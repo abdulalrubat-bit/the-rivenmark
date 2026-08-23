@@ -486,7 +486,7 @@ function moveEntity(e, dx, dy) {
    6. ENTITIES & SPAWNING
    ------------------------------------------------------------------------ */
 
-let player, enemies, bullets, loot, particles, portal;
+let player, enemies, bullets, loot, particles, rings, portal;
 let enemyGrid = new SpatialHash(ENEMY_CELL);
 const _near = [];
 
@@ -564,7 +564,7 @@ function fire() {
     bullets.push({
       x: player.x + Math.cos(a) * (player.r + 6),
       y: player.y + Math.sin(a) * (player.r + 6),
-      dx: Math.cos(a), dy: Math.sin(a),
+      dx: Math.cos(a), dy: Math.sin(a), a: a,
       speed: player.bulletSpeed, dmg: player.damage,
       pierce: player.pierce, life: 1.4, r: 3.5,
       hit: [], dead: false
@@ -580,6 +580,14 @@ function dropLoot(e) {
     vx: rand(-38, 38), vy: rand(-38, 38),
     value: e.tech, r: 6, spin: Math.random() * TAU, life: 0, pulled: false
   });
+}
+
+// Expanding shockwave ring — a few strokes, but it is what makes a kill read
+// as an event rather than a sprite vanishing.
+const MAX_RINGS = 40;
+function ring(x, y, color, r0, r1, life) {
+  if (rings.length >= MAX_RINGS) return;
+  rings.push({ x, y, color, r0, r1, life, max: life });
 }
 
 function burst(x, y, color, n, spd) {
@@ -677,7 +685,8 @@ function hurtPlayer(e) {
   shake(6 + e.dmg * 0.25);
   hitFlashUI();
   burst(player.x + (e.x - player.x) * 0.5, player.y + (e.y - player.y) * 0.5,
-        '#ff3b3b', 9, 170);
+        '#ff3b3b', 10, 180);
+  ring(player.x, player.y, '#ff3b3b', player.r, player.r * 3.4, 0.3);
   if (player.hp <= 0) { player.hp = 0; endRun(false); }
 }
 
@@ -688,7 +697,8 @@ function damageEnemy(e, dmg) {
   if (e.hp <= 0) {
     run.kills++;
     dropLoot(e);
-    burst(e.x, e.y, e.color, e.r > 18 ? 16 : 8, 190);
+    burst(e.x, e.y, e.color, e.r > 18 ? 18 : 9, 200);
+    ring(e.x, e.y, e.color, e.r * 0.5, e.r * (e.r > 18 ? 4.2 : 2.9), 0.34);
     if (e.r > 18) shake(3);
   } else {
     burst(e.x, e.y, '#e8f4ff', 2, 90);
@@ -844,7 +854,8 @@ function updateLoot(dt) {
 
     if (d < player.r + 10) {
       collectTech(l.value);
-      burst(l.x, l.y, '#ffd23f', 4, 110);
+      burst(l.x, l.y, '#ffd23f', 5, 120);
+      ring(l.x, l.y, '#ffd23f', 3, 22, 0.22);
       continue;
     }
     loot[w++] = l;
@@ -864,6 +875,16 @@ function updateParticles(dt) {
     particles[w++] = p;
   }
   particles.length = w;
+}
+
+function updateRings(dt) {
+  let w = 0;
+  for (let i = 0; i < rings.length; i++) {
+    const r = rings[i];
+    r.life -= dt;
+    if (r.life > 0) rings[w++] = r;
+  }
+  rings.length = w;
 }
 
 function updatePortal(dt) {
@@ -906,6 +927,7 @@ function update(dt) {
   compactEnemies();
   updateLoot(dt);
   updateParticles(dt);
+  updateRings(dt);
   updatePortal(dt);
   updateSpawning(dt);
   updateCamera(dt);
@@ -914,24 +936,333 @@ function update(dt) {
 
 /* ---------------------------------------------------------------------------
    9. RENDERING
-   All drawing happens in CSS pixels; the device-pixel-ratio scale lives in the
-   canvas transform, so the same code is crisp on a phone and on a desktop.
 
-   Every entity has its own draw function taking world coordinates. Swapping
-   the vector art for sprite sheets later means replacing the body of these
-   functions and nothing else -- no call site knows how a drone is drawn.
+   Nothing detailed is drawn with paths at frame time. Every entity is forged
+   once into an offscreen canvas at device resolution -- gradients, rim light,
+   inner detail and baked glow included -- and the frame loop only blits those
+   bitmaps. That buys the fidelity (a sprite can carry far more detail than is
+   affordable 220x a frame) and the speed (one drawImage beats a dozen path
+   ops) from the same change.
+
+   Sprites are supersampled at >=2x and downscaled on draw, so edges stay
+   smooth on a 1x desktop panel as well as a 3x phone.
    ------------------------------------------------------------------------ */
 
 const stage  = document.getElementById('stage');
 const canvas = document.getElementById('game');
 const ctx    = canvas.getContext('2d', { alpha: false });
 
-let lowFx = false;              // auto-drops bloom on slow devices
+let lowFx = false;              // auto-drops the light pass on slow devices
 let fxAccum = 0, fxFrames = 0, fxGood = 0;
 
+let SS = 2;                     // sprite supersample factor
+const SPR = {};                 // forged entity sprites
+const LIGHTS = new Map();       // radial light blobs, keyed colour|span
+let vignette = null, scanlines = null;
+const wallGrads = new Map();
+
+/* --- forge helpers ------------------------------------------------------ */
+
+function newCanvas(w, h) {
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.ceil(w));
+  c.height = Math.max(1, Math.ceil(h));
+  return c;
+}
+
+// Paint into a centred sprite `span` world-units across.
+function forge(span, paint) {
+  const px = Math.ceil(span * SS);
+  const c = newCanvas(px, px);
+  const g = c.getContext('2d');
+  g.translate(px / 2, px / 2);
+  g.scale(SS, SS);
+  paint(g);
+  // Span is derived back from the rounded pixel size so that span * dpr is
+  // exactly the source width: an unresampled blit instead of a filtered one.
+  c.span = px / SS;
+  return c;
+}
+
+function blit(spr, x, y, rot, alpha, scale) {
+  const s = spr.span * (scale || 1);
+  if (!rot) {
+    if (alpha !== undefined && alpha !== 1) ctx.globalAlpha = alpha;
+    ctx.drawImage(spr, x - s / 2, y - s / 2, s, s);
+    if (alpha !== undefined && alpha !== 1) ctx.globalAlpha = 1;
+    return;
+  }
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rot);
+  if (alpha !== undefined && alpha !== 1) ctx.globalAlpha = alpha;
+  ctx.drawImage(spr, -s / 2, -s / 2, s, s);
+  ctx.restore();
+}
+
+// #rrggbb -> rgba(), scaled toward black by `mul`.
+function tint(hex, mul, a) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.min(255, Math.round(((n >> 16) & 255) * mul));
+  const g = Math.min(255, Math.round(((n >> 8) & 255) * mul));
+  const b = Math.min(255, Math.round((n & 255) * mul));
+  return 'rgba(' + r + ',' + g + ',' + b + ',' + (a === undefined ? 1 : a) + ')';
+}
+
+function lightFor(color, span) {
+  const key = color + '|' + span;
+  let l = LIGHTS.get(key);
+  if (l) return l;
+  l = forge(span, g => {
+    const r = span / 2;
+    const grd = g.createRadialGradient(0, 0, 0, 0, 0, r);
+    grd.addColorStop(0,    tint(color, 1, 0.85));
+    grd.addColorStop(0.18, tint(color, 1, 0.42));
+    grd.addColorStop(0.45, tint(color, 0.9, 0.13));
+    grd.addColorStop(1,    tint(color, 0.8, 0));
+    g.fillStyle = grd;
+    g.beginPath(); g.arc(0, 0, r, 0, TAU); g.fill();
+  });
+  LIGHTS.set(key, l);
+  return l;
+}
+
+/* --- entity silhouettes ------------------------------------------------- */
+
+function enemyPath(g, kind, r) {
+  g.beginPath();
+  if (kind === 'drone') {
+    g.moveTo(r, 0);
+    g.lineTo(-r * 0.62, r * 0.78);
+    g.lineTo(-r * 0.26, 0);
+    g.lineTo(-r * 0.62, -r * 0.78);
+  } else if (kind === 'spike') {
+    g.moveTo(r * 1.5, 0);
+    g.lineTo(-r * 0.3, r * 0.5);
+    g.lineTo(-r * 0.95, r * 0.24);
+    g.lineTo(-r * 0.68, 0);
+    g.lineTo(-r * 0.95, -r * 0.24);
+    g.lineTo(-r * 0.3, -r * 0.5);
+  } else {
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * TAU;
+      const rr = r * (i % 2 === 0 ? 1 : 0.87);
+      (i === 0 ? g.moveTo : g.lineTo).call(g, Math.cos(a) * rr, Math.sin(a) * rr);
+    }
+  }
+  g.closePath();
+}
+
+function playerPath(g, r) {
+  g.beginPath();
+  g.moveTo(r * 1.4, 0);
+  g.lineTo(r * 0.25, r * 0.4);
+  g.lineTo(-r * 0.5, r * 0.98);
+  g.lineTo(-r * 0.86, r * 0.5);
+  g.lineTo(-r * 0.42, 0);
+  g.lineTo(-r * 0.86, -r * 0.5);
+  g.lineTo(-r * 0.5, -r * 0.98);
+  g.lineTo(r * 0.25, -r * 0.4);
+  g.closePath();
+}
+
+// The shared neon treatment: bake the glow, fill a lit gradient body, then
+// lay a crisp rim over the top. Order matters -- glow underneath, rim last.
+function neonBody(g, pathFn, r, color, flash) {
+  g.shadowColor = color;
+  g.shadowBlur = r * 0.5;
+  g.strokeStyle = color;
+  g.lineWidth = 2.2;
+  pathFn(g); g.stroke();
+  g.shadowBlur = r * 0.26;
+  pathFn(g); g.stroke();
+  g.shadowBlur = 0;
+
+  const grd = g.createLinearGradient(0, -r, 0, r);
+  grd.addColorStop(0, tint(color, 0.34));
+  grd.addColorStop(0.45, '#0a1220');
+  grd.addColorStop(1, '#05080f');
+  g.fillStyle = flash ? tint(color, 2.4, 0.95) : grd;
+  pathFn(g); g.fill();
+
+  g.strokeStyle = flash ? '#ffffff' : color;
+  g.lineWidth = 1.7;
+  pathFn(g); g.stroke();
+
+  // Rim light along the leading edge reads as a light source above-left.
+  g.strokeStyle = flash ? '#ffffff' : tint(color, 1.6, 0.85);
+  g.lineWidth = 0.8;
+  pathFn(g); g.stroke();
+}
+
+function forgeEnemy(kind, r, color, flash) {
+  return forge(r * 2.6, g => {
+    neonBody(g, gg => enemyPath(gg, kind, r), r, color, flash);
+    if (flash) return;
+    if (kind === 'brute') {
+      g.strokeStyle = tint(color, 1.5, 0.55);
+      g.lineWidth = 1.1;
+      g.beginPath(); g.arc(0, 0, r * 0.46, 0, TAU); g.stroke();
+      g.fillStyle = tint(color, 2, 0.9);
+      g.beginPath(); g.arc(0, 0, r * 0.17, 0, TAU); g.fill();
+      g.strokeStyle = tint(color, 1.3, 0.4);
+      g.lineWidth = 1.4;
+      for (let i = -1; i <= 1; i++) {
+        g.beginPath();
+        g.moveTo(r * 0.1, i * r * 0.34);
+        g.lineTo(r * 0.52, i * r * 0.2);
+        g.stroke();
+      }
+    } else if (kind === 'drone') {
+      g.fillStyle = tint(color, 2.1, 0.95);
+      g.beginPath(); g.arc(r * 0.05, 0, r * 0.16, 0, TAU); g.fill();
+      g.strokeStyle = tint(color, 1.4, 0.45);
+      g.lineWidth = 1;
+      g.beginPath();
+      g.moveTo(-r * 0.5, r * 0.5); g.lineTo(-r * 0.28, r * 0.18);
+      g.moveTo(-r * 0.5, -r * 0.5); g.lineTo(-r * 0.28, -r * 0.18);
+      g.stroke();
+    } else {
+      g.strokeStyle = tint(color, 2.2, 0.9);
+      g.lineWidth = 1.2;
+      g.beginPath(); g.moveTo(r * 1.2, 0); g.lineTo(-r * 0.5, 0); g.stroke();
+    }
+  });
+}
+
+function forgePlayer(flash) {
+  const r = BASE_PLAYER.r;
+  const C = '#22e0ff';
+  return forge(r * 2.8, g => {
+    neonBody(g, gg => playerPath(gg, r), r, C, flash);
+    if (flash) return;
+    // Cockpit
+    const grd = g.createRadialGradient(r * 0.15, 0, 0, r * 0.15, 0, r * 0.42);
+    grd.addColorStop(0, 'rgba(255,255,255,.95)');
+    grd.addColorStop(0.5, 'rgba(160,240,255,.5)');
+    grd.addColorStop(1, 'rgba(34,224,255,0)');
+    g.fillStyle = grd;
+    g.beginPath(); g.ellipse(r * 0.15, 0, r * 0.42, r * 0.26, 0, 0, TAU); g.fill();
+    // Engine ports
+    g.fillStyle = 'rgba(120,235,255,.85)';
+    g.fillRect(-r * 0.72, -r * 0.34, r * 0.16, r * 0.2);
+    g.fillRect(-r * 0.72, r * 0.14, r * 0.16, r * 0.2);
+    // Wing striping
+    g.strokeStyle = tint(C, 1.4, 0.35);
+    g.lineWidth = 0.9;
+    g.beginPath();
+    g.moveTo(-r * 0.2, r * 0.5); g.lineTo(-r * 0.55, r * 0.8);
+    g.moveTo(-r * 0.2, -r * 0.5); g.lineTo(-r * 0.55, -r * 0.8);
+    g.stroke();
+  });
+}
+
+function forgeBullet() {
+  return forge(30, g => {
+    const grd = g.createLinearGradient(-15, 0, 13, 0);
+    grd.addColorStop(0,   'rgba(34,224,255,0)');
+    grd.addColorStop(0.5, 'rgba(34,224,255,.35)');
+    grd.addColorStop(0.85,'rgba(150,245,255,.95)');
+    grd.addColorStop(1,   'rgba(255,255,255,1)');
+    g.shadowColor = '#22e0ff'; g.shadowBlur = 9;
+    g.fillStyle = grd;
+    g.beginPath();
+    g.moveTo(13, 0);
+    g.quadraticCurveTo(6, 3.1, -15, 1.1);
+    g.lineTo(-15, -1.1);
+    g.quadraticCurveTo(6, -3.1, 13, 0);
+    g.closePath(); g.fill();
+    g.shadowBlur = 0;
+    g.fillStyle = '#ffffff';
+    g.beginPath(); g.arc(11, 0, 1.7, 0, TAU); g.fill();
+  });
+}
+
+function forgeLoot(big) {
+  const s = big ? 11 : 7.5;
+  return forge(s * 3.2, g => {
+    g.shadowColor = '#ffd23f'; g.shadowBlur = 11;
+    g.fillStyle = 'rgba(255,210,63,.9)';
+    g.beginPath();
+    g.moveTo(0, -s); g.lineTo(s * 0.72, 0); g.lineTo(0, s); g.lineTo(-s * 0.72, 0);
+    g.closePath(); g.fill();
+    g.shadowBlur = 0;
+    // Facet: light half against dark half sells it as a solid.
+    g.fillStyle = 'rgba(255,244,200,.95)';
+    g.beginPath();
+    g.moveTo(0, -s); g.lineTo(s * 0.72, 0); g.lineTo(0, 0);
+    g.closePath(); g.fill();
+    g.fillStyle = 'rgba(190,130,0,.55)';
+    g.beginPath();
+    g.moveTo(0, s); g.lineTo(-s * 0.72, 0); g.lineTo(0, 0);
+    g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(255,235,150,.9)';
+    g.lineWidth = 0.9;
+    g.beginPath();
+    g.moveTo(0, -s); g.lineTo(s * 0.72, 0); g.lineTo(0, s); g.lineTo(-s * 0.72, 0);
+    g.closePath(); g.stroke();
+  });
+}
+
+/* --- environment surfaces ---------------------------------------------- */
+
+function forgeVignette() {
+  const w = Math.max(1, view.w), h = Math.max(1, view.h);
+  const c = newCanvas(w, h);
+  const g = c.getContext('2d');
+  const grd = g.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.32,
+                                     w / 2, h / 2, Math.max(w, h) * 0.78);
+  grd.addColorStop(0, 'rgba(0,0,0,0)');
+  grd.addColorStop(0.62, 'rgba(2,4,10,.34)');
+  grd.addColorStop(1, 'rgba(1,2,6,.82)');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, w, h);
+  // Cool top / warm-magenta bottom: a cheap two-source lighting suggestion.
+  const tg = g.createLinearGradient(0, 0, 0, h);
+  tg.addColorStop(0, 'rgba(34,224,255,.05)');
+  tg.addColorStop(0.5, 'rgba(0,0,0,0)');
+  tg.addColorStop(1, 'rgba(255,46,136,.05)');
+  g.fillStyle = tg;
+  g.fillRect(0, 0, w, h);
+  if (scanlines) {                    // folded in: one screen-sized blit, not two
+    g.fillStyle = scanlines;
+    g.globalAlpha = 0.16;
+    g.fillRect(0, 0, w, h);
+    g.globalAlpha = 1;
+  }
+  return c;
+}
+
+function forgeScanlines() {
+  const c = newCanvas(4, 4);
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgba(0,0,0,.5)';
+  g.fillRect(0, 3, 4, 1);
+  return ctx.createPattern(c, 'repeat');
+}
+
+function forgeAll() {
+  SS = Math.min(3, Math.max(2, view.dpr));
+  LIGHTS.clear();
+  wallGrads.clear();
+  SPR.player = forgePlayer(false);
+  SPR.playerHit = forgePlayer(true);
+  for (const k in ENEMY_TYPES) {
+    const d = ENEMY_TYPES[k];
+    SPR[k] = forgeEnemy(k, d.r, d.color, false);
+    SPR[k + 'Hit'] = forgeEnemy(k, d.r, d.color, true);
+  }
+  SPR.bullet = forgeBullet();
+  SPR.loot = forgeLoot(false);
+  SPR.lootBig = forgeLoot(true);
+  scanlines = forgeScanlines();
+  vignette = forgeVignette();       // bakes scanlines in, so it must come last
+}
+
+let forgedAt = 0;
 function resize() {
-  // Cap the ratio at 2: a 3x phone panel triples the fill cost for a
-  // difference nobody can see at arm's length.
+  // Cap the ratio at 2: a 3x phone panel triples fill cost for a difference
+  // nobody can see at arm's length.
   view.dpr = Math.min(window.devicePixelRatio || 1, 2);
   view.w = stage.clientWidth  || window.innerWidth;
   view.h = stage.clientHeight || window.innerHeight;
@@ -939,355 +1270,364 @@ function resize() {
   canvas.height = Math.round(view.h * view.dpr);
   canvas.style.width  = view.w + 'px';
   canvas.style.height = view.h + 'px';
+  ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+  if (forgedAt !== view.dpr) { forgeAll(); forgedAt = view.dpr; }
+  else vignette = forgeVignette();
 }
 
-function glowOn(color, blur) {
-  if (lowFx) return;
-  ctx.shadowColor = color;
-  ctx.shadowBlur = blur;
-}
-function glowOff() { ctx.shadowBlur = 0; }
+/* --- world ------------------------------------------------------------- */
 
-function drawFloor(x0, y0, x1, y1) {
-  ctx.fillStyle = '#070b14';
+function drawFloor(x0, y0, x1, y1, t) {
+  ctx.fillStyle = '#060a12';
   ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
 
-  const S = 50;
+  // Three batched paths. A pre-rendered pattern looked identical and cost ~5x
+  // as much: a transformed pattern fill re-filters every pixel of the view,
+  // while these strokes only touch the lines themselves.
+  const F = 25, B = 100;
   ctx.lineWidth = 1;
-  ctx.strokeStyle = 'rgba(34,224,255,.055)';
+  ctx.strokeStyle = 'rgba(34,224,255,.045)';
   ctx.beginPath();
-  for (let x = Math.floor(x0 / S) * S; x < x1; x += S) {
-    ctx.moveTo(x, y0); ctx.lineTo(x, y1);
-  }
-  for (let y = Math.floor(y0 / S) * S; y < y1; y += S) {
-    ctx.moveTo(x0, y); ctx.lineTo(x1, y);
+  for (let x = Math.ceil(x0 / F) * F; x < x1; x += F) { ctx.moveTo(x, y0); ctx.lineTo(x, y1); }
+  for (let y = Math.ceil(y0 / F) * F; y < y1; y += F) { ctx.moveTo(x0, y); ctx.lineTo(x1, y); }
+  ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(34,224,255,.1)';
+  ctx.beginPath();
+  for (let x = Math.ceil(x0 / B) * B; x < x1; x += B) { ctx.moveTo(x, y0); ctx.lineTo(x, y1); }
+  for (let y = Math.ceil(y0 / B) * B; y < y1; y += B) { ctx.moveTo(x0, y); ctx.lineTo(x1, y); }
+  ctx.stroke();
+
+  // Corner ticks at the coarse intersections: the "clean tech grid" read.
+  ctx.strokeStyle = 'rgba(34,224,255,.3)';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  for (let x = Math.ceil(x0 / B) * B; x < x1; x += B) {
+    for (let y = Math.ceil(y0 / B) * B; y < y1; y += B) {
+      ctx.moveTo(x - 6, y); ctx.lineTo(x + 6, y);
+      ctx.moveTo(x, y - 6); ctx.lineTo(x, y + 6);
+    }
   }
   ctx.stroke();
 
-  const B = 250;
-  ctx.strokeStyle = 'rgba(34,224,255,.12)';
-  ctx.beginPath();
-  for (let x = Math.floor(x0 / B) * B; x < x1; x += B) {
-    ctx.moveTo(x, y0); ctx.lineTo(x, y1);
+  if (lowFx) return;
+
+  // Slow scan sweep: one gradient band, sells "live system" for almost nothing.
+  const H = 120;
+  const sweep = ((t * 90) % (WORLD.h + 900)) - 450;
+  const top = Math.max(y0, sweep - H), bot = Math.min(y1, sweep + H);
+  if (bot > top) {
+    const sg = ctx.createLinearGradient(0, sweep - H, 0, sweep + H);
+    sg.addColorStop(0, 'rgba(34,224,255,0)');
+    sg.addColorStop(0.5, 'rgba(34,224,255,.05)');
+    sg.addColorStop(1, 'rgba(34,224,255,0)');
+    ctx.fillStyle = sg;
+    ctx.fillRect(x0, top, x1 - x0, bot - top);
   }
-  for (let y = Math.floor(y0 / B) * B; y < y1; y += B) {
-    ctx.moveTo(x0, y); ctx.lineTo(x1, y);
+}
+
+function wallGradient(h) {
+  const k = Math.round(h / 6) * 6;
+  let g = wallGrads.get(k);
+  if (!g) {
+    g = ctx.createLinearGradient(0, 0, 0, k || 1);
+    g.addColorStop(0, '#16233a');
+    g.addColorStop(0.14, '#0e1728');
+    g.addColorStop(1, '#05080f');
+    wallGrads.set(k, g);
   }
-  ctx.stroke();
+  return g;
 }
 
 function drawWalls(x0, y0, x1, y1) {
-  ctx.lineWidth = 1.5;
   for (let i = 0; i < walls.length; i++) {
     const w = walls[i];
     if (w.x > x1 || w.y > y1 || w.x + w.w < x0 || w.y + w.h < y0) continue;
-    ctx.fillStyle = '#0d1626';
-    ctx.fillRect(w.x, w.y, w.w, w.h);
-    ctx.strokeStyle = 'rgba(34,224,255,.32)';
-    ctx.strokeRect(w.x + 0.5, w.y + 0.5, w.w - 1, w.h - 1);
-    // Lit top edge — cheap way to read depth without a light pass.
-    ctx.strokeStyle = 'rgba(34,224,255,.55)';
-    ctx.beginPath();
-    ctx.moveTo(w.x + 1, w.y + 1.5);
-    ctx.lineTo(w.x + w.w - 1, w.y + 1.5);
-    ctx.stroke();
+
+    // Contact shadow first: grounds the slab on the floor.
+    ctx.fillStyle = 'rgba(0,0,0,.5)';
+    ctx.fillRect(w.x + 3, w.y + 5, w.w, w.h);
+
+    ctx.save();
+    ctx.translate(w.x, w.y);
+    ctx.fillStyle = wallGradient(w.h);
+    ctx.fillRect(0, 0, w.w, w.h);
+
+    ctx.strokeStyle = 'rgba(34,224,255,.22)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0.5, 0.5, w.w - 1, w.h - 1);
+
+    // Emissive top edge, wide-then-narrow so it blooms without shadowBlur.
+    ctx.strokeStyle = 'rgba(34,224,255,.16)';
+    ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(1, 2); ctx.lineTo(w.w - 1, 2); ctx.stroke();
+    ctx.strokeStyle = 'rgba(150,245,255,.85)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(1, 1.8); ctx.lineTo(w.w - 1, 1.8); ctx.stroke();
+
+    // Corner brackets
+    if (w.w > 26 && w.h > 26) {
+      ctx.strokeStyle = 'rgba(34,224,255,.55)';
+      ctx.lineWidth = 1.6;
+      const b = 7;
+      ctx.beginPath();
+      ctx.moveTo(2, b); ctx.lineTo(2, 2); ctx.lineTo(b, 2);
+      ctx.moveTo(w.w - b, 2); ctx.lineTo(w.w - 2, 2); ctx.lineTo(w.w - 2, b);
+      ctx.moveTo(2, w.h - b); ctx.lineTo(2, w.h - 2); ctx.lineTo(b, w.h - 2);
+      ctx.moveTo(w.w - b, w.h - 2); ctx.lineTo(w.w - 2, w.h - 2); ctx.lineTo(w.w - 2, w.h - b);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 }
 
 function drawPortal(t) {
   const active = portal.active;
-  const base = active ? '#22e0ff' : '#46536b';
-  const pulse = 0.5 + 0.5 * Math.sin(t * (active ? 3.4 : 1.2));
+  const base = active ? '#22e0ff' : '#3d4a61';
+  const pulse = 0.5 + 0.5 * Math.sin(t * (active ? 3.2 : 1.1));
 
   ctx.save();
   ctx.translate(portal.x, portal.y);
 
-  // Pad on the floor
-  ctx.fillStyle = active ? 'rgba(34,224,255,.09)' : 'rgba(70,83,107,.07)';
+  ctx.fillStyle = active ? 'rgba(34,224,255,.07)' : 'rgba(61,74,97,.05)';
   ctx.beginPath(); ctx.arc(0, 0, PORTAL_R, 0, TAU); ctx.fill();
 
-  glowOn(base, active ? 22 : 6);
   ctx.strokeStyle = base;
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 2.4;
+  ctx.globalAlpha = active ? 1 : 0.6;
   ctx.beginPath(); ctx.arc(0, 0, PORTAL_R, 0, TAU); ctx.stroke();
 
-  ctx.lineWidth = 1.5;
-  ctx.globalAlpha = 0.35 + pulse * 0.5;
-  ctx.beginPath(); ctx.arc(0, 0, PORTAL_R * (0.45 + pulse * 0.4), 0, TAU); ctx.stroke();
+  ctx.lineWidth = 1.2;
+  ctx.globalAlpha = (active ? 0.32 : 0.16) + pulse * 0.45;
+  ctx.beginPath(); ctx.arc(0, 0, PORTAL_R * (0.42 + pulse * 0.42), 0, TAU); ctx.stroke();
   ctx.globalAlpha = 1;
 
-  // Rotating tick marks
-  ctx.rotate(t * (active ? 0.9 : 0.2));
+  ctx.save();
+  ctx.rotate(t * (active ? 0.75 : 0.16));
   ctx.strokeStyle = base;
-  ctx.lineWidth = 3;
+  ctx.lineWidth = 3.4;
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * TAU;
     ctx.beginPath();
-    ctx.moveTo(Math.cos(a) * (PORTAL_R - 12), Math.sin(a) * (PORTAL_R - 12));
-    ctx.lineTo(Math.cos(a) * (PORTAL_R - 3),  Math.sin(a) * (PORTAL_R - 3));
+    ctx.moveTo(Math.cos(a) * (PORTAL_R - 13), Math.sin(a) * (PORTAL_R - 13));
+    ctx.lineTo(Math.cos(a) * (PORTAL_R - 4),  Math.sin(a) * (PORTAL_R - 4));
     ctx.stroke();
   }
   ctx.restore();
-  glowOff();
 
-  // Channel arc
+  // Counter-rotating inner glyph
+  ctx.save();
+  ctx.rotate(-t * (active ? 0.45 : 0.1));
+  ctx.strokeStyle = active ? 'rgba(150,245,255,.75)' : 'rgba(80,95,120,.5)';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * TAU, rr = PORTAL_R * 0.3;
+    (i === 0 ? ctx.moveTo : ctx.lineTo).call(ctx, Math.cos(a) * rr, Math.sin(a) * rr);
+  }
+  ctx.closePath(); ctx.stroke();
+  ctx.restore();
+  ctx.restore();
+
   if (portal.channel > 0) {
     const f = portal.channel / EXTRACT_CHANNEL;
     ctx.save();
     ctx.translate(portal.x, portal.y);
     ctx.rotate(-Math.PI / 2);
-    glowOn('#ffd23f', 18);
+    ctx.strokeStyle = 'rgba(255,210,63,.25)';
+    ctx.lineWidth = 9;
+    ctx.beginPath(); ctx.arc(0, 0, PORTAL_R + 10, 0, TAU * f); ctx.stroke();
     ctx.strokeStyle = '#ffd23f';
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.arc(0, 0, PORTAL_R + 9, 0, TAU * f);
-    ctx.stroke();
+    ctx.lineWidth = 3.4;
+    ctx.beginPath(); ctx.arc(0, 0, PORTAL_R + 10, 0, TAU * f); ctx.stroke();
     ctx.restore();
-    glowOff();
   }
 }
+
+/* --- entities ----------------------------------------------------------- */
 
 function drawLoot(t) {
   for (let i = 0; i < loot.length; i++) {
     const l = loot[i];
-    const s = l.r * (l.value > 1 ? 1.5 : 1) * (0.85 + 0.15 * Math.sin(t * 6 + l.spin));
-    ctx.save();
-    ctx.translate(l.x, l.y);
-    ctx.rotate(l.spin);
-    if (!lowFx) {
-      ctx.fillStyle = 'rgba(255,210,63,.22)';
-      ctx.beginPath();
-      ctx.moveTo(0, -s * 1.9); ctx.lineTo(s * 1.9, 0);
-      ctx.lineTo(0, s * 1.9); ctx.lineTo(-s * 1.9, 0);
-      ctx.closePath(); ctx.fill();
-    }
-    ctx.fillStyle = '#ffd23f';
-    ctx.beginPath();
-    ctx.moveTo(0, -s); ctx.lineTo(s, 0); ctx.lineTo(0, s); ctx.lineTo(-s, 0);
-    ctx.closePath(); ctx.fill();
-    ctx.restore();
+    blit(l.value > 1 ? SPR.lootBig : SPR.loot, l.x, l.y, l.spin);
   }
 }
 
 function drawBullets() {
-  ctx.lineCap = 'round';
-  // Three batched passes (halo, body, core) — one path each, so the whole
-  // volley is three strokes rather than three per projectile.
-  if (!lowFx) {
-    ctx.strokeStyle = 'rgba(34,224,255,.18)';
-    ctx.lineWidth = 9;
-    ctx.beginPath();
-    for (let i = 0; i < bullets.length; i++) {
-      const b = bullets[i];
-      ctx.moveTo(b.x, b.y);
-      ctx.lineTo(b.x - b.dx * 13, b.y - b.dy * 13);
-    }
-    ctx.stroke();
-  }
-  ctx.strokeStyle = 'rgba(34,224,255,.85)';
-  ctx.lineWidth = 3.5;
-  ctx.beginPath();
   for (let i = 0; i < bullets.length; i++) {
     const b = bullets[i];
-    ctx.moveTo(b.x, b.y);
-    ctx.lineTo(b.x - b.dx * 13, b.y - b.dy * 13);
+    blit(SPR.bullet, b.x, b.y, b.a);
   }
-  ctx.stroke();
-  ctx.strokeStyle = '#eaffff';
-  ctx.lineWidth = 1.4;
-  ctx.beginPath();
-  for (let i = 0; i < bullets.length; i++) {
-    const b = bullets[i];
-    ctx.moveTo(b.x, b.y);
-    ctx.lineTo(b.x - b.dx * 9, b.y - b.dy * 9);
-  }
-  ctx.stroke();
-  ctx.lineCap = 'butt';
 }
 
 function drawEnemy(e) {
-  const flash = e.hitFlash > 0;
-  ctx.save();
-  ctx.translate(e.x, e.y);
-  ctx.rotate(e.angle);
-  const r = e.r;
-  ctx.beginPath();
-  if (e.kind === 'drone') {
-    ctx.moveTo(r, 0); ctx.lineTo(-r * 0.7, r * 0.8);
-    ctx.lineTo(-r * 0.35, 0); ctx.lineTo(-r * 0.7, -r * 0.8);
-  } else if (e.kind === 'spike') {
-    const w = 0.5 + 0.12 * Math.sin(e.wob);
-    ctx.moveTo(r * 1.3, 0); ctx.lineTo(-r * 0.5, r * w);
-    ctx.lineTo(-r * 0.9, 0); ctx.lineTo(-r * 0.5, -r * w);
-  } else {
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * TAU;
-      const rr = r * (i % 2 === 0 ? 1 : 0.82);
-      const fn = i === 0 ? 'moveTo' : 'lineTo';
-      ctx[fn](Math.cos(a) * rr, Math.sin(a) * rr);
-    }
-  }
-  ctx.closePath();
-
-  // Bloom without shadowBlur: one wide translucent stroke under one crisp
-  // stroke. A blur pass per enemy costs ~3x this and is the single most
-  // expensive thing you can do 200 times a frame.
-  if (!lowFx) {
-    ctx.strokeStyle = flash ? 'rgba(255,255,255,.35)' : e.halo;
-    ctx.lineWidth = 6;
-    ctx.stroke();
-  }
-  ctx.fillStyle = flash ? 'rgba(255,255,255,.9)' : 'rgba(10,16,28,.9)';
-  ctx.fill();
-  ctx.strokeStyle = flash ? '#ffffff' : e.color;
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  if (e.kind === 'brute') {                 // inner core, reads as armour
-    ctx.beginPath();
-    ctx.arc(0, 0, r * 0.34, 0, TAU);
-    ctx.strokeStyle = flash ? '#fff' : e.color;
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-  }
-  ctx.restore();
-
-  // Health pip for the heavies only — bars over a 200-strong swarm is noise.
-  if (e.kind === 'brute' && e.hp < e.maxHp) {
-    const w = e.r * 2, f = clamp(e.hp / e.maxHp, 0, 1);
-    ctx.fillStyle = 'rgba(0,0,0,.6)';
-    ctx.fillRect(e.x - w / 2, e.y - e.r - 9, w, 3);
-    ctx.fillStyle = '#ff2e88';
-    ctx.fillRect(e.x - w / 2, e.y - e.r - 9, w * f, 3);
+  blit(e.hitFlash > 0 ? SPR[e.kind + 'Hit'] : SPR[e.kind], e.x, e.y, e.angle);
+  if (e.kind === 'brute' && e.hp < e.maxHp * 0.92) {
+    const w = e.r * 1.5, f = clamp(e.hp / e.maxHp, 0, 1);
+    const bx = e.x - w / 2, by = e.y - e.r - 6;
+    ctx.fillStyle = 'rgba(0,0,0,.55)';
+    ctx.fillRect(bx, by, w, 2);
+    ctx.fillStyle = f < 0.35 ? 'rgba(255,80,80,.85)' : 'rgba(190,120,255,.8)';
+    ctx.fillRect(bx, by, w * f, 2);
   }
 }
 
 function drawPlayer(t) {
   const p = player;
-  const blink = p.invuln > 0 && Math.floor(t * 22) % 2 === 0;
+  const blink = p.invuln > 0 && Math.floor(t * 20) % 2 === 0;
 
-  // Weapon envelope — quiet, but it makes "in range" legible at a glance.
   ctx.save();
-  ctx.setLineDash([5, 9]);
-  ctx.strokeStyle = 'rgba(34,224,255,.13)';
+  ctx.setLineDash([4, 10]);
+  ctx.strokeStyle = 'rgba(34,224,255,.1)';
   ctx.lineWidth = 1;
   ctx.beginPath(); ctx.arc(p.x, p.y, p.range, 0, TAU); ctx.stroke();
   ctx.restore();
 
-  ctx.save();
-  ctx.translate(p.x, p.y);
+  const ring = p.r + 8 + Math.sin(t * 2.6) * 1.6;
+  ctx.strokeStyle = p.hitFlash > 0 ? 'rgba(255,59,59,.85)' : 'rgba(34,224,255,.3)';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.arc(p.x, p.y, ring, 0, TAU); ctx.stroke();
 
-  const ring = p.r + 7 + Math.sin(t * 3) * 1.5;
-  ctx.strokeStyle = p.hitFlash > 0 ? 'rgba(255,59,59,.8)' : 'rgba(34,224,255,.35)';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.arc(0, 0, ring, 0, TAU); ctx.stroke();
+  blit(blink || p.hitFlash > 0 ? SPR.playerHit : SPR.player, p.x, p.y, p.angle);
 
-  ctx.rotate(p.angle);
   if (p.muzzle > 0) {
-    glowOn('#eaffff', 16);
-    ctx.fillStyle = 'rgba(234,255,255,.9)';
-    ctx.beginPath();
-    ctx.moveTo(p.r + 4, 0); ctx.lineTo(p.r + 16, 5); ctx.lineTo(p.r + 16, -5);
-    ctx.closePath(); ctx.fill();
-    glowOff();
+    const a = p.angle;
+    blit(lightFor('#eaffff', 46), p.x + Math.cos(a) * (p.r + 9),
+         p.y + Math.sin(a) * (p.r + 9), 0, p.muzzle / 0.06);
   }
-
-  glowOn('#22e0ff', 14);
-  ctx.fillStyle   = blink ? 'rgba(255,255,255,.95)' : '#0d1b2c';
-  ctx.strokeStyle = p.hitFlash > 0 ? '#ff3b3b' : '#22e0ff';
-  ctx.lineWidth = 2.2;
-  ctx.beginPath();
-  ctx.moveTo(p.r * 1.25, 0);
-  ctx.lineTo(-p.r * 0.75, p.r * 0.85);
-  ctx.lineTo(-p.r * 0.35, 0);
-  ctx.lineTo(-p.r * 0.75, -p.r * 0.85);
-  ctx.closePath();
-  ctx.fill(); ctx.stroke();
-  glowOff();
-  ctx.restore();
 }
 
 function drawParticles() {
+  if (lowFx) {                    // flat quads: no additive blend, no blit
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i];
+      ctx.globalAlpha = clamp(p.life / p.max, 0, 1);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+    }
+    ctx.globalAlpha = 1;
+    return;
+  }
+  ctx.globalCompositeOperation = 'lighter';
   for (let i = 0; i < particles.length; i++) {
     const p = particles[i];
-    ctx.globalAlpha = clamp(p.life / p.max, 0, 1);
-    ctx.fillStyle = p.color;
-    ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+    const a = clamp(p.life / p.max, 0, 1);
+    blit(lightFor(p.color, 11), p.x, p.y, 0, a * 0.9);
   }
-  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
 }
 
-/* --- screen-space overlays -------------------------------------------- */
+function drawRings() {
+  for (let i = 0; i < rings.length; i++) {
+    const rg = rings[i];
+    const f = 1 - rg.life / rg.max;
+    ctx.strokeStyle = tint(rg.color, 1.4, (1 - f) * 0.75);
+    ctx.lineWidth = 3 * (1 - f) + 0.6;
+    ctx.beginPath();
+    ctx.arc(rg.x, rg.y, rg.r0 + (rg.r1 - rg.r0) * f, 0, TAU);
+    ctx.stroke();
+  }
+}
+
+// Additive pass. Emissive entities carry baked glow already; this is the
+// light they cast onto the floor around them, which is what actually makes
+// the scene feel lit rather than merely bright.
+function drawLightPass(t) {
+  ctx.globalCompositeOperation = 'lighter';
+  const portalPulse = portal.active ? 0.55 + 0.2 * Math.sin(t * 3.2) : 0.16;
+  blit(lightFor(portal.active ? '#22e0ff' : '#3d4a61', PORTAL_R * 3.2),
+       portal.x, portal.y, 0, portalPulse);
+  blit(lightFor('#22e0ff', 118), player.x, player.y, 0, 0.36);
+  const lit = Math.min(loot.length, 14);
+  for (let i = 0; i < lit; i++) {
+    blit(lightFor('#ffd23f', 38), loot[i].x, loot[i].y, 0, 0.32);
+  }
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+/* --- screen-space overlays ---------------------------------------------- */
 
 function drawStick() {
   if (!stick.active) return;
   ctx.save();
-  ctx.globalAlpha = 0.5;
-  ctx.strokeStyle = 'rgba(34,224,255,.55)';
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(34,224,255,.4)';
+  ctx.lineWidth = 1.6;
   ctx.beginPath(); ctx.arc(stick.ox, stick.oy, STICK_MAX, 0, TAU); ctx.stroke();
-  ctx.beginPath(); ctx.arc(stick.ox, stick.oy, STICK_MAX * STICK_DEAD, 0, TAU);
-  ctx.strokeStyle = 'rgba(34,224,255,.22)'; ctx.stroke();
+  ctx.strokeStyle = 'rgba(34,224,255,.15)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(stick.ox, stick.oy, STICK_MAX * STICK_DEAD, 0, TAU); ctx.stroke();
 
   const kx = stick.ox + stick.dx * stick.mag * STICK_MAX;
   const ky = stick.oy + stick.dy * stick.mag * STICK_MAX;
-  ctx.fillStyle = 'rgba(34,224,255,.3)';
-  ctx.strokeStyle = 'rgba(34,224,255,.9)';
-  ctx.beginPath(); ctx.arc(kx, ky, 21, 0, TAU); ctx.fill(); ctx.stroke();
+  ctx.globalCompositeOperation = 'lighter';
+  blit(lightFor('#22e0ff', 96), kx, ky, 0, 0.5);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.strokeStyle = 'rgba(180,248,255,.95)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(kx, ky, 20, 0, TAU); ctx.stroke();
   ctx.restore();
 }
 
 function drawPortalArrow(t) {
   const sx = portal.x - cam.x, sy = portal.y - cam.y;
-  const m = 46;
+  const m = 48;
   if (sx > m && sx < view.w - m && sy > m && sy < view.h - m) return;
 
   const cx = view.w / 2, cy = view.h / 2;
   const a = Math.atan2(sy - cy, sx - cx);
-  const rx = Math.min(cx - m, cy - m);
-  const px = cx + Math.cos(a) * rx, py = cy + Math.sin(a) * rx;
+  const dx = Math.cos(a), dy = Math.sin(a);
+  const k = Math.min((cx - m) / Math.max(1e-6, Math.abs(dx)),
+                     (cy - m) / Math.max(1e-6, Math.abs(dy)));
+  const px = cx + dx * k, py = cy + dy * k;
   const col = portal.active ? '#22e0ff' : '#5c6a84';
 
   ctx.save();
   ctx.translate(px, py);
-  ctx.rotate(a);
   ctx.globalAlpha = 0.55 + (portal.active ? 0.4 * Math.abs(Math.sin(t * 3)) : 0.1);
+  ctx.fillStyle = 'rgba(5,9,18,.75)';
+  ctx.beginPath(); ctx.arc(0, 0, 15, 0, TAU); ctx.fill();
+  ctx.strokeStyle = col; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.arc(0, 0, 15, 0, TAU); ctx.stroke();
+  ctx.rotate(a);
   ctx.fillStyle = col;
   ctx.beginPath();
-  ctx.moveTo(13, 0); ctx.lineTo(-8, 8); ctx.lineTo(-4, 0); ctx.lineTo(-8, -8);
+  ctx.moveTo(9, 0); ctx.lineTo(-5, 6); ctx.lineTo(-2, 0); ctx.lineTo(-5, -6);
   ctx.closePath(); ctx.fill();
   ctx.restore();
 }
 
 function drawMinimap() {
-  const S = 92, pad = 12;
+  const S = 94, pad = 12;
   const x = view.w - S - pad, y = view.h - S - pad;
   const k = S / WORLD.w;
 
   ctx.save();
-  ctx.globalAlpha = 0.82;
-  ctx.fillStyle = 'rgba(5,9,18,.8)';
+  ctx.fillStyle = 'rgba(4,8,16,.78)';
   ctx.fillRect(x, y, S, S);
-  ctx.strokeStyle = 'rgba(34,224,255,.3)';
+  ctx.strokeStyle = 'rgba(34,224,255,.28)';
   ctx.lineWidth = 1;
   ctx.strokeRect(x + 0.5, y + 0.5, S - 1, S - 1);
+  ctx.strokeStyle = 'rgba(34,224,255,.7)';
+  ctx.lineWidth = 1.6;
+  const b = 8;
+  ctx.beginPath();
+  ctx.moveTo(x, y + b); ctx.lineTo(x, y); ctx.lineTo(x + b, y);
+  ctx.moveTo(x + S - b, y + S); ctx.lineTo(x + S, y + S); ctx.lineTo(x + S, y + S - b);
+  ctx.stroke();
 
-  ctx.fillStyle = 'rgba(34,224,255,.16)';
-  for (let i = 4; i < walls.length; i++) {           // skip the border slabs
+  ctx.fillStyle = 'rgba(34,224,255,.14)';
+  for (let i = 4; i < walls.length; i++) {
     const w = walls[i];
     ctx.fillRect(x + w.x * k, y + w.y * k, Math.max(1, w.w * k), Math.max(1, w.h * k));
   }
-
-  ctx.fillStyle = 'rgba(255,46,136,.75)';
+  ctx.fillStyle = 'rgba(255,46,136,.8)';
   for (let i = 0; i < enemies.length; i++) {
-    ctx.fillRect(x + enemies[i].x * k - 0.5, y + enemies[i].y * k - 0.5, 1.6, 1.6);
+    ctx.fillRect(x + enemies[i].x * k - 0.8, y + enemies[i].y * k - 0.8, 1.7, 1.7);
   }
-
   ctx.fillStyle = portal.active ? '#22e0ff' : '#5c6a84';
-  ctx.beginPath(); ctx.arc(x + portal.x * k, y + portal.y * k, 3.2, 0, TAU); ctx.fill();
-
+  ctx.beginPath(); ctx.arc(x + portal.x * k, y + portal.y * k, 3.4, 0, TAU); ctx.fill();
   ctx.fillStyle = '#ffffff';
-  ctx.beginPath(); ctx.arc(x + player.x * k, y + player.y * k, 2.6, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + player.x * k, y + player.y * k, 2.7, 0, TAU); ctx.fill();
   ctx.restore();
 }
 
@@ -1302,23 +1642,26 @@ function draw(t) {
   ctx.save();
   ctx.translate(-cam.x + shx, -cam.y + shy);
 
-  const x0 = cam.x - 40, y0 = cam.y - 40;
-  const x1 = cam.x + view.w + 40, y1 = cam.y + view.h + 40;
+  const x0 = cam.x - 60, y0 = cam.y - 60;
+  const x1 = cam.x + view.w + 60, y1 = cam.y + view.h + 60;
 
-  drawFloor(x0, y0, x1, y1);
-  drawWalls(x0, y0, x1, y1);
+  drawFloor(x0, y0, x1, y1, t);
   drawPortal(t);
+  drawWalls(x0, y0, x1, y1);
   drawLoot(t);
-  drawBullets();
   for (let i = 0; i < enemies.length; i++) {
     const e = enemies[i];
-    if (e.x < x0 || e.x > x1 || e.y < y0 || e.y > y1) continue;   // cull
+    if (e.x < x0 || e.x > x1 || e.y < y0 || e.y > y1) continue;
     drawEnemy(e);
   }
   drawPlayer(t);
+  drawBullets();
+  drawRings();
   drawParticles();
+  if (!lowFx) drawLightPass(t);
   ctx.restore();
 
+  if (vignette && !lowFx) ctx.drawImage(vignette, 0, 0, view.w, view.h);
   drawPortalArrow(t);
   drawMinimap();
   drawStick();
@@ -1412,7 +1755,7 @@ function resetRun() {
   generateWorld(spawn, pt);
   portal  = { x: pt.x, y: pt.y, pulse: 0, channel: 0, active: false };
   player  = makePlayer(spawn.x, spawn.y);
-  enemies = []; bullets = []; loot = []; particles = [];
+  enemies = []; bullets = []; loot = []; particles = []; rings = [];
   enemyGrid = new SpatialHash(ENEMY_CELL);
 
   run = { time: 0, tech: 0, xp: 0, xpNeed: 11, level: 1, kills: 0,

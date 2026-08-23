@@ -67,16 +67,23 @@ between frames, so a steady-state frame allocates nothing.
 Walls get a coarse static grid (100 px) built once at worldgen; enemies get a
 fine one (48 px) rebuilt each frame.
 
-Measured on the packed worst case — 220 enemies, 60 projectiles and 360
-particles all simultaneously on screen, which normal play does not reach:
-
-| | ms/frame |
-|---|---|
-| `update()` at 220 enemies | **0.30** |
-| `draw()`, full effects | **13.2** |
-| `draw()`, reduced effects | **9.6** |
-
 The enemy cap is now 220. Simulation is no longer the bottleneck; drawing is.
+
+Measured under **software rasterization** (headless Chromium on SwiftShader, no
+GPU), which is the pessimistic floor — a real device's GPU canvas handles the
+full-screen blits and additive blending that dominate here far better:
+
+| ms/frame | realistic load | 220 on screen |
+|---|---|---|
+| `update()` | — | **0.47** |
+| `draw()`, full effects | **12.7** | **23.9** |
+| `draw()`, reduced effects | — | **13.5** |
+
+"220 on screen" forces every enemy plus 60 projectiles and 360 particles into
+the viewport at once; normal play never reaches it, since the swarm is spread
+across the arena and culled. Benchmarks halt the game's own `requestAnimationFrame`
+loop first — otherwise its work lands inside the timed window and the numbers
+are noise.
 
 ### Collision (was: bullets clipping thin walls, enemies snagging corners)
 
@@ -112,26 +119,37 @@ Ten upgrades (damage, fire rate, speed, plating, range, multishot, pierce,
 magnet, regen, projectile velocity), most with stack caps. Levels queue if
 several are earned at once and are presented one at a time.
 
+### Visual style — the sprite forge
+
+Nothing detailed is drawn with paths at frame time. Every entity is forged once
+into an offscreen canvas at device resolution — gradient body, rim light, inner
+detail and baked glow — and the frame loop only blits those bitmaps. A sprite
+can carry far more detail than is affordable 220× a frame, and one `drawImage`
+beats a dozen path ops, so fidelity and speed come from the same change.
+
+Sprites are supersampled ≥2× and their span is derived back from the rounded
+pixel size, so `span × dpr` lands exactly on the source width — an unresampled
+blit rather than a filtered one. Rotated blits take a `save`/`restore`; the
+high-count unrotated cases (particles, lights) skip it entirely.
+
+On top of that: an additive light pass for the few things that genuinely read
+as light sources, expanding shockwave rings on kills, a baked vignette with
+scanlines folded into the same bitmap (one screen-sized composite, not two),
+and a slow scan sweep across the floor.
+
+This also closes out the handover's "replace vectors with sprite sheets" step,
+without needing art that doesn't exist: the sprites are generated procedurally
+at boot, so the project stays asset-free and offline. Swapping in authored
+sheets later means changing only the forge functions.
+
 ### Performance safety net
 
-Neon bloom is drawn as a wide translucent stroke under a crisp one rather than
-`shadowBlur`, which costs roughly 3× as much and is the single most expensive
-thing you can do 200 times a frame. Replacing it halved worst-case frame cost
-(28.2 ms → 13.2 ms).
-
-A frame-cost sampler drops bloom entirely if frames run long. Restoring it is
-deliberately sticky — it costs ~40% more per frame, so recovery requires a
+A frame-cost sampler drops the fill-heavy effects — light pass, vignette,
+scan sweep, additive particles — when frames run long. Recovery is deliberately
+sticky: restoring costs meaningfully more per frame, so it requires a
 comfortable margin held over several samples, otherwise restoring pushes cost
-straight back over the threshold and the setting oscillates.
-
-### Still open
-
-**Sprite integration** is not done — it needs art that doesn't exist yet, and
-the studio's "no external assets" position makes that a deliberate call rather
-than an oversight. The renderer is factored for it: every entity has its own
-draw function taking world coordinates, and no call site knows how a drone is
-drawn. Swapping vectors for sprite sheets means rewriting those function
-bodies and nothing else.
+straight back over the threshold and the setting oscillates. Verified to engage
+within ~2 s of sustained load and hold without flapping.
 
 ---
 
