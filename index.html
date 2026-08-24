@@ -230,7 +230,7 @@
     <div class="cards" id="heroPick"></div>
     <p class="hint">
       <b>Move</b> — drag anywhere, or WASD / arrows<br>
-      <b>Strike</b> — your steel looses on the nearest thrall<br>
+      <b>Strike</b> — your steel cuts a crescent at the nearest thrall<br>
       <b>Boons</b> — every few slag, choose a gift
     </p>
     <p class="fine" id="bestLine"></p>
@@ -286,14 +286,22 @@ const MAX_ENEMIES   = 220;   // was 40 before spatial partitioning
 const MAX_PARTICLES = 420;
 const MAX_DT        = 0.05;  // clamp after tab-switches / long frames
 
-const EXTRACT_QUOTA   = 70;  // tech needed before the portal powers up
+// Extraction terms live on the level (see LEVELS); these are the fallbacks a
+// level may leave unset.
+const HUD_H           = 58;   // canvas UI clears the HUD bar by this much
+const SWING_TIME      = 0.17; // how long the blade takes to come round
+const EXTRACT_QUOTA   = 70;  // slag needed before the ley-gate powers up
 const EXTRACT_CHANNEL = 4.0; // seconds standing inside it to win
 const PORTAL_R        = 62;
 
+// Spirit-wrought Steel is the conduit: the Vanguard strike, and the magic
+// leaves the edge as a crescent. `range` is how far that crescent carries and
+// how far the blade will pick a target; `sweep` is its half-width, so a wider
+// sweep mows a broader swathe rather than punching through one more body.
 const BASE_PLAYER = {
   r: 14, maxHp: 100, speed: 205,
-  damage: 22, fireDelay: 0.36, range: 275, bulletSpeed: 640,
-  shots: 1, pierce: 0, magnet: 118, regen: 0,
+  damage: 22, fireDelay: 0.50, range: 186, arcSpeed: 430,
+  sweep: 28, shots: 1, magnet: 118, regen: 0,
   iframe: 0.45
 };
 
@@ -332,13 +340,15 @@ const HEROES = {
            magic:'#ffc24d', trim:'rgba(196,142,44,.9)', cape:[86,32,26],
            blurb:'The vanguard’s anchor. Sun-Gold magic, a sun-emblazoned shield, ' +
                  'and no purchase for the Deceiver’s illusions.',
-           maxHp:125, speed:196, damage:25, fireDelay:0.40, pierce:0, range:268 },
+           maxHp:125, speed:196, damage:22, fireDelay:0.56,
+           range:178, sweep:33, arcSpeed:380 },
   zayd:  { id:'zayd', name:'Zayd', title:'The Piercing Truth',
            order:'Frost-Scholars of Kael', school:'Azure',
            magic:'#5fd0ff', trim:'rgba(70,150,196,.9)', cape:[30,44,72],
            blurb:'A tactician of Kael. The Sapphire Glaive severs hive-mind tethers, ' +
                  'and inverted ley-lines hold no confusion for him.',
-           maxHp:92, speed:228, damage:19, fireDelay:0.30, pierce:1, range:290 }
+           maxHp:92, speed:228, damage:17, fireDelay:0.42,
+           range:206, sweep:21, arcSpeed:520 }
 };
 
 // The sundered geography. Each delve falls in one of them.
@@ -375,17 +385,46 @@ const REGIONS = [
     flag:[50,20], stone:['#1c1c1f','#121215','#07070a'], lamp:'#b9c4cf' }
 ];
 
+/* ---------------------------------------------------------------------------
+   LEVELS
+
+   A level is the unit the player actually plays: which regions of the
+   Shattered Realm it can roll for its map and environment, what walks its
+   halls, what has to be killed before the ley-gate answers, and how much slag
+   buys passage out. Regions above are the environment table levels draw from,
+   so a new level is a data entry here rather than a change to the generator.
+
+   Only the test delve exists so far. It deliberately rolls all five regions,
+   because its job is to exercise every environment the generator can build.
+   ------------------------------------------------------------------------ */
+const LEVELS = [
+  { id:'test', name:'The Test Delve', tag:'TEST LEVEL',
+    note:'A proving ground cut across all five regions of the Shattered Realm.',
+    regions:['slag','vaelk','kraggen','weald','firth'],
+    horde:['thrall','eclipse','breaker'],
+    boss:'deceiver',
+    quota:70, channel:4.0 }
+];
+const LEVEL_BY_ID = {};
+for (const L of LEVELS) {
+  if (L.quota   == null) L.quota   = EXTRACT_QUOTA;
+  if (L.channel == null) L.channel = EXTRACT_CHANNEL;
+  LEVEL_BY_ID[L.id] = L;
+}
+const REGION_BY_ID = {};
+for (const R of REGIONS) REGION_BY_ID[R.id] = R;
+
 const UPGRADES = [
   { id:'dmg',    glyph:'✦', name:'Keen Edge',   desc:'your ward bites a quarter deeper',   max:99, apply:p=>p.damage      *= 1.25 },
   { id:'rate',   glyph:'❧', name:'Quickening',  desc:'the blade answers faster',           max:8,  apply:p=>p.fireDelay   *= 0.85 },
   { id:'speed',  glyph:'❯', name:'Windstep',    desc:'your stride lengthens',              max:6,  apply:p=>p.speed       *= 1.10 },
   { id:'plate',  glyph:'❖', name:'Ironhide',    desc:'+25 life, and 25 mended now',        max:99, apply:p=>{p.maxHp += 25; p.hp = Math.min(p.maxHp, p.hp + 25);} },
-  { id:'range',  glyph:'◎', name:'Farsight',    desc:'your reach grows by a seventh',      max:5,  apply:p=>p.range       *= 1.15 },
-  { id:'split',  glyph:'⁂', name:'Split Bolt',  desc:'one more bolt with every strike',    max:4,  apply:p=>p.shots       += 1 },
-  { id:'pierce', glyph:'⌁', name:'Rendbolt',    desc:'bolts run through one foe more',     max:4,  apply:p=>p.pierce      += 1 },
+  { id:'range',  glyph:'◎', name:'Long Reach', desc:'your crescents carry a seventh further', max:5, apply:p=>p.range   *= 1.15 },
+  { id:'split',  glyph:'⁂', name:'Twin Crescent', desc:'a second crescent leaves the edge',   max:4,  apply:p=>p.shots    += 1 },
+  { id:'pierce', glyph:'⌁', name:'Broad Sweep',   desc:'your arc cuts a wider swathe',        max:4,  apply:p=>p.sweep    *= 1.22 },
   { id:'magnet', glyph:'❂', name:'Soul Draw',   desc:'essence comes to you from further',  max:4,  apply:p=>p.magnet      *= 1.5 },
   { id:'regen',  glyph:'✚', name:'Mending',     desc:'0.8 life knits back each second',    max:5,  apply:p=>p.regen       += 0.8 },
-  { id:'vel',    glyph:'➤', name:'Swift Bolt',  desc:'bolts fly a quarter faster',         max:4,  apply:p=>p.bulletSpeed *= 1.25 }
+  { id:'vel',    glyph:'➤', name:'Swift Edge',    desc:'your crescents run a fifth faster',   max:4,  apply:p=>p.arcSpeed *= 1.20 }
 ];
 
 /* ---------------------------------------------------------------------------
@@ -1025,7 +1064,7 @@ function moveEntity(e, dx, dy) {
    6. ENTITIES & SPAWNING
    ------------------------------------------------------------------------ */
 
-let player, enemies, bullets, loot, particles, rings, portal;
+let player, enemies, arcs, loot, particles, rings, portal;
 let enemyGrid = new SpatialHash(ENEMY_CELL);
 const _near = [];
 
@@ -1036,11 +1075,13 @@ function makePlayer(x, y, heroId) {
   const p = Object.assign({}, BASE_PLAYER);
   p.hero = H.id;
   p.maxHp = H.maxHp; p.speed = H.speed; p.damage = H.damage;
-  p.fireDelay = H.fireDelay; p.pierce = H.pierce; p.range = H.range;
+  p.fireDelay = H.fireDelay; p.range = H.range;
+  p.sweep = H.sweep; p.arcSpeed = H.arcSpeed;
   p.x = x; p.y = y; p.angle = -Math.PI / 2;
   p.hp = p.maxHp;
   p.face = 1;
-  p.fireTimer = 0; p.invuln = 0; p.hitFlash = 0; p.muzzle = 0;
+  p.fireTimer = 0; p.invuln = 0; p.hitFlash = 0;
+  p.swing = 0; p.swingA = 0; p.swingDir = 1;
   p.upg = {};
   return p;
 }
@@ -1048,7 +1089,7 @@ function makePlayer(x, y, heroId) {
 function typeWeights(t) {
   let total = 0;
   const out = [];
-  for (const k in ENEMY_TYPES) {
+  for (const k of LEVEL.horde) {
     const d = ENEMY_TYPES[k];
     if (t < d.from) continue;
     // Ramp in over 20s so a new archetype trickles in rather than flooding.
@@ -1100,7 +1141,7 @@ function fire() {
   const R = player.range;
   enemyGrid.query(player.x, player.y, R, _near);
   // Nearest-target alone cannot fight a boss: while he is escorted, every
-  // bolt goes into the escort and he never takes a scratch. The Vanguard put
+  // crescent lands in the escort and he never takes a scratch. The Vanguard put
   // the avatar first. Mirages stay targetable -- being decoys is their whole
   // purpose -- except for Isaac, who is immune to the illusion and ignores
   // them outright.
@@ -1117,20 +1158,39 @@ function fire() {
   if (!best) return false;
 
   const base = Math.atan2(best.y - player.y, best.x - player.x);
-  const spread = 0.13;
+  // Extra crescents stagger behind the first rather than fanning out: two
+  // blades of light chasing the same line reads as a combination strike, where
+  // a spread reads as a shotgun.
   for (let i = 0; i < player.shots; i++) {
-    const a = base + (i - (player.shots - 1) / 2) * spread;
-    bullets.push({
-      x: player.x + Math.cos(a) * (player.r + 6),
-      y: player.y + Math.sin(a) * (player.r + 6),
-      dx: Math.cos(a), dy: Math.sin(a), a: a,
-      speed: player.bulletSpeed, dmg: player.damage,
-      pierce: player.pierce, life: 1.4, r: 3.5,
-      hit: [], dead: false
-    });
+    const a = base + (i === 0 ? 0 : (i % 2 ? 1 : -1) * 0.15 * Math.ceil(i / 2));
+    releaseCrescent(a, i * 0.055);
   }
-  player.muzzle = 0.06;
+  player.swing    = SWING_TIME;
+  player.swingA   = base;
+  player.swingDir = player.swingDir < 0 ? 1 : -1;   // alternate shoulders
+  player.angle    = base;
+  if (Math.abs(Math.cos(base)) > 0.25) player.face = Math.cos(base) < 0 ? -1 : 1;
   return true;
+}
+
+// One crescent of magic, thrown from the edge. `bow` is the radius the blade
+// scribes, so the band bulges forward the way a swung edge does; `half` is how
+// far along that band it reaches. Both are carried per-crescent so a boon can
+// widen the sweep without re-forging anything.
+function releaseCrescent(a, delay) {
+  const half = player.sweep;
+  const bow  = Math.max(half * 1.15, 52);
+  arcs.push({
+    x: player.x + Math.cos(a) * (player.r + 8),
+    y: player.y + Math.sin(a) * (player.r + 8),
+    dx: Math.cos(a), dy: Math.sin(a), a: a,
+    speed: player.arcSpeed, dmg: player.damage,
+    half: half, bow: bow, band: 11,
+    delay: delay || 0,
+    life: player.range / player.arcSpeed,
+    maxLife: player.range / player.arcSpeed,
+    hit: [], dead: false
+  });
 }
 
 function dropLoot(e) {
@@ -1221,7 +1281,7 @@ function moveVector() {
    8. SIMULATION
    ------------------------------------------------------------------------ */
 
-const view = { w: 0, h: 0, dpr: 1 };
+const view = { w: 0, h: 0, dpr: 1, safeT: 0, safeR: 0 };
 const cam  = { x: 0, y: 0, shake: 0 };
 
 function shake(amount) { cam.shake = Math.min(16, cam.shake + amount); }
@@ -1298,7 +1358,7 @@ function updatePlayer(dt) {
   }
   player.invuln  = Math.max(0, player.invuln - dt);
   player.hitFlash = Math.max(0, player.hitFlash - dt);
-  player.muzzle  = Math.max(0, player.muzzle - dt);
+  player.swing   = Math.max(0, player.swing - dt);
   if (player.regen > 0) player.hp = Math.min(player.maxHp, player.hp + player.regen * dt);
 
   player.fireTimer -= dt;
@@ -1489,15 +1549,33 @@ function updateEnemies(dt) {
   }
 }
 
-function updateBullets(dt) {
+// Is an enemy inside the crescent's band? The band is an arc of radius `bow`
+// centred behind the crescent, so this is two cheap tests: how far off that
+// radius the enemy sits, and how far around the arc it lies from dead ahead.
+function inCrescent(b, e) {
+  const cx = b.x - b.dx * b.bow, cy = b.y - b.dy * b.bow;
+  const vx = e.x - cx, vy = e.y - cy;
+  const d = Math.sqrt(vx * vx + vy * vy);
+  if (d < 1) return false;
+  if (Math.abs(d - b.bow) > b.band + e.r) return false;
+  // Angular half-width, widened by the body's own radius at this distance.
+  let da = Math.atan2(vy, vx) - b.a;
+  while (da >  Math.PI) da -= TAU;
+  while (da < -Math.PI) da += TAU;
+  return Math.abs(da) <= b.half / b.bow + e.r / d;
+}
+
+function updateArcs(dt) {
   let w = 0;
-  for (let i = 0; i < bullets.length; i++) {
-    const b = bullets[i];
+  for (let i = 0; i < arcs.length; i++) {
+    const b = arcs[i];
+    if (b.delay > 0) { b.delay -= dt; arcs[w++] = b; continue; }
     b.life -= dt;
     if (b.life <= 0) continue;
 
-    // Substepped travel: a fast projectile is tested along its path instead of
-    // teleporting a whole frame's distance, so it cannot tunnel a thin wall.
+    // Substepped travel: the crescent is tested along its path rather than
+    // teleporting a whole frame's distance, so it cannot skip a thin wall or
+    // step clean over a body between one frame and the next.
     const travel = b.speed * dt;
     const steps = Math.min(8, Math.max(1, Math.ceil(travel / 9)));
     const st = travel / steps;
@@ -1507,33 +1585,35 @@ function updateBullets(dt) {
       b.y += b.dy * st;
       if (b.x < 0 || b.y < 0 || b.x > WORLD.w || b.y > WORLD.h) { b.dead = true; break; }
 
-      const hits = wallsNear(b.x, b.y, b.r);
+      // Rock stops projected magic, tested on the leading centre the way the
+      // old bolt was: predictable, and it keeps a wide sweep from being
+      // cancelled because one horn clipped a corner.
+      const hits = wallsNear(b.x, b.y, 4);
       for (let k = 0; k < hits.length; k++) {
         const wl = walls[hits[k]];
-        if (b.x > wl.x - b.r && b.x < wl.x + wl.w + b.r &&
-            b.y > wl.y - b.r && b.y < wl.y + wl.h + b.r) {
+        if (b.x > wl.x - 4 && b.x < wl.x + wl.w + 4 &&
+            b.y > wl.y - 4 && b.y < wl.y + wl.h + 4) {
           b.dead = true;
-          burst(b.x, b.y, PAL.arcane, 4, 130);
+          burst(b.x, b.y, HEROES[run.hero].magic, 5, 140);
           break;
         }
       }
       if (b.dead) break;
 
-      enemyGrid.query(b.x, b.y, 26 + b.r, _near);
+      // A crescent cuts everything it sweeps through -- it is an edge, not a
+      // bolt -- but only once each, so a slow arc cannot grind one body down.
+      enemyGrid.query(b.x, b.y, b.bow + b.half + b.band + 30, _near);
       for (let k = 0; k < _near.length; k++) {
         const e = _near[k];
         if (e.hp <= 0 || b.hit.indexOf(e) !== -1) continue;
-        const rr = e.r + b.r;
-        if (dist2(b.x, b.y, e.x, e.y) > rr * rr) continue;
+        if (!inCrescent(b, e)) continue;
         damageEnemy(e, b.dmg);
         b.hit.push(e);
-        if (b.pierce-- <= 0) { b.dead = true; break; }
       }
-      if (b.dead) break;
     }
-    if (!b.dead) bullets[w++] = b;
+    if (!b.dead) arcs[w++] = b;
   }
-  bullets.length = w;
+  arcs.length = w;
 }
 
 function updateLoot(dt) {
@@ -1589,6 +1669,13 @@ function updateRings(dt) {
   rings.length = w;
 }
 
+// The level names its boss; the Deceiver is the only one built so far, so a
+// level with no boss simply opens the gate on quota.
+function spawnBoss() {
+  if (!LEVEL.boss) { run.bossDown = true; return; }
+  if (LEVEL.boss === 'deceiver') spawnDeceiver();
+}
+
 function spawnDeceiver() {
   const d = ENEMY_TYPES.deceiver;
   const scale = 1 + run.time / 220;
@@ -1631,16 +1718,16 @@ function spawnMirages(src, n) {
 function updatePortal(dt) {
   portal.pulse += dt;
   // Reaching the quota does not open the gate -- it draws him to it.
-  if (run.tech >= EXTRACT_QUOTA && !run.bossCalled) {
+  if (run.tech >= LEVEL.quota && !run.bossCalled) {
     run.bossCalled = true;
-    spawnDeceiver();
+    spawnBoss();
   }
-  portal.active = run.tech >= EXTRACT_QUOTA && run.bossDown;
+  portal.active = run.tech >= LEVEL.quota && run.bossDown;
   if (!portal.active) { portal.channel = 0; return; }
   const inside = dist2(player.x, player.y, portal.x, portal.y) < PORTAL_R * PORTAL_R;
   if (inside) {
-    portal.channel = Math.min(EXTRACT_CHANNEL, portal.channel + dt);
-    if (portal.channel >= EXTRACT_CHANNEL) endRun(true);
+    portal.channel = Math.min(LEVEL.channel, portal.channel + dt);
+    if (portal.channel >= LEVEL.channel) endRun(true);
   } else {
     portal.channel = Math.max(0, portal.channel - dt * 0.7);
   }
@@ -1670,7 +1757,7 @@ function update(dt) {
   if (run.banner > 0) { run.banner -= dt;
     if (run.banner <= 0) { run.bannerText = null; run.bannerNote = null; } }
   updatePlayer(dt);
-  updateBullets(dt);
+  updateArcs(dt);
   updateEnemies(dt);
   compactEnemies();
   updateLoot(dt);
@@ -2229,28 +2316,6 @@ function forgeHero(id, flash) {
   });
 }
 
-// An arcane bolt: hot core, cold tail.
-function forgeBolt(colour) {
-  return forge(32, g => {
-    g.shadowColor = colour; g.shadowBlur = 10;
-    const grd = g.createLinearGradient(-15, 0, 12, 0);
-    grd.addColorStop(0, tint(colour, 1, 0));
-    grd.addColorStop(0.55, tint(colour, 1, 0.45));
-    grd.addColorStop(0.9, tint(colour, 1.5, 0.95));
-    grd.addColorStop(1, '#ffffff');
-    g.fillStyle = grd;
-    g.beginPath();
-    g.moveTo(12, 0);
-    g.quadraticCurveTo(4, 3.4, -15, 1.0);
-    g.lineTo(-15, -1.0);
-    g.quadraticCurveTo(4, -3.4, 12, 0);
-    g.closePath(); g.fill();
-    g.fillStyle = '#ffffff';
-    g.beginPath(); g.arc(10, 0, 1.9, 0, TAU); g.fill();
-    g.shadowBlur = 0;
-  });
-}
-
 // Essence: a mote of light bound in a shard.
 function forgeLoot(big) {
   const s = big ? 10 : 7;
@@ -2312,7 +2377,6 @@ function forgeAll() {
     SPR['h_' + hid + 'Hit'] = forgeHero(hid, true);
     SPR['h_' + hid + 'L'] = mirrorSprite(SPR['h_' + hid]);
     SPR['h_' + hid + 'HitL'] = mirrorSprite(SPR['h_' + hid + 'Hit']);
-    SPR['bolt_' + hid] = forgeBolt(HEROES[hid].magic);
   }
   for (const k in ENEMY_TYPES) {
     const d = ENEMY_TYPES[k];
@@ -2339,6 +2403,12 @@ function resize() {
   view.dpr = Math.min(window.devicePixelRatio || 1, 2);
   view.w = stage.clientWidth  || window.innerWidth;
   view.h = stage.clientHeight || window.innerHeight;
+  // The HUD is DOM and gets env(safe-area-inset-*) from CSS; the canvas does
+  // not, so read the resolved values off the root and let canvas UI clear a
+  // notch the same way.
+  const cs = getComputedStyle(document.documentElement);
+  view.safeT = parseFloat(cs.getPropertyValue('--safe-t')) || 0;
+  view.safeR = parseFloat(cs.getPropertyValue('--safe-r')) || 0;
   canvas.width  = Math.round(view.w * view.dpr);
   canvas.height = Math.round(view.h * view.dpr);
   canvas.style.width  = view.w + 'px';
@@ -2408,6 +2478,7 @@ function blitRect(spr, x, y, rot) {
   ctx.restore();
 }
 
+let LEVEL = LEVELS[0];
 let REGION = REGIONS[0];
 
 const GROUND_T = 200;              // world units per ground tile
@@ -2919,7 +2990,7 @@ function drawPortal(t) {
   ctx.restore();
 
   if (portal.channel > 0) {
-    const f = portal.channel / EXTRACT_CHANNEL;
+    const f = portal.channel / LEVEL.channel;
     ctx.save();
     ctx.translate(portal.x, portal.y);
     ctx.rotate(-Math.PI / 2);
@@ -2942,10 +3013,47 @@ function drawLoot(t) {
   }
 }
 
-function drawBullets() {
-  for (let i = 0; i < bullets.length; i++) {
-    const b = bullets[i];
-    blit(SPR['bolt_' + run.hero] || SPR.bolt_isaac, b.x, b.y, b.a);
+// Crescents are stroked, not blitted: the sweep widens with boons, so a forged
+// sprite would have to be re-baked every time one lands. Three concentric
+// strokes fake the taper a single stroke cannot.
+function drawArcs() {
+  if (!arcs.length) return;
+  const colour = HEROES[run.hero].magic;
+  ctx.lineCap = 'round';
+  for (let i = 0; i < arcs.length; i++) {
+    const b = arcs[i];
+    if (b.delay > 0) continue;
+    const f = clamp(b.life / b.maxLife, 0, 1);          // 1 fresh -> 0 spent
+    const cx = b.x - b.dx * b.bow, cy = b.y - b.dy * b.bow;
+    const ha = (b.half / b.bow) * (0.55 + 0.45 * f);    // furls as it dies
+    if (lowFx) {
+      ctx.strokeStyle = tint(colour, 1.05, 0.55 + 0.35 * f);
+      ctx.lineWidth = 9;
+      ctx.beginPath(); ctx.arc(cx, cy, b.bow, b.a - ha, b.a + ha); ctx.stroke();
+      continue;
+    }
+    // Four passes, each spanning a little less of the arc than the last, so the
+    // crescent tapers to points at its horns the way a swung edge does. The
+    // halo is stacked translucent strokes rather than a shadow blur: measured
+    // on this software rasteriser, shadowBlur cost 7.1ms per crescent against
+    // 0.6ms for the strokes, and it is the only thing that made the arcs
+    // expensive at all. Saturated hero colour carries the body; the white core
+    // stays thin, or additive blending bleaches the whole thing to a sliver.
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = tint(colour, 0.75, 0.13 * f);
+    ctx.lineWidth = 30;
+    ctx.beginPath(); ctx.arc(cx, cy, b.bow, b.a - ha, b.a + ha); ctx.stroke();
+    ctx.strokeStyle = tint(colour, 0.9, 0.24 * f);
+    ctx.lineWidth = 19;
+    ctx.beginPath(); ctx.arc(cx, cy, b.bow, b.a - ha, b.a + ha); ctx.stroke();
+    ctx.strokeStyle = tint(colour, 1, 0.78 * f);
+    ctx.lineWidth = 9;
+    ctx.beginPath(); ctx.arc(cx, cy, b.bow, b.a - ha * 0.94, b.a + ha * 0.94); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,' + (0.4 * f).toFixed(3) + ')';
+    ctx.lineWidth = 1.7;
+    ctx.beginPath(); ctx.arc(cx, cy, b.bow, b.a - ha * 0.7, b.a + ha * 0.7); ctx.stroke();
+    ctx.restore();
   }
 }
 
@@ -2984,10 +3092,34 @@ function drawPlayer(t) {
   const key = 'h_' + p.hero + (hurt ? 'Hit' : '') + (p.face < 0 ? 'L' : '');
   blit(SPR[key] || SPR['h_' + p.hero], p.x, p.y);
 
-  if (p.muzzle > 0) {
-    const a = p.angle;
-    blit(lightFor('#cfe8ff', 46), p.x + Math.cos(a) * (p.r + 9),
-         p.y + Math.sin(a) * (p.r + 9), 0, p.muzzle / 0.06);
+  // The forged hero sprites hold a still blade, so the swing is drawn over the
+  // top as a streak sweeping through the strike -- far cheaper than re-forging
+  // a sprite per frame, and it reads at a glance which way the edge went.
+  if (p.swing > 0) {
+    const f = 1 - p.swing / SWING_TIME;            // 0 at the wind-up, 1 done
+    const arcSpan = 1.55;
+    const a = p.swingA + p.swingDir * (arcSpan * (0.5 - f));
+    const R = p.r + 13;
+    const colour = HEROES[p.hero].magic;
+    const trail = 0.62 * (1 - f);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+    // ctx.arc sweeps clockwise from start to end, so the ends must be ordered
+    // low-to-high: handed the other way round it wraps the long way and rings
+    // the player instead of trailing the blade.
+    const span = (t0, t1) => {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, R, Math.min(t0, t1), Math.max(t0, t1));
+      ctx.stroke();
+    };
+    ctx.strokeStyle = tint(colour, 1.2, 0.42 * (1 - f * 0.7));
+    ctx.lineWidth = 5.5;
+    span(a - p.swingDir * trail, a);
+    ctx.strokeStyle = 'rgba(255,255,255,' + (0.5 * (1 - f)).toFixed(3) + ')';
+    ctx.lineWidth = 1.8;
+    span(a - p.swingDir * trail * 0.6, a);
+    ctx.restore();
   }
 }
 
@@ -3137,9 +3269,16 @@ function drawViewFrame() {
 }
 
 function drawMinimap() {
-  const S = 94, pad = 12;
-  const x = view.w - S - pad, y = view.h - S - pad;
+  // Top-right, tucked under the HUD bar. The bottom corners are where the
+  // thumbs live on a phone -- a map there is under a hand for most of a run --
+  // and at 94px the whole 2000-unit world came out too small to read, so it is
+  // larger here and its markers are scaled with it.
+  const S = Math.round(Math.min(132, Math.max(96, view.w * 0.30)));
+  const pad = 14;   // the stone surround overhangs the panel by 7px each side
+  const x = view.w - S - pad - view.safeR;
+  const y = HUD_H + pad + view.safeT;
   const k = S / WORLD.w;
+  const mk = S / 108;              // marker scale, so dots grow with the frame
 
   ctx.save();
   // Stone surround with corner fittings
@@ -3160,32 +3299,39 @@ function drawMinimap() {
     ctx.fillRect(c[0], c[1], 8, 8);
   }
 
-  ctx.fillStyle = 'rgba(126,110,82,.22)';
+  // Rock was too dim against the panel to read the shape of a corridor.
+  ctx.fillStyle = 'rgba(150,132,98,.42)';
   for (let i = 4; i < walls.length; i++) {
     const w = walls[i];
     ctx.fillRect(x + w.x * k, y + w.y * k, Math.max(1, w.w * k), Math.max(1, w.h * k));
   }
-  ctx.fillStyle = 'rgba(200,90,60,.85)';
+  ctx.fillStyle = 'rgba(214,96,64,.9)';
+  const es = Math.max(1.7, 2.2 * mk);
   for (let i = 0; i < enemies.length; i++) {
-    ctx.fillRect(x + enemies[i].x * k - 0.8, y + enemies[i].y * k - 0.8, 1.7, 1.7);
+    ctx.fillRect(x + enemies[i].x * k - es / 2, y + enemies[i].y * k - es / 2, es, es);
   }
   ctx.fillStyle = portal.active ? PAL.arcane : '#7a6e58';
-  ctx.beginPath(); ctx.arc(x + portal.x * k, y + portal.y * k, 3.4, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + portal.x * k, y + portal.y * k, 4 * mk, 0, TAU); ctx.fill();
+  // The player pip carries a dark ring so it stays readable over pale rock.
+  ctx.strokeStyle = 'rgba(0,0,0,.75)'; ctx.lineWidth = 1.6 * mk;
+  ctx.beginPath(); ctx.arc(x + player.x * k, y + player.y * k, 3.2 * mk, 0, TAU); ctx.stroke();
   ctx.fillStyle = '#ffffff';
-  ctx.beginPath(); ctx.arc(x + player.x * k, y + player.y * k, 2.7, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + player.x * k, y + player.y * k, 3.2 * mk, 0, TAU); ctx.fill();
 
   // Compasses point south now. The needle is drawn as it reads, not as it
   // ought to -- one of the Final Signs, and a standing reminder of it.
-  const nx = x + S - 13, ny = y + 13;
+  const nx = x + S - 15 * mk, ny = y + 15 * mk;
   ctx.strokeStyle = 'rgba(226,196,140,.55)'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.arc(nx, ny, 7.5, 0, TAU); ctx.stroke();
+  ctx.beginPath(); ctx.arc(nx, ny, 8.5 * mk, 0, TAU); ctx.stroke();
   ctx.fillStyle = 'rgba(224,120,80,.95)';
   ctx.beginPath();
-  ctx.moveTo(nx, ny + 7); ctx.lineTo(nx - 2.6, ny); ctx.lineTo(nx + 2.6, ny);
+  ctx.moveTo(nx, ny + 8 * mk); ctx.lineTo(nx - 3 * mk, ny); ctx.lineTo(nx + 3 * mk, ny);
   ctx.closePath(); ctx.fill();
   ctx.fillStyle = 'rgba(226,196,140,.9)';
-  ctx.font = '600 7px ui-monospace, monospace';
-  ctx.fillText('S', nx - 2, ny - 9.5);
+  ctx.font = '600 ' + Math.round(8 * mk) + 'px ui-monospace, monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('S', nx, ny - 11 * mk);
+  ctx.textAlign = 'left';
   ctx.restore();
 }
 
@@ -3214,7 +3360,7 @@ function draw(t) {
     drawEnemy(e);
   }
   drawPlayer(t);
-  drawBullets();
+  drawArcs();
   drawParticles();
   if (!lowFx) drawLightPass(t);
   ctx.restore();
@@ -3227,10 +3373,21 @@ function draw(t) {
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(238,224,192,.95)';
     ctx.font = '400 21px Georgia, "Times New Roman", serif';
-    ctx.fillText(run.bannerText || REGION.name, view.w / 2, view.h * 0.42);
+    // The opening banner announces the level, then the region it was cut
+    // from; anything the run raises later (the gate, the boss) replaces both.
+    if (!run.bannerText && LEVEL.tag) {
+      ctx.fillStyle = 'rgba(150,132,102,.9)';
+      ctx.font = '600 9px ui-monospace, Menlo, Consolas, monospace';
+      ctx.letterSpacing = '2px';
+      ctx.fillText(LEVEL.tag, view.w / 2, view.h * 0.42 - 26);
+      ctx.letterSpacing = '0px';
+      ctx.fillStyle = 'rgba(238,224,192,.95)';
+    }
+    ctx.font = '400 21px Georgia, "Times New Roman", serif';
+    ctx.fillText(run.bannerText || LEVEL.name, view.w / 2, view.h * 0.42);
     ctx.fillStyle = 'rgba(186,164,128,.85)';
     ctx.font = 'italic 400 13px Georgia, "Times New Roman", serif';
-    ctx.fillText(run.bannerNote || REGION.landmark || REGION.note, view.w / 2, view.h * 0.42 + 24);
+    ctx.fillText(run.bannerNote || REGION.name, view.w / 2, view.h * 0.42 + 24);
     ctx.strokeStyle = 'rgba(196,164,116,.4)';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -3319,11 +3476,11 @@ function syncHud() {
   if (run.tech !== hudCache.tech || run.bossDown !== hudCache.boss) {
     hudCache.boss = run.bossDown;
     hudCache.tech = run.tech;
-    const f = clamp(run.tech / EXTRACT_QUOTA, 0, 1);
+    const f = clamp(run.tech / LEVEL.quota, 0, 1);
     el.techFill.style.transform = 'scaleX(' + f + ')';
     el.techBar.classList.toggle('done', f >= 1);
     el.techText.innerHTML = f < 1
-      ? 'Slag <b>' + run.tech + '</b>/' + EXTRACT_QUOTA
+      ? 'Slag <b>' + run.tech + '</b>/' + LEVEL.quota
       : (run.bossDown ? '<b class="go">Ley-gate open</b>'
                       : '<b class="go">The Deceiver holds it</b>');
   }
@@ -3341,9 +3498,12 @@ function hitFlashUI() {
 
 /* --- run lifecycle ------------------------------------------------------ */
 
-function resetRun(heroId) {
+function resetRun(heroId, levelId) {
   const hero = heroId || (run && run.hero) || 'isaac';
-  REGION = REGIONS[(Math.random() * REGIONS.length) | 0];
+  LEVEL = LEVEL_BY_ID[levelId || (run && run.level_id) || LEVELS[0].id] || LEVELS[0];
+  // The level decides which regions it can be cut from; the delve rolls one.
+  const pool = LEVEL.regions;
+  REGION = REGION_BY_ID[pool[(Math.random() * pool.length) | 0]] || REGIONS[0];
   PAL.stoneTop = REGION.stone[0];
   PAL.stoneMid = REGION.stone[1];
   PAL.stoneLow = REGION.stone[2];
@@ -3362,11 +3522,12 @@ function resetRun(heroId) {
   generateWorld(spawn, pt);
   portal  = { x: pt.x, y: pt.y, pulse: 0, channel: 0, active: false };
   player  = makePlayer(spawn.x, spawn.y, hero);
-  enemies = []; bullets = []; loot = []; particles = []; rings = [];
+  enemies = []; arcs = []; loot = []; particles = []; rings = [];
   enemyGrid = new SpatialHash(ENEMY_CELL);
 
   run = { time: 0, tech: 0, xp: 0, xpNeed: 11, level: 1, kills: 0,
-          spawnTimer: 1.4, pendingLevels: 0, hero: hero, banner: 4.2,
+          spawnTimer: 1.4, pendingLevels: 0, hero: hero, level_id: LEVEL.id,
+          banner: 4.2,
           bannerText: null, bannerNote: null,
           bossCalled: false, bossDown: false, boss: null };
 
@@ -3382,8 +3543,8 @@ function resetRun(heroId) {
   syncHud();
 }
 
-function startRun(heroId) {
-  resetRun(heroId);
+function startRun(heroId, levelId) {
+  resetRun(heroId, levelId);
   state = 'play';
   showScreen(null);
 }

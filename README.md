@@ -4,16 +4,20 @@ Mobile-first top-down survival prototype set in the Rivenmark, after the Aegis
 shattered. Vanilla HTML5 + canvas 2D, no libraries, no image assets, no network
 calls. The whole game is `index.html` — open it and it runs, from `file://`.
 
-*(Repo is still named `neon-extraction` from the original prototype.)*
+Everything shipped so far is **the test level** — a proving ground. Levels
+are a first-class structure (see below), so further levels with their own maps
+and environments are data entries rather than a rewrite.
 
 ---
 
 ## Core loop
 
 Play one of the Guided Vanguard. Raw magic is lethal unless it runs through
-Spirit-wrought Steel, so your blade answers on its own. Cut **Arcane Slag**
-from the Hollow-Thralls, then find a **ley-gate** and hold it open long enough
-to carry the haul out from under the Shroud of Dúath.
+Spirit-wrought Steel, so the blade is the conduit: you swing, and the magic
+leaves the edge as a **crescent** of Sun-Gold or Azure that carries a short way
+and cuts whatever it sweeps through. Cut **Arcane Slag** from the
+Hollow-Thralls, then find a **ley-gate** and hold it open long enough to carry
+the haul out from under the Shroud of Dúath.
 
 - **Move** — drag anywhere (floating stick), or WASD / arrows
 - **Strike** — automatic, nearest thrall in reach
@@ -31,7 +35,33 @@ and the weapon carries the order.
 | Order | Hearth-Wardens | Frost-Scholars of Kael |
 | School | Sun-Gold | Azure |
 | Arms | Sun-emblazoned shield, golden sword | Sapphire Glaive |
-| Play | 125 life, heavier, harder hitting | 92 life, faster, bolts pierce |
+| Play | 125 life, heavy slow cleave | 92 life, fast narrow lance |
+| Reach | 178 | 206 |
+| Sweep (half-width) | 33 | 21 |
+| Damage / swing | 22 every 0.56 s | 17 every 0.42 s |
+
+Isaac throws a broad, slow, heavy crescent; Zayd a thin fast one that carries
+further. Neither has a pierce limit — a crescent is an edge, so it cuts
+everything in its path, each body once.
+
+## The blade
+
+The strike is not a projectile weapon dressed up. A swing plays on the hero —
+a streak trailing the edge — and releases a crescent that travels `range` and
+expires. Geometry is an arc of radius `bow` centred behind the crescent, so it
+bulges forward the way a swung edge does; a body is cut when it falls within
+`band` of that radius and inside the arc's angular span.
+
+That makes the collision two cheap tests (radial distance, angular offset)
+rather than a swept-polygon intersection, and it means the sweep can widen with
+a boon without re-forging anything — which is also why crescents are stroked
+live rather than blitted from a forged sprite.
+
+Crescents are drawn as four stacked translucent strokes under `lighter`, each
+spanning slightly less of the arc than the last so it tapers to points at the
+horns. They carry **no `shadowBlur`**: measured on this software rasteriser, the
+blur cost **7.1 ms per crescent** against **0.6 ms** for the strokes, and it was
+the only thing that made them expensive at all.
 
 ## The horde
 
@@ -41,6 +71,29 @@ the asymmetrical void-brand that binds them to the silent hive-mind.
 - *Hollow-Thrall* — stooped, long-armed, dragging itself forward
 - *Eclipse-Marked* — fast, hooded, fraying into tatters
 - *Ghor-Breaker* — planted and over-armoured, held together by burning seams
+
+## Levels
+
+A **level** is the unit the player actually plays. It owns which regions it can
+be cut from, what walks its halls, what has to be killed before the ley-gate
+answers, and how much slag buys passage out:
+
+```js
+{ id:'test', name:'The Test Delve', tag:'TEST LEVEL',
+  regions:['slag','vaelk','kraggen','weald','firth'],
+  horde:['thrall','eclipse','breaker'],
+  boss:'deceiver', quota:70, channel:4.0 }
+```
+
+Regions (below) are the environment table levels draw from. Because the quota,
+the channel time, the spawn table and the boss are all read from `LEVEL` rather
+than from constants, a second level is a new entry in `LEVELS` — not a change
+to the generator, the spawner or the extraction logic. `resetRun(hero, levelId)`
+is the seam; a level naming no `boss` simply opens its gate on quota.
+
+Only **The Test Delve** exists so far, and it is labelled as such on the opening
+banner. It deliberately rolls all five regions, because its job is to exercise
+every environment the generator can build.
 
 ## The sundered geography
 
@@ -63,8 +116,14 @@ and despeckle passes — those exist to remove one-cell walls, which is exactly
 what a curtain wall is made of — and a reachability repair then proves the gate
 can be walked to, cutting the shortest link only if it cannot.
 
-The minimap compass points **south**. The realm's natural order has inverted —
-one of the Final Signs — and the needle is drawn as it reads.
+The minimap sits **top-right, under the HUD bar**. The bottom corners are where
+the thumbs live on a phone, so a map there is under a hand for most of a run;
+it also scales with viewport width (96–132px) instead of sitting at a fixed
+94px, because the whole 2000-unit world squeezed into that was too small to
+read a corridor from.
+
+Its compass points **south**. The realm's natural order has inverted — one of
+the Final Signs — and the needle is drawn as it reads.
 
 ## The Gilded Deceiver
 
@@ -81,8 +140,8 @@ He does not walk. A body that wide wedges on corners, and an avatar stepping
 out of one place into another near you is both the fix and the character.
 
 Auto-aim gives him priority while he is in reach. Nearest-target alone cannot
-fight a boss: while he is escorted, every bolt lands in the escort and he takes
-nothing — measured at 100% health in 7 runs of 10 before the change.
+fight a boss: while he is escorted, every strike lands in the escort and he
+takes nothing — measured at 100% health in 7 runs of 10 before the change.
 
 ## Art direction
 
@@ -113,8 +172,8 @@ half.
 - *Warden* — helm and crest, pauldrons, tabard, shield and raised blade. Drawn
   front-on and mirrored by heading rather than rotated with it: a human seen
   from directly overhead is a shoulders-and-hat blob, and every rotated attempt
-  read as a face, because concentric round masses always do. The bolts carry
-  the aim instead.
+  read as a face, because concentric round masses always do. The swing streak
+  and the crescent carry the aim instead.
 - *Wretch* — stooped, long-armed, dragging itself forward on sick green eyes
 - *Shade* — hangs rather than stands; a hood over nothing, fraying into tatters
 - *Revenant* — planted and over-armoured, held together by burning seams
@@ -218,9 +277,14 @@ canvas transform.
 
 ### Upgrades & progression
 
-Ten upgrades (damage, fire rate, speed, plating, range, multishot, pierce,
-magnet, regen, projectile velocity), most with stack caps. Levels queue if
+Ten boons, most with stack caps, offered three at a time. Levels queue if
 several are earned at once and are presented one at a time.
+
+Four of them are shaped by the blade rather than by a projectile: **Long Reach**
+carries the crescent further, **Broad Sweep** widens the swathe (measured at
+66 → 97 units across at three stacks), **Twin Crescent** adds a second crescent
+staggered behind the first, and **Swift Edge** speeds the arc. There is no
+pierce boon — a crescent already cuts everything in its path.
 
 ### The sprite forge
 
@@ -262,9 +326,21 @@ Tuned against a scripted bot playing full runs headless — flees crowding,
 drifts toward loot, beelines the portal once it powers up. It is a deliberately
 mediocre player, so its results are a floor, not a ceiling.
 
-Current curve: tech quota reached around **80 s**, median run **~2 minutes**,
-bot extracts roughly **1 run in 3**. Spawn rate more than doubles while the
-portal is being channelled — the last stand is the intended climax.
+Current curve, over 80 bot runs per hero: quota reached around **85 s**, median
+run **105–115 s**, bot extracts **25/80 as Isaac (31%)** and **20/80 as Zayd
+(25%)**. Zayd running harder is intended — he is the 92-life glass cannon. Spawn
+rate more than doubles while the gate is being channelled; the last stand is the
+intended climax.
+
+Sixteen runs cannot tell 31% from 56% apart on this bot — the same tuning
+returned 5/16 and then 9/16 — so tuning decisions here are made on 40-run
+batches at minimum.
+
+Moving from bolts to crescents made the game *easier*, not harder, despite reach
+dropping by about a third: a bolt died on the first body it hit, where a crescent
+cuts everything in its path. The crude bot's escape rate jumped from 1/10 to
+7/10 before retuning. Width turned out to be a weak lever (13/16 → 11/16 across a
+44% sweep cut); damage and cadence did the work.
 
 Tuning constants are grouped at the top of section 1.
 
@@ -288,9 +364,9 @@ byte-identical to `index.html`.
 while a menu is up so it can never swallow a tap meant for a hero or boon card;
 tap `D` on the start screen to pin it there anyway when you want the seed box.
 
-**Live stats** — fps, draw/update cost, whether `lowFx` has engaged, region, hero,
-enemy/bullet/particle counts, prop and lamp counts, wall and edge counts, slag
-against quota, boss health, active seed.
+**Live stats** — fps, draw/update cost, whether `lowFx` has engaged, level,
+region, hero, enemy/crescent/particle counts, prop and lamp counts, wall and edge
+counts, slag against quota, boss health, active seed.
 
 **Toggles** — `god`, `1-shot`, `no spawn`, `slow-mo` (0.35×), `flow` (BFS field
 and its gradient), `hitboxes` (wall rects, enemy circles, player radius and
@@ -298,8 +374,10 @@ range), `force low` (pin reduced effects on, rather than waiting for the adaptiv
 sampler), `seeded`. Shortcuts: `g` god, `h` hitboxes, `f` flow.
 
 **Actions** — `+25 slag`, `fill slag`, `to gate`, `summon boss`, `kill boss`,
-`wipe horde`, `+50 horde`, `rank up`, `heal`, `remake map`, and a jump button per
-region so an encounter can be reached without playing to it.
+`wipe horde`, `+50 horde`, `rank up`, `heal`, `remake map`, a jump button per
+level, and a jump button per region so an encounter can be reached without
+playing to it. The region buttons are rebuilt from `LEVEL.regions` whenever the
+level changes, so they always show what the current level can actually roll.
 
 **Seeds** — world generation is all `Math.random`, so the overlay swaps in a
 seeded `mulberry32` around `resetRun`. Type a seed, press *use*, and the same map
@@ -317,3 +395,14 @@ curve, auto-fire cadence, geometry embedding, frame cost at load, layout at
 The debug build is verified the same way: panel visibility across menus, every
 toggle and action, both world overlays, the region jumps, and seed reproducibility
 (same seed → identical grid/wall/prop fingerprint; different seed → different).
+
+Combat has its own harness (16 checks) covering the crescent's geometry and the
+boons that reshape it: that a swing releases one, that it cuts a rank of three
+abreast, that it spares what is behind and to the flank, that each body is cut
+exactly once rather than ground down frame after frame, that it dies at the
+blade's reach and not past it, and that each of the four blade boons measurably
+changes the arc. Geometry checks cast along a fixed heading rather than going
+through auto-aim, and the fixture demands a verified clear lane on a fixed seed —
+letting auto-aim pick the target, or letting the map fall where it may, made
+these tests report failures that were the harness's fault rather than the
+game's.

@@ -167,6 +167,7 @@
     '<div id="dbgStats"></div>' +
     '<h5>Toggles</h5><div class="grid" id="dbgTog"></div>' +
     '<h5>Actions</h5><div class="grid" id="dbgAct"></div>' +
+    '<h5>Level</h5><div class="grid" id="dbgLev"></div>' +
     '<h5>Region</h5><div class="grid" id="dbgReg"></div>' +
     '<h5>Seed</h5><div class="row" style="margin-top:3px">' +
     '<input id="dbgSeed"><button id="dbgSeedGo" style="flex:1">use</button></div>';
@@ -204,9 +205,9 @@
 
   mkButtons(panel.querySelector('#dbgAct'), [
     ['+25 slag', () => collectTech(25)],
-    ['fill slag', () => collectTech(Math.max(0, EXTRACT_QUOTA - run.tech))],
+    ['fill slag', () => collectTech(Math.max(0, LEVEL.quota - run.tech))],
     ['to gate', () => { player.x = portal.x; player.y = portal.y; }],
-    ['summon boss', () => { if (!run.bossCalled) { run.bossCalled = true; spawnDeceiver(); } }],
+    ['summon boss', () => { if (!run.bossCalled) { run.bossCalled = true; spawnBoss(); } }],
     ['kill boss', () => { if (run.boss) { damageEnemy(run.boss, 1e9); compactEnemies(); } }],
     ['wipe horde', () => { for (const e of enemies) if (e.kind !== 'deceiver') e.hp = 0;
                            compactEnemies(); }],
@@ -216,17 +217,34 @@
     ['remake map', () => resetRun(run.hero)]
   ]);
 
+  // Levels own their region pool, so the region buttons are rebuilt whenever
+  // the level changes rather than being baked once from the full table.
+  const levHost = panel.querySelector('#dbgLev');
   const regHost = panel.querySelector('#dbgReg');
-  REGIONS.forEach(R => {
+  function buildRegionButtons() {
+    regHost.innerHTML = '';
+    LEVEL.regions.forEach(id => {
+      const b = document.createElement('button');
+      b.textContent = id;
+      b.onclick = () => {
+        // resetRun rolls at random; re-roll until it lands on the one asked for.
+        for (let i = 0; i < 200 && REGION.id !== id; i++) resetRun(run.hero, LEVEL.id);
+        state = 'play'; showScreen(null);
+      };
+      regHost.appendChild(b);
+    });
+  }
+  LEVELS.forEach(L => {
     const b = document.createElement('button');
-    b.textContent = R.id;
+    b.textContent = L.id;
     b.onclick = () => {
-      // resetRun picks at random; roll until it lands on the one asked for.
-      for (let i = 0; i < 200 && REGION.id !== R.id; i++) resetRun(run.hero);
+      resetRun(run.hero, L.id);
+      buildRegionButtons();
       state = 'play'; showScreen(null);
     };
-    regHost.appendChild(b);
+    levHost.appendChild(b);
   });
+  buildRegionButtons();
 
   const seedIn = panel.querySelector('#dbgSeed');
   seedIn.value = seed;
@@ -247,13 +265,14 @@
       row('fps', fps.toFixed(0), fps < 50) +
       row('draw / upd', drawMs.toFixed(1) + ' / ' + updMs.toFixed(2) + 'ms', ms > 16.7) +
       row('lowFx', lowFx, lowFx) +
+      row('level', LEVEL.id) +
       row('region', REGION.id) +
       row('hero', (run && run.hero) || '-') +
       row('enemies', enemies.length) +
-      row('bullets / parts', bullets.length + ' / ' + particles.length) +
+      row('arcs / parts', arcs.length + ' / ' + particles.length) +
       row('props / lamps', props.length + ' / ' + lamps.length) +
       row('walls / edges', walls.length + ' / ' + edges.length) +
-      row('slag', (run ? run.tech : 0) + '/' + EXTRACT_QUOTA) +
+      row('slag', (run ? run.tech : 0) + '/' + LEVEL.quota) +
       row('boss', run && run.boss ? Math.round(100 * run.boss.hp / run.boss.maxHp) + '%'
                                   : (run && run.bossDown ? 'down' : '-')) +
       row('seed', seeded ? seed : 'off');
