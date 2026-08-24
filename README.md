@@ -68,6 +68,39 @@ the only thing that made them expensive at all.
 The **Hollow-Thralls** — people who surrendered their will, every one carrying
 the asymmetrical void-brand that binds them to the silent hive-mind.
 
+### Packs, not waves
+
+The delve is **populated at generation time and cleared by walking into it**.
+Nothing is pushed at the player on a timer; the only bodies that arrive mid-run
+are the ones the Deceiver calls. A cleared room stays cleared.
+
+`placePacks` scatters ~20 pack sites across the reachable floor, kept `PACK_APART`
+(250) from each other and `PACK_SAFE` (430) from the spawn pocket — enforced on
+each **body**, not on the site, since members scatter off-site and one drifting
+back inside its own aggro radius would have the delve waking on you at spawn.
+Packs lean on heavier archetypes the deeper they sit, and placement runs until
+`PACK_SLAG` (132) is on the map against a quota of 100.
+
+Difficulty comes from **depth, not the clock**. Waves used to ramp enemy health
+with run time; a placed dungeon ramps it with distance from the spawn pocket
+(`PACK_DEPTH_HP`).
+
+### Waking
+
+A body waits where the generator put it until one of three things happens: you
+come inside its notice, you hit it, or a neighbour that already woke passes the
+alarm along (`ALERT_R` 155, one `ALERT_DELAY` beat later, so a pack rouses in
+sequence rather than snapping awake together).
+
+Notice is **path distance, not line of sight** — `noticeDist` reads the BFS flow
+field that already exists for pathing, so a pack one wall away stays deaf. Cheap
+(one array read) and it stops the whole map hearing you through rock. Measured on
+a live map: a body 132 units away by line, 680 by path, stays asleep.
+
+Dormant bodies skip the seek and the separation pass entirely, which is most of
+the per-enemy cost — so a delve holding ~110 placed bodies runs at the cost of
+the handful actually awake.
+
 - *Hollow-Thrall* — stooped, long-armed, dragging itself forward
 - *Eclipse-Marked* — fast, hooded, fraying into tatters
 - *Ghor-Breaker* — planted and over-armoured, held together by burning seams
@@ -326,11 +359,15 @@ Tuned against a scripted bot playing full runs headless — flees crowding,
 drifts toward loot, beelines the portal once it powers up. It is a deliberately
 mediocre player, so its results are a floor, not a ceiling.
 
-Current curve, over 80 bot runs per hero: quota reached around **85 s**, median
-run **105–115 s**, bot extracts **25/80 as Isaac (31%)** and **20/80 as Zayd
-(25%)**. Zayd running harder is intended — he is the 92-life glass cannon. Spawn
-rate more than doubles while the gate is being channelled; the last stand is the
-intended climax.
+Current curve, over 40 bot runs per hero: median run **72–81 s**, ~77 kills, bot
+extracts **14/40 as Isaac (35%)** and **11/40 as Zayd (28%)**.
+
+Two levers were swept to get there rather than guessed. **Quota** at 70 ended the
+run having seen half the map (46% escape, 72 s); at 125 it fell to 25% escape and
+141 s; 100 sits at 38% and 84 s, which is most of the delve cleared without the
+last stretch being a hunt for one remaining pack. **Depth health ramp** at 0.55
+punished the fragile hero badly — Zayd 3/30 against Isaac 14/40 — and 0.30 brings
+the two back level.
 
 Sixteen runs cannot tell 31% from 56% apart on this bot — the same tuning
 returned 5/16 and then 9/16 — so tuning decisions here are made on 40-run

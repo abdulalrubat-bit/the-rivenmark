@@ -283,6 +283,24 @@ const WALL_CELL  = 100;
 const ENEMY_CELL = 48;
 
 const MAX_ENEMIES   = 220;   // was 40 before spatial partitioning
+
+// --- packs and waking -----------------------------------------------------
+// The delve is populated at generation time and cleared by walking into it,
+// rather than having waves pushed at the player forever. Packs sit dormant
+// until something wakes them, so pressure comes from what you walk into.
+const PACK_SAFE     = 430;   // no pack closer than this to the spawn pocket
+const PACK_APART    = 250;   // minimum spacing between pack sites
+const PACK_SLAG     = 132;   // slag placed on the map, against a 70 quota
+const AGGRO_NEAR    = 250;   // a body notices you inside this
+const AGGRO_FAR     = 340;   // ...and the bigger, slower ones a little sooner
+const ALERT_R       = 155;   // a woken body pulls its neighbours up with it
+const ALERT_DELAY   = 0.18;  // ...one beat later, so a pack rouses in sequence
+// Health ramp from the spawn pocket to the far edge of the delve -- this is
+// what replaced the old run-time ramp, since a placed dungeon gets harder by
+// going deeper rather than by the clock running. Left mutable so the balance
+// harness can sweep it. At 0.55 the deep packs put Zayd's escape rate at 3/30
+// against Isaac's 14/40; 0.30 brings the two back level.
+let PACK_DEPTH_HP = 0.30;
 const MAX_PARTICLES = 420;
 const MAX_DT        = 0.05;  // clamp after tab-switches / long frames
 
@@ -403,7 +421,11 @@ const LEVELS = [
     regions:['slag','vaelk','kraggen','weald','firth'],
     horde:['thrall','eclipse','breaker'],
     boss:'deceiver',
-    quota:70, channel:4.0 }
+    // 100 against the ~135 slag the generator places: enough that most of the
+    // delve has to be cleared, without the last stretch being a hunt for the
+    // one pack left. At 70 you were done having seen half the map; at 125 the
+    // bot's escape rate fell to 25% and runs ran to 140s.
+    quota:100, channel:4.0 }
 ];
 const LEVEL_BY_ID = {};
 for (const L of LEVELS) {
@@ -1067,6 +1089,10 @@ function moveEntity(e, dx, dy) {
 let player, enemies, arcs, loot, particles, rings, portal;
 let enemyGrid = new SpatialHash(ENEMY_CELL);
 const _near = [];
+// wakeEnemy runs from inside damageEnemy, which is itself called while
+// updateArcs iterates _near -- so the alarm query needs its own scratch or it
+// clobbers the array being walked.
+const _alert = [];
 
 let run;  // per-run state: timers, counters, difficulty
 
@@ -1100,6 +1126,125 @@ function typeWeights(t) {
   return { out, total };
 }
 
+// Put one body on the map, dormant, at a given spot. Depth (0 at the spawn
+// pocket, 1 at the far edge of the delve) stands in for the old run-time
+// health ramp: waves used to get tougher as the clock ran, and a placed
+// dungeon gets tougher the further in you go instead.
+function placeEnemy(kind, x, y, depth) {
+  if (enemies.length >= MAX_ENEMIES) return null;
+  const d = ENEMY_TYPES[kind];
+  const scale = 1 + depth * PACK_DEPTH_HP;
+  const e = {
+    kind, x, y, r: d.r, speed: d.speed * rand(0.92, 1.08),
+    hp: d.hp * scale, maxHp: d.hp * scale, dmg: d.dmg, tech: d.tech,
+    cd: d.cd, mass: d.mass, color: d.color, halo: d.halo,
+    atk: rand(0, d.cd), hitFlash: 0, wob: Math.random() * TAU, angle: 0, face: 1,
+    awake: false, alert: 0, home: { x, y }, drowse: Math.random() * TAU,
+    aggro: d.r >= 20 ? AGGRO_FAR : AGGRO_NEAR
+  };
+  enemies.push(e);
+  return e;
+}
+
+// How far away the player is *by ground a body could walk*, so a pack does not
+// rouse through a wall. The flow field is a BFS from the player rebuilt only
+// when they cross a cell, so this is one array read; straight-line distance
+// stands in only before the first field exists.
+function noticeDist(e, straight) {
+  if (!flowDist) return straight;
+  const cx = clamp(Math.floor(e.x / CELL_W), 0, GW - 1);
+  const cy = clamp(Math.floor(e.y / CELL_W), 0, GH - 1);
+  const steps = flowDist[gi(cx, cy)];
+  if (steps < 0) return Infinity;               // no path: it never hears you
+  return steps * CELL_W;
+}
+
+// Wake a body, and pass the alarm to its neighbours a beat later so a pack
+// rouses in sequence rather than all at once.
+function wakeEnemy(e, chain) {
+  if (e.awake || e.hp <= 0) return;
+  e.awake = true;
+  e.alert = 0;
+  if (chain === false) return;
+  enemyGrid.query(e.x, e.y, ALERT_R, _alert);
+  for (let i = 0; i < _alert.length; i++) {
+    const o = _alert[i];
+    if (o === e || o.awake || o.hp <= 0) continue;
+    if (o.alert > 0) continue;
+    if (dist2(e.x, e.y, o.x, o.y) > ALERT_R * ALERT_R) continue;
+    o.alert = ALERT_DELAY;
+  }
+}
+
+// Populate the delve: packs spread across the reachable floor, none of them
+// near the spawn pocket, biggest and meanest deepest in, plus a guard on the
+// ley-gate itself. Placement stops once enough slag is on the map to make the
+// quota with room to spare -- the level has to be completable by clearing it.
+function placePacks(spawn) {
+  if (!openCells.length) return;
+  const far = Math.hypot(WORLD.w, WORLD.h) * 0.5;
+  const sites = [];
+  const roster = LEVEL.horde;
+
+  // Reservoir of candidate sites, kept apart so packs read as separate groups.
+  for (let tries = 0; tries < 4000 && sites.length < 26; tries++) {
+    const c = openCells[(Math.random() * openCells.length) | 0];
+    const ds = Math.hypot(c.x - spawn.x, c.y - spawn.y);
+    if (ds < PACK_SAFE) continue;
+    let ok = true;
+    for (let i = 0; i < sites.length && ok; i++) {
+      if (dist2(c.x, c.y, sites[i].x, sites[i].y) < PACK_APART * PACK_APART) ok = false;
+    }
+    if (!ok) continue;
+    sites.push({ x: c.x, y: c.y, depth: clamp(ds / far, 0, 1) });
+  }
+  // Nearest first, so the slag budget is spent from the spawn outwards and a
+  // short delve is not left with every pack in one far corner.
+  sites.sort((a, b) => a.depth - b.depth);
+
+  let slag = 0;
+  for (let i = 0; i < sites.length && slag < PACK_SLAG; i++) {
+    const st = sites[i];
+    const n = 3 + ((Math.random() * 3) | 0) + (st.depth > 0.55 ? 1 : 0);
+    for (let k = 0; k < n; k++) {
+      // Deeper packs lean on the heavier archetypes; near ones are thralls.
+      let kind = roster[0];
+      const r = Math.random();
+      if (st.depth > 0.62 && r < 0.28 && roster.indexOf('breaker') >= 0) kind = 'breaker';
+      else if (st.depth > 0.3 && r < 0.55 && roster.indexOf('eclipse') >= 0) kind = 'eclipse';
+      // The site is kept clear of the spawn pocket, but members scatter off
+      // the site -- so the clearance has to be enforced on the body, not the
+      // site, or one can drift back inside its own aggro radius of the player.
+      const pos = scatterNear(st.x, st.y, 86, ENEMY_TYPES[kind].r + 4, spawn);
+      if (!pos) continue;
+      const e = placeEnemy(kind, pos.x, pos.y, st.depth);
+      if (e) slag += e.tech;
+    }
+  }
+
+  // The gate is the objective, so it is guarded -- and that guard is awake to
+  // nobody until you come for it.
+  for (let k = 0; k < 6; k++) {
+    const kind = k < 2 && roster.indexOf('breaker') >= 0 ? 'breaker' : roster[0];
+    const pos = scatterNear(portal.x, portal.y, 150, ENEMY_TYPES[kind].r + 4, spawn);
+    if (pos) placeEnemy(kind, pos.x, pos.y, 0.85);
+  }
+}
+
+// A free spot within `spread` of a point, clear of rock. Returns null rather
+// than a wedged position if the ground there will not take a body.
+function scatterNear(x, y, spread, pad, keepFrom) {
+  for (let i = 0; i < 26; i++) {
+    const a = Math.random() * TAU, d = Math.sqrt(Math.random()) * spread;
+    const nx = clamp(x + Math.cos(a) * d, pad + 4, WORLD.w - pad - 4);
+    const ny = clamp(y + Math.sin(a) * d, pad + 4, WORLD.h - pad - 4);
+    if (pointInWalls(nx, ny, pad)) continue;
+    if (keepFrom && dist2(nx, ny, keepFrom.x, keepFrom.y) < PACK_SAFE * PACK_SAFE) continue;
+    return { x: nx, y: ny };
+  }
+  return null;
+}
+
 function spawnEnemy(t) {
   if (enemies.length >= MAX_ENEMIES) return;
 
@@ -1131,7 +1276,9 @@ function spawnEnemy(t) {
     kind, x, y, r: d.r, speed: d.speed * rand(0.92, 1.08),
     hp: d.hp * scale, maxHp: d.hp * scale, dmg: d.dmg, tech: d.tech,
     cd: d.cd, mass: d.mass, color: d.color, halo: d.halo,
-    atk: rand(0, d.cd), hitFlash: 0, wob: Math.random() * TAU, angle: 0, face: 1
+    atk: rand(0, d.cd), hitFlash: 0, wob: Math.random() * TAU, angle: 0, face: 1,
+    // Summoned bodies arrive awake: they were called to you, not stumbled on.
+    awake: true, alert: 0, drowse: Math.random() * TAU, aggro: AGGRO_NEAR
   });
 }
 
@@ -1145,16 +1292,26 @@ function fire() {
   // the avatar first. Mirages stay targetable -- being decoys is their whole
   // purpose -- except for Isaac, who is immune to the illusion and ignores
   // them outright.
+  // Rock stops a crescent, so a target has to be reachable as well as near.
+  // With the delve populated in advance there is nearly always a dormant pack
+  // through a wall somewhere inside reach, and nearest-target alone spent every
+  // swing on stone. Blocked bodies are still eligible, but only once nothing
+  // clear is left.
   const blind = player.hero === 'isaac';
   let best = null, bestD = R * R, avatar = null, avatarD = R * R;
+  let walled = null, walledD = R * R;
   for (let i = 0; i < _near.length; i++) {
     const e = _near[i];
     if (blind && e.kind === 'mirage') continue;
     const d = dist2(player.x, player.y, e.x, e.y);
     if (e.kind === 'deceiver') { if (d < avatarD) { avatarD = d; avatar = e; } }
+    if (!clearShot(player.x, player.y, e.x, e.y)) {
+      if (d < walledD) { walledD = d; walled = e; }
+      continue;
+    }
     if (d < bestD) { bestD = d; best = e; }
   }
-  best = avatar || best;
+  best = avatar || best || walled;
   if (!best) return false;
 
   const base = Math.atan2(best.y - player.y, best.x - player.x);
@@ -1191,6 +1348,20 @@ function releaseCrescent(a, delay) {
     maxLife: player.range / player.arcSpeed,
     hit: [], dead: false
   });
+}
+
+// Is there open ground the whole way between two points? Sampled rather than
+// swept: at 14-unit steps nothing thinner than half a cell can hide between
+// samples, and it runs only for bodies already inside weapon reach.
+function clearShot(x0, y0, x1, y1) {
+  const dx = x1 - x0, dy = y1 - y0;
+  const len = Math.hypot(dx, dy);
+  const steps = Math.min(24, Math.max(1, Math.ceil(len / 14)));
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    if (pointInWalls(x0 + dx * t, y0 + dy * t, 3)) return false;
+  }
+  return true;
 }
 
 function dropLoot(e) {
@@ -1310,6 +1481,7 @@ function hurtPlayer(e) {
 
 function damageEnemy(e, dmg) {
   if (e.hp <= 0) return;
+  if (!e.awake) wakeEnemy(e);          // struck from the dark: everyone hears
   e.hp -= dmg;
   e.hitFlash = 0.12;
   if (e.hp <= 0) {
@@ -1504,6 +1676,25 @@ function updateEnemies(dt) {
 
     const dx = player.x - e.x, dy = player.y - e.y;
     const d = Math.hypot(dx, dy) || 1;
+
+    // --- dormant until something rouses it --------------------------------
+    // A body waits where the generator put it. It wakes when you come inside
+    // its notice, when you hit it, or when a neighbour that already woke
+    // passes the alarm along. Dormant bodies skip the seek and the separation
+    // pass entirely, which is most of the per-enemy cost.
+    if (!e.awake) {
+      if (e.alert > 0) {
+        e.alert -= dt;
+        if (e.alert <= 0) wakeEnemy(e);
+      } else if (noticeDist(e, d) < e.aggro) {
+        wakeEnemy(e);
+      }
+      if (!e.awake) {
+        e.drowse += dt * 1.6;
+        continue;
+      }
+    }
+
     e.angle = Math.atan2(dy, dx);
     if (Math.abs(dx) > 3) e.face = dx < 0 ? -1 : 1;
 
@@ -1741,9 +1932,13 @@ function compactEnemies() {
   enemies.length = w;
 }
 
+// The delve is populated once, at generation, and cleared by walking into it.
+// Nothing is pushed at the player on a timer any more -- the only bodies that
+// arrive mid-run are the ones the Deceiver calls. Kept as a seam so a level
+// can opt back into waves without touching the loop.
 function updateSpawning(dt) {
+  if (!LEVEL.waves) return;
   const t = run.time;
-  // Holding the portal calls the whole arena down on you — the last stand.
   const mul = portal.channel > 0 ? 2.4 : 1;
   run.spawnTimer -= dt * mul;
   if (run.spawnTimer > 0) return;
@@ -3535,6 +3730,7 @@ function resetRun(heroId, levelId) {
   cam.y = clamp(player.y - view.h / 2, 0, Math.max(0, WORLD.h - view.h));
   cam.shake = 0;
 
+  placePacks(spawn);
   flowFrom = -1;
   rebuildFlow();
   hudCache.hp = hudCache.tech = hudCache.time = hudCache.lvl = -1;
@@ -3761,7 +3957,7 @@ showScreen('start');
 requestAnimationFrame(frame);
 </script>
 <script>
-/* generated 2026-08-24T10:15:51Z by tools/build-debug.js — do not edit */
+/* generated 2026-08-24T10:41:49Z by tools/build-debug.js — do not edit */
 /* =============================================================================
    THE RIVENMARK — debug overlay
    Injected into debug.html by tools/build-debug.js. Never shipped in the
