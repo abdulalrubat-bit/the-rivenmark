@@ -128,6 +128,48 @@ Only **The Test Delve** exists so far, and it is labelled as such on the opening
 banner. It deliberately rolls all five regions, because its job is to exercise
 every environment the generator can build.
 
+## Rooms
+
+A braided maze is uniform corridor and near-uniform chamber — nothing you would
+recognise on the way back. `carveRooms` stamps 3–5 rooms per delve with a shape
+you can name, each recording itself so the stain layer and the scenery pass can
+dress it to match:
+
+| Room | Shape | Reads as |
+|---|---|---|
+| Pillared hall | rectangle, pillars on a 3-cell grid | built rather than eroded; cover to break sightlines in a fight |
+| Cistern | disc | standing water, dark pool with a dried-back rim, moss and grates |
+| Barracks | rectangle, stub partition walls off one side | bunk rows; crates and barrels |
+| Collapse | rectangle, scattered loose blocks | a caved-in ceiling; pale dust thrown out from the fall |
+
+They are carved **after** the widening and despeckle passes — despeckle exists to
+remove lone one-cell blocks, which is exactly what a hall's pillars are — and each
+one cuts a corridor back toward the gate so no room generates stranded. Verified
+over 12 delves: 0 unreachable.
+
+## The floor
+
+Tiled ground alone is noise at one density everywhere, so nothing draws the eye.
+The **stain layer** is a single world-scale canvas baked once per delve at quarter
+resolution, carrying everything that depends on the *layout* rather than the tile
+grid: paths worn along the corridors (a cell walled on two or more sides is a
+route, open chamber floor is not), damp banked at the foot of walls, broad dry and
+damp zones, hard wear at the spawn pocket and the gate, and each room's signature
+staining.
+
+It costs one `drawImage` a frame, drawn with **`imageSmoothingEnabled = false`**.
+Bilinear upscaling it to full screen measured **3.8 ms a frame** on the software
+rasteriser — it is a whole-viewport resample — against roughly nothing for point
+sampling, and the layer is nothing but soft gradients, so the two look the same.
+
+## The walls
+
+Merged wall rects are all axis-aligned, so the silhouette where rock meets floor
+was an unbroken straight line and the map read as a tileset. A **rubble skirt** of
+chipped, faceted stones is blitted along the foot of every third course, spilling
+outward onto the floor. Which course gets rubble is chosen by **position hash, not
+`Math.random`** — a per-frame roll makes the stones crawl.
+
 ## The sundered geography
 
 Each delve falls in one of the five regions from the map, and they generate
@@ -353,21 +395,34 @@ within ~2 s of sustained load and hold without flapping.
 
 ---
 
+## Scenery
+
+Props arrive in **knots**, not scatter. An independent roll per cell produces an
+even sprinkle however it is weighted, because that is what it is — so the per-cell
+pass is now thin background texture only (cracks, moss, loose rubble), and the
+loud objects come from `scatterKnots`, which seeds clusters where debris would
+actually collect: jammed into dead ends (a cell walled on three sides), banked
+into corners, and dressed through each room to match what it was. Roughly 590
+props a delve, and the middle of a chamber stays clear so a fight reads.
+
 ## Balance
 
 Tuned against a scripted bot playing full runs headless — flees crowding,
 drifts toward loot, beelines the portal once it powers up. It is a deliberately
 mediocre player, so its results are a floor, not a ceiling.
 
-Current curve, over 40 bot runs per hero: median run **72–81 s**, ~77 kills, bot
-extracts **14/40 as Isaac (35%)** and **11/40 as Zayd (28%)**.
+Current curve, over 40 bot runs per hero: median run **79–87 s**, ~90–98 kills,
+bot extracts **12/40 as Isaac (30%)** and **9/40 as Zayd (23%)**.
 
-Two levers were swept to get there rather than guessed. **Quota** at 70 ended the
-run having seen half the map (46% escape, 72 s); at 125 it fell to 25% escape and
-141 s; 100 sits at 38% and 84 s, which is most of the delve cleared without the
-last stretch being a hunt for one remaining pack. **Depth health ramp** at 0.55
-punished the fragile hero badly — Zayd 3/30 against Isaac 14/40 — and 0.30 brings
-the two back level.
+**Quota is the difficulty lever, not enemy health.** The depth health ramp scales
+the fragile hero far harder than the tank — measured twice, before and after the
+rooms went in: at 0.55, Zayd 3/30 against Isaac 14/40; at 0.65, Zayd 7/40 against
+Isaac 15/40. Quota moves both together, so the ramp stays at 0.30 and the quota
+does the work. It sits at 125 against the ~185 slag the generator places, about a
+two-thirds clear.
+
+Adding rooms made the delve **easier** (Isaac 35% → 53%) — open ground and pillar
+cover both favour the player — which is why the quota went up with them.
 
 Sixteen runs cannot tell 31% from 56% apart on this bot — the same tuning
 returned 5/16 and then 9/16 — so tuning decisions here are made on 40-run

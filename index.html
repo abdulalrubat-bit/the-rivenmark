@@ -290,7 +290,7 @@ const MAX_ENEMIES   = 220;   // was 40 before spatial partitioning
 // until something wakes them, so pressure comes from what you walk into.
 const PACK_SAFE     = 430;   // no pack closer than this to the spawn pocket
 const PACK_APART    = 250;   // minimum spacing between pack sites
-const PACK_SLAG     = 132;   // slag placed on the map, against a 70 quota
+let PACK_SLAG       = 175;  // slag placed on the map, against the level quota
 const AGGRO_NEAR    = 250;   // a body notices you inside this
 const AGGRO_FAR     = 340;   // ...and the bigger, slower ones a little sooner
 const ALERT_R       = 155;   // a woken body pulls its neighbours up with it
@@ -421,11 +421,11 @@ const LEVELS = [
     regions:['slag','vaelk','kraggen','weald','firth'],
     horde:['thrall','eclipse','breaker'],
     boss:'deceiver',
-    // 100 against the ~135 slag the generator places: enough that most of the
-    // delve has to be cleared, without the last stretch being a hunt for the
-    // one pack left. At 70 you were done having seen half the map; at 125 the
-    // bot's escape rate fell to 25% and runs ran to 140s.
-    quota:100, channel:4.0 }
+    // 125 against the ~185 slag the generator places -- about a two-thirds
+    // clear. Quota is the difficulty lever rather than enemy health: the depth
+    // health ramp scales the fragile hero far harder than the tank (at 0.65 it
+    // put Zayd at 7/40 against Isaac's 15/40), where quota moves both together.
+    quota:125, channel:4.0 }
 ];
 const LEVEL_BY_ID = {};
 for (const L of LEVELS) {
@@ -713,6 +713,7 @@ function generateWorld(spawn, portal) {
   }
   for (let i = 0; i < lone.length; i++) grid[lone[i]] = OPEN;
 
+  carveRooms(sc, pc);
   buildLandmark(pc);
   connectPortal(sc, pc);
 
@@ -738,6 +739,7 @@ function generateWorld(spawn, portal) {
 
   buildWallRects();
   buildEdges();
+  buildStains(spawn, portal);
   buildScenery(spawn, portal);
 }
 
@@ -776,6 +778,73 @@ function connectPortal(sc, pc) {
 // The place the region is named for. Built around the ley-gate, because the
 // objective should be somewhere, not a circle on blank ground.
 function setCell(cx, cy, v) { if (inGrid(cx, cy)) grid[gi(cx, cy)] = v; }
+
+/* --- room archetypes -----------------------------------------------------
+   A braided maze is uniform corridor and near-uniform chamber: nothing you
+   would recognise on the way back. These stamp a handful of rooms with a shape
+   you can name, and record themselves so the stain layer and the scenery pass
+   can dress each one to match.
+   --------------------------------------------------------------------- */
+let rooms = [];
+
+function carveRooms(sc, pc) {
+  rooms = [];
+  const KINDS = ['hall', 'cistern', 'barracks', 'collapse'];
+  const want = 3 + ((Math.random() * 3) | 0);
+  const tries = 260;
+  for (let t = 0; t < tries && rooms.length < want; t++) {
+    const kind = KINDS[(Math.random() * KINDS.length) | 0];
+    const rw = kind === 'cistern' ? 0 : 5 + ((Math.random() * 4) | 0);
+    const rh = kind === 'cistern' ? 0 : 4 + ((Math.random() * 4) | 0);
+    const rad = 4 + ((Math.random() * 2) | 0);
+    const half = kind === 'cistern' ? rad : Math.max(rw, rh);
+    const cx = half + 2 + ((Math.random() * (GW - 2 * half - 4)) | 0);
+    const cy = half + 2 + ((Math.random() * (GH - 2 * half - 4)) | 0);
+    // keep clear of the spawn pocket, the gate, and each other
+    if (Math.abs(cx - sc.x) + Math.abs(cy - sc.y) < 12) continue;
+    if (Math.abs(cx - pc.x) + Math.abs(cy - pc.y) < 12) continue;
+    let ok = true;
+    for (let i = 0; i < rooms.length && ok; i++) {
+      const r = rooms[i];
+      if (Math.abs(cx - r.cx) < half + r.half + 4 &&
+          Math.abs(cy - r.cy) < half + r.half + 4) ok = false;
+    }
+    if (!ok) continue;
+
+    if (kind === 'cistern') carveDisc(cx, cy, rad);
+    else carveRect(cx - rw, cy - rh, cx + rw, cy + rh);
+
+    if (kind === 'hall') {
+      // Pillars on a regular grid: the one shape that reads as built rather
+      // than as eroded, and it gives a fight cover to break line of sight on.
+      for (let py = -rh + 1; py <= rh - 1; py += 3) {
+        for (let px = -rw + 1; px <= rw - 1; px += 3) {
+          grid[gi(cx + px, cy + py)] = SOLID;
+        }
+      }
+    } else if (kind === 'barracks') {
+      // Stub walls in rows, like bunk partitions off one side.
+      for (let py = -rh + 1; py <= rh - 1; py += 2) {
+        const len = 1 + ((Math.random() * (rw - 1)) | 0);
+        for (let px = 0; px < len; px++) grid[gi(cx - rw + 1 + px, cy + py)] = SOLID;
+      }
+    } else if (kind === 'collapse') {
+      // A caved-in ceiling: a scatter of loose blocks, no pattern at all.
+      const n = 4 + ((Math.random() * 5) | 0);
+      for (let i = 0; i < n; i++) {
+        const px = cx - rw + 1 + ((Math.random() * (rw * 2 - 2)) | 0);
+        const py = cy - rh + 1 + ((Math.random() * (rh * 2 - 2)) | 0);
+        grid[gi(px, py)] = SOLID;
+      }
+    }
+
+    rooms.push({ kind, cx, cy, half,
+                 x: cx * CELL_W + CELL_W / 2, y: cy * CELL_W + CELL_W / 2,
+                 r: half * CELL_W });
+    // A room nobody can reach is scenery, so tie it back to the gate route.
+    carveCorridor(cx, cy, pc.x, pc.y, 0);
+  }
+}
 
 function buildLandmark(pc) {
   const kind = REGION.build;
@@ -1010,20 +1079,96 @@ function buildScenery(spawn, portal) {
     let kind = null;
     // The place should look looted and lived-in. Heavier against the rock
     // where things pile up, lighter in the open so a fight stays readable.
+    // Thin background texture only. The loud objects arrive in knots below --
+    // an independent roll per cell, however weighted, produces exactly the
+    // even sprinkle it looks like, because that is what it is.
     if (byRock) {
-      if (roll > 0.62) continue;
-      kind = roll < 0.09 ? 'rubble'  : roll < 0.16 ? 'bones'  : roll < 0.22 ? 'barrel' :
-             roll < 0.28 ? 'crate'   : roll < 0.33 ? 'grate'  : roll < 0.39 ? 'urn' :
-             roll < 0.45 ? 'coins'   : roll < 0.50 ? 'sword'  : roll < 0.54 ? 'shield' :
-             roll < 0.58 ? 'hornskull' : 'moss';
+      if (roll > 0.20) continue;
+      kind = roll < 0.05 ? 'rubble' : roll < 0.10 ? 'moss' :
+             roll < 0.15 ? 'crack'  : 'bones';
     } else {
-      if (roll > 0.34) continue;
-      kind = roll < 0.07 ? 'crack' : roll < 0.12 ? 'moss'  : roll < 0.17 ? 'bones' :
-             roll < 0.22 ? 'coins' : roll < 0.26 ? 'sword' : roll < 0.30 ? 'scroll' : 'rubble';
+      if (roll > 0.085) continue;
+      kind = roll < 0.035 ? 'crack' : roll < 0.06 ? 'moss' : 'rubble';
     }
     props.push({ x: c.x + rand(-C * 0.22, C * 0.22),
                  y: c.y + rand(-C * 0.22, C * 0.22),
                  q: (Math.random() * 4) | 0, kind });
+  }
+
+  scatterKnots(spawn, portal);
+}
+
+/* Debris arrives in knots, where it would actually collect: jammed into
+   dead ends, banked into corners, and dressed through the rooms to match what
+   each one was. Everything else stays background texture, so a knot reads as
+   somebody having been here rather than as more of the same scatter. */
+const KNOT_SETS = {
+  store:   ['crate', 'barrel', 'urn', 'crate', 'coins'],
+  killed:  ['bones', 'sword', 'shield', 'hornskull', 'bones'],
+  spoil:   ['coins', 'scroll', 'urn', 'coins', 'bones'],
+  fallen:  ['rubble', 'rubble', 'crack', 'bones', 'rubble'],
+  damp:    ['moss', 'moss', 'rubble', 'grate', 'moss']
+};
+
+function knot(x, y, set, n, spread) {
+  const pool = KNOT_SETS[set];
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * TAU, d = Math.sqrt(Math.random()) * spread;
+    const px = x + Math.cos(a) * d, py = y + Math.sin(a) * d;
+    if (pointInWalls(px, py, 7)) continue;
+    props.push({ x: px, y: py, q: (Math.random() * 4) | 0,
+                 kind: pool[(Math.random() * pool.length) | 0] });
+  }
+}
+
+function scatterKnots(spawn, portal) {
+  const C = CELL_W;
+  // Dead ends and corners first -- the places a corridor stops being a route.
+  const ends = [], corners = [];
+  for (let cy = 1; cy < GH - 1; cy++) {
+    for (let cx = 1; cx < GW - 1; cx++) {
+      if (cellAt(cx, cy) === SOLID) continue;
+      let w = 0;
+      const L = cellAt(cx - 1, cy) === SOLID, R = cellAt(cx + 1, cy) === SOLID;
+      const U = cellAt(cx, cy - 1) === SOLID, D = cellAt(cx, cy + 1) === SOLID;
+      w = L + R + U + D;
+      const p = { x: cx * C + C / 2, y: cy * C + C / 2 };
+      if (dist2(p.x, p.y, spawn.x, spawn.y) < 150 * 150) continue;
+      if (dist2(p.x, p.y, portal.x, portal.y) < 150 * 150) continue;
+      if (w >= 3) ends.push(p);
+      else if (w === 2 && ((L || R) && (U || D))) corners.push(p);
+    }
+  }
+  const pick = (arr, n) => {
+    const out = [];
+    for (let i = 0; i < n && arr.length; i++) {
+      out.push(arr.splice((Math.random() * arr.length) | 0, 1)[0]);
+    }
+    return out;
+  };
+  // A dead end is where something was dumped, dragged, or died.
+  for (const p of pick(ends, Math.min(22, ends.length))) {
+    const r = Math.random();
+    knot(p.x, p.y, r < 0.34 ? 'store' : r < 0.68 ? 'killed' : 'spoil',
+         3 + ((Math.random() * 4) | 0), 26);
+  }
+  // Corners bank debris the way a current does.
+  for (const p of pick(corners, Math.min(26, corners.length))) {
+    knot(p.x, p.y, Math.random() < 0.5 ? 'fallen' : 'killed',
+         2 + ((Math.random() * 3) | 0), 22);
+  }
+  // Rooms get dressed as what they were.
+  for (let i = 0; i < rooms.length; i++) {
+    const rm = rooms[i];
+    const set = rm.kind === 'barracks' ? 'store' :
+                rm.kind === 'cistern'  ? 'damp'  :
+                rm.kind === 'collapse' ? 'fallen' : 'spoil';
+    const knots = 4 + ((Math.random() * 4) | 0);
+    for (let k = 0; k < knots; k++) {
+      const a = Math.random() * TAU, d = Math.sqrt(Math.random()) * rm.r * 0.85;
+      knot(rm.x + Math.cos(a) * d, rm.y + Math.sin(a) * d, set,
+           3 + ((Math.random() * 4) | 0), 30);
+    }
   }
 }
 
@@ -2680,6 +2825,127 @@ const GROUND_T = 200;              // world units per ground tile
 const GROUND_VARIANTS = 8;
 let groundTiles = [];
 
+/* --- the stain layer -----------------------------------------------------
+   Tiled ground alone is noise at one density everywhere, so nothing draws the
+   eye and the floor has no sense of place. This is a single world-scale canvas
+   baked once per delve at a quarter resolution, carrying the things that
+   depend on the *layout* rather than on the tile grid: paths worn along the
+   corridors people actually walk, damp and moss banked against the rock, and
+   broad dry/bare zones. It costs one drawImage a frame, and being upscaled 4x
+   is what makes it read as soft staining rather than as pixels.
+   --------------------------------------------------------------------- */
+const STAIN_DIV = 4;
+let stainMap = null;
+
+function buildStains(spawn, portal) {
+  const W = Math.ceil(WORLD.w / STAIN_DIV), H = Math.ceil(WORLD.h / STAIN_DIV);
+  stainMap = newCanvas(W, H);
+  const g = stainMap.getContext('2d');
+  const K = 1 / STAIN_DIV;
+  const wet = REGION.mottle[0], dry = REGION.mottle[2];
+
+  // Broad zones first: slow, large blobs of damp and of bare dry ground, so
+  // one end of the delve does not look like the other.
+  for (let i = 0; i < 24; i++) {
+    const x = Math.random() * W, y = Math.random() * H;
+    const r = (90 + Math.random() * 190) * K * STAIN_DIV * 0.25;
+    const damp = Math.random() < 0.5;
+    const c = damp ? wet : dry;
+    const grd = g.createRadialGradient(x, y, 0, x, y, r);
+    grd.addColorStop(0, 'rgba(' + c.join(',') + ',' + (damp ? 0.15 : 0.10) + ')');
+    grd.addColorStop(1, 'rgba(' + c.join(',') + ',0)');
+    g.fillStyle = grd;
+    g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+  }
+
+  // Traffic. A cell hemmed in on two or more sides is a corridor, and corridors
+  // are where the walking happens; open chamber floor stays comparatively
+  // untrodden. Stamping a soft light blob per corridor cell lays worn routes
+  // along exactly the ground a player is funnelled down.
+  g.globalCompositeOperation = 'lighter';
+  for (let cy = 1; cy < GH - 1; cy++) {
+    for (let cx = 1; cx < GW - 1; cx++) {
+      if (cellAt(cx, cy) === SOLID) continue;
+      let walled = 0;
+      if (cellAt(cx - 1, cy) === SOLID) walled++;
+      if (cellAt(cx + 1, cy) === SOLID) walled++;
+      if (cellAt(cx, cy - 1) === SOLID) walled++;
+      if (cellAt(cx, cy + 1) === SOLID) walled++;
+      if (walled < 2) continue;                      // open floor: not a route
+      const x = (cx * CELL_W + CELL_W / 2) * K, y = (cy * CELL_W + CELL_W / 2) * K;
+      const r = CELL_W * K * (0.75 + Math.random() * 0.4);
+      const a = 0.026 + walled * 0.009;
+      const grd = g.createRadialGradient(x, y, 0, x, y, r);
+      grd.addColorStop(0, 'rgba(' + dry.join(',') + ',' + a.toFixed(3) + ')');
+      grd.addColorStop(1, 'rgba(' + dry.join(',') + ',0)');
+      g.fillStyle = grd;
+      g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+    }
+  }
+
+  // The two places every run visits: the spawn pocket and the gate. Wear them
+  // hardest, so arriving anywhere near either reads as trodden ground.
+  g.globalCompositeOperation = 'source-over';
+  for (const pt of [spawn, portal]) {
+    const x = pt.x * K, y = pt.y * K, r = 150 * K;
+    const grd = g.createRadialGradient(x, y, 0, x, y, r);
+    grd.addColorStop(0, 'rgba(' + dry.join(',') + ',0.18)');
+    grd.addColorStop(1, 'rgba(' + dry.join(',') + ',0)');
+    g.fillStyle = grd;
+    g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+  }
+
+  // Each room gets the staining its archetype implies, so it reads as a place
+  // and not just a differently-shaped hole.
+  for (let i = 0; i < rooms.length; i++) {
+    const rm = rooms[i], x = rm.x * K, y = rm.y * K, r = rm.r * K;
+    if (rm.kind === 'cistern') {
+      // standing water: a dark pool with a bright rim where it has dried back
+      const grd = g.createRadialGradient(x, y, 0, x, y, r);
+      grd.addColorStop(0,    'rgba(' + wet.join(',') + ',0.85)');
+      grd.addColorStop(0.72, 'rgba(' + wet.join(',') + ',0.55)');
+      grd.addColorStop(1,    'rgba(' + wet.join(',') + ',0)');
+      g.fillStyle = grd;
+      g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+    } else if (rm.kind === 'barracks' || rm.kind === 'hall') {
+      // trodden flat by whatever used to live here
+      const grd = g.createRadialGradient(x, y, 0, x, y, r);
+      grd.addColorStop(0, 'rgba(' + dry.join(',') + ',0.30)');
+      grd.addColorStop(1, 'rgba(' + dry.join(',') + ',0)');
+      g.fillStyle = grd;
+      g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+    } else if (rm.kind === 'collapse') {
+      // dust thrown out from the fall, dry and pale
+      for (let k = 0; k < 9; k++) {
+        const a = Math.random() * TAU, d = Math.random() * r;
+        const px = x + Math.cos(a) * d, py = y + Math.sin(a) * d;
+        const pr = r * (0.2 + Math.random() * 0.3);
+        const grd = g.createRadialGradient(px, py, 0, px, py, pr);
+        grd.addColorStop(0, 'rgba(' + dry.join(',') + ',0.26)');
+        grd.addColorStop(1, 'rgba(' + dry.join(',') + ',0)');
+        g.fillStyle = grd;
+        g.beginPath(); g.arc(px, py, pr, 0, TAU); g.fill();
+      }
+    }
+  }
+
+  // Damp banked against the rock: seepage collects at the foot of a wall.
+  for (let i = 0; i < edges.length; i += 2) {
+    const e = edges[i];
+    const len = Math.hypot(e.x2 - e.x1, e.y2 - e.y1);
+    if (len < 50 || Math.random() > 0.42) continue;
+    const t = 0.2 + Math.random() * 0.6;
+    const x = (e.x1 + (e.x2 - e.x1) * t + e.nx * 14) * K;
+    const y = (e.y1 + (e.y2 - e.y1) * t + e.ny * 14) * K;
+    const r = (26 + Math.random() * 40) * K;
+    const grd = g.createRadialGradient(x, y, 0, x, y, r);
+    grd.addColorStop(0, 'rgba(' + wet.join(',') + ',0.24)');
+    grd.addColorStop(1, 'rgba(' + wet.join(',') + ',0)');
+    g.fillStyle = grd;
+    g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+  }
+}
+
 function forgeGround() {
   groundTiles = [];
   for (let v = 0; v < GROUND_VARIANTS; v++) {
@@ -2761,6 +3027,7 @@ function forgeGround() {
 // Courses of cut stone laid along a wall face. Authored running along +x with
 // the dressed, lit face toward -y, which is rotated to the wall's normal.
 let wallCourses = [];
+let wallRubble = [];
 function forgeWallCourses() {
   wallCourses = [];
   for (let v = 0; v < 3; v++) {
@@ -2805,6 +3072,50 @@ function forgeWallCourses() {
     });
     wallCourses.push([0, 1, 2, 3].map(q => rotateSprite(base, q)));
   }
+  forgeWallRubble();
+}
+
+/* Rubble spilling off the foot of a wall. Merged wall rects are all
+   axis-aligned, so without this the silhouette is an unbroken straight line
+   wherever rock meets floor and the whole map reads as a tileset. Authored in
+   the same local frame as a course and blitted with the same quarter rotation,
+   biased toward the floor side so the stones spill outward. */
+function forgeWallRubble() {
+  wallRubble = [];
+  for (let v = 0; v < 4; v++) {
+    const base = forgeRect(100, 34, g => {
+      g.translate(-50, -17);
+      const n = 7 + ((Math.random() * 6) | 0);
+      for (let i = 0; i < n; i++) {
+        // local y below centre is the floor side once rotated into place
+        const x = 6 + Math.random() * 88;
+        const y = 15 + Math.random() * 15;
+        const w = 4 + Math.random() * 11, h = 3 + Math.random() * 7;
+        const tone = 52 + Math.random() * 34;
+        g.fillStyle = 'rgba(5,4,3,.45)';                       // contact shadow
+        g.beginPath();
+        g.ellipse(x + 1.5, y + h * 0.55, w * 0.62, h * 0.42, 0, 0, TAU);
+        g.fill();
+        const grd = g.createLinearGradient(0, y - h / 2, 0, y + h / 2);
+        grd.addColorStop(0, 'rgb(' + Math.round(tone * 1.45) + ',' +
+                                     Math.round(tone * 1.38) + ',' +
+                                     Math.round(tone * 1.22) + ')');
+        grd.addColorStop(1, 'rgb(' + Math.round(tone * 0.6) + ',' +
+                                     Math.round(tone * 0.57) + ',' +
+                                     Math.round(tone * 0.5) + ')');
+        g.fillStyle = grd;
+        g.beginPath();
+        // chipped, not round: a few flat facets reads as broken stone
+        g.moveTo(x - w / 2, y);
+        g.lineTo(x - w / 4, y - h / 2);
+        g.lineTo(x + w / 3, y - h / 2.4);
+        g.lineTo(x + w / 2, y + h / 6);
+        g.lineTo(x, y + h / 2);
+        g.closePath(); g.fill();
+      }
+    });
+    wallRubble.push([0, 1, 2, 3].map(q => rotateSprite(base, q)));
+  }
 }
 
 function drawGround(x0, y0, x1, y1) {
@@ -2817,6 +3128,22 @@ function drawGround(x0, y0, x1, y1) {
       const tile = groundTiles[h % GROUND_VARIANTS];
       if (!tile) continue;
       ctx.drawImage(tile, tx * T, ty * T, T, T);
+    }
+  }
+  // One call for the whole layout-aware layer: worn routes, damp, dry zones.
+  if (stainMap && !lowFx) {
+    const sx = Math.max(0, x0 / STAIN_DIV), sy = Math.max(0, y0 / STAIN_DIV);
+    const sw = Math.min(stainMap.width - sx, (x1 - x0) / STAIN_DIV);
+    const sh = Math.min(stainMap.height - sy, (y1 - y0) / STAIN_DIV);
+    if (sw > 0 && sh > 0) {
+      // Nearest-neighbour on purpose. Bilinear upscaling this to full screen
+      // measured 3.8ms a frame on the software rasteriser -- it is a full
+      // viewport resample -- and the layer is nothing but soft gradients, so
+      // point sampling costs a fraction and looks the same.
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(stainMap, sx, sy, sw, sh,
+                    sx * STAIN_DIV, sy * STAIN_DIV, sw * STAIN_DIV, sh * STAIN_DIV);
+      ctx.imageSmoothingEnabled = true;
     }
   }
 }
@@ -2870,6 +3197,18 @@ function drawWalls(x0, y0, x1, y1) {
                                wallCourses.length) % wallCourses.length];
       const spr = set[q];
       ctx.drawImage(spr, cx - spr.spanW / 2, cy - spr.spanH / 2, spr.spanW, spr.spanH);
+
+      // Rubble on roughly every third course, chosen by position hash rather
+      // than by Math.random -- a per-frame roll would make the stones crawl.
+      if (!wallRubble.length) continue;
+      const hh = (((cx * 31 + cy * 17) | 0) % 3 + 3) % 3;
+      if (hh !== 0) continue;
+      const rset = wallRubble[(((cx * 11 + cy * 23) | 0) % wallRubble.length +
+                               wallRubble.length) % wallRubble.length];
+      const rs = rset[q];
+      const rx = e.x1 + ux * d + e.nx * 4;
+      const ry = e.y1 + uy * d + e.ny * 4;
+      ctx.drawImage(rs, rx - rs.spanW / 2, ry - rs.spanH / 2, rs.spanW, rs.spanH);
     }
   }
 }
@@ -3500,10 +3839,15 @@ function drawMinimap() {
     const w = walls[i];
     ctx.fillRect(x + w.x * k, y + w.y * k, Math.max(1, w.w * k), Math.max(1, w.h * k));
   }
+  // Only what has actually noticed you. Plotting every dormant body would hand
+  // the player the location of every pack in the delve before they set out,
+  // which is the whole thing the packs exist to avoid.
   ctx.fillStyle = 'rgba(214,96,64,.9)';
   const es = Math.max(1.7, 2.2 * mk);
   for (let i = 0; i < enemies.length; i++) {
-    ctx.fillRect(x + enemies[i].x * k - es / 2, y + enemies[i].y * k - es / 2, es, es);
+    const e = enemies[i];
+    if (!e.awake || e.hp <= 0) continue;
+    ctx.fillRect(x + e.x * k - es / 2, y + e.y * k - es / 2, es, es);
   }
   ctx.fillStyle = portal.active ? PAL.arcane : '#7a6e58';
   ctx.beginPath(); ctx.arc(x + portal.x * k, y + portal.y * k, 4 * mk, 0, TAU); ctx.fill();
