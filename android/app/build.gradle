@@ -1,0 +1,41 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.rivenmark.game'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.rivenmark.game"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "0.1"
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-debug"
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+// AndroidX drags in kotlin-stdlib-jdk7/jdk8, whose classes were folded into
+// kotlin-stdlib itself at Kotlin 1.8 -- leaving both on the classpath fails
+// dexing with several hundred duplicate-class errors. The shims are empty now,
+// so dropping them is the fix rather than pinning versions against each other.
+configurations.all {
+    exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
+    exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.core:core:1.13.1'
+}

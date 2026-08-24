@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Pre-API-26 launchers take this; API 26+ prefer mipmap-anydpi-v26. -->
+    <drawable name="ic_launcher">@drawable/ic_launcher_legacy</drawable>
+</resources>
