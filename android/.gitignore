@@ -1,0 +1,8 @@
+# Gradle / AGP build output
+.gradle/
+build/
+app/build/
+local.properties
+
+# Generated from debug.html by sync-assets.js -- never hand-edited, never committed
+app/src/main/assets/index.html

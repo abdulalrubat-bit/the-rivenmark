@@ -526,6 +526,49 @@ restores the real generator.
 
 ---
 
+## Android
+
+`android/` wraps the game in a WebView and packages it as a debug APK. The game
+itself is unchanged by this — it is still one HTML file that runs from `file://`,
+and the Android app is a shell around it.
+
+    node android/sync-assets.js       # rebuilds debug.html and copies it into assets
+    cd android && gradle assembleDebug
+    # -> app/build/outputs/apk/debug/app-debug.apk
+
+`sync-assets.js` runs the debug build first and copies the result, rather than
+trusting whatever is sitting in `assets/`, so the APK cannot ship a stale page.
+The copied asset is gitignored for the same reason: it is generated, and a
+committed copy would go out of date the moment `index.html` changed.
+
+The APK is **not committed** either. `.github/workflows/android-debug.yml` builds
+it on every push and uploads it as an artifact, and asserts along the way that
+the page inside the APK hashes identically to the generated `debug.html` — a
+green build is therefore evidence the APK matches its source, which a binary in
+git could never be.
+
+What the shell has to get right:
+
+- **Edge to edge.** The page is authored `viewport-fit=cover` and reads
+  `env(safe-area-inset-*)` to keep the HUD and minimap clear of a notch. Those
+  resolve to zero unless the app draws behind the system bars, so
+  `setDecorFitsSystemWindows(false)` is what makes the game's own safe-area
+  handling mean anything.
+- **DOM storage on**, or the best-delve record cannot persist.
+- **Text zoom pinned to 100%**, or the system font scale resizes the UI.
+- **Long-press swallowed**, or text selection fires mid-fight.
+- **Losing focus pauses the run**, rather than leaving the Vanguard standing in
+  a crowd.
+- **Back pauses a run but still exits** from a menu — pausing unconditionally
+  leaves the home button as the only way out of the app.
+
+Debug specifics: package `com.rivenmark.game.debug`, `minSdk 24`, `targetSdk 34`,
+signed with the standard Android debug key, and `setWebContentsDebuggingEnabled`
+so `chrome://inspect` can attach. **No permissions are requested** — the game
+makes no network calls and needs none.
+
+---
+
 ## Testing
 
 No test framework is committed. Verification was done by driving the built
