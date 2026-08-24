@@ -854,6 +854,7 @@ function makePlayer(x, y) {
   const p = Object.assign({}, BASE_PLAYER);
   p.x = x; p.y = y; p.angle = -Math.PI / 2;
   p.hp = p.maxHp;
+  p.face = 1;
   p.fireTimer = 0; p.invuln = 0; p.hitFlash = 0; p.muzzle = 0;
   p.upg = {};
   return p;
@@ -1083,6 +1084,7 @@ function updatePlayer(dt) {
   if (mv.x !== 0 || mv.y !== 0) {
     const target = Math.atan2(mv.y, mv.x);
     player.angle += angleDelta(player.angle, target) * Math.min(1, dt * 15);
+    if (Math.abs(mv.x) > 0.12) player.face = mv.x < 0 ? -1 : 1;
     moveEntity(player, mv.x * player.speed * dt, mv.y * player.speed * dt);
   }
   player.invuln  = Math.max(0, player.invuln - dt);
@@ -1604,61 +1606,162 @@ function forgeEnemy(kind, r, color, flash) {
   });
 }
 
-// The warden: cloak, pauldrons, helm, and a warded blade held out front.
+// The warden.
+//
+// Drawn front-on and mirrored by heading rather than rotated with it. A human
+// seen from directly overhead is a shoulders-and-hat blob -- every attempt to
+// rotate one at this size read as a face, because concentric round masses
+// always do. Survivors-likes solve this the same way: keep the figure facing
+// the camera, flip it by travel direction, and let the bolts carry the aim.
 function forgePlayer(flash) {
-  const r = BASE_PLAYER.r;
-  const cloak = gg => {
-    gg.beginPath();
-    gg.moveTo(r * 0.86, 0);
-    gg.quadraticCurveTo(r * 0.62, r * 0.86, -r * 0.28, r * 1.02);
-    gg.quadraticCurveTo(-r * 1.18, r * 0.72, -r * 1.14, 0);
-    gg.quadraticCurveTo(-r * 1.18, -r * 0.72, -r * 0.28, -r * 1.02);
-    gg.quadraticCurveTo(r * 0.62, -r * 0.86, r * 0.86, 0);
-    gg.closePath();
-  };
-  return forge(r * 3.6, g => {
-    // Blade first so the body sits over its hilt
-    g.shadowColor = PAL.arcane; g.shadowBlur = flash ? 6 : 13;
-    g.strokeStyle = 'rgba(150,214,255,.9)'; g.lineWidth = 3.4; g.lineCap = 'round';
-    g.beginPath(); g.moveTo(r * 0.5, r * 0.45); g.lineTo(r * 2.02, r * 0.16); g.stroke();
-    g.strokeStyle = '#eaf6ff'; g.lineWidth = 1.3;
-    g.beginPath(); g.moveTo(r * 0.5, r * 0.45); g.lineTo(r * 1.98, r * 0.17); g.stroke();
-    g.shadowBlur = 0;
-    // Crossguard
-    g.strokeStyle = '#6b5a44'; g.lineWidth = 2.6;
-    g.beginPath(); g.moveTo(r * 0.56, r * 0.72); g.lineTo(r * 0.72, r * 0.16); g.stroke();
+  const u = BASE_PLAYER.r * 1.28;                   // figure unit
+  const L = flash ? 1.55 : 1;
+  const lit = (a, b, c) => 'rgb(' + Math.round(Math.min(255, a * L)) + ',' +
+                                    Math.round(Math.min(255, b * L)) + ',' +
+                                    Math.round(Math.min(255, c * L)) + ')';
 
-    // Shield, off the left arm
-    g.fillStyle = '#2b2721';
-    g.beginPath(); g.ellipse(-r * 0.1, -r * 0.86, r * 0.46, r * 0.3, -0.35, 0, TAU); g.fill();
-    g.strokeStyle = 'rgba(190,170,140,.6)'; g.lineWidth = 1.2; g.stroke();
-    g.fillStyle = PAL.arcane;
-    g.beginPath(); g.arc(-r * 0.1, -r * 0.86, r * 0.1, 0, TAU); g.fill();
+  return forge(u * 4.0, g => {
+    g.lineJoin = 'round';
 
-    // Cloak and mail
-    paintedBody(g, cloak, r,
-                flash ? '#8a7468' : '#544a40',
-                flash ? '#4a3d34' : '#241d18',
-                'rgba(238,222,190,.85)');
-    // Pauldrons
-    g.fillStyle = '#5d5e57';
-    g.beginPath(); g.ellipse(r * 0.08, r * 0.7, r * 0.4, r * 0.26, 0.5, 0, TAU); g.fill();
-    g.beginPath(); g.ellipse(r * 0.08, -r * 0.7, r * 0.4, r * 0.26, -0.5, 0, TAU); g.fill();
-    g.strokeStyle = 'rgba(240,226,196,.75)'; g.lineWidth = 1.1;
-    g.beginPath(); g.ellipse(r * 0.08, r * 0.7, r * 0.4, r * 0.26, 0.5, 0, TAU); g.stroke();
-    g.beginPath(); g.ellipse(r * 0.08, -r * 0.7, r * 0.4, r * 0.26, -0.5, 0, TAU); g.stroke();
+    // --- cape behind the figure -------------------------------------------
+    const capeG = g.createLinearGradient(0, -u * 0.6, 0, u * 1.3);
+    capeG.addColorStop(0, lit(58, 26, 24));
+    capeG.addColorStop(1, lit(20, 9, 8));
+    g.fillStyle = capeG;
+    g.beginPath();
+    g.moveTo(-u * 0.62, -u * 0.34);
+    g.quadraticCurveTo(-u * 1.12, u * 0.5, -u * 0.86, u * 1.22);
+    g.lineTo(u * 0.86, u * 1.22);
+    g.quadraticCurveTo(u * 1.12, u * 0.5, u * 0.62, -u * 0.34);
+    g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(0,0,0,.8)'; g.lineWidth = 2; g.stroke();
+    g.strokeStyle = 'rgba(0,0,0,.45)'; g.lineWidth = 1.4;
+    g.beginPath();
+    g.moveTo(-u * 0.3, -u * 0.1); g.lineTo(-u * 0.42, u * 1.2);
+    g.moveTo(u * 0.3, -u * 0.1); g.lineTo(u * 0.42, u * 1.2);
+    g.stroke();
 
-    // Helm with a lit visor slit
-    const hg = g.createLinearGradient(0, -r * 0.5, 0, r * 0.5);
-    hg.addColorStop(0, '#9aa0a0'); hg.addColorStop(1, '#3a3833');
-    g.fillStyle = hg;
-    g.beginPath(); g.ellipse(r * 0.18, 0, r * 0.52, r * 0.45, 0, 0, TAU); g.fill();
-    g.strokeStyle = 'rgba(246,236,212,.9)'; g.lineWidth = 1.3; g.stroke();
-    g.shadowColor = PAL.arcane; g.shadowBlur = 8;
-    g.fillStyle = 'rgba(180,226,255,.95)';
-    g.fillRect(r * 0.34, -r * 0.18, r * 0.3, r * 0.36);
-    g.shadowBlur = 0;
+    // --- legs --------------------------------------------------------------
+    g.fillStyle = lit(40, 36, 31);
+    g.beginPath(); g.roundRect ? g.roundRect(-u * 0.36, u * 0.62, u * 0.28, u * 0.62, u * 0.1)
+                               : g.rect(-u * 0.36, u * 0.62, u * 0.28, u * 0.62);
+    g.fill();
+    g.beginPath(); g.roundRect ? g.roundRect(u * 0.08, u * 0.62, u * 0.28, u * 0.62, u * 0.1)
+                               : g.rect(u * 0.08, u * 0.62, u * 0.28, u * 0.62);
+    g.fill();
+    g.strokeStyle = 'rgba(0,0,0,.7)'; g.lineWidth = 1.6;
+    g.beginPath(); g.moveTo(-u * 0.22, u * 0.66); g.lineTo(-u * 0.22, u * 1.2);
+    g.moveTo(u * 0.22, u * 0.66); g.lineTo(u * 0.22, u * 1.2); g.stroke();
+
+    // --- torso -------------------------------------------------------------
+    const tg = g.createLinearGradient(0, -u * 0.4, 0, u * 0.8);
+    tg.addColorStop(0, lit(122, 118, 108));
+    tg.addColorStop(0.5, lit(72, 68, 61));
+    tg.addColorStop(1, lit(30, 27, 23));
+    g.fillStyle = tg;
+    g.beginPath();
+    g.moveTo(-u * 0.5, -u * 0.3);
+    g.quadraticCurveTo(-u * 0.62, u * 0.3, -u * 0.4, u * 0.68);
+    g.lineTo(u * 0.4, u * 0.68);
+    g.quadraticCurveTo(u * 0.62, u * 0.3, u * 0.5, -u * 0.3);
+    g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(0,0,0,.8)'; g.lineWidth = 2; g.stroke();
+    // tabard
+    g.fillStyle = 'rgba(122,38,30,.85)';
+    g.beginPath();
+    g.moveTo(-u * 0.17, -u * 0.28); g.lineTo(u * 0.17, -u * 0.28);
+    g.lineTo(u * 0.13, u * 0.68); g.lineTo(-u * 0.13, u * 0.68);
+    g.closePath(); g.fill();
+    // belt
+    g.fillStyle = lit(58, 44, 28);
+    g.fillRect(-u * 0.44, u * 0.42, u * 0.88, u * 0.14);
+    g.fillStyle = lit(150, 122, 70);
+    g.fillRect(-u * 0.08, u * 0.42, u * 0.16, u * 0.14);
+
+    // --- shield arm (figure's right, screen left) --------------------------
+    g.fillStyle = lit(46, 43, 38);
+    g.beginPath(); g.ellipse(-u * 0.78, u * 0.34, u * 0.3, u * 0.42, -0.12, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(0,0,0,.8)'; g.lineWidth = 2; g.stroke();
+    g.strokeStyle = 'rgba(206,190,158,.55)'; g.lineWidth = 1.2;
+    g.beginPath(); g.ellipse(-u * 0.78, u * 0.34, u * 0.22, u * 0.33, -0.12, 0, TAU); g.stroke();
+    g.fillStyle = lit(140, 134, 120);
+    g.beginPath(); g.arc(-u * 0.78, u * 0.34, u * 0.08, 0, TAU); g.fill();
+
+    // --- sword arm and blade ----------------------------------------------
+    g.strokeStyle = lit(70, 66, 59); g.lineWidth = u * 0.24; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(u * 0.46, u * 0.06); g.lineTo(u * 0.74, u * 0.3); g.stroke();
     g.lineCap = 'butt';
+    g.strokeStyle = '#5c4a30'; g.lineWidth = u * 0.16;
+    g.beginPath(); g.moveTo(u * 0.66, u * 0.42); g.lineTo(u * 0.82, u * 0.12); g.stroke();
+    g.strokeStyle = '#7d6a48'; g.lineWidth = u * 0.1;
+    g.beginPath(); g.moveTo(u * 0.6, u * 0.1); g.lineTo(u * 0.94, u * 0.26); g.stroke();
+    g.lineCap = 'round';
+    g.strokeStyle = 'rgba(168,202,228,.3)'; g.lineWidth = u * 0.28;
+    g.beginPath(); g.moveTo(u * 0.8, u * 0.06); g.lineTo(u * 1.24, -u * 1.06); g.stroke();
+    g.strokeStyle = '#c2d3de'; g.lineWidth = u * 0.15;
+    g.beginPath(); g.moveTo(u * 0.8, u * 0.06); g.lineTo(u * 1.22, -u * 1.04); g.stroke();
+    g.strokeStyle = 'rgba(244,250,255,.95)'; g.lineWidth = u * 0.06;
+    g.beginPath(); g.moveTo(u * 0.78, u * 0.02); g.lineTo(u * 1.18, -u * 1.0); g.stroke();
+    g.lineCap = 'butt';
+
+    // --- pauldrons ---------------------------------------------------------
+    const pauldron = (sx) => {
+      const pg = g.createLinearGradient(0, -u * 0.52, 0, u * 0.06);
+      pg.addColorStop(0, lit(146, 142, 130));
+      pg.addColorStop(1, lit(48, 45, 40));
+      g.fillStyle = pg;
+      g.beginPath();
+      g.ellipse(sx * u * 0.56, -u * 0.16, u * 0.28, u * 0.24, sx * 0.3, 0, TAU);
+      g.fill();
+      g.strokeStyle = 'rgba(0,0,0,.8)'; g.lineWidth = 1.8; g.stroke();
+      g.strokeStyle = 'rgba(238,226,198,.6)'; g.lineWidth = 1.1;
+      g.beginPath();
+      g.ellipse(sx * u * 0.56, -u * 0.2, u * 0.2, u * 0.16, sx * 0.3, 0, TAU);
+      g.stroke();
+    };
+    pauldron(-1); pauldron(1);
+
+    // --- helm --------------------------------------------------------------
+    const hg = g.createLinearGradient(0, -u * 0.92, 0, -u * 0.2);
+    hg.addColorStop(0, lit(158, 154, 142));
+    hg.addColorStop(0.55, lit(82, 78, 70));
+    hg.addColorStop(1, lit(28, 26, 22));
+    g.fillStyle = hg;
+    g.beginPath();
+    g.moveTo(-u * 0.3, -u * 0.34);
+    g.quadraticCurveTo(-u * 0.34, -u * 0.94, 0, -u * 0.98);
+    g.quadraticCurveTo(u * 0.34, -u * 0.94, u * 0.3, -u * 0.34);
+    g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(0,0,0,.85)'; g.lineWidth = 2; g.stroke();
+    // visor slot
+    g.fillStyle = 'rgba(6,7,8,.95)';
+    g.beginPath();
+    g.roundRect ? g.roundRect(-u * 0.22, -u * 0.66, u * 0.44, u * 0.16, u * 0.05)
+                : g.rect(-u * 0.22, -u * 0.66, u * 0.44, u * 0.16);
+    g.fill();
+    g.fillStyle = 'rgba(150,192,220,.8)';
+    g.fillRect(-u * 0.14, -u * 0.62, u * 0.1, u * 0.08);
+    g.fillRect(u * 0.05, -u * 0.62, u * 0.1, u * 0.08);
+    // crest
+    g.fillStyle = 'rgba(122,38,30,.9)';
+    g.beginPath();
+    g.moveTo(-u * 0.05, -u * 0.98);
+    g.quadraticCurveTo(0, -u * 1.24, u * 0.05, -u * 0.98);
+    g.closePath(); g.fill();
+
+    // Struck: wash every drawn pixel, which a per-shape tint could not do.
+    if (flash) {
+      g.globalCompositeOperation = 'source-atop';
+      g.fillStyle = 'rgba(255,238,212,.5)';
+      g.fillRect(-u * 2, -u * 2, u * 4, u * 4);
+      g.globalCompositeOperation = 'source-over';
+    }
+
+    // Shadow last, dropped behind everything.
+    g.globalCompositeOperation = 'destination-over';
+    g.fillStyle = 'rgba(0,0,0,.42)';
+    g.beginPath(); g.ellipse(0, u * 1.28, u * 0.86, u * 0.3, 0, 0, TAU); g.fill();
+    g.globalCompositeOperation = 'source-over';
   });
 }
 
@@ -1742,6 +1845,8 @@ function forgeAll() {
   wallGrads.clear();
   SPR.player = forgePlayer(false);
   SPR.playerHit = forgePlayer(true);
+  SPR.playerL = mirrorSprite(SPR.player);
+  SPR.playerHitL = mirrorSprite(SPR.playerHit);
   for (const k in ENEMY_TYPES) {
     const d = ENEMY_TYPES[k];
     SPR[k] = forgeEnemy(k, d.r, d.color, false);
@@ -1793,6 +1898,16 @@ function forgeRect(w, h, paint) {
   paint(g);
   c.spanW = pw / SS;
   c.spanH = ph / SS;
+  return c;
+}
+
+function mirrorSprite(src) {
+  const c = newCanvas(src.width, src.height);
+  const g = c.getContext('2d');
+  g.translate(src.width, 0);
+  g.scale(-1, 1);
+  g.drawImage(src, 0, 0);
+  c.span = src.span;
   return c;
 }
 
@@ -2360,12 +2475,10 @@ function drawPlayer(t) {
   const p = player;
   const blink = p.invuln > 0 && Math.floor(t * 20) % 2 === 0;
 
-  if (!lowFx) {
-    ctx.globalCompositeOperation = 'lighter';
-    blit(lightFor('#6a5330', 78), p.x, p.y, 0, 0.5);
-    ctx.globalCompositeOperation = 'source-over';
-  }
-  blit(blink || p.hitFlash > 0 ? SPR.playerHit : SPR.player, p.x, p.y, p.angle);
+  const hurt = blink || p.hitFlash > 0;
+  const spr = p.face < 0 ? (hurt ? SPR.playerHitL : SPR.playerL)
+                         : (hurt ? SPR.playerHit  : SPR.player);
+  blit(spr, p.x, p.y);
 
   if (p.muzzle > 0) {
     const a = p.angle;

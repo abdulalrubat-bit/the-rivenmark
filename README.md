@@ -50,7 +50,11 @@ turned resampling blits into straight copies and cut the frame cost roughly in
 half.
 
 **The cast**
-- *Warden* — cloaked, helmed, blade held out front; the only cold-blue light
+- *Warden* — helm and crest, pauldrons, tabard, shield and raised blade. Drawn
+  front-on and mirrored by heading rather than rotated with it: a human seen
+  from directly overhead is a shoulders-and-hat blob, and every rotated attempt
+  read as a face, because concentric round masses always do. The bolts carry
+  the aim instead.
 - *Wretch* — hunched and shambling, sick green eyes
 - *Shade* — fast, tattered, streaming; spectral violet
 - *Revenant* — heavy plate held together by orange bindings, slow and hard
