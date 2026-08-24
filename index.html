@@ -791,6 +791,16 @@ function buildScenery(spawn, portal) {
     }
   }
 
+  // Torch count follows the edge count, so a fretted map can light itself into
+  // a performance problem. Thin evenly rather than clipping a region dark.
+  const LAMP_CAP = 46;
+  if (lamps.length > LAMP_CAP) {
+    const keep = [];
+    const step = lamps.length / LAMP_CAP;
+    for (let i = 0; i < LAMP_CAP; i++) keep.push(lamps[Math.floor(i * step)]);
+    lamps = keep;
+  }
+
   // Floor scenery. Two rules keep it from reading as floating debris:
   // man-made decals snap to right angles (only rubble and stains rotate
   // freely), and the loud ones cluster against the rock, where equipment and
