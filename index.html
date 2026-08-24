@@ -905,7 +905,7 @@ function spawnEnemy(t) {
     kind, x, y, r: d.r, speed: d.speed * rand(0.92, 1.08),
     hp: d.hp * scale, maxHp: d.hp * scale, dmg: d.dmg, tech: d.tech,
     cd: d.cd, mass: d.mass, color: d.color, halo: d.halo,
-    atk: rand(0, d.cd), hitFlash: 0, wob: Math.random() * TAU, angle: 0
+    atk: rand(0, d.cd), hitFlash: 0, wob: Math.random() * TAU, angle: 0, face: 1
   });
 }
 
@@ -1200,6 +1200,7 @@ function updateEnemies(dt) {
     const dx = player.x - e.x, dy = player.y - e.y;
     const d = Math.hypot(dx, dy) || 1;
     e.angle = Math.atan2(dy, dx);
+    if (Math.abs(dx) > 3) e.face = dx < 0 ? -1 : 1;
 
     // --- separation (flocking): repulsion from crowded neighbours ---------
     let rx = 0, ry = 0;
@@ -1483,126 +1484,189 @@ function lightFor(color, span) {
   return l;
 }
 
-/* --- entity silhouettes -------------------------------------------------
-   Painted rather than neon: a body is a dark mass lit from above, with a
-   thin rim where the light catches, and glow reserved for the things that
-   are actually magical -- a warded blade, a revenant's runes, an essence
-   mote. Nothing glows just because it is a game object.
+/* --- the dead ------------------------------------------------------------
+   Drawn front-on and mirrored by heading, like the warden, for the same
+   reason: a body seen from directly overhead is a blob, and a blob with two
+   lit dots on it reads as a face no matter what you shade it. Each one is a
+   figure with a posture -- the wretch stoops, the shade hangs, the revenant
+   plants itself -- so they are told apart by silhouette before colour.
    ---------------------------------------------------------------------- */
 
-// Dark mass, lit crown, thin rim. The shared look for everything alive.
-function paintedBody(g, pathFn, r, top, bottom, rim) {
-  pathFn(g);
-  const grd = g.createLinearGradient(0, -r, 0, r * 0.9);
-  grd.addColorStop(0, top);
-  grd.addColorStop(0.55, bottom);
-  grd.addColorStop(1, '#0a0806');
-  g.fillStyle = grd;
-  g.fill();
-
-  g.strokeStyle = 'rgba(0,0,0,.6)';
-  g.lineWidth = 2.6;
-  pathFn(g); g.stroke();
-
-  g.strokeStyle = rim;
-  g.lineWidth = 1.1;
-  pathFn(g); g.stroke();
-}
-
-function enemyPath(g, kind, r) {
-  g.beginPath();
-  if (kind === 'wretch') {
-    // Hunched, lopsided: a thing that shambles.
-    g.moveTo(r * 0.95, -r * 0.1);
-    g.quadraticCurveTo(r * 0.7, r * 0.72, -r * 0.1, r * 0.9);
-    g.quadraticCurveTo(-r * 0.95, r * 0.62, -r * 0.86, -r * 0.16);
-    g.quadraticCurveTo(-r * 0.5, -r * 0.92, r * 0.2, -r * 0.8);
-    g.quadraticCurveTo(r * 0.8, -r * 0.7, r * 0.95, -r * 0.1);
-  } else if (kind === 'shade') {
-    // Tattered and streaming: a wraith drawn forward by hunger.
-    g.moveTo(r * 1.35, 0);
-    g.quadraticCurveTo(r * 0.2, r * 0.55, -r * 0.55, r * 0.95);
-    g.lineTo(-r * 0.42, r * 0.28);
-    g.quadraticCurveTo(-r * 1.15, r * 0.2, -r * 1.25, 0);
-    g.quadraticCurveTo(-r * 1.15, -r * 0.2, -r * 0.42, -r * 0.28);
-    g.lineTo(-r * 0.55, -r * 0.95);
-    g.quadraticCurveTo(r * 0.2, -r * 0.55, r * 1.35, 0);
-  } else {
-    // Revenant: broad pauldrons over a heavy trunk.
-    g.moveTo(r * 0.78, -r * 0.34);
-    g.quadraticCurveTo(r * 1.0, 0, r * 0.78, r * 0.34);
-    g.lineTo(r * 0.34, r * 0.86);
-    g.quadraticCurveTo(0, r * 1.06, -r * 0.34, r * 0.86);
-    g.lineTo(-r * 0.8, r * 0.5);
-    g.quadraticCurveTo(-r * 1.02, 0, -r * 0.8, -r * 0.5);
-    g.lineTo(-r * 0.34, -r * 0.86);
-    g.quadraticCurveTo(0, -r * 1.06, r * 0.34, -r * 0.86);
-  }
-  g.closePath();
-}
-
 function forgeEnemy(kind, r, color, flash) {
-  return forge(r * 2.7, g => {
+  const u = r * 1.16;
+  const L = flash ? 1.5 : 1;
+  const lit = (a, b, c) => 'rgb(' + Math.round(Math.min(255, a * L)) + ',' +
+                                    Math.round(Math.min(255, b * L)) + ',' +
+                                    Math.round(Math.min(255, c * L)) + ')';
+  const outline = (w) => { g0.strokeStyle = 'rgba(0,0,0,.82)'; g0.lineWidth = w; g0.stroke(); };
+  let g0 = null;
+
+  // Bounds sized to the figure (widest extent is the shadow at 1.28u), not a
+  // round number: at 220 bodies on screen the padding is pure fill cost.
+  return forge(u * 2.9, g => {
+    g0 = g;
+    g.lineJoin = 'round';
+    g.lineCap = 'round';
+
     if (kind === 'wretch') {
-      paintedBody(g, gg => enemyPath(gg, kind, r), r,
-                  '#4d5340', '#252a1d', 'rgba(190,214,140,.5)');
-      // Rag wrappings
-      g.strokeStyle = 'rgba(20,24,14,.75)'; g.lineWidth = 1.6;
+      // Stooped, long-armed, dragging itself forward.
+      g.strokeStyle = lit(52, 56, 40); g.lineWidth = u * 0.26;      // legs
       g.beginPath();
-      g.moveTo(-r * 0.55, -r * 0.2); g.quadraticCurveTo(0, r * 0.05, r * 0.5, -r * 0.3);
-      g.moveTo(-r * 0.5, r * 0.25); g.quadraticCurveTo(0, r * 0.45, r * 0.45, r * 0.15);
+      g.moveTo(-u * 0.2, u * 0.4); g.lineTo(-u * 0.3, u * 1.05);
+      g.moveTo(u * 0.2, u * 0.4);  g.lineTo(u * 0.32, u * 1.02);
       g.stroke();
-      // Two sick little eyes
-      g.shadowColor = color; g.shadowBlur = 7;
-      g.fillStyle = color;
-      g.beginPath(); g.arc(r * 0.44, -r * 0.24, r * 0.11, 0, TAU); g.fill();
-      g.beginPath(); g.arc(r * 0.5, r * 0.16, r * 0.11, 0, TAU); g.fill();
-      g.shadowBlur = 0;
+
+      const bg = g.createLinearGradient(0, -u * 0.6, 0, u * 0.6);   // hunched back
+      bg.addColorStop(0, lit(116, 128, 86));
+      bg.addColorStop(1, lit(44, 48, 32));
+      g.fillStyle = bg;
+      g.beginPath();
+      g.moveTo(-u * 0.52, u * 0.42);
+      g.quadraticCurveTo(-u * 0.72, -u * 0.34, -u * 0.14, -u * 0.5);
+      g.quadraticCurveTo(u * 0.62, -u * 0.44, u * 0.54, u * 0.42);
+      g.closePath(); g.fill(); outline(u * 0.13);
+
+      g.fillStyle = 'rgba(38,36,26,.85)';                            // rags
+      g.beginPath();
+      g.moveTo(-u * 0.5, u * 0.18); g.lineTo(u * 0.52, u * 0.1);
+      g.lineTo(u * 0.44, u * 0.5); g.lineTo(-u * 0.44, u * 0.52);
+      g.closePath(); g.fill();
+
+      g.strokeStyle = lit(104, 114, 76); g.lineWidth = u * 0.17;     // long arms
+      g.beginPath();
+      g.moveTo(-u * 0.44, -u * 0.2); g.quadraticCurveTo(-u * 0.86, u * 0.3, -u * 0.62, u * 0.86);
+      g.moveTo(u * 0.46, -u * 0.24); g.quadraticCurveTo(u * 0.92, u * 0.26, u * 0.7, u * 0.84);
+      g.stroke();
+      g.strokeStyle = 'rgba(0,0,0,.5)'; g.lineWidth = u * 0.06;
+      g.beginPath();
+      g.moveTo(-u * 0.62, u * 0.86); g.lineTo(-u * 0.7, u * 1.0);
+      g.moveTo(u * 0.7, u * 0.84);  g.lineTo(u * 0.78, u * 0.98);
+      g.stroke();
+
+      const hg = g.createLinearGradient(0, -u * 1.0, 0, -u * 0.4);   // sunken head
+      hg.addColorStop(0, lit(150, 160, 112));
+      hg.addColorStop(1, lit(60, 64, 44));
+      g.fillStyle = hg;
+      g.beginPath(); g.ellipse(u * 0.06, -u * 0.66, u * 0.31, u * 0.29, 0.12, 0, TAU); g.fill();
+      outline(u * 0.1);
+      g.fillStyle = 'rgba(10,12,8,.9)';                              // jaw
+      g.beginPath(); g.ellipse(u * 0.08, -u * 0.5, u * 0.16, u * 0.09, 0, 0, TAU); g.fill();
+      g.fillStyle = color;                                           // sick eyes
+      g.beginPath(); g.ellipse(-u * 0.04, -u * 0.72, u * 0.07, u * 0.05, 0, 0, TAU); g.fill();
+      g.beginPath(); g.ellipse(u * 0.18, -u * 0.73, u * 0.07, u * 0.05, 0, 0, TAU); g.fill();
 
     } else if (kind === 'shade') {
-      paintedBody(g, gg => enemyPath(gg, kind, r), r,
-                  '#3a3050', '#1b1628', 'rgba(176,124,255,.55)');
-      // Streaming tatters
-      g.strokeStyle = 'rgba(176,124,255,.3)'; g.lineWidth = 1.2;
+      // Hangs rather than stands: a robe that frays into nothing.
+      const rg = g.createLinearGradient(0, -u * 0.9, 0, u * 1.1);
+      rg.addColorStop(0, lit(76, 64, 108));
+      rg.addColorStop(0.6, lit(34, 28, 52));
+      rg.addColorStop(1, 'rgba(14,11,22,0)');
+      g.fillStyle = rg;
       g.beginPath();
-      g.moveTo(-r * 0.4, -r * 0.35); g.quadraticCurveTo(-r * 1.1, -r * 0.5, -r * 1.5, -r * 0.2);
-      g.moveTo(-r * 0.4, r * 0.35); g.quadraticCurveTo(-r * 1.1, r * 0.5, -r * 1.5, r * 0.2);
+      g.moveTo(-u * 0.44, -u * 0.44);
+      g.quadraticCurveTo(-u * 0.72, u * 0.3, -u * 0.5, u * 1.06);
+      g.lineTo(-u * 0.24, u * 0.78); g.lineTo(-u * 0.04, u * 1.12);
+      g.lineTo(u * 0.2, u * 0.76);  g.lineTo(u * 0.46, u * 1.04);
+      g.quadraticCurveTo(u * 0.7, u * 0.28, u * 0.44, -u * 0.44);
+      g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(0,0,0,.6)'; g.lineWidth = u * 0.1; g.stroke();
+
+      g.strokeStyle = 'rgba(176,124,255,.28)'; g.lineWidth = u * 0.09;   // trailing wisps
+      g.beginPath();
+      g.moveTo(-u * 0.42, u * 0.2); g.quadraticCurveTo(-u * 0.96, u * 0.5, -u * 1.1, u * 0.16);
+      g.moveTo(u * 0.42, u * 0.24); g.quadraticCurveTo(u * 0.96, u * 0.54, u * 1.1, u * 0.2);
       g.stroke();
-      g.shadowColor = color; g.shadowBlur = 10;
-      g.fillStyle = 'rgba(226,208,255,.95)';
-      g.beginPath(); g.ellipse(r * 0.42, 0, r * 0.2, r * 0.12, 0, 0, TAU); g.fill();
-      g.shadowBlur = 0;
+
+      const hoodG = g.createLinearGradient(0, -u * 1.05, 0, -u * 0.3);   // hood
+      hoodG.addColorStop(0, lit(92, 78, 130));
+      hoodG.addColorStop(1, lit(28, 23, 44));
+      g.fillStyle = hoodG;
+      g.beginPath();
+      g.moveTo(-u * 0.42, -u * 0.36);
+      g.quadraticCurveTo(-u * 0.46, -u * 1.0, 0, -u * 1.04);
+      g.quadraticCurveTo(u * 0.46, -u * 1.0, u * 0.42, -u * 0.36);
+      g.closePath(); g.fill(); outline(u * 0.11);
+      g.fillStyle = 'rgba(6,5,10,.96)';                                   // hollow
+      g.beginPath(); g.ellipse(0, -u * 0.6, u * 0.26, u * 0.28, 0, 0, TAU); g.fill();
+      g.fillStyle = color;
+      g.beginPath(); g.ellipse(-u * 0.1, -u * 0.62, u * 0.06, u * 0.08, 0, 0, TAU); g.fill();
+      g.beginPath(); g.ellipse(u * 0.1, -u * 0.62, u * 0.06, u * 0.08, 0, 0, TAU); g.fill();
 
     } else {
-      paintedBody(g, gg => enemyPath(gg, kind, r), r,
-                  '#4a4038', '#221c18', 'rgba(190,170,150,.5)');
-      // Plate seams
-      g.strokeStyle = 'rgba(12,9,7,.8)'; g.lineWidth = 1.8;
+      // Planted, over-armoured, bound together by burning seams.
+      g.fillStyle = lit(48, 44, 38);                                     // greaves
       g.beginPath();
-      g.moveTo(-r * 0.62, -r * 0.5); g.lineTo(-r * 0.3, -r * 0.14);
-      g.moveTo(-r * 0.62, r * 0.5); g.lineTo(-r * 0.3, r * 0.14);
-      g.stroke();
-      // Bound runes: the only thing keeping it upright
-      g.shadowColor = color; g.shadowBlur = 9;
-      g.strokeStyle = color; g.lineWidth = 1.9;
+      g.roundRect ? g.roundRect(-u * 0.44, u * 0.42, u * 0.36, u * 0.66, u * 0.1)
+                  : g.rect(-u * 0.44, u * 0.42, u * 0.36, u * 0.66);
+      g.fill(); outline(u * 0.08);
       g.beginPath();
-      g.moveTo(-r * 0.1, -r * 0.46); g.lineTo(r * 0.16, -r * 0.1);
-      g.lineTo(-r * 0.1, r * 0.1); g.lineTo(r * 0.16, r * 0.46);
+      g.roundRect ? g.roundRect(u * 0.08, u * 0.42, u * 0.36, u * 0.66, u * 0.1)
+                  : g.rect(u * 0.08, u * 0.42, u * 0.36, u * 0.66);
+      g.fill(); outline(u * 0.08);
+
+      const cg = g.createLinearGradient(0, -u * 0.6, 0, u * 0.6);        // cuirass
+      cg.addColorStop(0, lit(104, 96, 86));
+      cg.addColorStop(0.5, lit(56, 50, 44));
+      cg.addColorStop(1, lit(24, 21, 18));
+      g.fillStyle = cg;
+      g.beginPath();
+      g.moveTo(-u * 0.58, -u * 0.4);
+      g.quadraticCurveTo(-u * 0.7, u * 0.2, -u * 0.44, u * 0.5);
+      g.lineTo(u * 0.44, u * 0.5);
+      g.quadraticCurveTo(u * 0.7, u * 0.2, u * 0.58, -u * 0.4);
+      g.closePath(); g.fill(); outline(u * 0.12);
+
+      g.strokeStyle = color; g.lineWidth = u * 0.09;                     // burning seams
+      g.shadowColor = color; g.shadowBlur = u * 0.5;
+      g.beginPath();
+      g.moveTo(-u * 0.3, -u * 0.3); g.lineTo(u * 0.06, u * 0.02);
+      g.lineTo(-u * 0.16, u * 0.16); g.lineTo(u * 0.2, u * 0.44);
+      g.moveTo(u * 0.34, -u * 0.22); g.lineTo(u * 0.18, u * 0.06);
       g.stroke();
-      g.fillStyle = 'rgba(255,214,190,.95)';
-      g.beginPath(); g.arc(r * 0.5, -r * 0.2, r * 0.1, 0, TAU); g.fill();
-      g.beginPath(); g.arc(r * 0.5, r * 0.2, r * 0.1, 0, TAU); g.fill();
+      g.shadowBlur = 0;
+
+      const pg = g.createLinearGradient(0, -u * 0.72, 0, -u * 0.1);      // pauldrons
+      pg.addColorStop(0, lit(128, 118, 104));
+      pg.addColorStop(1, lit(40, 36, 31));
+      [-1, 1].forEach(sx => {
+        g.fillStyle = pg;
+        g.beginPath();
+        g.ellipse(sx * u * 0.62, -u * 0.3, u * 0.32, u * 0.27, sx * 0.34, 0, TAU);
+        g.fill(); outline(u * 0.1);
+        g.strokeStyle = 'rgba(216,200,170,.4)'; g.lineWidth = u * 0.05;
+        g.beginPath();
+        g.ellipse(sx * u * 0.62, -u * 0.36, u * 0.22, u * 0.17, sx * 0.34, 0, TAU);
+        g.stroke();
+      });
+
+      const hg2 = g.createLinearGradient(0, -u * 0.98, 0, -u * 0.4);     // great helm
+      hg2.addColorStop(0, lit(112, 104, 92));
+      hg2.addColorStop(1, lit(30, 27, 23));
+      g.fillStyle = hg2;
+      g.beginPath();
+      g.moveTo(-u * 0.3, -u * 0.44);
+      g.lineTo(-u * 0.26, -u * 0.92); g.lineTo(u * 0.26, -u * 0.92);
+      g.lineTo(u * 0.3, -u * 0.44);
+      g.closePath(); g.fill(); outline(u * 0.1);
+      g.fillStyle = 'rgba(6,5,4,.95)';
+      g.fillRect(-u * 0.22, -u * 0.74, u * 0.44, u * 0.13);
+      g.fillStyle = color;
+      g.shadowColor = color; g.shadowBlur = u * 0.45;
+      g.fillRect(-u * 0.17, -u * 0.72, u * 0.12, u * 0.09);
+      g.fillRect(u * 0.05, -u * 0.72, u * 0.12, u * 0.09);
       g.shadowBlur = 0;
     }
 
     if (flash) {
-      enemyPath(g, kind, r);
-      g.fillStyle = 'rgba(255,238,214,.42)';
-      g.fill();
-      g.strokeStyle = 'rgba(255,250,240,.9)';
-      g.lineWidth = 1.8;
-      enemyPath(g, kind, r); g.stroke();
+      g.globalCompositeOperation = 'source-atop';
+      g.fillStyle = 'rgba(255,240,220,.5)';
+      g.fillRect(-u * 2, -u * 2, u * 4, u * 4);
+      g.globalCompositeOperation = 'source-over';
     }
+    g.globalCompositeOperation = 'destination-over';
+    g.fillStyle = 'rgba(0,0,0,.4)';
+    g.beginPath(); g.ellipse(0, u * 1.06, u * 0.66, u * 0.22, 0, 0, TAU); g.fill();
+    g.globalCompositeOperation = 'source-over';
   });
 }
 
@@ -1851,6 +1915,8 @@ function forgeAll() {
     const d = ENEMY_TYPES[k];
     SPR[k] = forgeEnemy(k, d.r, d.color, false);
     SPR[k + 'Hit'] = forgeEnemy(k, d.r, d.color, true);
+    SPR[k + 'L'] = mirrorSprite(SPR[k]);
+    SPR[k + 'HitL'] = mirrorSprite(SPR[k + 'Hit']);
   }
   SPR.bullet = forgeBullet();
   SPR.loot = forgeLoot(false);
@@ -2460,7 +2526,8 @@ function drawBullets() {
 }
 
 function drawEnemy(e) {
-  blit(e.hitFlash > 0 ? SPR[e.kind + 'Hit'] : SPR[e.kind], e.x, e.y, e.angle);
+  const key = e.kind + (e.hitFlash > 0 ? 'Hit' : '') + (e.face < 0 ? 'L' : '');
+  blit(SPR[key] || SPR[e.kind], e.x, e.y);
   if (e.kind === 'revenant' && e.hp < e.maxHp * 0.92) {
     const w = e.r * 1.5, f = clamp(e.hp / e.maxHp, 0, 1);
     const bx = e.x - w / 2, by = e.y - e.r - 6;

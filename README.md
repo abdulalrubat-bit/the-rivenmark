@@ -55,9 +55,13 @@ half.
   from directly overhead is a shoulders-and-hat blob, and every rotated attempt
   read as a face, because concentric round masses always do. The bolts carry
   the aim instead.
-- *Wretch* — hunched and shambling, sick green eyes
-- *Shade* — fast, tattered, streaming; spectral violet
-- *Revenant* — heavy plate held together by orange bindings, slow and hard
+- *Wretch* — stooped, long-armed, dragging itself forward on sick green eyes
+- *Shade* — hangs rather than stands; a hood over nothing, fraying into tatters
+- *Revenant* — planted and over-armoured, held together by burning seams
+
+Every figure is drawn front-on and mirrored by heading, never rotated, and each
+has a distinct posture so they are told apart by silhouette before colour. That
+also made them cheap: 220 straight copies a frame instead of 220 rotated blits.
 
 ---
 
