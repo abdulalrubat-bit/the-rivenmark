@@ -350,6 +350,45 @@ canvas transform.
 - The stick locks to one `pointerId`. A second finger cannot steal or disturb
   movement, and UI lives in the DOM layer above the canvas.
 
+### Gear
+
+Power comes from two places that stack: **boons**, chosen on rank-up and fixed
+for the run, and **gear**, found on the floor and swapped freely.
+
+Eight slots — blade, off-hand, mail, girdle, boots, amulet, two rings. No helm:
+the compendium is explicit that the Clear-Sighted fight unhelmeted, so there is
+nowhere to put one.
+
+Five rarities (Worn, Tempered, Spirit-wrought, Hallowed, Riven) carrying one to
+five affixes. Both the rarity roll and the affix rolls scale with how deep the
+body was standing when it died, so pushing further in is what pays — a deep drop
+is *better*, not merely more likely. Affixes are restricted per slot, so a blade
+rolls like a blade.
+
+**Nothing accumulates on the player.** Gear comes off as easily as it goes on, so
+every derived stat is rebuilt from the hero's base by `recomputeStats`: base,
+then boons re-applied from their tally, then gear — additive terms first, then
+multiplicative, so the order two items were equipped in cannot change the result.
+Current life is preserved and only clamped, or swapping a +life item would be a
+free heal. This is the invariant most likely to rot, so it is the one the harness
+leans on hardest: removing all gear must return *exactly* to base, equip order
+must not matter, and recompute must be idempotent.
+
+`ward` is the one new stat — flat damage reduction, capped at 75% so a full kit
+of it can never reach immunity.
+
+### The bag
+
+The bag button pauses the delve and opens a full screen: worn slots and derived
+stats down one side, a 20-cell bag on the other. There is **no drag-and-drop** —
+on a phone that is a fight with the touch target. Selection is a tap, equipping
+is a second tap on a button big enough to hit, and anything selected in the bag
+is shown measured **per stat** against whatever is in its slot already, because
+"is this better" is the only question the screen exists to answer.
+
+A full bag leaves the item on the floor rather than binning it silently, and says
+so once rather than on every frame it is touched.
+
 ### Upgrades & progression
 
 Ten boons, most with stack caps, offered three at a time. Levels queue if
@@ -411,8 +450,17 @@ Tuned against a scripted bot playing full runs headless — flees crowding,
 drifts toward loot, beelines the portal once it powers up. It is a deliberately
 mediocre player, so its results are a floor, not a ceiling.
 
-Current curve, over 40 bot runs per hero: median run **79–87 s**, ~90–98 kills,
-bot extracts **12/40 as Isaac (30%)** and **9/40 as Zayd (23%)**.
+Current curve, over 40 bot runs per hero: median run **70–85 s**, 65–79 kills,
+6–7 items found and 4–5 slots filled, bot extracts **12/40 as Isaac (30%)** and
+**14/40 as Zayd (35%)**. The bot wears what it finds — a greedy per-slot score —
+because a measurement that ignores gear says nothing about a game where gear is
+half the power.
+
+Gear is a large power budget: switching it from inert to live moved the bot from
+43% to 60%. That was met by **raising the opposition** (`LEVEL.threat`, 1.45)
+rather than by nerfing the loot, which would defeat the point of the loot.
+Affix magnitude turned out to be a weak lever — 1.0, 0.6 and 0.4 all landed
+within noise of each other — so it stays at 1.0 and threat does the work.
 
 **Quota is the difficulty lever, not enemy health.** The depth health ramp scales
 the fragile hero far harder than the tank — measured twice, before and after the

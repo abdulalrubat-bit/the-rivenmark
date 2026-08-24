@@ -214,7 +214,15 @@
     ['+50 horde', () => { for (let i = 0; i < 50; i++) _spawn(run.time); }],
     ['rank up', () => { run.pendingLevels++; }],
     ['heal', () => { player.hp = player.maxHp; }],
-    ['remake map', () => resetRun(run.hero)]
+    ['remake map', () => resetRun(run.hero)],
+    ['drop item', () => { if (player.bag.length < BAG_MAX) {
+        const it = rollItem(Math.random());
+        player.bag.push(it); toast(it.name, rarityOf(it).colour); syncBagBadge(); } }],
+    ['best kit', () => { for (const sl of SLOTS) player.gear[sl.id] = rollItem(1, sl.id);
+        recomputeStats(); }],
+    ['strip kit', () => { for (const sl of SLOTS) player.gear[sl.id] = null;
+        player.bag.length = 0; recomputeStats(); syncBagBadge(); }],
+    ['open bag', () => openGear()]
   ]);
 
   // Levels own their region pool, so the region buttons are rebuilt whenever
@@ -273,6 +281,8 @@
       row('props / lamps', props.length + ' / ' + lamps.length) +
       row('walls / edges', walls.length + ' / ' + edges.length) +
       row('slag', (run ? run.tech : 0) + '/' + LEVEL.quota) +
+      row('gear worn', (player ? SLOTS.filter(sl => player.gear[sl.id]).length : 0) + '/8') +
+      row('bag / found', (player ? player.bag.length : 0) + ' / ' + (run ? run.found : 0)) +
       row('boss', run && run.boss ? Math.round(100 * run.boss.hp / run.boss.maxHp) + '%'
                                   : (run && run.bossDown ? 'down' : '-')) +
       row('seed', seeded ? seed : 'off');
