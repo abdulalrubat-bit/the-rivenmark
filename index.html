@@ -38,8 +38,8 @@
   #ui > *{pointer-events:auto;}
 
   .hud{
-    position:absolute; top:calc(8px + var(--safe-t)); left:calc(10px + var(--safe-l));
-    right:calc(10px + var(--safe-r));
+    position:absolute; top:calc(8px + var(--safe-t)); left:calc(56px + var(--safe-l));
+    right:calc(52px + var(--safe-r));
     display:flex; align-items:flex-start; gap:10px; pointer-events:none;
   }
   .hud[hidden]{display:none;}
@@ -62,9 +62,11 @@
 
   .readout{
     display:flex; justify-content:space-between; gap:10px;
-    font-family:var(--font-ui); font-size:11px; letter-spacing:2.2px;
+    font-family:var(--font-ui); font-size:11px; letter-spacing:1.4px;
     text-transform:uppercase; color:var(--dim); margin-top:6px;
+    white-space:nowrap;
   }
+  .readout span{white-space:nowrap;}
   .readout b{color:var(--ink); font-weight:600;}
   .readout .go{color:var(--gold);}
 
@@ -306,15 +308,19 @@ const ENEMY_TYPES = {
 
 // One place for the look. Everything on the canvas pulls from here.
 const PAL = {
-  arcane:'#5cb8ff', arcaneDim:'#2f6f9e',
-  ember:'#ff9a3c', gold:'#ffc24d', blood:'#c2352a',
+  arcane:'#5fd0ff', arcaneDim:'#2f8fae', teal:'#4fd8c0',
+  ember:'#ff5f28', gold:'#ffc24d', blood:'#c2352a',
   wretch:'#9dbb5a', shade:'#b07cff', revenant:'#e0552a',
-  floor:'#191510', floorLine:'rgba(206,172,120,.085)',
-  floorLineBold:'rgba(206,172,120,.15)',
-  stoneTop:'#3b342b', stoneMid:'#241e18', stoneLow:'#0d0b09',
-  rimWarm:'rgba(255,168,86,.34)', rimLight:'rgba(255,214,170,.72)',
-  rimSpill:'rgba(255,150,60,.075)', bevel:'rgba(214,180,140,.12)',
-  bone:'#cbbd9a'
+
+  // Lit flagstone underfoot, unlit rock above: the contrast the whole scene
+  // hangs on. Walls are near-black inside and carry all their detail on the
+  // bevelled edge, the way a raised ledge reads from overhead.
+  floor:'#232b33', floorLine:'rgba(150,180,190,.075)',
+  floorLineBold:'rgba(160,195,205,.13)',
+  stoneTop:'#1d292c', stoneMid:'#111a1d', stoneLow:'#070b0d',
+  bevelHi:'rgba(150,224,203,.85)', bevelMid:'rgba(86,158,144,.6)',
+  bevelLo:'rgba(4,8,9,.85)', rimSpill:'rgba(90,200,180,.07)',
+  bone:'#d8cdb0', coin:'#e0b356'
 };
 
 const UPGRADES = [
@@ -740,8 +746,8 @@ function buildScenery(spawn, portal) {
     // Torches are the light. Everything else is just furniture.
     if (kind === 'torch') {
       lamps.push({ x: mx + e.nx * 12, y: my + e.ny * 12, color: PAL.ember });
-    } else if (kind === 'sconce' && Math.random() < 0.28) {
-      lamps.push({ x: mx + e.nx * 12, y: my + e.ny * 12, color: PAL.arcane });
+    } else if (kind === 'sconce' && Math.random() < 0.34) {
+      lamps.push({ x: mx + e.nx * 12, y: my + e.ny * 12, color: PAL.teal });
     }
     }
   }
@@ -762,14 +768,19 @@ function buildScenery(spawn, portal) {
                    cellAt(cx, cy - 1) === SOLID || cellAt(cx, cy + 1) === SOLID;
     const roll = Math.random();
     let kind = null, rot = 0;
+    // The place should look looted and lived-in. Heavier against the rock
+    // where things pile up, lighter in the open so a fight stays readable.
     if (byRock) {
-      if (roll > 0.44) continue;
-      kind = roll < 0.11 ? 'rubble' : roll < 0.19 ? 'bones' : roll < 0.26 ? 'barrel' :
-             roll < 0.32 ? 'crate' : roll < 0.38 ? 'grate' : 'moss';
+      if (roll > 0.62) continue;
+      kind = roll < 0.09 ? 'rubble'  : roll < 0.16 ? 'bones'  : roll < 0.22 ? 'barrel' :
+             roll < 0.28 ? 'crate'   : roll < 0.33 ? 'grate'  : roll < 0.39 ? 'urn' :
+             roll < 0.45 ? 'coins'   : roll < 0.50 ? 'sword'  : roll < 0.54 ? 'shield' :
+             roll < 0.58 ? 'hornskull' : 'moss';
       rot = (kind === 'crate' || kind === 'grate') ? snap() : Math.random() * TAU;
     } else {
-      if (roll > 0.2) continue;
-      kind = roll < 0.08 ? 'crack' : roll < 0.13 ? 'moss' : roll < 0.17 ? 'bones' : 'rubble';
+      if (roll > 0.34) continue;
+      kind = roll < 0.07 ? 'crack' : roll < 0.12 ? 'moss'  : roll < 0.17 ? 'bones' :
+             roll < 0.22 ? 'coins' : roll < 0.26 ? 'sword' : roll < 0.30 ? 'scroll' : 'rubble';
       rot = (kind === 'crack') ? snap() : Math.random() * TAU;
     }
     props.push({ x: c.x + rand(-C * 0.22, C * 0.22),
@@ -1538,9 +1549,11 @@ function forgeEnemy(kind, r, color, flash) {
   return forge(r * 2.7, g => {
     if (flash) {
       enemyPath(g, kind, r);
-      g.fillStyle = 'rgba(255,236,214,.95)';
+      g.fillStyle = tint(color, 2.1, 0.92);
       g.fill();
-      g.strokeStyle = '#fff'; g.lineWidth = 1.6;
+      g.strokeStyle = 'rgba(0,0,0,.55)'; g.lineWidth = 2.4;
+      enemyPath(g, kind, r); g.stroke();
+      g.strokeStyle = 'rgba(255,246,232,.95)'; g.lineWidth = 1.4;
       enemyPath(g, kind, r); g.stroke();
       return;
     }
@@ -1771,8 +1784,6 @@ function drawFloor(x0, y0, x1, y1) {
   ctx.fillStyle = PAL.floor;
   ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
 
-  // Flagstone joints. Two batched passes, same trick as before -- a pattern
-  // fill costs several times as much for the same picture.
   const F = 50, B = 100;
   ctx.lineWidth = 1;
   ctx.strokeStyle = PAL.floorLine;
@@ -1782,11 +1793,92 @@ function drawFloor(x0, y0, x1, y1) {
   ctx.stroke();
 
   ctx.strokeStyle = PAL.floorLineBold;
-  ctx.lineWidth = 1.6;
+  ctx.lineWidth = 1.8;
   ctx.beginPath();
   for (let x = Math.ceil(x0 / B) * B; x < x1; x += B) { ctx.moveTo(x, y0); ctx.lineTo(x, y1); }
   for (let y = Math.ceil(y0 / B) * B; y < y1; y += B) { ctx.moveTo(x0, y); ctx.lineTo(x1, y); }
   ctx.stroke();
+}
+
+function drawWalls(x0, y0, x1, y1) {
+  const vis = [];
+  for (let i = 0; i < edges.length; i++) {
+    const e = edges[i];
+    if (e.x1 > x1 || e.y1 > y1 || e.x2 < x0 || e.y2 < y0) continue;
+    vis.push(e);
+  }
+
+  // 1. Shadow the ledge casts onto the flagstones. Drawn before the mass so
+  //    the rock covers its inward half.
+  if (!lowFx) {
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = PAL.bevelLo;
+    ctx.lineWidth = 13;
+    ctx.beginPath();
+    for (let i = 0; i < vis.length; i++) {
+      const e = vis[i];
+      ctx.moveTo(e.x1 + e.nx * 5, e.y1 + e.ny * 5);
+      ctx.lineTo(e.x2 + e.nx * 5, e.y2 + e.ny * 5);
+    }
+    ctx.stroke();
+  }
+
+  // 2. The mass itself: near-black, so all the detail lives on the edge.
+  for (let i = 0; i < walls.length; i++) {
+    const w = walls[i];
+    if (w.x > x1 || w.y > y1 || w.x + w.w < x0 || w.y + w.h < y0) continue;
+    ctx.save();
+    ctx.translate(w.x, w.y);
+    ctx.fillStyle = wallGradient(w.h);
+    ctx.fillRect(0, 0, w.w, w.h);
+    ctx.restore();
+  }
+
+  // 3. The carved bevel. Three lines -- a wide verdigris face, a bright crest,
+  //    and a shadow biting inward -- is what makes a flat box read as a raised
+  //    stone ledge seen from above.
+  ctx.lineCap = 'butt';
+  ctx.strokeStyle = PAL.bevelMid;
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  for (let i = 0; i < vis.length; i++) {
+    const e = vis[i];
+    ctx.moveTo(e.x1 - e.nx * 1.5, e.y1 - e.ny * 1.5);
+    ctx.lineTo(e.x2 - e.nx * 1.5, e.y2 - e.ny * 1.5);
+  }
+  ctx.stroke();
+
+  ctx.strokeStyle = PAL.bevelHi;
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  for (let i = 0; i < vis.length; i++) {
+    const e = vis[i];
+    ctx.moveTo(e.x1 + e.nx * 0.6, e.y1 + e.ny * 0.6);
+    ctx.lineTo(e.x2 + e.nx * 0.6, e.y2 + e.ny * 0.6);
+  }
+  ctx.stroke();
+
+  if (!lowFx) {
+    ctx.strokeStyle = 'rgba(4,8,9,.75)';
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    for (let i = 0; i < vis.length; i++) {
+      const e = vis[i];
+      ctx.moveTo(e.x1 - e.nx * 6, e.y1 - e.ny * 6);
+      ctx.lineTo(e.x2 - e.nx * 6, e.y2 - e.ny * 6);
+    }
+    ctx.stroke();
+
+    ctx.strokeStyle = PAL.rimSpill;
+    ctx.lineWidth = 11;
+    ctx.beginPath();
+    for (let i = 0; i < vis.length; i++) {
+      const e = vis[i];
+      ctx.moveTo(e.x1 + e.nx * 7, e.y1 + e.ny * 7);
+      ctx.lineTo(e.x2 + e.nx * 7, e.y2 + e.ny * 7);
+    }
+    ctx.stroke();
+  }
 }
 
 function wallGradient(h) {
@@ -1917,6 +2009,95 @@ function forgeProps() {
     g.moveTo(9, -2); g.lineTo(11, 4);
     g.stroke();
   });
+  P('coins', 30, g => {
+    const disc = (cx, cy, r2) => {
+      g.fillStyle = 'rgba(224,179,86,.9)';
+      g.beginPath(); g.ellipse(cx, cy, r2, r2 * 0.78, 0, 0, TAU); g.fill();
+      g.strokeStyle = 'rgba(120,84,26,.8)'; g.lineWidth = 0.7; g.stroke();
+      g.fillStyle = 'rgba(255,232,170,.7)';
+      g.beginPath(); g.ellipse(cx - r2 * 0.22, cy - r2 * 0.22, r2 * 0.34, r2 * 0.26, 0, 0, TAU); g.fill();
+    };
+    disc(-4, 1, 3.2); disc(1.5, -2.5, 2.9); disc(3.5, 3, 3.4);
+    disc(-1, 4, 2.4); disc(6, -1, 2.2);
+  });
+  P('sword', 40, g => {
+    g.strokeStyle = 'rgba(176,188,196,.75)'; g.lineWidth = 2.4; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(-12, 3); g.lineTo(11, -3); g.stroke();
+    g.strokeStyle = 'rgba(232,240,246,.5)'; g.lineWidth = 0.9;
+    g.beginPath(); g.moveTo(-11, 2.7); g.lineTo(10, -2.8); g.stroke();
+    g.strokeStyle = '#5a4530'; g.lineWidth = 3;
+    g.beginPath(); g.moveTo(-15, 4.4); g.lineTo(-12.5, 3.6); g.stroke();
+    g.strokeStyle = '#7a6440'; g.lineWidth = 2.2;
+    g.beginPath(); g.moveTo(-12, 0.4); g.lineTo(-10.5, 6.4); g.stroke();
+    g.lineCap = 'butt';
+  });
+  P('shield', 36, g => {
+    const grd = g.createRadialGradient(-3, -3, 1, 0, 0, 11);
+    grd.addColorStop(0, '#4a5a5e'); grd.addColorStop(1, '#1d2628');
+    g.fillStyle = grd;
+    g.beginPath(); g.ellipse(0, 0, 10.5, 9.5, 0, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(150,224,203,.45)'; g.lineWidth = 1.6; g.stroke();
+    g.fillStyle = 'rgba(190,206,212,.7)';
+    g.beginPath(); g.arc(0, 0, 3, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(30,40,42,.8)'; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(-9, 0); g.lineTo(9, 0); g.stroke();
+  });
+  P('urn', 32, g => {
+    const grd = g.createRadialGradient(-2, -3, 1, 0, 0, 10);
+    grd.addColorStop(0, '#7a5336'); grd.addColorStop(1, '#33210f');
+    g.fillStyle = grd;
+    g.beginPath(); g.ellipse(0, 0, 8.4, 8, 0, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(20,12,6,.8)'; g.lineWidth = 1.3; g.stroke();
+    g.strokeStyle = 'rgba(190,150,100,.45)'; g.lineWidth = 1.1;
+    g.beginPath(); g.arc(0, 0, 4.6, 0, TAU); g.stroke();
+    g.fillStyle = 'rgba(10,7,4,.85)';
+    g.beginPath(); g.arc(0, 0, 2.6, 0, TAU); g.fill();
+  });
+  P('scroll', 34, g => {
+    g.fillStyle = 'rgba(214,196,152,.85)';
+    g.beginPath(); g.roundRect ? g.roundRect(-9, -4, 18, 8, 2) : g.rect(-9, -4, 18, 8);
+    g.fill();
+    g.strokeStyle = 'rgba(120,98,62,.8)'; g.lineWidth = 1; g.stroke();
+    g.strokeStyle = 'rgba(150,126,84,.7)'; g.lineWidth = 1.2;
+    g.beginPath(); g.moveTo(-9, -4); g.lineTo(-9, 4); g.moveTo(9, -4); g.lineTo(9, 4); g.stroke();
+    g.strokeStyle = 'rgba(160,60,50,.8)'; g.lineWidth = 1.6;
+    g.beginPath(); g.moveTo(1, -4.6); g.lineTo(1, 4.6); g.stroke();
+  });
+  P('hornskull', 38, g => {
+    g.fillStyle = 'rgba(216,205,176,.75)';
+    g.beginPath(); g.ellipse(0, 1, 5.4, 6.4, 0, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(120,108,84,.7)'; g.lineWidth = 0.9; g.stroke();
+    g.strokeStyle = 'rgba(216,205,176,.72)'; g.lineWidth = 2.4; g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(-4, -3); g.quadraticCurveTo(-11, -6, -12, -12);
+    g.moveTo(4, -3);  g.quadraticCurveTo(11, -6, 12, -12);
+    g.stroke();
+    g.fillStyle = 'rgba(16,12,8,.9)';
+    g.beginPath(); g.ellipse(-2.1, 0.4, 1.5, 1.9, 0, 0, TAU); g.fill();
+    g.beginPath(); g.ellipse(2.1, 0.4, 1.5, 1.9, 0, 0, TAU); g.fill();
+    g.lineCap = 'butt';
+  });
+  P('boss', 54, g => {                     // horned skull boss for the frame
+    g.strokeStyle = 'rgba(212,200,170,.9)'; g.lineWidth = 3.4; g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(-6, -5); g.quadraticCurveTo(-15, -9, -18, -18);
+    g.moveTo(6, -5);  g.quadraticCurveTo(15, -9, 18, -18);
+    g.stroke();
+    const grd = g.createRadialGradient(-3, -4, 1, 0, 0, 12);
+    grd.addColorStop(0, '#efe6cc'); grd.addColorStop(1, '#8e8367');
+    g.fillStyle = grd;
+    g.beginPath(); g.ellipse(0, -1, 9.5, 10.5, 0, 0, TAU); g.fill();
+    g.beginPath(); g.moveTo(-5.5, 6); g.lineTo(5.5, 6); g.lineTo(3.5, 12); g.lineTo(-3.5, 12);
+    g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(60,52,38,.8)'; g.lineWidth = 1; g.stroke();
+    g.fillStyle = 'rgba(8,10,10,.92)';
+    g.beginPath(); g.ellipse(-3.6, -1.5, 2.7, 3.3, 0.15, 0, TAU); g.fill();
+    g.beginPath(); g.ellipse(3.6, -1.5, 2.7, 3.3, -0.15, 0, TAU); g.fill();
+    g.beginPath(); g.moveTo(0, 2); g.lineTo(-1.8, 5.4); g.lineTo(1.8, 5.4); g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(40,34,24,.7)'; g.lineWidth = 0.9;
+    g.beginPath(); g.moveTo(-4, 8.6); g.lineTo(4, 8.6); g.stroke();
+    g.lineCap = 'butt';
+  });
   P('grate', 34, g => {
     g.fillStyle = 'rgba(8,6,5,.85)';
     g.fillRect(-11, -11, 22, 22);
@@ -1927,70 +2108,6 @@ function forgeProps() {
       g.beginPath(); g.moveTo(i, -11); g.lineTo(i, 11); g.stroke();
     }
   });
-}
-
-function drawWalls(x0, y0, x1, y1) {
-  // 1. Stone mass. Merged rects, so a few dozen fills cover the level.
-  for (let i = 0; i < walls.length; i++) {
-    const w = walls[i];
-    if (w.x > x1 || w.y > y1 || w.x + w.w < x0 || w.y + w.h < y0) continue;
-    ctx.save();
-    ctx.translate(w.x, w.y);
-    ctx.fillStyle = wallGradient(w.h);
-    ctx.fillRect(0, 0, w.w, w.h);
-    ctx.restore();
-  }
-
-  // 2. Torchlight catching the stone faces, then the lit edge itself. Batched
-  //    over visible faces only -- this is what makes a grid of boxes read as
-  //    worked masonry rather than flat blocks.
-  ctx.lineCap = 'round';
-  if (!lowFx) {
-    ctx.strokeStyle = PAL.rimSpill;
-    ctx.lineWidth = 10;
-    ctx.beginPath();
-    for (let i = 0; i < edges.length; i++) {
-      const e = edges[i];
-      if (e.x1 > x1 || e.y1 > y1 || e.x2 < x0 || e.y2 < y0) continue;
-      ctx.moveTo(e.x1 + e.nx * 3, e.y1 + e.ny * 3);
-      ctx.lineTo(e.x2 + e.nx * 3, e.y2 + e.ny * 3);
-    }
-    ctx.stroke();
-  }
-
-  ctx.strokeStyle = PAL.rimWarm;
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  for (let i = 0; i < edges.length; i++) {
-    const e = edges[i];
-    if (e.x1 > x1 || e.y1 > y1 || e.x2 < x0 || e.y2 < y0) continue;
-    ctx.moveTo(e.x1, e.y1); ctx.lineTo(e.x2, e.y2);
-  }
-  ctx.stroke();
-
-  ctx.strokeStyle = PAL.rimLight;
-  ctx.lineWidth = 1.2;
-  ctx.beginPath();
-  for (let i = 0; i < edges.length; i++) {
-    const e = edges[i];
-    if (e.x1 > x1 || e.y1 > y1 || e.x2 < x0 || e.y2 < y0) continue;
-    ctx.moveTo(e.x1, e.y1); ctx.lineTo(e.x2, e.y2);
-  }
-  ctx.stroke();
-
-  if (!lowFx) {
-    ctx.strokeStyle = PAL.bevel;
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    for (let i = 0; i < edges.length; i++) {
-      const e = edges[i];
-      if (e.x1 > x1 || e.y1 > y1 || e.x2 < x0 || e.y2 < y0) continue;
-      ctx.moveTo(e.x1 - e.nx * 5, e.y1 - e.ny * 5);
-      ctx.lineTo(e.x2 - e.nx * 5, e.y2 - e.ny * 5);
-    }
-    ctx.stroke();
-  }
-  ctx.lineCap = 'butt';
 }
 
 function drawProps(x0, y0, x1, y1) {
@@ -2194,7 +2311,8 @@ function drawLightPass(t) {
   for (let i = 0; i < lamps.length; i++) {
     const L = lamps[i];
     if (L.x < vx0 || L.x > vx1 || L.y < vy0 || L.y > vy1) continue;
-    blit(lightFor(L.color, 98), L.x, L.y, 0, 0.46 * flick);
+    blit(lightFor(L.color, L.color === PAL.ember ? 138 : 112), L.x, L.y, 0,
+         (L.color === PAL.ember ? 0.6 : 0.42) * flick);
   }
   ctx.globalCompositeOperation = 'source-over';
 }
@@ -2250,24 +2368,73 @@ function drawPortalArrow(t) {
   ctx.restore();
 }
 
+// Carved stonework around the readouts. Drawn in screen space under the DOM
+// text, so the numbers stay crisp while the frame around them is scenery.
+function stonePlate(x, y, w, h) {
+  const g = ctx.createLinearGradient(0, y, 0, y + h);
+  g.addColorStop(0, '#2e3a3c');
+  g.addColorStop(0.5, '#1b2426');
+  g.addColorStop(1, '#0e1516');
+  ctx.fillStyle = g;
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = 'rgba(150,224,203,.5)';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.moveTo(x, y + 0.7); ctx.lineTo(x + w, y + 0.7); ctx.stroke();
+  ctx.strokeStyle = 'rgba(86,158,144,.4)';
+  ctx.lineWidth = 2.4;
+  ctx.beginPath(); ctx.moveTo(x, y + h - 1.2); ctx.lineTo(x + w, y + h - 1.2); ctx.stroke();
+  ctx.strokeStyle = 'rgba(6,10,11,.85)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(x, y + h + 1); ctx.lineTo(x + w, y + h + 1); ctx.stroke();
+}
+
+function drawHudFrame() {
+  const h = 74;
+  stonePlate(-2, -2, view.w + 4, h);
+  if (SPR.p_boss) {
+    blit(SPR.p_boss, 27, h - 26, 0, 1, 1.2);
+    blit(SPR.p_boss, view.w - 27, h - 26, 0, 1, 1.2);
+  }
+  // Chased trim across the middle of the plate
+  ctx.strokeStyle = 'rgba(150,224,203,.14)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(58, h - 12); ctx.lineTo(view.w - 58, h - 12);
+  ctx.stroke();
+}
+
+function drawViewFrame() {
+  ctx.strokeStyle = 'rgba(6,10,11,.9)';
+  ctx.lineWidth = 6;
+  ctx.strokeRect(3, 3, view.w - 6, view.h - 6);
+  ctx.strokeStyle = 'rgba(86,158,144,.32)';
+  ctx.lineWidth = 1.4;
+  ctx.strokeRect(6.5, 6.5, view.w - 13, view.h - 13);
+}
+
 function drawMinimap() {
   const S = 94, pad = 12;
   const x = view.w - S - pad, y = view.h - S - pad;
   const k = S / WORLD.w;
 
   ctx.save();
-  ctx.fillStyle = 'rgba(12,9,7,.82)';
+  // Stone surround with corner fittings
+  const fg = ctx.createLinearGradient(0, y - 7, 0, y + S + 7);
+  fg.addColorStop(0, '#2e3a3c'); fg.addColorStop(1, '#111a1b');
+  ctx.fillStyle = fg;
+  ctx.fillRect(x - 7, y - 7, S + 14, S + 14);
+  ctx.strokeStyle = 'rgba(150,224,203,.4)';
+  ctx.lineWidth = 1.2;
+  ctx.strokeRect(x - 6.5, y - 6.5, S + 13, S + 13);
+  ctx.fillStyle = 'rgba(10,14,15,.9)';
   ctx.fillRect(x, y, S, S);
-  ctx.strokeStyle = 'rgba(196,164,116,.3)';
+  ctx.strokeStyle = 'rgba(86,158,144,.5)';
   ctx.lineWidth = 1;
   ctx.strokeRect(x + 0.5, y + 0.5, S - 1, S - 1);
-  ctx.strokeStyle = 'rgba(226,196,140,.7)';
-  ctx.lineWidth = 1.6;
-  const b = 8;
-  ctx.beginPath();
-  ctx.moveTo(x, y + b); ctx.lineTo(x, y); ctx.lineTo(x + b, y);
-  ctx.moveTo(x + S - b, y + S); ctx.lineTo(x + S, y + S); ctx.lineTo(x + S, y + S - b);
-  ctx.stroke();
+  ctx.fillStyle = 'rgba(150,224,203,.55)';
+  for (const c of [[x - 7, y - 7], [x + S - 1, y - 7], [x - 7, y + S - 1], [x + S - 1, y + S - 1]]) {
+    ctx.fillRect(c[0], c[1], 8, 8);
+  }
 
   ctx.fillStyle = 'rgba(150,128,96,.18)';
   for (let i = 4; i < walls.length; i++) {
@@ -2320,6 +2487,7 @@ function draw(t) {
   drawPortalArrow(t);
   drawMinimap();
   drawStick();
+  if (state !== 'menu') { drawViewFrame(); drawHudFrame(); }
 }
 
 /* ---------------------------------------------------------------------------
@@ -2382,7 +2550,7 @@ function syncHud() {
     el.techFill.style.transform = 'scaleX(' + f + ')';
     el.techBar.classList.toggle('done', f >= 1);
     el.techText.innerHTML = f >= 1
-      ? '<b class="go">The waygate stirs</b>'
+      ? '<b class="go">Waygate open</b>'
       : 'Essence <b>' + run.tech + '</b>/' + EXTRACT_QUOTA;
   }
   const secs = Math.floor(run.time);

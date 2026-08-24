@@ -26,8 +26,20 @@ seconds to escape.
 
 ## Art direction
 
-Dark fantasy: worked stone lit by guttering torchlight, steel and leather,
-cold arcane blue for the player's magic and warm rune-orange for the enemy's.
+Dark fantasy: verdigris-bevelled stone ledges around unlit voids, lit slate
+flagstone underfoot, guttering torchlight in warm pools and cold arcane blue
+for the player's magic.
+
+Walls carry all their detail on the edge — a wide verdigris face, a bright
+crest, and a shadow biting inward — which is what makes a flat box read as a
+raised ledge seen from overhead. The interiors stay near-black, so the lit
+floor and the unlit rock separate at a glance.
+
+The floor is strewn with what people left behind: coins, dropped swords and
+shields, urns, scrolls, bones and horned skulls, crates, barrels and grates.
+Heavier against the rock where things pile up, lighter in the open so a fight
+stays readable. Carved stonework frames the readouts and the map, with horned
+skull bosses at the corners.
 Bodies are painted — a dark mass lit from above with a thin rim where the
 light catches — and glow is reserved for things that are actually magical:
 a warded blade, a revenant's bindings, a mote of essence. Nothing glows just
