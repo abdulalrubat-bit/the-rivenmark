@@ -421,58 +421,132 @@ function carveCorridor(ax, ay, bx, by, half) {
   for (let y = ay; y !== by + stepY; y += stepY) carveDisc(bx, y, half);
 }
 
+function carveRect(x0, y0, x1, y1) {
+  for (let y = Math.max(1, y0); y <= Math.min(GH - 2, y1); y++)
+    for (let x = Math.max(1, x0); x <= Math.min(GW - 2, x1); x++)
+      grid[gi(x, y)] = OPEN;
+}
+
+/* A depth-first maze over coarse cells, then braided: roughly a third of the
+   remaining walls are knocked through, which turns a perfect maze (all dead
+   ends, one route between any two points) into a looping network. Dead ends
+   are death in a game where a horde follows you, and loops give both sides
+   room to flank. */
+function carveMaze() {
+  const P = 4;                                    // fine cells per maze cell
+  const MW = Math.floor((GW - 2) / P), MH = Math.floor((GH - 2) / P);
+  const seen = new Uint8Array(MW * MH);
+  const mi = (x, y) => y * MW + x;
+  const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  const link = [];
+
+  const stack = [[(Math.random() * MW) | 0, (Math.random() * MH) | 0]];
+  seen[mi(stack[0][0], stack[0][1])] = 1;
+  while (stack.length) {
+    const [x, y] = stack[stack.length - 1];
+    const opts = [];
+    for (let i = 0; i < 4; i++) {
+      const nx = x + DIRS[i][0], ny = y + DIRS[i][1];
+      if (nx < 0 || ny < 0 || nx >= MW || ny >= MH || seen[mi(nx, ny)]) continue;
+      opts.push([nx, ny]);
+    }
+    if (!opts.length) { stack.pop(); continue; }
+    const n = opts[(Math.random() * opts.length) | 0];
+    seen[mi(n[0], n[1])] = 1;
+    link.push([x, y, n[0], n[1]]);
+    stack.push(n);
+  }
+  const braids = Math.floor(MW * MH * 0.34);
+  for (let i = 0; i < braids; i++) {
+    const x = (Math.random() * MW) | 0, y = (Math.random() * MH) | 0;
+    const d = DIRS[(Math.random() * 4) | 0];
+    const nx = x + d[0], ny = y + d[1];
+    if (nx < 0 || ny < 0 || nx >= MW || ny >= MH) continue;
+    link.push([x, y, nx, ny]);
+  }
+
+  // Rooms at every junction, corridors two cells wide along each link.
+  for (let my = 0; my < MH; my++)
+    for (let mx = 0; mx < MW; mx++) {
+      const ox = 1 + mx * P, oy = 1 + my * P;
+      carveRect(ox, oy, ox + 1, oy + 1);
+    }
+  for (let i = 0; i < link.length; i++) {
+    const [x, y, nx, ny] = link[i];
+    const ox = 1 + x * P, oy = 1 + y * P;
+    const nox = 1 + nx * P, noy = 1 + ny * P;
+    if (y === ny) carveRect(Math.min(ox, nox), oy, Math.max(ox, nox) + 1, oy + 1);
+    else          carveRect(ox, Math.min(oy, noy), ox + 1, Math.max(oy, noy) + 1);
+  }
+
+  // A handful of the junctions open out into proper chambers.
+  for (let i = 0; i < 7; i++) {
+    const mx = (Math.random() * MW) | 0, my = (Math.random() * MH) | 0;
+    carveDisc(1 + mx * P, 1 + my * P, 2 + (Math.random() * 2 | 0));
+  }
+  return P;
+}
+
 function generateWorld(spawn, portal) {
   grid = new Uint8Array(GW * GH);
+  grid.fill(SOLID);
 
-  // 1. Random fill, walled border.
-  for (let y = 0; y < GH; y++)
-    for (let x = 0; x < GW; x++)
-      grid[gi(x, y)] = (x < 2 || y < 2 || x >= GW - 2 || y >= GH - 2 ||
-                        Math.random() < CAVE_FILL) ? SOLID : OPEN;
+  carveMaze();
 
-  // 2. Smooth into caves. Majority rule with a dead band keeps detail on the
-  //    walls instead of rounding everything into blobs.
-  let next = new Uint8Array(GW * GH);
-  for (let pass = 0; pass < 4; pass++) {
-    for (let y = 0; y < GH; y++) {
-      for (let x = 0; x < GW; x++) {
-        if (x < 2 || y < 2 || x >= GW - 2 || y >= GH - 2) { next[gi(x, y)] = SOLID; continue; }
-        let n = 0;
-        for (let dy = -1; dy <= 1; dy++)
-          for (let dx = -1; dx <= 1; dx++)
-            if (dx || dy) n += cellAt(x + dx, y + dy);
-        next[gi(x, y)] = n >= 5 ? SOLID : n <= 3 ? OPEN : grid[gi(x, y)];
-      }
+  // Roughen: without this the maze reads as machined corridors. Flip a few
+  // boundary cells, then one gentle smoothing pass to knock the noise into
+  // shapes -- enough to look carved, too little to dissolve the layout.
+  for (let y = 2; y < GH - 2; y++) {
+    for (let x = 2; x < GW - 2; x++) {
+      const k = gi(x, y);
+      let openN = 0;
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++)
+          if (dx || dy) openN += cellAt(x + dx, y + dy) === OPEN ? 1 : 0;
+      if (openN === 0 || openN === 8) continue;         // interiors stay put
+      if (Math.random() < 0.30) grid[k] = grid[k] === OPEN ? SOLID : OPEN;
     }
-    const t = grid; grid = next; next = t;
   }
+  const smoothed = new Uint8Array(grid);
+  for (let y = 2; y < GH - 2; y++) {
+    for (let x = 2; x < GW - 2; x++) {
+      let n = 0;
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++)
+          if (dx || dy) n += cellAt(x + dx, y + dy);
+      smoothed[gi(x, y)] = n >= 6 ? SOLID : n <= 2 ? OPEN : grid[gi(x, y)];
+    }
+  }
+  grid = smoothed;
 
-  // 3. Cut the skeleton: chambers joined by corridors, plus a few extra links
-  //    so the map loops instead of dead-ending everywhere.
-  const sc = { x: Math.floor(spawn.x / CELL_W), y: Math.floor(spawn.y / CELL_W) };
-  const pc = { x: Math.floor(portal.x / CELL_W), y: Math.floor(portal.y / CELL_W) };
-  const nodes = [sc, pc];
-  for (let i = 0; i < 9; i++) {
-    nodes.push({ x: 4 + Math.floor(Math.random() * (GW - 8)),
-                 y: 4 + Math.floor(Math.random() * (GH - 8)) });
-  }
-  carveDisc(sc.x, sc.y, 5);
-  carveDisc(pc.x, pc.y, 4);
-  for (let i = 2; i < nodes.length; i++) carveDisc(nodes[i].x, nodes[i].y, 2 + (Math.random() * 2 | 0));
-  for (let i = 1; i < nodes.length; i++) {
-    const a = nodes[i], b = nodes[i - 1];
-    carveCorridor(a.x, a.y, b.x, b.y, Math.random() < 0.35 ? 2 : 1);
-  }
-  carveCorridor(sc.x, sc.y, pc.x, pc.y, 1);            // spawn always reaches portal
-  for (let i = 0; i < 4; i++) {                        // loops
-    const a = nodes[(Math.random() * nodes.length) | 0];
-    const b = nodes[(Math.random() * nodes.length) | 0];
-    if (a !== b) carveCorridor(a.x, a.y, b.x, b.y, 1);
-  }
+  // Spawn pocket and portal apron, cut after the roughening so they are clean.
+  const sc = { x: clamp(Math.floor(spawn.x / CELL_W), 2, GW - 3),
+               y: clamp(Math.floor(spawn.y / CELL_W), 2, GH - 3) };
+  const pc = { x: clamp(Math.floor(portal.x / CELL_W), 2, GW - 3),
+               y: clamp(Math.floor(portal.y / CELL_W), 2, GH - 3) };
+  carveDisc(sc.x, sc.y, 4);
+  carveDisc(pc.x, pc.y, 3);
+  carveCorridor(sc.x, sc.y, pc.x, pc.y, 1);   // never strand the objective
 
   widenPassages();
 
-  // 4. Keep only what is reachable from spawn; everything else becomes rock.
+  // Drop fully isolated single pillars. Roughening plus widening leaves a
+  // scatter of lone 40-unit blocks that read as debris rather than cave wall;
+  // anything still touching rock stays, so cover and structure survive.
+  const lone = [];
+  for (let y = 2; y < GH - 2; y++) {
+    for (let x = 2; x < GW - 2; x++) {
+      if (grid[gi(x, y)] !== SOLID) continue;
+      let n = 0;
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++)
+          if ((dx || dy) && cellAt(x + dx, y + dy) === SOLID) n++;
+      if (n === 0) lone.push(gi(x, y));
+    }
+  }
+  for (let i = 0; i < lone.length; i++) grid[lone[i]] = OPEN;
+
+  // Keep only what is reachable from spawn; everything else becomes rock.
   const seen = new Uint8Array(GW * GH);
   const stack = [gi(sc.x, sc.y)];
   seen[stack[0]] = 1;
@@ -481,9 +555,9 @@ function generateWorld(spawn, portal) {
     const k = stack.pop();
     const cx = k % GW, cy = (k / GW) | 0;
     openCells.push({ x: cx * CELL_W + CELL_W / 2, y: cy * CELL_W + CELL_W / 2 });
-    const nb = [[1,0],[-1,0],[0,1],[0,-1]];
     for (let i = 0; i < 4; i++) {
-      const nx = cx + nb[i][0], ny = cy + nb[i][1];
+      const nx = cx + (i === 0 ? 1 : i === 1 ? -1 : 0);
+      const ny = cy + (i === 2 ? 1 : i === 3 ? -1 : 0);
       if (!inGrid(nx, ny)) continue;
       const nk = gi(nx, ny);
       if (seen[nk] || grid[nk] === SOLID) continue;
@@ -510,22 +584,21 @@ function openness(cx, cy) {
 }
 
 function widenPassages() {
-  for (let pass = 0; pass < 3; pass++) {
-    const toOpen = [];
-    for (let y = 2; y < GH - 2; y++) {
-      for (let x = 2; x < GW - 2; x++) {
-        if (grid[gi(x, y)] !== OPEN) continue;
-        if (cellAt(x - 1, y) === SOLID && cellAt(x + 1, y) === SOLID) {
-          toOpen.push(openness(x - 1, y) >= openness(x + 1, y) ? gi(x - 1, y) : gi(x + 1, y));
-        }
-        if (cellAt(x, y - 1) === SOLID && cellAt(x, y + 1) === SOLID) {
-          toOpen.push(openness(x, y - 1) >= openness(x, y + 1) ? gi(x, y - 1) : gi(x, y + 1));
-        }
+  const snap = new Uint8Array(grid);
+  const solid = (cx, cy) => (cx < 0 || cy < 0 || cx >= GW || cy >= GH) ? 1 : snap[gi(cx, cy)];
+  const toOpen = [];
+  for (let y = 2; y < GH - 2; y++) {
+    for (let x = 2; x < GW - 2; x++) {
+      if (snap[gi(x, y)] !== OPEN) continue;
+      if (solid(x - 1, y) && solid(x + 1, y)) {
+        toOpen.push(openness(x - 1, y) >= openness(x + 1, y) ? gi(x - 1, y) : gi(x + 1, y));
+      }
+      if (solid(x, y - 1) && solid(x, y + 1)) {
+        toOpen.push(openness(x, y - 1) >= openness(x, y + 1) ? gi(x, y - 1) : gi(x, y + 1));
       }
     }
-    if (!toOpen.length) break;
-    for (let i = 0; i < toOpen.length; i++) grid[toOpen[i]] = OPEN;
   }
+  for (let i = 0; i < toOpen.length; i++) grid[toOpen[i]] = OPEN;
 }
 
 // Greedy rectangle merge: far fewer, larger boxes for the collision system
@@ -573,16 +646,42 @@ function buildWallRects() {
 // Every face where rock meets open floor. Drawn as one batched neon rim, which
 // is what makes a grid of boxes read as a carved cave wall.
 function buildEdges() {
-  edges = [];
   const C = CELL_W;
+  // Collect faces per line, then merge collinear neighbours into single long
+  // segments. A straight run of wall emitted one 40-unit stub per cell; the
+  // rim is stroked three times a frame with round caps, so segment count is
+  // the cost. Merging cuts it by roughly two thirds for an identical picture.
+  const lines = new Map();
+  const add = (key, a, b) => {
+    let arr = lines.get(key);
+    if (!arr) { arr = []; lines.set(key, arr); }
+    arr.push([a, b]);
+  };
   for (let y = 1; y < GH - 1; y++) {
     for (let x = 1; x < GW - 1; x++) {
       if (grid[gi(x, y)] !== SOLID) continue;
-      const px = x * C, py = y * C;
-      if (cellAt(x, y - 1) === OPEN) edges.push({ x1: px, y1: py, x2: px + C, y2: py, nx: 0, ny: -1 });
-      if (cellAt(x, y + 1) === OPEN) edges.push({ x1: px, y1: py + C, x2: px + C, y2: py + C, nx: 0, ny: 1 });
-      if (cellAt(x - 1, y) === OPEN) edges.push({ x1: px, y1: py, x2: px, y2: py + C, nx: -1, ny: 0 });
-      if (cellAt(x + 1, y) === OPEN) edges.push({ x1: px + C, y1: py, x2: px + C, y2: py + C, nx: 1, ny: 0 });
+      if (cellAt(x, y - 1) === OPEN) add('h|' + y + '|-1', x, x + 1);
+      if (cellAt(x, y + 1) === OPEN) add('h|' + (y + 1) + '|1', x, x + 1);
+      if (cellAt(x - 1, y) === OPEN) add('v|' + x + '|-1', y, y + 1);
+      if (cellAt(x + 1, y) === OPEN) add('v|' + (x + 1) + '|1', y, y + 1);
+    }
+  }
+
+  edges = [];
+  for (const [key, arr] of lines) {
+    const parts = key.split('|');
+    const horiz = parts[0] === 'h';
+    const at = +parts[1] * C;
+    const sign = +parts[2];
+    arr.sort((a, b) => a[0] - b[0]);
+    let s0 = arr[0][0], s1 = arr[0][1];
+    for (let i = 1; i <= arr.length; i++) {
+      if (i < arr.length && arr[i][0] === s1) { s1 = arr[i][1]; continue; }
+      const a = s0 * C, b = s1 * C;
+      edges.push(horiz
+        ? { x1: a, y1: at, x2: b, y2: at, nx: 0, ny: sign }
+        : { x1: at, y1: a, x2: at, y2: b, nx: sign, ny: 0 });
+      if (i < arr.length) { s0 = arr[i][0]; s1 = arr[i][1]; }
     }
   }
 }
@@ -592,21 +691,29 @@ function buildScenery(spawn, portal) {
   lamps = [];
   const C = CELL_W;
 
-  // Wall-mounted fittings, oriented to face the open side.
+  // Wall-mounted fittings, oriented to face the open side. Edges are merged
+  // into long runs, so step along each one rather than placing a single
+  // fitting at its midpoint -- otherwise a 20-metre wall gets one vent.
+  const STRIDE = 58;
   for (let i = 0; i < edges.length; i++) {
     const e = edges[i];
-    if (Math.random() > 0.13) continue;
-    const mx = (e.x1 + e.x2) / 2 + e.nx * 7;
-    const my = (e.y1 + e.y2) / 2 + e.ny * 7;
+    const len = Math.hypot(e.x2 - e.x1, e.y2 - e.y1);
+    const ux = (e.x2 - e.x1) / (len || 1), uy = (e.y2 - e.y1) / (len || 1);
     const rot = Math.atan2(e.ny, e.nx);
+    for (let d = STRIDE * 0.5; d < len; d += STRIDE) {
+    if (Math.random() > 0.34) continue;
+    const jitter = rand(-9, 9);
+    const mx = e.x1 + ux * clamp(d + jitter, 6, len - 6) + e.nx * 7;
+    const my = e.y1 + uy * clamp(d + jitter, 6, len - 6) + e.ny * 7;
     const roll = Math.random();
     const kind = roll < 0.34 ? 'vent' : roll < 0.62 ? 'pipes' : roll < 0.84 ? 'panel' : 'warn';
     props.push({ x: mx, y: my, rot, kind });
-    if (kind === 'panel') {
+    if (kind === 'panel' && Math.random() < 0.45) {
       lamps.push({ x: mx + e.nx * 10, y: my + e.ny * 10,
                    color: Math.random() < 0.78 ? '#22e0ff' : '#ff2e88' });
-    } else if (kind === 'warn' && Math.random() < 0.4) {
+    } else if (kind === 'warn' && Math.random() < 0.22) {
       lamps.push({ x: mx + e.nx * 10, y: my + e.ny * 10, color: '#ffd23f' });
+    }
     }
   }
 
@@ -1695,15 +1802,15 @@ function forgeProps() {
 
   // --- floor scenery ------------------------------------------------------
   P('grate', 34, g => {
-    g.strokeStyle = 'rgba(70,100,140,.4)'; g.lineWidth = 1;
+    g.strokeStyle = 'rgba(95,135,185,.6)'; g.lineWidth = 1;
     g.strokeRect(-11, -11, 22, 22);
-    g.strokeStyle = 'rgba(70,100,140,.26)';
+    g.strokeStyle = 'rgba(95,135,185,.4)';
     for (let i = -8; i <= 8; i += 4) {
       g.beginPath(); g.moveTo(i, -11); g.lineTo(i, 11); g.stroke();
     }
   });
   P('rubble', 28, g => {
-    g.fillStyle = 'rgba(24,34,52,.95)'; g.strokeStyle = 'rgba(80,110,150,.3)'; g.lineWidth = 0.8;
+    g.fillStyle = 'rgba(28,40,60,.95)'; g.strokeStyle = 'rgba(105,140,185,.5)'; g.lineWidth = 0.9;
     const chunk = (cx, cy, s) => {
       g.beginPath();
       for (let i = 0; i < 5; i++) {
@@ -1732,12 +1839,12 @@ function forgeProps() {
   P('hazard', 34, g => {
     g.save();
     g.beginPath(); g.rect(-13, -6, 26, 12); g.clip();
-    g.strokeStyle = 'rgba(255,210,63,.2)'; g.lineWidth = 4;
+    g.strokeStyle = 'rgba(255,210,63,.3)'; g.lineWidth = 4;
     for (let i = -20; i < 22; i += 8) {
       g.beginPath(); g.moveTo(i, -8); g.lineTo(i + 8, 8); g.stroke();
     }
     g.restore();
-    g.strokeStyle = 'rgba(255,210,63,.26)'; g.lineWidth = 1;
+    g.strokeStyle = 'rgba(255,210,63,.38)'; g.lineWidth = 1;
     g.strokeRect(-13, -6, 26, 12);
   });
 }
@@ -1986,7 +2093,7 @@ function drawLightPass(t) {
   for (let i = 0; i < lamps.length; i++) {
     const L = lamps[i];
     if (L.x < vx0 || L.x > vx1 || L.y < vy0 || L.y > vy1) continue;
-    blit(lightFor(L.color, 132), L.x, L.y, 0, 0.3 * flick);
+    blit(lightFor(L.color, 96), L.x, L.y, 0, 0.34 * flick);
   }
   ctx.globalCompositeOperation = 'source-over';
 }
