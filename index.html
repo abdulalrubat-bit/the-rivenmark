@@ -147,6 +147,32 @@
   .stats b{display:block; font-family:var(--font-display); font-size:21px;
     color:var(--ink); letter-spacing:1px; margin-top:3px; font-weight:400;}
 
+  /* ---------- Menu ---------- */
+  .crest{display:flex; align-items:center; gap:10px; opacity:.7;}
+  .crest-rule{display:block; width:54px; height:1px;
+    background:linear-gradient(90deg,transparent,var(--gold),transparent);}
+  .crest-mark{color:var(--gold); font-size:13px;}
+  .menu{display:flex; flex-direction:column; gap:8px; width:100%; max-width:400px;
+    margin-top:4px;}
+  .mbtn{display:block; width:100%; text-align:left; cursor:pointer;
+    border:1px solid var(--line); border-left:3px solid #3a3128;
+    background:linear-gradient(100deg,#1d1610,#140f0a); border-radius:2px;
+    padding:12px 15px; color:inherit; font-family:inherit;
+    touch-action:manipulation;}
+  .mbtn b{display:block; font-family:var(--font-display); font-weight:400;
+    font-size:19px; letter-spacing:2px; text-transform:uppercase; color:var(--ink);}
+  .mbtn i{display:block; font-size:11.5px; color:#8a7c60; margin-top:2px;}
+  .mbtn.prime{border-left-color:var(--gold);
+    background:linear-gradient(100deg,#2a2015,#181109);}
+  .mbtn:active{background:linear-gradient(100deg,#3a2d1d,#241a10);}
+  .card.sel{border-color:var(--gold); background:linear-gradient(100deg,#33271a,#1d150d);}
+  .card .tier{font:600 9px/1 ui-monospace,monospace; letter-spacing:1.4px;
+    color:#8a7c60; text-transform:uppercase;}
+  .setline{width:100%; max-width:520px; font:11px/1.5 ui-monospace,monospace;
+    color:#8a7c60; text-align:left;}
+  .setline b{color:#e0563f;}
+  .setline .on{color:#e6dcc4;}
+
   /* ---------- Gear ---------- */
   #gear{justify-content:flex-start; gap:9px;}
   .gear-wrap{display:flex; gap:12px; width:100%; max-width:520px; align-items:flex-start;}
@@ -263,6 +289,9 @@
   </div>
 
   <div class="screen on" id="start">
+    <div class="crest" aria-hidden="true">
+      <span class="crest-rule"></span><span class="crest-mark">✦</span><span class="crest-rule"></span>
+    </div>
     <h1 class="title">The<br><em>Rivenmark</em></h1>
     <p class="sub">The Aegis is shattered</p>
     <p class="blurb">
@@ -271,19 +300,33 @@
       and hold it open long enough to carry the haul out from under the
       Shroud of Dúath.
     </p>
-    <div class="cards" id="heroPick"></div>
-    <p class="hint">
-      <b>Move</b> — drag anywhere, or WASD / arrows<br>
-      <b>Strike</b> — your steel cuts a crescent at the nearest thrall<br>
-      <b>Boons</b> — every few slag, choose a gift
-    </p>
+    <div class="menu">
+      <button class="mbtn prime" id="toDelve">
+        <b>Descend</b><i>choose a delve and how hard it bites</i></button>
+      <button class="mbtn" id="toKit">
+        <b>The Kit</b><i><span id="kitLine">nothing recovered</span></i></button>
+    </div>
     <p class="fine" id="bestLine"></p>
+  </div>
+
+  <div class="screen" id="delve">
+    <p class="sub">Choose your ground</p>
+    <h5 class="gear-h">The Vanguard</h5>
+    <div class="cards" id="heroPick"></div>
+    <h5 class="gear-h">The delve</h5>
+    <div class="cards" id="levelPick"></div>
+    <h5 class="gear-h">How hard it bites</h5>
+    <div class="cards" id="diffPick"></div>
+    <div class="menu">
+      <button class="mbtn prime" id="beginRun"><b>Descend</b><i id="beginLine"></i></button>
+      <button class="mbtn" id="delveBack"><b>Back</b><i>to the gate-house</i></button>
+    </div>
   </div>
 
   <button id="bagBtn" aria-label="Bag"><b>▣</b><span id="bagBadge">0</span></button>
 
   <div class="screen" id="gear">
-    <p class="sub">The Vanguard's kit</p>
+    <p class="sub" id="gearSub">The Vanguard's kit</p>
     <div class="gear-wrap">
       <div class="gear-col">
         <h5 class="gear-h">Worn</h5>
@@ -296,6 +339,7 @@
       </div>
     </div>
     <div class="gear-detail" id="gearDetail"></div>
+    <div class="setline" id="setLine"></div>
     <button class="btn" id="gearClose">Back to the delve</button>
   </div>
 
@@ -358,6 +402,8 @@ const AGGRO_NEAR    = 250;   // a body notices you inside this
 const AGGRO_FAR     = 340;   // ...and the bigger, slower ones a little sooner
 const ALERT_R       = 155;   // a woken body pulls its neighbours up with it
 const ALERT_DELAY   = 0.18;  // ...one beat later, so a pack rouses in sequence
+const ELITE_CHANCE  = 0.16;  // share of packs led by a branded champion
+const ELITE_HP      = 2.6;   // and what that champion is worth fighting through
 // Health ramp from the spawn pocket to the far edge of the delve -- this is
 // what replaced the old run-time ramp, since a placed dungeon gets harder by
 // going deeper rather than by the clock running. Left mutable so the balance
@@ -492,15 +538,26 @@ const LEVELS = [
     // What the delve hits back with. Gear is a large power budget -- a full
     // kit took the bot from 43% to 60% -- so the opposition is scaled to meet
     // it here rather than by nerfing the loot, which is the point of the loot.
-    // Threat responds steeply -- 1.45 put the bot at 28%/20% and 1.28 at
-    // 68%/50%, a 40-point swing for a 12% change -- because gear snowballs:
-    // survive the first packs, get kitted, and the rest follows. 1.42 sits in
-    // the middle of that cliff.
-    threat:1.42 }
+    }
 ];
+/* Difficulty is the bargain the genre runs on: harder ground pays better.
+   Threat scales enemy health and damage; the loot rates scale how often gear
+   falls and how often a piece of the Regalia is among it. `riven` carries the
+   values the balance harness was tuned against. */
+const DIFFICULTIES = [
+  { id:'harrowed', name:'Harrowed', threat:1.00, lootRate:0.85, setRate:0.6,
+    note:'A delve you can learn on.' },
+  { id:'riven',    name:'Riven',    threat:1.42, lootRate:1.00, setRate:1.0,
+    note:'The Rivenmark as it is. Roughly one delve in three ends at the gate.' },
+  { id:'sundered', name:'Sundered', threat:1.95, lootRate:1.35, setRate:1.8,
+    note:'Champions in every hall. The Regalia surfaces here.' }
+];
+const DIFF_BY_ID = {};
+for (const d of DIFFICULTIES) DIFF_BY_ID[d.id] = d;
+let DIFF = DIFF_BY_ID.riven;
+
 const LEVEL_BY_ID = {};
 for (const L of LEVELS) {
-  if (L.threat  == null) L.threat  = 1;
   if (L.quota   == null) L.quota   = EXTRACT_QUOTA;
   if (L.channel == null) L.channel = EXTRACT_CHANNEL;
   LEVEL_BY_ID[L.id] = L;
@@ -551,8 +608,51 @@ const RARITY = [
   { id:'tempered',name:'Tempered',       colour:'#7fa869', affixes:2, weight:28 },
   { id:'wrought', name:'Spirit-wrought', colour:'#5f9fd0', affixes:3, weight:14 },
   { id:'hallowed',name:'Hallowed',       colour:'#a98fd8', affixes:4, weight:5  },
-  { id:'riven',   name:'Riven',          colour:'#d9a441', affixes:5, weight:1  }
+  { id:'riven',   name:'Riven',          colour:'#d9a441', affixes:5, weight:1  },
+  // Never rolled by rollRarity -- set pieces are the only mythics, and they
+  // come off elites and the avatar rather than out of the ordinary drop table.
+  { id:'mythic',  name:'Mythic',         colour:'#e0563f', affixes:5, weight:0  }
 ];
+
+/* --- The Sundered Regalia -------------------------------------------------
+   One set, eight pieces, one per slot. Pieces drop only from elites and from
+   the Deceiver. Each carries fixed, better-than-random affixes, and wearing
+   several together pays a bonus on top -- so a half-set is a real decision
+   against eight good rolled items rather than an obvious upgrade.
+   ---------------------------------------------------------------------- */
+const SET_ID = 'regalia';
+const SET_NAME = 'The Sundered Regalia';
+const SET_PIECES = {
+  blade:   { base:'Aegis-Shard Blade',  affixes:[['damage',9],['damageP',0.22],['cadence',-0.12],['reach',0.12],['sweep',0.14]] },
+  offhand: { base:'Unbroken Ward',      affixes:[['ward',0.10],['life',30],['damageP',0.12],['regen',0.7],['sweep',0.10]] },
+  mail:    { base:'Hauberk of the Vigil',affixes:[['life',38],['ward',0.09],['regen',0.8],['speed',0.07],['damageP',0.10]] },
+  girdle:  { base:'Girdle of Held Light',affixes:[['life',26],['ward',0.07],['magnet',0.35],['regen',0.6],['speed',0.05]] },
+  boots:   { base:'Treads of the Last March',affixes:[['speed',0.12],['life',22],['ward',0.05],['magnet',0.25],['regen',0.4]] },
+  amulet:  { base:'Pendant of Dúath',   affixes:[['damageP',0.20],['life',24],['regen',0.7],['magnet',0.30],['reach',0.10]] },
+  ring1:   { base:'Band of the Vigil',  affixes:[['damage',7],['damageP',0.14],['life',18],['ward',0.05],['cadence',-0.08]] },
+  ring2:   { base:'Band of the Vigil',  affixes:[['damage',7],['damageP',0.14],['life',18],['ward',0.05],['cadence',-0.08]] }
+};
+// Bonuses granted for wearing N pieces. Additive terms and multipliers are
+// folded in by recomputeStats exactly like an affix, so nothing special has to
+// happen anywhere else.
+const SET_BONUSES = [
+  { at:2, text:'+18 life, +5% ward',           add:{ maxHp:18, ward:0.05 } },
+  { at:4, text:'+12% damage, +8% stride',      mul:{ damage:0.12, speed:0.08 } },
+  { at:6, text:'+10% reach and sweep, +1 life a second',
+                                               mul:{ range:0.10, sweep:0.10 }, add:{ regen:1.0 } },
+  { at:8, text:'a second crescent with every strike', add:{ shots:1 } }
+];
+
+function rollSetPiece(slotId) {
+  const slot = slotId || SLOTS[(Math.random() * SLOTS.length) | 0].id;
+  const def = SET_PIECES[slot];
+  return { uid: ++itemSeq, slot, base: def.base, rarity: 'mythic', set: SET_ID,
+           affixes: def.affixes.map(a => ({ id: a[0], v: a[1] })),
+           name: def.base };
+}
+
+const setWorn = p => SLOTS.reduce((n, sl) =>
+  n + (p.gear[sl.id] && p.gear[sl.id].set === SET_ID ? 1 : 0), 0);
 
 // Base items per slot. `key` picks which affix pool the base leans on, so a
 // blade rolls like a weapon and boots roll like boots.
@@ -684,6 +784,15 @@ function recomputeStats() {
       else add[a.stat] = (add[a.stat] || 0) + af.v;
     }
   }
+  // Set bonuses ride in on the same two piles, so they cannot be applied twice
+  // or in the wrong order relative to the affixes themselves.
+  const worn = setWorn(p);
+  for (const b of SET_BONUSES) {
+    if (worn < b.at) continue;
+    if (b.add) for (const k in b.add) add[k] = (add[k] || 0) + b.add[k];
+    if (b.mul) for (const k in b.mul) mul[k] = (mul[k] === undefined ? 1 : mul[k]) * (1 + b.mul[k]);
+  }
+
   for (const k in add) base[k] = (base[k] || 0) + add[k];
   for (const k in mul) base[k] = (base[k] || 0) * mul[k];
 
@@ -1259,9 +1368,20 @@ function buildEdges() {
     for (let i = 1; i <= arr.length; i++) {
       if (i < arr.length && arr[i][0] === s1) { s1 = arr[i][1]; continue; }
       const a = s0 * C, b = s1 * C;
+      // Does this run end at a corner, or does the wall simply stop? Courses
+      // are laid past a corner so the square between two perpendicular faces
+      // is covered -- but doing that at a free end hangs masonry out over open
+      // floor. The rock one cell beyond the run tells them apart.
+      const solid = horiz
+        ? (sign === -1 ? +parts[1] : +parts[1] - 1)     // solid row
+        : (sign === -1 ? +parts[1] : +parts[1] - 1);    // solid column
+      const capA = horiz ? cellAt(s0 - 1, solid) === SOLID
+                         : cellAt(solid, s0 - 1) === SOLID;
+      const capB = horiz ? cellAt(s1, solid) === SOLID
+                         : cellAt(solid, s1) === SOLID;
       edges.push(horiz
-        ? { x1: a, y1: at, x2: b, y2: at, nx: 0, ny: sign }
-        : { x1: at, y1: a, x2: at, y2: b, nx: sign, ny: 0 });
+        ? { x1: a, y1: at, x2: b, y2: at, nx: 0, ny: sign, capA, capB }
+        : { x1: at, y1: a, x2: at, y2: b, nx: sign, ny: 0, capA, capB });
       if (i < arr.length) { s0 = arr[i][0]; s1 = arr[i][1]; }
     }
   }
@@ -1504,7 +1624,8 @@ function makePlayer(x, y, heroId) {
   p.swing = 0; p.swingA = 0; p.swingDir = 1;
   p.upg = {};
   p.gear = {};
-  for (const sl of SLOTS) p.gear[sl.id] = null;
+  // Wear what came home from the last delve.
+  for (const sl of SLOTS) p.gear[sl.id] = (stash.gear && stash.gear[sl.id]) || null;
   p.bag = [];
   p.ward = 0;
   return p;
@@ -1531,16 +1652,35 @@ function typeWeights(t) {
 function placeEnemy(kind, x, y, depth) {
   if (enemies.length >= MAX_ENEMIES) return null;
   const d = ENEMY_TYPES[kind];
-  const scale = (1 + depth * PACK_DEPTH_HP) * LEVEL.threat;
+  const scale = (1 + depth * PACK_DEPTH_HP) * DIFF.threat;
   const e = {
     kind, x, y, r: d.r, speed: d.speed * rand(0.92, 1.08),
-    hp: d.hp * scale, maxHp: d.hp * scale, dmg: d.dmg * LEVEL.threat, tech: d.tech,
+    hp: d.hp * scale, maxHp: d.hp * scale, dmg: d.dmg * DIFF.threat, tech: d.tech,
     cd: d.cd, mass: d.mass, color: d.color, halo: d.halo,
     atk: rand(0, d.cd), hitFlash: 0, wob: Math.random() * TAU, angle: 0, face: 1,
     awake: false, alert: 0, home: { x, y }, drowse: Math.random() * TAU,
-    aggro: d.r >= 20 ? AGGRO_FAR : AGGRO_NEAR
+    aggro: d.r >= 20 ? AGGRO_FAR : AGGRO_NEAR, elite: false
   };
   enemies.push(e);
+  return e;
+}
+
+// Promote a body to the champion of its pack: harder, worth more, and the only
+// thing besides the avatar that carries a piece of the Regalia.
+function makeElite(e) {
+  if (!e || e.kind === 'mirage' || e.kind === 'deceiver') return e;
+  e.elite = true;
+  e.hp = e.maxHp = e.maxHp * ELITE_HP;
+  e.dmg *= 1.35;
+  e.speed *= 0.92;
+  e.mass *= 1.6;
+  // A champion is bodily bigger, but the spot was chosen for the body it was
+  // before -- growing the radius blind can wedge it in rock it used to fit
+  // through. Take the size only if the ground still takes it.
+  const bigger = Math.round(e.r * 1.22);
+  if (!pointInWalls(e.x, e.y, bigger)) e.r = bigger;
+  e.tech = Math.max(3, Math.round(e.tech * 4));
+  e.aggro = AGGRO_FAR;
   return e;
 }
 
@@ -1616,7 +1756,13 @@ function placePacks(spawn) {
       const pos = scatterNear(st.x, st.y, 86, ENEMY_TYPES[kind].r + 4, spawn);
       if (!pos) continue;
       const e = placeEnemy(kind, pos.x, pos.y, st.depth);
-      if (e) slag += e.tech;
+      if (e) {
+        // One champion at most, and only in some packs -- an elite in every
+        // group is just a tougher baseline rather than a thing you notice.
+        if (k === 0 && Math.random() <
+            (ELITE_CHANCE + st.depth * 0.14) * DIFF.setRate) makeElite(e);
+        slag += e.tech;
+      }
     }
   }
 
@@ -1625,7 +1771,8 @@ function placePacks(spawn) {
   for (let k = 0; k < 6; k++) {
     const kind = k < 2 && roster.indexOf('breaker') >= 0 ? 'breaker' : roster[0];
     const pos = scatterNear(portal.x, portal.y, 150, ENEMY_TYPES[kind].r + 4, spawn);
-    if (pos) placeEnemy(kind, pos.x, pos.y, 0.85);
+    const g = pos && placeEnemy(kind, pos.x, pos.y, 0.85);
+    if (g && k < 2) makeElite(g);      // the gate is held by champions
   }
 }
 
@@ -1669,10 +1816,10 @@ function spawnEnemy(t) {
   if (!ok) return;
 
   // Health creeps up with run time so late waves stay meaningful.
-  const scale = (1 + t / 200) * LEVEL.threat;
+  const scale = (1 + t / 200) * DIFF.threat;
   enemies.push({
     kind, x, y, r: d.r, speed: d.speed * rand(0.92, 1.08),
-    hp: d.hp * scale, maxHp: d.hp * scale, dmg: d.dmg * LEVEL.threat, tech: d.tech,
+    hp: d.hp * scale, maxHp: d.hp * scale, dmg: d.dmg * DIFF.threat, tech: d.tech,
     cd: d.cd, mass: d.mass, color: d.color, halo: d.halo,
     atk: rand(0, d.cd), hitFlash: 0, wob: Math.random() * TAU, angle: 0, face: 1,
     // Summoned bodies arrive awake: they were called to you, not stumbled on.
@@ -1776,17 +1923,31 @@ const BAG_MAX = 20;
 function maybeDropItem(e) {
   const depth = clamp(Math.hypot(e.x - run.spawnX, e.y - run.spawnY) /
                       (Math.hypot(WORLD.w, WORLD.h) * 0.5), 0, 1);
+  // What killed matters as much as where. A thrall is a lottery ticket; a
+  // champion is the reason to fight one.
   let chance = e.kind === 'deceiver' ? 1 :
+               e.elite               ? 0.85 :
                e.kind === 'breaker'  ? 0.22 :
                e.kind === 'mirage'   ? 0 : 0.055;
-  chance *= 1 + depth * 0.8;
-  const n = e.kind === 'deceiver' ? 3 : 1;
+  chance *= (1 + depth * 0.8) * DIFF.lootRate;
+  const n = e.kind === 'deceiver' ? 3 : e.elite ? 2 : 1;
+
+  // Regalia pieces come off champions and the avatar only.
+  const setOdds = e.kind === 'deceiver' ? 0.55 : e.elite ? 0.14 : 0;
+  const push = it => drops.push({
+    x: e.x + rand(-14, 14), y: e.y + rand(-14, 14),
+    vx: rand(-46, 46), vy: rand(-46, 46),
+    item: it, r: 9, life: 0, pulled: false });
+
+  if (setOdds && Math.random() < setOdds * DIFF.setRate) {
+    push(rollSetPiece());
+    if (e.kind !== 'deceiver') return;      // one piece is the whole prize
+  }
   for (let i = 0; i < n; i++) {
     if (i === 0 && Math.random() > chance) return;
-    const it = rollItem(e.kind === 'deceiver' ? Math.max(depth, 0.8) : depth);
-    drops.push({ x: e.x + rand(-14, 14), y: e.y + rand(-14, 14),
-                 vx: rand(-46, 46), vy: rand(-46, 46),
-                 item: it, r: 9, life: 0, pulled: false });
+    // Quality floor by what it came off, so a champion never hands you rags.
+    const floor = e.kind === 'deceiver' ? 0.85 : e.elite ? 0.7 : 0;
+    push(rollItem(Math.max(depth, floor)));
   }
 }
 
@@ -3510,13 +3671,15 @@ function drawWalls(x0, y0, x1, y1) {
     const q = ((Math.round((Math.atan2(e.ny, e.nx) + Math.PI / 2) / (Math.PI / 2)) % 4) + 4) % 4;
     // Faces are built per direction, so where a horizontal run meets a vertical
     // one neither covers the corner square and the near-black wall interior
-    // shows through as a notch -- which reads as a hole in the masonry rather
-    // than as a join. Running each course past both ends closes it: the
-    // overhang lands on the perpendicular face's own dressed band, never on
-    // open floor, because a wall that ends has a face there too.
+    // shows through as a notch -- a hole in the masonry rather than a join.
+    // Running the course past that end closes it. Only that end, though: a run
+    // that ends because the wall ends has open floor beyond it, and overhanging
+    // there leaves stone hanging in the air off the end of the wall.
     const EXT = 12;
-    const n = Math.max(1, Math.ceil((len + EXT * 2) / L));
-    const start = (len - n * L) / 2;
+    const eA = e.capA ? EXT : 0, eB = e.capB ? EXT : 0;
+    const span = len + eA + eB;
+    const n = Math.max(1, Math.ceil(span / L));
+    const start = -eA + (span - n * L) / 2;
     for (let k = 0; k < n; k++) {
       const d = start + L * (k + 0.5);
       const cx = e.x1 + ux * d - e.nx * 7;
@@ -3883,17 +4046,47 @@ function drawLoot(t) {
 // strokes fake the taper a single stroke cannot.
 // Gear on the floor. Drawn live rather than from a forged sprite because the
 // colour is the item's rarity, and there are never many on screen at once.
+// Gear on the floor, under a beacon. A lozenge alone is a few pixels in a dark
+// room full of debris and goes straight past you; the shaft is what carries
+// across a chamber, and its colour says what the thing is worth before you walk
+// over to it. Rarer drops throw a taller, brighter beam.
+const BEACON_H = { worn: 54, tempered: 74, wrought: 98, hallowed: 124, riven: 150, mythic: 190 };
+
 function drawDrops(t) {
   for (let i = 0; i < drops.length; i++) {
     const d = drops[i];
-    const c = rarityOf(d.item).colour;
+    const r = rarityOf(d.item);
+    const c = r.colour;
     const bob = Math.sin(t * 3 + d.x * 0.05) * 2.2;
     const y = d.y + bob;
+    const h = BEACON_H[r.id] || 60;
+    const pulse = 0.72 + 0.28 * Math.sin(t * 2.6 + d.x * 0.03);
+
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = tint(c, 1, 0.16);
-    ctx.beginPath(); ctx.ellipse(d.x, y, 15, 15, 0, 0, TAU); ctx.fill();
+
+    if (!lowFx) {
+      // the shaft: brightest at the floor, gone by the top
+      const beam = ctx.createLinearGradient(0, d.y - h, 0, d.y + 4);
+      beam.addColorStop(0, tint(c, 1, 0));
+      beam.addColorStop(0.55, tint(c, 1, 0.10 * pulse));
+      beam.addColorStop(1, tint(c, 1.15, 0.34 * pulse));
+      ctx.fillStyle = beam;
+      const wTop = 15, wBot = 7;
+      ctx.beginPath();
+      ctx.moveTo(d.x - wTop, d.y - h); ctx.lineTo(d.x + wTop, d.y - h);
+      ctx.lineTo(d.x + wBot, d.y + 4); ctx.lineTo(d.x - wBot, d.y + 4);
+      ctx.closePath(); ctx.fill();
+    }
+
+    // pool of light on the ground under it
+    const pool = ctx.createRadialGradient(d.x, d.y + 4, 0, d.x, d.y + 4, 26);
+    pool.addColorStop(0, tint(c, 1.1, 0.30 * pulse));
+    pool.addColorStop(1, tint(c, 1, 0));
+    ctx.fillStyle = pool;
+    ctx.beginPath(); ctx.ellipse(d.x, d.y + 4, 26, 12, 0, 0, TAU); ctx.fill();
     ctx.restore();
+
     ctx.fillStyle = 'rgba(6,5,4,.6)';
     ctx.beginPath(); ctx.ellipse(d.x, d.y + 9, 8, 3.4, 0, 0, TAU); ctx.fill();
     ctx.fillStyle = c;
@@ -3901,7 +4094,7 @@ function drawDrops(t) {
     ctx.moveTo(d.x, y - 8); ctx.lineTo(d.x + 5.5, y);
     ctx.lineTo(d.x, y + 8);  ctx.lineTo(d.x - 5.5, y);
     ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,250,240,.75)'; ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(255,250,240,.85)'; ctx.lineWidth = 1;
     ctx.stroke();
   }
 }
@@ -3963,8 +4156,29 @@ function drawEnemy(e) {
     }
     return;
   }
+  if (e.elite) {
+    // A brand around the feet: the same void-mark the thralls carry, but lit.
+    const p = 0.6 + 0.4 * Math.sin(e.wob * 0.7);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = tint(PAL.brand, 1, 0.42 * p);
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(e.x, e.y + e.r * 0.55, e.r * 1.15, 0, TAU); ctx.stroke();
+    ctx.strokeStyle = tint(PAL.brand, 1.2, 0.22 * p);
+    ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.arc(e.x, e.y + e.r * 0.55, e.r * 1.15, 0, TAU); ctx.stroke();
+    ctx.restore();
+  }
   blit(SPR[key] || SPR[e.kind], e.x, e.y);
-  if (e.kind === 'breaker' && e.hp < e.maxHp * 0.92) {
+  if (e.elite) {
+    // scaled up a touch so the champion reads as bodily bigger, not just lit
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = tint(PAL.brand, 1, 0.10);
+    ctx.beginPath(); ctx.arc(e.x, e.y, e.r * 1.1, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+  if ((e.kind === 'breaker' || e.elite) && e.hp < e.maxHp * 0.92) {
     const w = e.r * 1.5, f = clamp(e.hp / e.maxHp, 0, 1);
     const bx = e.x - w / 2, by = e.y - e.r - 6;
     ctx.fillStyle = 'rgba(0,0,0,.55)';
@@ -4347,6 +4561,7 @@ const el = {
   start: $('start'), levelup: $('levelup'), paused: $('paused'), over: $('over'),
   cards: $('cards'), lvlNum: $('lvlNum'), lvlSub: $('lvlSub'), bestLine: $('bestLine'),
   overTitle: $('overTitle'), overSub: $('overSub'), overStats: $('overStats'),
+  delve: $('delve'), kitLine: $('kitLine'), gearSub: $('gearSub'), setLine: $('setLine'),
   gear: $('gear'), gearSlots: $('gearSlots'), gearStats: $('gearStats'),
   bagGrid: $('bagGrid'), bagCount: $('bagCount'), gearDetail: $('gearDetail'),
   gearClose: $('gearClose'), bagBtn: $('bagBtn'), bagBadge: $('bagBadge')
@@ -4355,10 +4570,10 @@ const el = {
 let state = 'menu';   // menu | play | levelup | pause | over
 
 function showScreen(name) {
-  for (const s of ['start', 'levelup', 'paused', 'over', 'gear']) {
+  for (const s of ['start', 'delve', 'levelup', 'paused', 'over', 'gear']) {
     el[s].classList.toggle('on', s === name);
   }
-  el.hud.hidden = (name === 'start');
+  el.hud.hidden = (name === 'start' || name === 'delve');
   // The bag button belongs to the delve, not to any screen over it.
   el.bagBtn.hidden = (name !== null);
 }
@@ -4374,6 +4589,71 @@ function loadBest() {
 function saveBest(b) {
   try { localStorage.setItem(STORE_KEY, JSON.stringify(b)); } catch (e) { /* ignore */ }
 }
+/* --- the stash -----------------------------------------------------------
+   Gear outlives a delve, but only what you carried out. Extract and the bag
+   comes home with you; die and it stays on the floor where you fell. What is
+   actually worn survives either way -- losing the kit off your back to one bad
+   tap would make every delve a decision about whether to risk playing at all.
+   ---------------------------------------------------------------------- */
+const STASH_KEY = 'rivenmark.stash.v1';
+const VAULT_MAX = 60;
+
+function blankStash() {
+  const g = {};
+  for (const sl of SLOTS) g[sl.id] = null;
+  return { gear: g, vault: [], hero: 'isaac', seq: 0 };
+}
+
+function loadStash() {
+  let st;
+  try { st = JSON.parse(localStorage.getItem(STASH_KEY)); } catch (e) { st = null; }
+  if (!st || typeof st !== 'object') return blankStash();
+  const out = blankStash();
+  // Anything on disk is last session's data and may predate a change to the
+  // slots or the affix table, so it is filtered rather than trusted.
+  if (st.gear) for (const sl of SLOTS) {
+    if (validItem(st.gear[sl.id], sl.id)) out.gear[sl.id] = st.gear[sl.id];
+  }
+  if (Array.isArray(st.vault)) {
+    out.vault = st.vault.filter(it => validItem(it)).slice(0, VAULT_MAX);
+  }
+  if (HEROES[st.hero]) out.hero = st.hero;
+  out.seq = +st.seq || 0;
+  return out;
+}
+
+function validItem(it, slotId) {
+  if (!it || typeof it !== 'object') return false;
+  if (!SLOT_BY_ID[it.slot]) return false;
+  if (slotId && it.slot !== slotId) return false;
+  if (!RARITY.some(r => r.id === it.rarity)) return false;
+  if (!Array.isArray(it.affixes)) return false;
+  return it.affixes.every(a => AFFIX_BY_ID[a.id] && isFinite(a.v));
+}
+
+function saveStash() {
+  try {
+    stash.seq = itemSeq;
+    localStorage.setItem(STASH_KEY, JSON.stringify(stash));
+  } catch (e) { /* private mode: the delve still plays, it just will not keep */ }
+}
+
+let stash = blankStash();
+
+// Carried home from a finished delve. Equipped kit always; the bag only if the
+// Vanguard actually walked out.
+function bankRun(extracted) {
+  for (const sl of SLOTS) stash.gear[sl.id] = player.gear[sl.id] || null;
+  if (extracted) {
+    for (const it of player.bag) {
+      if (stash.vault.length >= VAULT_MAX) break;
+      stash.vault.push(it);
+    }
+  }
+  stash.hero = run.hero;
+  saveStash();
+}
+
 function refreshBestLine() {
   const b = loadBest();
   if (!b.runs) { el.bestLine.textContent = 'No delve recorded'; return; }
@@ -4419,8 +4699,9 @@ function hitFlashUI() {
 
 /* --- run lifecycle ------------------------------------------------------ */
 
-function resetRun(heroId, levelId) {
+function resetRun(heroId, levelId, diffId) {
   const hero = heroId || (run && run.hero) || 'isaac';
+  DIFF = DIFF_BY_ID[diffId || (run && run.diff_id) || DIFF.id] || DIFF_BY_ID.riven;
   LEVEL = LEVEL_BY_ID[levelId || (run && run.level_id) || LEVELS[0].id] || LEVELS[0];
   // The level decides which regions it can be cut from; the delve rolls one.
   const pool = LEVEL.regions;
@@ -4448,6 +4729,7 @@ function resetRun(heroId, levelId) {
 
   run = { time: 0, tech: 0, xp: 0, xpNeed: 11, level: 1, kills: 0,
           spawnTimer: 1.4, pendingLevels: 0, hero: hero, level_id: LEVEL.id,
+          diff_id: DIFF.id,
           banner: 4.2,
           bannerText: null, bannerNote: null,
           bossCalled: false, bossDown: false, boss: null,
@@ -4468,8 +4750,8 @@ function resetRun(heroId, levelId) {
   syncHud();
 }
 
-function startRun(heroId, levelId) {
-  resetRun(heroId, levelId);
+function startRun(heroId, levelId, diffId) {
+  resetRun(heroId, levelId, diffId);
   state = 'play';
   showScreen(null);
 }
@@ -4486,15 +4768,22 @@ function endRun(won) {
   b.bestKills = Math.max(b.bestKills || 0, run.kills);
   saveBest(b);
 
+  const carried = player.bag.length;
+  bankRun(won);
+
   el.overTitle.innerHTML = won ? '<em>Escaped</em>' : '<span>Slain</span>';
   el.overSub.textContent = won
-    ? 'The ley-gate held. You carried the slag out.'
-    : 'The hive-mind claimed another of the Clear-Sighted.';
+    ? (carried ? 'The ley-gate held. You carried ' + carried +
+                 (carried === 1 ? ' find' : ' finds') + ' out with the slag.'
+               : 'The ley-gate held. You carried the slag out.')
+    : (carried ? 'The hive-mind claimed another of the Clear-Sighted. ' + carried +
+                 (carried === 1 ? ' find stays' : ' finds stay') + ' where you fell.'
+               : 'The hive-mind claimed another of the Clear-Sighted.');
   el.overStats.innerHTML =
     '<div>Endured<b>' + fmtTime(run.time) + '</b></div>' +
     '<div>Slain<b>' + run.kills + '</b></div>' +
     '<div>Slag<b>' + run.tech + '</b></div>' +
-    '<div>Rank<b>' + run.level + '</b></div>';
+    '<div>' + (won ? 'Carried out' : 'Left behind') + '<b>' + carried + '</b></div>';
   showScreen('over');
   refreshBestLine();
 }
@@ -4560,26 +4849,59 @@ function takeUpgrade(u) {
    --------------------------------------------------------------------- */
 let gearSel = null;   // {from:'bag'|'worn', index|slot}
 
-function openGear() {
-  if (state !== 'play' && state !== 'pause') return;
+/* The same screen serves the bag you are carrying mid-delve and the kit you
+   keep between them. `gearCtx` says which, so none of the rendering or the
+   equip logic has to be written twice. */
+let gearCtx = null;
+
+function runCtx() {
+  return { gear: player.gear, bag: player.bag, cap: BAG_MAX, live: true,
+           sub: "The Vanguard's kit", back: 'Back to the delve',
+           bagName: 'Bag' };
+}
+function stashCtx() {
+  return { gear: stash.gear, bag: stash.vault, cap: VAULT_MAX, live: false,
+           sub: 'What you carried home', back: 'Back to the gate-house',
+           bagName: 'Vault' };
+}
+
+function openGear(which) {
+  if (which === 'stash') {
+    gearCtx = stashCtx();
+  } else {
+    if (state !== 'play' && state !== 'pause') return;
+    gearCtx = runCtx();
+    stickEnd();
+    keys.clear();
+  }
+  gearReturn = which === 'stash' ? 'start' : null;
   state = 'gear';
-  stickEnd();
-  keys.clear();
   gearSel = null;
   renderGear();
   showScreen('gear');
 }
 
+let gearReturn = null;
+
 function closeGear() {
   if (state !== 'gear') return;
+  if (gearReturn === 'start') {
+    if (!gearCtx.live) saveStash();
+    state = 'menu';
+    refreshKitLine();
+    showScreen('start');
+    return;
+  }
   state = 'play';
   showScreen(null);
 }
 
 // The stat lines worth showing on the left. Derived, so they already include
 // boons and everything equipped.
+// Stats shown against the kit on display: the live player mid-delve, or a
+// stand-in wearing the stash so the menu can show what a swap would do.
 function statLines() {
-  const p = player;
+  const p = gearCtx && !gearCtx.live ? previewPlayer() : player;
   return [
     ['Life',    Math.round(p.maxHp)],
     ['Damage',  Math.round(p.damage)],
@@ -4592,17 +4914,38 @@ function statLines() {
   ];
 }
 
+// A throwaway player wearing the stash, so the menu can show real derived
+// numbers without touching the one in the delve.
+let _preview = null;
+function previewPlayer() {
+  const keepPlayer = player, keepGear = player && player.gear, keepUpg = player && player.upg;
+  _preview = makePlayer(0, 0, stash.hero || 'isaac');
+  _preview.gear = gearCtx.gear;
+  _preview.upg = {};
+  const save = player;
+  player = _preview;
+  recomputeStats();
+  player = save;
+  void keepPlayer; void keepGear; void keepUpg;
+  return _preview;
+}
+
 function renderGear() {
+  const C = gearCtx || (gearCtx = runCtx());
+  el.gearSub.textContent = C.sub;
+  el.gearClose.textContent = C.back;
+
   // worn slots
   el.gearSlots.innerHTML = '';
   for (const sl of SLOTS) {
-    const it = player.gear[sl.id];
+    const it = C.gear[sl.id];
     const b = document.createElement('button');
     b.className = 'slot' + (!it ? ' empty' : '') +
       (gearSel && gearSel.from === 'worn' && gearSel.slot === sl.id ? ' sel' : '');
     if (it) b.style.borderLeftColor = rarityOf(it).colour;
     b.innerHTML = '<span class="sname">' + sl.name + '</span>' +
                   '<span class="iname">' + (it ? it.name : 'empty') + '</span>';
+    if (it && it.set === SET_ID) b.style.borderLeftColor = '#e0563f';
     b.onclick = () => { gearSel = it ? { from: 'worn', slot: sl.id } : null; renderGear(); };
     el.gearSlots.appendChild(b);
   }
@@ -4611,11 +4954,12 @@ function renderGear() {
   el.gearStats.innerHTML = statLines()
     .map(r => '<div><span>' + r[0] + '</span><b>' + r[1] + '</b></div>').join('');
 
-  // bag
-  el.bagCount.textContent = player.bag.length + '/' + BAG_MAX;
+  // bag or vault
+  el.bagCount.textContent = C.bag.length + '/' + C.cap;
   el.bagGrid.innerHTML = '';
-  for (let i = 0; i < BAG_MAX; i++) {
-    const it = player.bag[i];
+  const cells = Math.min(C.cap, Math.max(20, C.bag.length + 4));
+  for (let i = 0; i < cells; i++) {
+    const it = C.bag[i];
     const b = document.createElement('button');
     b.className = 'cellbtn' +
       (gearSel && gearSel.from === 'bag' && gearSel.index === i ? ' sel' : '');
@@ -4624,18 +4968,31 @@ function renderGear() {
     el.bagGrid.appendChild(b);
   }
 
+  renderSetLine();
   renderDetail();
+}
+
+// How much of the Regalia is on, and what that is currently paying.
+function renderSetLine() {
+  const C = gearCtx;
+  const n = SLOTS.reduce((a, sl) =>
+    a + (C.gear[sl.id] && C.gear[sl.id].set === SET_ID ? 1 : 0), 0);
+  if (!n) { el.setLine.innerHTML = ''; return; }
+  el.setLine.innerHTML = '<b>' + SET_NAME + '</b> ' + n + '/8 &nbsp; ' +
+    SET_BONUSES.map(b => '<span class="' + (n >= b.at ? 'on' : '') + '">(' +
+      b.at + ') ' + b.text + '</span>').join(' &nbsp;· ');
 }
 
 function selectedItem() {
   if (!gearSel) return null;
-  return gearSel.from === 'bag' ? player.bag[gearSel.index] : player.gear[gearSel.slot];
+  const C = gearCtx;
+  return gearSel.from === 'bag' ? C.bag[gearSel.index] : C.gear[gearSel.slot];
 }
 
 // What each affix on `it` is worth against what is worn in that slot, so the
 // comparison is per-stat rather than a single made-up score.
 function compareLines(it) {
-  const worn = player.gear[it.slot];
+  const worn = gearCtx.gear[it.slot];
   const totals = {};
   const add = (src, sign) => {
     if (!src) return;
@@ -4672,7 +5029,7 @@ function renderDetail() {
     return;
   }
   const r = rarityOf(it);
-  const worn = player.gear[it.slot];
+  const worn = gearCtx.gear[it.slot];
   const cmp = gearSel.from === 'bag' ? compareLines(it) : [];
   el.gearDetail.innerHTML =
     '<div class="dt" style="color:' + r.colour + '">' + it.name + '</div>' +
@@ -4697,37 +5054,39 @@ function renderDetail() {
   if (of) of.onclick = unequipSelected;
 }
 
-function equipSelected() {
-  const it = selectedItem();
-  if (!it || gearSel.from !== 'bag') return;
-  const prev = player.gear[it.slot];
-  player.bag.splice(gearSel.index, 1);
-  player.gear[it.slot] = it;
-  if (prev) player.bag.push(prev);          // the old one goes back in the bag
-  recomputeStats();
+function afterGearChange() {
+  const C = gearCtx;
+  if (C.live) recomputeStats(); else saveStash();
   gearSel = null;
   renderGear();
   syncBagBadge();
+}
+
+function equipSelected() {
+  const it = selectedItem();
+  if (!it || gearSel.from !== 'bag') return;
+  const C = gearCtx;
+  const prev = C.gear[it.slot];
+  C.bag.splice(gearSel.index, 1);
+  C.gear[it.slot] = it;
+  if (prev) C.bag.push(prev);            // the old one goes back where it came from
+  afterGearChange();
 }
 
 function unequipSelected() {
   const it = selectedItem();
   if (!it || gearSel.from !== 'worn') return;
-  if (player.bag.length >= BAG_MAX) return; // nowhere to put it
-  player.gear[gearSel.slot] = null;
-  player.bag.push(it);
-  recomputeStats();
-  gearSel = null;
-  renderGear();
-  syncBagBadge();
+  const C = gearCtx;
+  if (C.bag.length >= C.cap) return;     // nowhere to put it
+  C.gear[gearSel.slot] = null;
+  C.bag.push(it);
+  afterGearChange();
 }
 
 function discardSelected() {
   if (!gearSel || gearSel.from !== 'bag') return;
-  player.bag.splice(gearSel.index, 1);
-  gearSel = null;
-  renderGear();
-  syncBagBadge();
+  gearCtx.bag.splice(gearSel.index, 1);
+  afterGearChange();
 }
 
 function syncBagBadge() {
@@ -4790,7 +5149,9 @@ window.addEventListener('keydown', e => {
     return;
   }
   if (k === 'i' || k === 'b') {
-    if (state === 'gear') closeGear(); else openGear();
+    if (state === 'gear') closeGear();
+    else if (state === 'menu') openGear('stash');
+    else openGear('run');
     return;
   }
   if (k === ' ' || k === 'enter') {
@@ -4810,25 +5171,94 @@ window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', () => setTimeout(resize, 120));
 
 (function buildHeroPick() {
-  const wrap = $('heroPick');
+  // --- the delve screen: who, where, and how hard ---------------------------
+  const pick = { hero: 'isaac', level: LEVELS[0].id, diff: 'riven' };
+
+  const heroWrap = $('heroPick');
   for (const hid in HEROES) {
     const H = HEROES[hid];
     const card = document.createElement('button');
     card.className = 'card';
     card.type = 'button';
+    card.dataset.hero = hid;
     card.innerHTML =
       '<span class="glyph">' + (hid === 'isaac' ? '\u2600' : '\u2726') + '</span>' +
       '<span><h4>' + H.name + ' &middot; ' + H.title + '</h4>' +
       '<p>' + H.blurb + ' <span class="tier">' + H.order + ' &middot; ' +
       H.school + '</span></p></span>';
     card.style.borderLeftColor = H.magic;
-    card.addEventListener('click', () => startRun(hid));
-    wrap.appendChild(card);
+    card.addEventListener('click', () => { pick.hero = hid; syncPick(); });
+    heroWrap.appendChild(card);
   }
+
+  const lvlWrap = $('levelPick');
+  for (const L of LEVELS) {
+    const card = document.createElement('button');
+    card.className = 'card';
+    card.type = 'button';
+    card.dataset.level = L.id;
+    card.innerHTML =
+      '<span class="glyph">\u25C8</span>' +
+      '<span><h4>' + L.name + '</h4><p>' + L.note +
+      (L.tag ? ' <span class="tier">' + L.tag + '</span>' : '') + '</p></span>';
+    card.addEventListener('click', () => { pick.level = L.id; syncPick(); });
+    lvlWrap.appendChild(card);
+  }
+
+  const diffWrap = $('diffPick');
+  for (const D of DIFFICULTIES) {
+    const card = document.createElement('button');
+    card.className = 'card';
+    card.type = 'button';
+    card.dataset.diff = D.id;
+    card.innerHTML =
+      '<span class="glyph">\u2694</span>' +
+      '<span><h4>' + D.name + '</h4><p>' + D.note +
+      ' <span class="tier">threat &times;' + D.threat.toFixed(2) +
+      ' &middot; loot &times;' + D.lootRate.toFixed(2) +
+      ' &middot; regalia &times;' + D.setRate.toFixed(1) + '</span></p></span>';
+    card.addEventListener('click', () => { pick.diff = D.id; syncPick(); });
+    diffWrap.appendChild(card);
+  }
+
+  function syncPick() {
+    for (const c of heroWrap.children) c.classList.toggle('sel', c.dataset.hero === pick.hero);
+    for (const c of lvlWrap.children)  c.classList.toggle('sel', c.dataset.level === pick.level);
+    for (const c of diffWrap.children) c.classList.toggle('sel', c.dataset.diff === pick.diff);
+    const H = HEROES[pick.hero], D = DIFF_BY_ID[pick.diff], L = LEVEL_BY_ID[pick.level];
+    $('beginLine').textContent = H.name + ' \u00b7 ' + L.name + ' \u00b7 ' + D.name;
+  }
+
+  window.__syncPick = syncPick;
+  window.__pick = pick;
+  syncPick();
+
+  $('toDelve').addEventListener('click', () => {
+    pick.hero = stash.hero || pick.hero;
+    syncPick();
+    state = 'menu';
+    showScreen('delve');
+  });
+  $('delveBack').addEventListener('click', () => { showScreen('start'); });
+  $('beginRun').addEventListener('click', () => startRun(pick.hero, pick.level, pick.diff));
+  $('toKit').addEventListener('click', () => openGear('stash'));
 })();
+
+// How much is waiting in the vault, shown on the menu so the kit is not a
+// door you have to open to find out whether anything is behind it.
+function refreshKitLine() {
+  const worn = SLOTS.filter(sl => stash.gear[sl.id]).length;
+  const n = stash.vault.length;
+  const setN = SLOTS.reduce((a, sl) =>
+    a + (stash.gear[sl.id] && stash.gear[sl.id].set === SET_ID ? 1 : 0), 0);
+  el.kitLine.textContent = worn || n
+    ? worn + '/8 worn, ' + n + ' in the vault' +
+      (setN ? '  \u00b7  Regalia ' + setN + '/8' : '')
+    : 'nothing recovered';
+}
 $('againBtn').addEventListener('click', () => startRun(run && run.hero));
 $('pauseBtn').addEventListener('click', pauseRun);
-el.bagBtn.addEventListener('click', openGear);
+el.bagBtn.addEventListener('click', () => openGear('run'));
 el.gearClose.addEventListener('click', closeGear);
 $('resumeBtn').addEventListener('click', resumeRun);
 $('abortBtn').addEventListener('click', () => {
@@ -4874,8 +5304,11 @@ function frame(now) {
 }
 
 resize();
-resetRun();
+stash = loadStash();
+itemSeq = Math.max(itemSeq, stash.seq || 0);
+resetRun(stash.hero);
 refreshBestLine();
+refreshKitLine();
 showScreen('start');
 requestAnimationFrame(frame);
 </script>

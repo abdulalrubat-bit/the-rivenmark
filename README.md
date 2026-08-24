@@ -105,6 +105,32 @@ the handful actually awake.
 - *Eclipse-Marked* — fast, hooded, fraying into tatters
 - *Ghor-Breaker* — planted and over-armoured, held together by burning seams
 
+## The menus
+
+Three screens rather than one. The **gate-house** is the title: two ways in, and a
+line telling you what is in the kit so it is not a door you must open to find out
+whether anything is behind it. **Descend** opens the delve screen — who, where,
+and how hard it bites, each a card with its selection state visible. **The Kit**
+opens the same screen the in-delve bag uses.
+
+That last one is the piece worth knowing about: the bag screen serves both the
+bag you are carrying and the kit you keep between delves. A `gearCtx` says which,
+so none of the rendering, comparison or equip logic is written twice, and the
+menu shows real derived numbers by standing up a throwaway player wearing the
+stash rather than touching the one in the delve.
+
+## Difficulty
+
+Harder ground pays better — the bargain the genre runs on. Threat scales enemy
+health and damage; the loot rates scale how often gear falls and how often a
+Regalia piece is among it.
+
+| Delve | Threat | Loot | Regalia | Bot extracts (fresh, Isaac) |
+|---|---|---|---|---|
+| Harrowed | ×1.00 | ×0.85 | ×0.6 | 16/25 (64%) |
+| Riven | ×1.42 | ×1.00 | ×1.0 | 13/40 (33%) |
+| Sundered | ×1.95 | ×1.35 | ×1.8 | 6/25 (24%) |
+
 ## Levels
 
 A **level** is the unit the player actually plays. It owns which regions it can
@@ -402,6 +428,35 @@ Measured over 1,566 vantage points across six delves, **8%** had a body in reach
 but none with a clear line — low enough that the blade rarely goes quiet, and
 those are exactly the moments where a swing would have been wasted anyway.
 
+### The Sundered Regalia
+
+One mythic set, eight pieces, one per slot, with fixed better-than-random affixes
+and bonuses at 2/4/6/8 worn — the last granting a second crescent with every
+strike. Pieces drop **only from champions and the Deceiver**, never from the
+ordinary table, so the set is a reason to fight the thing you could have walked
+past. Set bonuses ride into `recomputeStats` on the same additive/multiplicative
+piles as affixes, so they cannot be applied twice or in the wrong order.
+
+### Champions
+
+Some packs are led by an **elite**: 2.6× health, harder hitting, slower, bigger,
+worth four times the slag, and ringed with a lit void-brand so you can see what
+you have walked into. They are where the good gear is — 85% drop chance against a
+thrall's 5.5%, with a quality floor so a champion never hands you rags.
+
+A champion is bodily bigger than the body it was promoted from, which is a trap:
+the spot was chosen for the smaller radius, so growing it blind can wedge the
+elite in rock it used to fit through. The size is taken only if the ground still
+takes it.
+
+### Drops, and finding them
+
+Gear on the floor stands under a **beacon** — a shaft of light whose height and
+colour follow rarity, from a low grey glow for Worn to a tall red one for a
+Regalia piece. A lozenge alone is a few pixels in a dark room full of debris and
+goes straight past you; the shaft is what carries across a chamber, and it says
+what the thing is worth before you cross the room for it.
+
 ### The bag
 
 The bag button pauses the delve and opens a full screen: worn slots and derived
@@ -413,6 +468,25 @@ is shown measured **per stat** against whatever is in its slot already, because
 
 A full bag leaves the item on the floor rather than binning it silently, and says
 so once rather than on every frame it is touched.
+
+### The stash
+
+Gear outlives a delve, but only what you carried out:
+
+| | Equipped | Bag |
+|---|---|---|
+| Extract | kept | **kept** |
+| Die | kept | **lost where you fell** |
+
+Losing the kit off your back to one bad tap would make every delve a decision
+about whether to risk playing at all, so what is worn always survives; the bag is
+what the gate is for.
+
+The stash is `localStorage`, and everything read back is **filtered, not
+trusted** — a save may predate a change to the slots, the rarities or the affix
+table. `validItem` checks every field and a corrupt save is discarded rather than
+obeyed. Verified by feeding the game a deliberately malformed save: it boots to a
+clean stash instead of breaking.
 
 ### Upgrades & progression
 
@@ -475,9 +549,18 @@ Tuned against a scripted bot playing full runs headless — flees crowding,
 drifts toward loot, beelines the portal once it powers up. It is a deliberately
 mediocre player, so its results are a floor, not a ceiling.
 
-Current curve, over 40 bot runs per hero: median run **64–90 s**, 53–91 kills,
-4–10 items found and 4–6 slots filled, bot extracts **17/40 as Isaac (43%)** and
-**11/40 as Zayd (28%)**.
+Current curve on **Riven**, from an empty stash, over 40 bot runs per hero:
+median run **57 s**, ~60 kills, 10 items found and 6/8 slots filled by the end,
+bot extracts **13/40 as Isaac (33%)** and **17/40 as Zayd (43%)**.
+
+**Persistence broke the old measurement, and that is worth stating plainly.**
+Once gear carries between delves, runs in one session stop being independent
+samples: by the fifth the bot is a kitted veteran, and the number describes a
+different game from the one a new player meets. Measured with the stash carried
+forward, Isaac extracts **33/40 (83%)** with all eight slots filled and a 40 s
+median. Both numbers are real; they just answer different questions, so the
+harness wipes the stash between runs by default and keeps it only when the geared
+case is what is being asked about.
 
 Enforcing line of sight made the game harder, as it should: you can no longer
 damage anything through a wall. It cost roughly 2 points for Isaac and 15 for
