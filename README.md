@@ -116,8 +116,14 @@ and despeckle passes — those exist to remove one-cell walls, which is exactly
 what a curtain wall is made of — and a reachability repair then proves the gate
 can be walked to, cutting the shortest link only if it cannot.
 
-The minimap compass points **south**. The realm's natural order has inverted —
-one of the Final Signs — and the needle is drawn as it reads.
+The minimap sits **top-right, under the HUD bar**. The bottom corners are where
+the thumbs live on a phone, so a map there is under a hand for most of a run;
+it also scales with viewport width (96–132px) instead of sitting at a fixed
+94px, because the whole 2000-unit world squeezed into that was too small to
+read a corridor from.
+
+Its compass points **south**. The realm's natural order has inverted — one of
+the Final Signs — and the needle is drawn as it reads.
 
 ## The Gilded Deceiver
 

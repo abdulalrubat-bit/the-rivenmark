@@ -288,6 +288,7 @@ const MAX_DT        = 0.05;  // clamp after tab-switches / long frames
 
 // Extraction terms live on the level (see LEVELS); these are the fallbacks a
 // level may leave unset.
+const HUD_H           = 58;   // canvas UI clears the HUD bar by this much
 const SWING_TIME      = 0.17; // how long the blade takes to come round
 const EXTRACT_QUOTA   = 70;  // slag needed before the ley-gate powers up
 const EXTRACT_CHANNEL = 4.0; // seconds standing inside it to win
@@ -1280,7 +1281,7 @@ function moveVector() {
    8. SIMULATION
    ------------------------------------------------------------------------ */
 
-const view = { w: 0, h: 0, dpr: 1 };
+const view = { w: 0, h: 0, dpr: 1, safeT: 0, safeR: 0 };
 const cam  = { x: 0, y: 0, shake: 0 };
 
 function shake(amount) { cam.shake = Math.min(16, cam.shake + amount); }
@@ -2402,6 +2403,12 @@ function resize() {
   view.dpr = Math.min(window.devicePixelRatio || 1, 2);
   view.w = stage.clientWidth  || window.innerWidth;
   view.h = stage.clientHeight || window.innerHeight;
+  // The HUD is DOM and gets env(safe-area-inset-*) from CSS; the canvas does
+  // not, so read the resolved values off the root and let canvas UI clear a
+  // notch the same way.
+  const cs = getComputedStyle(document.documentElement);
+  view.safeT = parseFloat(cs.getPropertyValue('--safe-t')) || 0;
+  view.safeR = parseFloat(cs.getPropertyValue('--safe-r')) || 0;
   canvas.width  = Math.round(view.w * view.dpr);
   canvas.height = Math.round(view.h * view.dpr);
   canvas.style.width  = view.w + 'px';
@@ -3262,9 +3269,16 @@ function drawViewFrame() {
 }
 
 function drawMinimap() {
-  const S = 94, pad = 12;
-  const x = view.w - S - pad, y = view.h - S - pad;
+  // Top-right, tucked under the HUD bar. The bottom corners are where the
+  // thumbs live on a phone -- a map there is under a hand for most of a run --
+  // and at 94px the whole 2000-unit world came out too small to read, so it is
+  // larger here and its markers are scaled with it.
+  const S = Math.round(Math.min(132, Math.max(96, view.w * 0.30)));
+  const pad = 14;   // the stone surround overhangs the panel by 7px each side
+  const x = view.w - S - pad - view.safeR;
+  const y = HUD_H + pad + view.safeT;
   const k = S / WORLD.w;
+  const mk = S / 108;              // marker scale, so dots grow with the frame
 
   ctx.save();
   // Stone surround with corner fittings
@@ -3285,32 +3299,39 @@ function drawMinimap() {
     ctx.fillRect(c[0], c[1], 8, 8);
   }
 
-  ctx.fillStyle = 'rgba(126,110,82,.22)';
+  // Rock was too dim against the panel to read the shape of a corridor.
+  ctx.fillStyle = 'rgba(150,132,98,.42)';
   for (let i = 4; i < walls.length; i++) {
     const w = walls[i];
     ctx.fillRect(x + w.x * k, y + w.y * k, Math.max(1, w.w * k), Math.max(1, w.h * k));
   }
-  ctx.fillStyle = 'rgba(200,90,60,.85)';
+  ctx.fillStyle = 'rgba(214,96,64,.9)';
+  const es = Math.max(1.7, 2.2 * mk);
   for (let i = 0; i < enemies.length; i++) {
-    ctx.fillRect(x + enemies[i].x * k - 0.8, y + enemies[i].y * k - 0.8, 1.7, 1.7);
+    ctx.fillRect(x + enemies[i].x * k - es / 2, y + enemies[i].y * k - es / 2, es, es);
   }
   ctx.fillStyle = portal.active ? PAL.arcane : '#7a6e58';
-  ctx.beginPath(); ctx.arc(x + portal.x * k, y + portal.y * k, 3.4, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + portal.x * k, y + portal.y * k, 4 * mk, 0, TAU); ctx.fill();
+  // The player pip carries a dark ring so it stays readable over pale rock.
+  ctx.strokeStyle = 'rgba(0,0,0,.75)'; ctx.lineWidth = 1.6 * mk;
+  ctx.beginPath(); ctx.arc(x + player.x * k, y + player.y * k, 3.2 * mk, 0, TAU); ctx.stroke();
   ctx.fillStyle = '#ffffff';
-  ctx.beginPath(); ctx.arc(x + player.x * k, y + player.y * k, 2.7, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + player.x * k, y + player.y * k, 3.2 * mk, 0, TAU); ctx.fill();
 
   // Compasses point south now. The needle is drawn as it reads, not as it
   // ought to -- one of the Final Signs, and a standing reminder of it.
-  const nx = x + S - 13, ny = y + 13;
+  const nx = x + S - 15 * mk, ny = y + 15 * mk;
   ctx.strokeStyle = 'rgba(226,196,140,.55)'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.arc(nx, ny, 7.5, 0, TAU); ctx.stroke();
+  ctx.beginPath(); ctx.arc(nx, ny, 8.5 * mk, 0, TAU); ctx.stroke();
   ctx.fillStyle = 'rgba(224,120,80,.95)';
   ctx.beginPath();
-  ctx.moveTo(nx, ny + 7); ctx.lineTo(nx - 2.6, ny); ctx.lineTo(nx + 2.6, ny);
+  ctx.moveTo(nx, ny + 8 * mk); ctx.lineTo(nx - 3 * mk, ny); ctx.lineTo(nx + 3 * mk, ny);
   ctx.closePath(); ctx.fill();
   ctx.fillStyle = 'rgba(226,196,140,.9)';
-  ctx.font = '600 7px ui-monospace, monospace';
-  ctx.fillText('S', nx - 2, ny - 9.5);
+  ctx.font = '600 ' + Math.round(8 * mk) + 'px ui-monospace, monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('S', nx, ny - 11 * mk);
+  ctx.textAlign = 'left';
   ctx.restore();
 }
 
@@ -3740,7 +3761,7 @@ showScreen('start');
 requestAnimationFrame(frame);
 </script>
 <script>
-/* generated 2026-08-24T09:41:30Z by tools/build-debug.js — do not edit */
+/* generated 2026-08-24T10:15:51Z by tools/build-debug.js — do not edit */
 /* =============================================================================
    THE RIVENMARK — debug overlay
    Injected into debug.html by tools/build-debug.js. Never shipped in the
