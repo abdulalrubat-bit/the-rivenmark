@@ -147,6 +147,50 @@
   .stats b{display:block; font-family:var(--font-display); font-size:21px;
     color:var(--ink); letter-spacing:1px; margin-top:3px; font-weight:400;}
 
+  /* ---------- Gear ---------- */
+  #gear{justify-content:flex-start; gap:9px;}
+  .gear-wrap{display:flex; gap:12px; width:100%; max-width:520px; align-items:flex-start;}
+  .gear-col{flex:1; min-width:0;}
+  .gear-h{margin:0 0 6px; font:600 9px/1 ui-monospace,monospace; letter-spacing:2px;
+    text-transform:uppercase; color:#8a7c60;}
+  .slot{display:flex; align-items:center; gap:8px; width:100%; text-align:left;
+    border:1px solid var(--line); border-left:3px solid #3a3128; background:#171209;
+    border-radius:2px; padding:6px 8px; margin-bottom:4px; color:inherit;
+    font-family:inherit; cursor:pointer; touch-action:manipulation;}
+  .slot .sname{font:600 9px/1.2 ui-monospace,monospace; letter-spacing:1px;
+    color:#7d7159; text-transform:uppercase; width:52px; flex:none;}
+  .slot .iname{font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .slot.empty .iname{color:#5d5445; font-style:italic;}
+  .slot.sel{background:#2a2115; border-color:var(--gold);}
+  .bag{display:grid; grid-template-columns:repeat(4,1fr); gap:4px;}
+  .cellbtn{aspect-ratio:1; border:1px solid var(--line); background:#171209;
+    border-radius:2px; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; touch-action:manipulation; padding:0;}
+  .cellbtn.sel{border-color:var(--gold); background:#2a2115;}
+  .cellbtn i{display:block; width:11px; height:11px; transform:rotate(45deg);
+    border-radius:1px;}
+  .gear-stats{margin-top:8px; font:11px/1.5 ui-monospace,monospace; color:#9d917a;}
+  .gear-stats div{display:flex; justify-content:space-between; gap:8px;}
+  .gear-stats b{color:#e6dcc4; font-weight:600;}
+  .gear-detail{width:100%; max-width:520px; min-height:96px; border:1px solid var(--line);
+    background:rgba(12,9,6,.7); border-radius:2px; padding:10px 12px; text-align:left;}
+  .gear-detail .dt{font:600 13px/1.3 Georgia,serif; margin-bottom:2px;}
+  .gear-detail .db{font:11px/1.3 ui-monospace,monospace; color:#8a7c60; margin-bottom:6px;}
+  .gear-detail ul{margin:0 0 8px; padding-left:14px; font-size:12px; color:#cbbf9f;}
+  .gear-detail .cmp{font:11px/1.5 ui-monospace,monospace; color:#8a7c60;}
+  .gear-detail .up{color:#7fa869;} .gear-detail .dn{color:#c07050;}
+  .gear-acts{display:flex; gap:6px; margin-top:8px;}
+  .gear-acts button{flex:1; font:600 11px/1 ui-monospace,monospace; padding:8px 6px;
+    border:1px solid var(--line); background:#1d1710; color:#cbbf9f; border-radius:2px;
+    cursor:pointer; touch-action:manipulation;}
+  .gear-acts button.prime{border-color:var(--gold); color:#f0e4c6;}
+  #bagBtn{position:absolute; right:calc(8px + var(--safe-r));
+    bottom:calc(12px + var(--safe-b)); width:46px; height:46px; border-radius:3px;
+    border:1px solid var(--line); background:rgba(18,13,9,.8); color:#cbbf9f;
+    font:600 10px/1 ui-monospace,monospace; cursor:pointer; touch-action:manipulation;}
+  #bagBtn b{display:block; font-size:15px; margin-bottom:2px;}
+  #bagBtn.hot{border-color:var(--gold); color:#f0e4c6;}
+
   /* ---------- Boon cards ---------- */
   #levelup .cards{
     display:flex; flex-direction:column; gap:10px; width:100%; max-width:400px;
@@ -236,6 +280,25 @@
     <p class="fine" id="bestLine"></p>
   </div>
 
+  <button id="bagBtn" aria-label="Bag"><b>▣</b><span id="bagBadge">0</span></button>
+
+  <div class="screen" id="gear">
+    <p class="sub">The Vanguard's kit</p>
+    <div class="gear-wrap">
+      <div class="gear-col">
+        <h5 class="gear-h">Worn</h5>
+        <div id="gearSlots"></div>
+        <div class="gear-stats" id="gearStats"></div>
+      </div>
+      <div class="gear-col">
+        <h5 class="gear-h">Bag <span id="bagCount"></span></h5>
+        <div class="bag" id="bagGrid"></div>
+      </div>
+    </div>
+    <div class="gear-detail" id="gearDetail"></div>
+    <button class="btn" id="gearClose">Back to the delve</button>
+  </div>
+
   <div class="screen" id="levelup">
     <p class="sub" id="lvlSub">A boon is offered</p>
     <h1 class="title" style="font-size:clamp(24px,7vw,38px)">Rank <span id="lvlNum">2</span></h1>
@@ -283,6 +346,24 @@ const WALL_CELL  = 100;
 const ENEMY_CELL = 48;
 
 const MAX_ENEMIES   = 220;   // was 40 before spatial partitioning
+
+// --- packs and waking -----------------------------------------------------
+// The delve is populated at generation time and cleared by walking into it,
+// rather than having waves pushed at the player forever. Packs sit dormant
+// until something wakes them, so pressure comes from what you walk into.
+const PACK_SAFE     = 430;   // no pack closer than this to the spawn pocket
+const PACK_APART    = 250;   // minimum spacing between pack sites
+let PACK_SLAG       = 175;  // slag placed on the map, against the level quota
+const AGGRO_NEAR    = 250;   // a body notices you inside this
+const AGGRO_FAR     = 340;   // ...and the bigger, slower ones a little sooner
+const ALERT_R       = 155;   // a woken body pulls its neighbours up with it
+const ALERT_DELAY   = 0.18;  // ...one beat later, so a pack rouses in sequence
+// Health ramp from the spawn pocket to the far edge of the delve -- this is
+// what replaced the old run-time ramp, since a placed dungeon gets harder by
+// going deeper rather than by the clock running. Left mutable so the balance
+// harness can sweep it. At 0.55 the deep packs put Zayd's escape rate at 3/30
+// against Isaac's 14/40; 0.30 brings the two back level.
+let PACK_DEPTH_HP = 0.30;
 const MAX_PARTICLES = 420;
 const MAX_DT        = 0.05;  // clamp after tab-switches / long frames
 
@@ -403,10 +484,19 @@ const LEVELS = [
     regions:['slag','vaelk','kraggen','weald','firth'],
     horde:['thrall','eclipse','breaker'],
     boss:'deceiver',
-    quota:70, channel:4.0 }
+    // 125 against the ~185 slag the generator places -- about a two-thirds
+    // clear. Quota is the difficulty lever rather than enemy health: the depth
+    // health ramp scales the fragile hero far harder than the tank (at 0.65 it
+    // put Zayd at 7/40 against Isaac's 15/40), where quota moves both together.
+    quota:125, channel:4.0,
+    // What the delve hits back with. Gear is a large power budget -- a full
+    // kit took the bot from 43% to 60% -- so the opposition is scaled to meet
+    // it here rather than by nerfing the loot, which is the point of the loot.
+    threat:1.45 }
 ];
 const LEVEL_BY_ID = {};
 for (const L of LEVELS) {
+  if (L.threat  == null) L.threat  = 1;
   if (L.quota   == null) L.quota   = EXTRACT_QUOTA;
   if (L.channel == null) L.channel = EXTRACT_CHANNEL;
   LEVEL_BY_ID[L.id] = L;
@@ -418,7 +508,7 @@ const UPGRADES = [
   { id:'dmg',    glyph:'✦', name:'Keen Edge',   desc:'your ward bites a quarter deeper',   max:99, apply:p=>p.damage      *= 1.25 },
   { id:'rate',   glyph:'❧', name:'Quickening',  desc:'the blade answers faster',           max:8,  apply:p=>p.fireDelay   *= 0.85 },
   { id:'speed',  glyph:'❯', name:'Windstep',    desc:'your stride lengthens',              max:6,  apply:p=>p.speed       *= 1.10 },
-  { id:'plate',  glyph:'❖', name:'Ironhide',    desc:'+25 life, and 25 mended now',        max:99, apply:p=>{p.maxHp += 25; p.hp = Math.min(p.maxHp, p.hp + 25);} },
+  { id:'plate',  glyph:'❖', name:'Ironhide',    desc:'+25 life, and 25 mended now',        max:99, apply:p=>{p.maxHp += 25;}, onTake:p=>{p.hp = Math.min(p.maxHp, p.hp + 25);} },
   { id:'range',  glyph:'◎', name:'Long Reach', desc:'your crescents carry a seventh further', max:5, apply:p=>p.range   *= 1.15 },
   { id:'split',  glyph:'⁂', name:'Twin Crescent', desc:'a second crescent leaves the edge',   max:4,  apply:p=>p.shots    += 1 },
   { id:'pierce', glyph:'⌁', name:'Broad Sweep',   desc:'your arc cuts a wider swathe',        max:4,  apply:p=>p.sweep    *= 1.22 },
@@ -426,6 +516,183 @@ const UPGRADES = [
   { id:'regen',  glyph:'✚', name:'Mending',     desc:'0.8 life knits back each second',    max:5,  apply:p=>p.regen       += 0.8 },
   { id:'vel',    glyph:'➤', name:'Swift Edge',    desc:'your crescents run a fifth faster',   max:4,  apply:p=>p.arcSpeed *= 1.20 }
 ];
+
+/* ---------------------------------------------------------------------------
+   GEAR
+
+   Power comes from two places that stack: boons, chosen on rank-up and fixed
+   for the run, and gear, found on the floor and swapped freely. Because gear
+   comes off as easily as it goes on, no stat can be accumulated by mutating
+   the player -- everything is recomputed from the hero's base each time
+   anything changes. See recomputeStats.
+   ------------------------------------------------------------------------ */
+
+// Both heroes fight unhelmeted, which the compendium is explicit about, so
+// there is no head slot to put a helm in.
+const SLOTS = [
+  { id:'blade',   name:'Blade' },
+  { id:'offhand', name:'Off-hand' },
+  { id:'mail',    name:'Mail' },
+  { id:'girdle',  name:'Girdle' },
+  { id:'boots',   name:'Boots' },
+  { id:'amulet',  name:'Amulet' },
+  { id:'ring1',   name:'Ring' },
+  { id:'ring2',   name:'Ring' }
+];
+const SLOT_BY_ID = {};
+for (const s of SLOTS) SLOT_BY_ID[s.id] = s;
+
+const RARITY = [
+  { id:'worn',    name:'Worn',           colour:'#8d8676', affixes:1, weight:52 },
+  { id:'tempered',name:'Tempered',       colour:'#7fa869', affixes:2, weight:28 },
+  { id:'wrought', name:'Spirit-wrought', colour:'#5f9fd0', affixes:3, weight:14 },
+  { id:'hallowed',name:'Hallowed',       colour:'#a98fd8', affixes:4, weight:5  },
+  { id:'riven',   name:'Riven',          colour:'#d9a441', affixes:5, weight:1  }
+];
+
+// Base items per slot. `key` picks which affix pool the base leans on, so a
+// blade rolls like a weapon and boots roll like boots.
+const BASES = {
+  blade:   ['Longsword', 'Falchion', 'Warblade', 'Glaive', 'Cleaver'],
+  offhand: ['Kite Shield', 'Buckler', 'Warding Focus', 'Tower Shield'],
+  mail:    ['Ringmail', 'Scale Hauberk', 'Plated Coat', 'Padded Jack'],
+  girdle:  ['Leather Girdle', 'Plated Belt', 'Sash of Cord'],
+  boots:   ['Marching Boots', 'Greaves', 'Soft Treads'],
+  amulet:  ['Bone Amulet', 'Ley-Charm', 'Sun Pendant'],
+  ring1:   ['Iron Band', 'Signet', 'Twisted Ring'],
+  ring2:   ['Iron Band', 'Signet', 'Twisted Ring']
+};
+
+// An affix is a stat, a roll range, and how it is worded. `mul` stats are
+// multiplicative and stack by product; the rest add.
+const AFFIXES = [
+  { id:'damage',  stat:'damage',    mul:false, lo:2,    hi:7,    dp:0, name:'Keen',      word:'+@ damage' },
+  { id:'damageP', stat:'damage',    mul:true,  lo:0.06, hi:0.20, dp:0, name:'Cruel',     word:'+@ damage' },
+  { id:'life',    stat:'maxHp',     mul:false, lo:8,    hi:26,   dp:0, name:'Stout',     word:'+@ life' },
+  { id:'ward',    stat:'ward',      mul:false, lo:0.03, hi:0.09, dp:0, name:'Warded',    word:'@ harm turned' },
+  { id:'speed',   stat:'speed',     mul:true,  lo:0.03, hi:0.09, dp:0, name:'Fleet',     word:'+@ stride' },
+  { id:'reach',   stat:'range',     mul:true,  lo:0.04, hi:0.13, dp:0, name:'Far',       word:'+@ reach' },
+  { id:'sweep',   stat:'sweep',     mul:true,  lo:0.05, hi:0.16, dp:0, name:'Broad',     word:'+@ sweep' },
+  { id:'cadence', stat:'fireDelay', mul:true,  lo:-0.12,hi:-0.04,dp:0, name:'Quick',     word:'@ swing time' },
+  { id:'magnet',  stat:'magnet',    mul:true,  lo:0.10, hi:0.35, dp:0, name:'Drawing',   word:'+@ draw' },
+  { id:'regen',   stat:'regen',     mul:false, lo:0.2,  hi:0.9,  dp:1, name:'Mending',   word:'+@ life a second' }
+];
+// Global dial on how much a roll is worth. Gear should be felt, but a full kit
+// of eight items multiplies together fast: at 1.0 the bot's escape rate went
+// from 30% to 73%. Left mutable so the balance harness can sweep it.
+let AFFIX_SCALE = 1;
+
+const AFFIX_BY_ID = {};
+for (const a of AFFIXES) AFFIX_BY_ID[a.id] = a;
+
+// Which affixes a slot can roll. Keeps a blade feeling like a blade.
+const SLOT_AFFIXES = {
+  blade:   ['damage','damageP','reach','sweep','cadence'],
+  offhand: ['ward','life','damageP','sweep','regen'],
+  mail:    ['life','ward','regen','speed'],
+  girdle:  ['life','ward','magnet','regen'],
+  boots:   ['speed','life','magnet','ward'],
+  amulet:  ['damageP','life','regen','magnet','reach'],
+  ring1:   ['damage','damageP','life','ward','speed','magnet','cadence'],
+  ring2:   ['damage','damageP','life','ward','speed','magnet','cadence']
+};
+
+function rollRarity(depth) {
+  // Deeper ground gives up better things. Shift weight off the bottom tier.
+  const lift = 1 + depth * 2.4;
+  let total = 0;
+  const w = RARITY.map((r, i) => {
+    const ww = i === 0 ? r.weight / lift : r.weight * (1 + depth * i * 0.5);
+    total += ww;
+    return ww;
+  });
+  let roll = Math.random() * total;
+  for (let i = 0; i < RARITY.length; i++) {
+    roll -= w[i];
+    if (roll <= 0) return RARITY[i];
+  }
+  return RARITY[0];
+}
+
+let itemSeq = 0;
+
+function rollItem(depth, slotId) {
+  const slot = slotId || SLOTS[(Math.random() * SLOTS.length) | 0].id;
+  const rarity = rollRarity(clamp(depth, 0, 1));
+  const bases = BASES[slot];
+  const base = bases[(Math.random() * bases.length) | 0];
+  const pool = SLOT_AFFIXES[slot].slice();
+  const affixes = [];
+  const n = Math.min(rarity.affixes, pool.length);
+  // Item level lifts the rolls, so a deep drop is better than a shallow one of
+  // the same rarity rather than merely more likely.
+  const ilvl = (0.55 + clamp(depth, 0, 1) * 0.75) * AFFIX_SCALE;
+  for (let i = 0; i < n; i++) {
+    const id = pool.splice((Math.random() * pool.length) | 0, 1)[0];
+    const a = AFFIX_BY_ID[id];
+    let v = (a.lo + Math.random() * (a.hi - a.lo)) * ilvl;
+    v = a.dp ? +v.toFixed(a.dp) : (Math.abs(a.lo) >= 1 ? Math.max(1, Math.round(v)) : v);
+    affixes.push({ id, v });
+  }
+  return { uid: ++itemSeq, slot, base, rarity: rarity.id, affixes,
+           name: affixes.length ? AFFIX_BY_ID[affixes[0].id].name + ' ' + base : base };
+}
+
+function affixText(af) {
+  const a = AFFIX_BY_ID[af.id];
+  let v;
+  if (a.mul) v = (af.v >= 0 ? '+' : '') + Math.round(af.v * 100) + '%';
+  else if (a.id === 'ward') v = Math.round(af.v * 100) + '%';
+  else v = (af.v >= 0 ? '+' : '') + (a.dp ? af.v.toFixed(a.dp) : af.v);
+  return a.word.replace('+@', v).replace('@', v);
+}
+
+const rarityOf = it => RARITY.find(r => r.id === it.rarity) || RARITY[0];
+
+/* Rebuild every derived stat from the hero's base. Boons and gear both feed
+   in here and nothing accumulates on the player, so a ring can come off
+   without leaving its damage behind. Current life is preserved, only clamped,
+   or swapping a +life item would be a free heal. */
+function recomputeStats() {
+  const p = player;
+  const H = HEROES[p.hero] || HEROES.isaac;
+  const base = Object.assign({}, BASE_PLAYER);
+  base.maxHp = H.maxHp; base.speed = H.speed; base.damage = H.damage;
+  base.fireDelay = H.fireDelay; base.range = H.range;
+  base.sweep = H.sweep; base.arcSpeed = H.arcSpeed;
+  base.ward = 0;
+
+  // Boons, re-applied from the tally rather than remembered as a total.
+  for (const u of UPGRADES) {
+    const n = p.upg[u.id] || 0;
+    for (let i = 0; i < n; i++) u.apply(base);
+  }
+
+  // Gear on top: additive terms first, then the multiplicative ones, so the
+  // order two items were equipped in cannot change the result.
+  const add = {}, mul = {};
+  for (const sl of SLOTS) {
+    const it = p.gear[sl.id];
+    if (!it) continue;
+    for (const af of it.affixes) {
+      const a = AFFIX_BY_ID[af.id];
+      if (a.mul) mul[a.stat] = (mul[a.stat] === undefined ? 1 : mul[a.stat]) * (1 + af.v);
+      else add[a.stat] = (add[a.stat] || 0) + af.v;
+    }
+  }
+  for (const k in add) base[k] = (base[k] || 0) + add[k];
+  for (const k in mul) base[k] = (base[k] || 0) * mul[k];
+
+  base.ward = clamp(base.ward, 0, 0.75);      // never immune
+  base.fireDelay = Math.max(0.08, base.fireDelay);
+
+  for (const k in base) {
+    if (k === 'r' || k === 'iframe') continue;
+    p[k] = base[k];
+  }
+  p.hp = Math.min(p.hp, p.maxHp);
+  hudCache.hp = -1;
+}
 
 /* ---------------------------------------------------------------------------
    2. MATH HELPERS
@@ -691,6 +958,7 @@ function generateWorld(spawn, portal) {
   }
   for (let i = 0; i < lone.length; i++) grid[lone[i]] = OPEN;
 
+  carveRooms(sc, pc);
   buildLandmark(pc);
   connectPortal(sc, pc);
 
@@ -716,6 +984,7 @@ function generateWorld(spawn, portal) {
 
   buildWallRects();
   buildEdges();
+  buildStains(spawn, portal);
   buildScenery(spawn, portal);
 }
 
@@ -754,6 +1023,73 @@ function connectPortal(sc, pc) {
 // The place the region is named for. Built around the ley-gate, because the
 // objective should be somewhere, not a circle on blank ground.
 function setCell(cx, cy, v) { if (inGrid(cx, cy)) grid[gi(cx, cy)] = v; }
+
+/* --- room archetypes -----------------------------------------------------
+   A braided maze is uniform corridor and near-uniform chamber: nothing you
+   would recognise on the way back. These stamp a handful of rooms with a shape
+   you can name, and record themselves so the stain layer and the scenery pass
+   can dress each one to match.
+   --------------------------------------------------------------------- */
+let rooms = [];
+
+function carveRooms(sc, pc) {
+  rooms = [];
+  const KINDS = ['hall', 'cistern', 'barracks', 'collapse'];
+  const want = 3 + ((Math.random() * 3) | 0);
+  const tries = 260;
+  for (let t = 0; t < tries && rooms.length < want; t++) {
+    const kind = KINDS[(Math.random() * KINDS.length) | 0];
+    const rw = kind === 'cistern' ? 0 : 5 + ((Math.random() * 4) | 0);
+    const rh = kind === 'cistern' ? 0 : 4 + ((Math.random() * 4) | 0);
+    const rad = 4 + ((Math.random() * 2) | 0);
+    const half = kind === 'cistern' ? rad : Math.max(rw, rh);
+    const cx = half + 2 + ((Math.random() * (GW - 2 * half - 4)) | 0);
+    const cy = half + 2 + ((Math.random() * (GH - 2 * half - 4)) | 0);
+    // keep clear of the spawn pocket, the gate, and each other
+    if (Math.abs(cx - sc.x) + Math.abs(cy - sc.y) < 12) continue;
+    if (Math.abs(cx - pc.x) + Math.abs(cy - pc.y) < 12) continue;
+    let ok = true;
+    for (let i = 0; i < rooms.length && ok; i++) {
+      const r = rooms[i];
+      if (Math.abs(cx - r.cx) < half + r.half + 4 &&
+          Math.abs(cy - r.cy) < half + r.half + 4) ok = false;
+    }
+    if (!ok) continue;
+
+    if (kind === 'cistern') carveDisc(cx, cy, rad);
+    else carveRect(cx - rw, cy - rh, cx + rw, cy + rh);
+
+    if (kind === 'hall') {
+      // Pillars on a regular grid: the one shape that reads as built rather
+      // than as eroded, and it gives a fight cover to break line of sight on.
+      for (let py = -rh + 1; py <= rh - 1; py += 3) {
+        for (let px = -rw + 1; px <= rw - 1; px += 3) {
+          grid[gi(cx + px, cy + py)] = SOLID;
+        }
+      }
+    } else if (kind === 'barracks') {
+      // Stub walls in rows, like bunk partitions off one side.
+      for (let py = -rh + 1; py <= rh - 1; py += 2) {
+        const len = 1 + ((Math.random() * (rw - 1)) | 0);
+        for (let px = 0; px < len; px++) grid[gi(cx - rw + 1 + px, cy + py)] = SOLID;
+      }
+    } else if (kind === 'collapse') {
+      // A caved-in ceiling: a scatter of loose blocks, no pattern at all.
+      const n = 4 + ((Math.random() * 5) | 0);
+      for (let i = 0; i < n; i++) {
+        const px = cx - rw + 1 + ((Math.random() * (rw * 2 - 2)) | 0);
+        const py = cy - rh + 1 + ((Math.random() * (rh * 2 - 2)) | 0);
+        grid[gi(px, py)] = SOLID;
+      }
+    }
+
+    rooms.push({ kind, cx, cy, half,
+                 x: cx * CELL_W + CELL_W / 2, y: cy * CELL_W + CELL_W / 2,
+                 r: half * CELL_W });
+    // A room nobody can reach is scenery, so tie it back to the gate route.
+    carveCorridor(cx, cy, pc.x, pc.y, 0);
+  }
+}
 
 function buildLandmark(pc) {
   const kind = REGION.build;
@@ -988,20 +1324,96 @@ function buildScenery(spawn, portal) {
     let kind = null;
     // The place should look looted and lived-in. Heavier against the rock
     // where things pile up, lighter in the open so a fight stays readable.
+    // Thin background texture only. The loud objects arrive in knots below --
+    // an independent roll per cell, however weighted, produces exactly the
+    // even sprinkle it looks like, because that is what it is.
     if (byRock) {
-      if (roll > 0.62) continue;
-      kind = roll < 0.09 ? 'rubble'  : roll < 0.16 ? 'bones'  : roll < 0.22 ? 'barrel' :
-             roll < 0.28 ? 'crate'   : roll < 0.33 ? 'grate'  : roll < 0.39 ? 'urn' :
-             roll < 0.45 ? 'coins'   : roll < 0.50 ? 'sword'  : roll < 0.54 ? 'shield' :
-             roll < 0.58 ? 'hornskull' : 'moss';
+      if (roll > 0.20) continue;
+      kind = roll < 0.05 ? 'rubble' : roll < 0.10 ? 'moss' :
+             roll < 0.15 ? 'crack'  : 'bones';
     } else {
-      if (roll > 0.34) continue;
-      kind = roll < 0.07 ? 'crack' : roll < 0.12 ? 'moss'  : roll < 0.17 ? 'bones' :
-             roll < 0.22 ? 'coins' : roll < 0.26 ? 'sword' : roll < 0.30 ? 'scroll' : 'rubble';
+      if (roll > 0.085) continue;
+      kind = roll < 0.035 ? 'crack' : roll < 0.06 ? 'moss' : 'rubble';
     }
     props.push({ x: c.x + rand(-C * 0.22, C * 0.22),
                  y: c.y + rand(-C * 0.22, C * 0.22),
                  q: (Math.random() * 4) | 0, kind });
+  }
+
+  scatterKnots(spawn, portal);
+}
+
+/* Debris arrives in knots, where it would actually collect: jammed into
+   dead ends, banked into corners, and dressed through the rooms to match what
+   each one was. Everything else stays background texture, so a knot reads as
+   somebody having been here rather than as more of the same scatter. */
+const KNOT_SETS = {
+  store:   ['crate', 'barrel', 'urn', 'crate', 'coins'],
+  killed:  ['bones', 'sword', 'shield', 'hornskull', 'bones'],
+  spoil:   ['coins', 'scroll', 'urn', 'coins', 'bones'],
+  fallen:  ['rubble', 'rubble', 'crack', 'bones', 'rubble'],
+  damp:    ['moss', 'moss', 'rubble', 'grate', 'moss']
+};
+
+function knot(x, y, set, n, spread) {
+  const pool = KNOT_SETS[set];
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * TAU, d = Math.sqrt(Math.random()) * spread;
+    const px = x + Math.cos(a) * d, py = y + Math.sin(a) * d;
+    if (pointInWalls(px, py, 7)) continue;
+    props.push({ x: px, y: py, q: (Math.random() * 4) | 0,
+                 kind: pool[(Math.random() * pool.length) | 0] });
+  }
+}
+
+function scatterKnots(spawn, portal) {
+  const C = CELL_W;
+  // Dead ends and corners first -- the places a corridor stops being a route.
+  const ends = [], corners = [];
+  for (let cy = 1; cy < GH - 1; cy++) {
+    for (let cx = 1; cx < GW - 1; cx++) {
+      if (cellAt(cx, cy) === SOLID) continue;
+      let w = 0;
+      const L = cellAt(cx - 1, cy) === SOLID, R = cellAt(cx + 1, cy) === SOLID;
+      const U = cellAt(cx, cy - 1) === SOLID, D = cellAt(cx, cy + 1) === SOLID;
+      w = L + R + U + D;
+      const p = { x: cx * C + C / 2, y: cy * C + C / 2 };
+      if (dist2(p.x, p.y, spawn.x, spawn.y) < 150 * 150) continue;
+      if (dist2(p.x, p.y, portal.x, portal.y) < 150 * 150) continue;
+      if (w >= 3) ends.push(p);
+      else if (w === 2 && ((L || R) && (U || D))) corners.push(p);
+    }
+  }
+  const pick = (arr, n) => {
+    const out = [];
+    for (let i = 0; i < n && arr.length; i++) {
+      out.push(arr.splice((Math.random() * arr.length) | 0, 1)[0]);
+    }
+    return out;
+  };
+  // A dead end is where something was dumped, dragged, or died.
+  for (const p of pick(ends, Math.min(22, ends.length))) {
+    const r = Math.random();
+    knot(p.x, p.y, r < 0.34 ? 'store' : r < 0.68 ? 'killed' : 'spoil',
+         3 + ((Math.random() * 4) | 0), 26);
+  }
+  // Corners bank debris the way a current does.
+  for (const p of pick(corners, Math.min(26, corners.length))) {
+    knot(p.x, p.y, Math.random() < 0.5 ? 'fallen' : 'killed',
+         2 + ((Math.random() * 3) | 0), 22);
+  }
+  // Rooms get dressed as what they were.
+  for (let i = 0; i < rooms.length; i++) {
+    const rm = rooms[i];
+    const set = rm.kind === 'barracks' ? 'store' :
+                rm.kind === 'cistern'  ? 'damp'  :
+                rm.kind === 'collapse' ? 'fallen' : 'spoil';
+    const knots = 4 + ((Math.random() * 4) | 0);
+    for (let k = 0; k < knots; k++) {
+      const a = Math.random() * TAU, d = Math.sqrt(Math.random()) * rm.r * 0.85;
+      knot(rm.x + Math.cos(a) * d, rm.y + Math.sin(a) * d, set,
+           3 + ((Math.random() * 4) | 0), 30);
+    }
   }
 }
 
@@ -1064,9 +1476,13 @@ function moveEntity(e, dx, dy) {
    6. ENTITIES & SPAWNING
    ------------------------------------------------------------------------ */
 
-let player, enemies, arcs, loot, particles, rings, portal;
+let player, enemies, arcs, loot, drops, particles, rings, portal;
 let enemyGrid = new SpatialHash(ENEMY_CELL);
 const _near = [];
+// wakeEnemy runs from inside damageEnemy, which is itself called while
+// updateArcs iterates _near -- so the alarm query needs its own scratch or it
+// clobbers the array being walked.
+const _alert = [];
 
 let run;  // per-run state: timers, counters, difficulty
 
@@ -1083,6 +1499,10 @@ function makePlayer(x, y, heroId) {
   p.fireTimer = 0; p.invuln = 0; p.hitFlash = 0;
   p.swing = 0; p.swingA = 0; p.swingDir = 1;
   p.upg = {};
+  p.gear = {};
+  for (const sl of SLOTS) p.gear[sl.id] = null;
+  p.bag = [];
+  p.ward = 0;
   return p;
 }
 
@@ -1098,6 +1518,125 @@ function typeWeights(t) {
     out.push({ k, w });
   }
   return { out, total };
+}
+
+// Put one body on the map, dormant, at a given spot. Depth (0 at the spawn
+// pocket, 1 at the far edge of the delve) stands in for the old run-time
+// health ramp: waves used to get tougher as the clock ran, and a placed
+// dungeon gets tougher the further in you go instead.
+function placeEnemy(kind, x, y, depth) {
+  if (enemies.length >= MAX_ENEMIES) return null;
+  const d = ENEMY_TYPES[kind];
+  const scale = (1 + depth * PACK_DEPTH_HP) * LEVEL.threat;
+  const e = {
+    kind, x, y, r: d.r, speed: d.speed * rand(0.92, 1.08),
+    hp: d.hp * scale, maxHp: d.hp * scale, dmg: d.dmg * LEVEL.threat, tech: d.tech,
+    cd: d.cd, mass: d.mass, color: d.color, halo: d.halo,
+    atk: rand(0, d.cd), hitFlash: 0, wob: Math.random() * TAU, angle: 0, face: 1,
+    awake: false, alert: 0, home: { x, y }, drowse: Math.random() * TAU,
+    aggro: d.r >= 20 ? AGGRO_FAR : AGGRO_NEAR
+  };
+  enemies.push(e);
+  return e;
+}
+
+// How far away the player is *by ground a body could walk*, so a pack does not
+// rouse through a wall. The flow field is a BFS from the player rebuilt only
+// when they cross a cell, so this is one array read; straight-line distance
+// stands in only before the first field exists.
+function noticeDist(e, straight) {
+  if (!flowDist) return straight;
+  const cx = clamp(Math.floor(e.x / CELL_W), 0, GW - 1);
+  const cy = clamp(Math.floor(e.y / CELL_W), 0, GH - 1);
+  const steps = flowDist[gi(cx, cy)];
+  if (steps < 0) return Infinity;               // no path: it never hears you
+  return steps * CELL_W;
+}
+
+// Wake a body, and pass the alarm to its neighbours a beat later so a pack
+// rouses in sequence rather than all at once.
+function wakeEnemy(e, chain) {
+  if (e.awake || e.hp <= 0) return;
+  e.awake = true;
+  e.alert = 0;
+  if (chain === false) return;
+  enemyGrid.query(e.x, e.y, ALERT_R, _alert);
+  for (let i = 0; i < _alert.length; i++) {
+    const o = _alert[i];
+    if (o === e || o.awake || o.hp <= 0) continue;
+    if (o.alert > 0) continue;
+    if (dist2(e.x, e.y, o.x, o.y) > ALERT_R * ALERT_R) continue;
+    o.alert = ALERT_DELAY;
+  }
+}
+
+// Populate the delve: packs spread across the reachable floor, none of them
+// near the spawn pocket, biggest and meanest deepest in, plus a guard on the
+// ley-gate itself. Placement stops once enough slag is on the map to make the
+// quota with room to spare -- the level has to be completable by clearing it.
+function placePacks(spawn) {
+  if (!openCells.length) return;
+  const far = Math.hypot(WORLD.w, WORLD.h) * 0.5;
+  const sites = [];
+  const roster = LEVEL.horde;
+
+  // Reservoir of candidate sites, kept apart so packs read as separate groups.
+  for (let tries = 0; tries < 4000 && sites.length < 26; tries++) {
+    const c = openCells[(Math.random() * openCells.length) | 0];
+    const ds = Math.hypot(c.x - spawn.x, c.y - spawn.y);
+    if (ds < PACK_SAFE) continue;
+    let ok = true;
+    for (let i = 0; i < sites.length && ok; i++) {
+      if (dist2(c.x, c.y, sites[i].x, sites[i].y) < PACK_APART * PACK_APART) ok = false;
+    }
+    if (!ok) continue;
+    sites.push({ x: c.x, y: c.y, depth: clamp(ds / far, 0, 1) });
+  }
+  // Nearest first, so the slag budget is spent from the spawn outwards and a
+  // short delve is not left with every pack in one far corner.
+  sites.sort((a, b) => a.depth - b.depth);
+
+  let slag = 0;
+  for (let i = 0; i < sites.length && slag < PACK_SLAG; i++) {
+    const st = sites[i];
+    const n = 3 + ((Math.random() * 3) | 0) + (st.depth > 0.55 ? 1 : 0);
+    for (let k = 0; k < n; k++) {
+      // Deeper packs lean on the heavier archetypes; near ones are thralls.
+      let kind = roster[0];
+      const r = Math.random();
+      if (st.depth > 0.62 && r < 0.28 && roster.indexOf('breaker') >= 0) kind = 'breaker';
+      else if (st.depth > 0.3 && r < 0.55 && roster.indexOf('eclipse') >= 0) kind = 'eclipse';
+      // The site is kept clear of the spawn pocket, but members scatter off
+      // the site -- so the clearance has to be enforced on the body, not the
+      // site, or one can drift back inside its own aggro radius of the player.
+      const pos = scatterNear(st.x, st.y, 86, ENEMY_TYPES[kind].r + 4, spawn);
+      if (!pos) continue;
+      const e = placeEnemy(kind, pos.x, pos.y, st.depth);
+      if (e) slag += e.tech;
+    }
+  }
+
+  // The gate is the objective, so it is guarded -- and that guard is awake to
+  // nobody until you come for it.
+  for (let k = 0; k < 6; k++) {
+    const kind = k < 2 && roster.indexOf('breaker') >= 0 ? 'breaker' : roster[0];
+    const pos = scatterNear(portal.x, portal.y, 150, ENEMY_TYPES[kind].r + 4, spawn);
+    if (pos) placeEnemy(kind, pos.x, pos.y, 0.85);
+  }
+}
+
+// A free spot within `spread` of a point, clear of rock. Returns null rather
+// than a wedged position if the ground there will not take a body.
+function scatterNear(x, y, spread, pad, keepFrom) {
+  for (let i = 0; i < 26; i++) {
+    const a = Math.random() * TAU, d = Math.sqrt(Math.random()) * spread;
+    const nx = clamp(x + Math.cos(a) * d, pad + 4, WORLD.w - pad - 4);
+    const ny = clamp(y + Math.sin(a) * d, pad + 4, WORLD.h - pad - 4);
+    if (pointInWalls(nx, ny, pad)) continue;
+    if (keepFrom && dist2(nx, ny, keepFrom.x, keepFrom.y) < PACK_SAFE * PACK_SAFE) continue;
+    return { x: nx, y: ny };
+  }
+  return null;
 }
 
 function spawnEnemy(t) {
@@ -1126,12 +1665,14 @@ function spawnEnemy(t) {
   if (!ok) return;
 
   // Health creeps up with run time so late waves stay meaningful.
-  const scale = 1 + t / 200;
+  const scale = (1 + t / 200) * LEVEL.threat;
   enemies.push({
     kind, x, y, r: d.r, speed: d.speed * rand(0.92, 1.08),
-    hp: d.hp * scale, maxHp: d.hp * scale, dmg: d.dmg, tech: d.tech,
+    hp: d.hp * scale, maxHp: d.hp * scale, dmg: d.dmg * LEVEL.threat, tech: d.tech,
     cd: d.cd, mass: d.mass, color: d.color, halo: d.halo,
-    atk: rand(0, d.cd), hitFlash: 0, wob: Math.random() * TAU, angle: 0, face: 1
+    atk: rand(0, d.cd), hitFlash: 0, wob: Math.random() * TAU, angle: 0, face: 1,
+    // Summoned bodies arrive awake: they were called to you, not stumbled on.
+    awake: true, alert: 0, drowse: Math.random() * TAU, aggro: AGGRO_NEAR
   });
 }
 
@@ -1145,16 +1686,26 @@ function fire() {
   // the avatar first. Mirages stay targetable -- being decoys is their whole
   // purpose -- except for Isaac, who is immune to the illusion and ignores
   // them outright.
+  // Rock stops a crescent, so a target has to be reachable as well as near.
+  // With the delve populated in advance there is nearly always a dormant pack
+  // through a wall somewhere inside reach, and nearest-target alone spent every
+  // swing on stone. Blocked bodies are still eligible, but only once nothing
+  // clear is left.
   const blind = player.hero === 'isaac';
   let best = null, bestD = R * R, avatar = null, avatarD = R * R;
+  let walled = null, walledD = R * R;
   for (let i = 0; i < _near.length; i++) {
     const e = _near[i];
     if (blind && e.kind === 'mirage') continue;
     const d = dist2(player.x, player.y, e.x, e.y);
     if (e.kind === 'deceiver') { if (d < avatarD) { avatarD = d; avatar = e; } }
+    if (!clearShot(player.x, player.y, e.x, e.y)) {
+      if (d < walledD) { walledD = d; walled = e; }
+      continue;
+    }
     if (d < bestD) { bestD = d; best = e; }
   }
-  best = avatar || best;
+  best = avatar || best || walled;
   if (!best) return false;
 
   const base = Math.atan2(best.y - player.y, best.x - player.x);
@@ -1193,12 +1744,91 @@ function releaseCrescent(a, delay) {
   });
 }
 
+// Is there open ground the whole way between two points? Sampled rather than
+// swept: at 14-unit steps nothing thinner than half a cell can hide between
+// samples, and it runs only for bodies already inside weapon reach.
+function clearShot(x0, y0, x1, y1) {
+  const dx = x1 - x0, dy = y1 - y0;
+  const len = Math.hypot(dx, dy);
+  const steps = Math.min(24, Math.max(1, Math.ceil(len / 14)));
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    if (pointInWalls(x0 + dx * t, y0 + dy * t, 3)) return false;
+  }
+  return true;
+}
+
 function dropLoot(e) {
   loot.push({
     x: e.x, y: e.y,
     vx: rand(-38, 38), vy: rand(-38, 38),
     value: e.tech, r: 6, spin: Math.random() * TAU, life: 0, pulled: false
   });
+  maybeDropItem(e);
+}
+
+const BAG_MAX = 20;
+
+// Gear falls where the body did. Chance and quality both follow how deep the
+// body was standing, so pushing further in is what pays.
+function maybeDropItem(e) {
+  const depth = clamp(Math.hypot(e.x - run.spawnX, e.y - run.spawnY) /
+                      (Math.hypot(WORLD.w, WORLD.h) * 0.5), 0, 1);
+  let chance = e.kind === 'deceiver' ? 1 :
+               e.kind === 'breaker'  ? 0.22 :
+               e.kind === 'mirage'   ? 0 : 0.055;
+  chance *= 1 + depth * 0.8;
+  const n = e.kind === 'deceiver' ? 3 : 1;
+  for (let i = 0; i < n; i++) {
+    if (i === 0 && Math.random() > chance) return;
+    const it = rollItem(e.kind === 'deceiver' ? Math.max(depth, 0.8) : depth);
+    drops.push({ x: e.x + rand(-14, 14), y: e.y + rand(-14, 14),
+                 vx: rand(-46, 46), vy: rand(-46, 46),
+                 item: it, r: 9, life: 0, pulled: false });
+  }
+}
+
+function updateDrops(dt) {
+  const damp = Math.pow(0.1, dt);
+  let w = 0;
+  for (let i = 0; i < drops.length; i++) {
+    const d0 = drops[i];
+    d0.life += dt;
+    const dx = player.x - d0.x, dy = player.y - d0.y;
+    const d = Math.hypot(dx, dy) || 1;
+    // Gear is drawn in at a shorter reach than slag: it should be picked up
+    // on purpose, not hoovered off the far side of a room.
+    if (!d0.pulled && d < player.magnet * 0.55) d0.pulled = true;
+    if (d0.pulled) {
+      const k = Math.min(1, dt * 6);
+      d0.vx = lerp(d0.vx, (dx / d) * 420, k);
+      d0.vy = lerp(d0.vy, (dy / d) * 420, k);
+    } else { d0.vx *= damp; d0.vy *= damp; }
+    d0.x += d0.vx * dt; d0.y += d0.vy * dt;
+
+    if (d < player.r + 12) {
+      if (player.bag.length < BAG_MAX) {
+        player.bag.push(d0.item);
+        run.found++;
+        syncBagBadge();
+        burst(d0.x, d0.y, rarityOf(d0.item).colour, 8, 150);
+        toast(d0.item.name, rarityOf(d0.item).colour);
+        continue;
+      }
+      // Bag full: leave it on the floor rather than silently binning it, and
+      // say so once rather than every frame it is touched.
+      if (!run.bagWarned) { run.bagWarned = 2.5; toast('Bag full', '#c9863e'); }
+      d0.pulled = false;
+      d0.vx = -(dx / d) * 90; d0.vy = -(dy / d) * 90;
+    }
+    drops[w++] = d0;
+  }
+  drops.length = w;
+}
+
+// A short line above the HUD: what you just picked up, in its rarity colour.
+function toast(text, colour) {
+  run.toast = { text, colour, life: 2.4 };
 }
 
 // Expanding shockwave ring — a few strokes, but it is what makes a kill read
@@ -1298,10 +1928,12 @@ function updateCamera(dt) {
 
 function hurtPlayer(e) {
   if (player.invuln > 0) return;
-  player.hp -= e.dmg;
+  // Ward is flat damage reduction off gear, capped well short of immunity.
+  const taken = e.dmg * (1 - (player.ward || 0));
+  player.hp -= taken;
   player.invuln = player.iframe;
   player.hitFlash = 0.3;
-  shake(6 + e.dmg * 0.25);
+  shake(6 + taken * 0.25);
   hitFlashUI();
   burst(player.x + (e.x - player.x) * 0.5, player.y + (e.y - player.y) * 0.5,
         PAL.blood, 10, 180);
@@ -1310,6 +1942,7 @@ function hurtPlayer(e) {
 
 function damageEnemy(e, dmg) {
   if (e.hp <= 0) return;
+  if (!e.awake) wakeEnemy(e);          // struck from the dark: everyone hears
   e.hp -= dmg;
   e.hitFlash = 0.12;
   if (e.hp <= 0) {
@@ -1504,6 +2137,25 @@ function updateEnemies(dt) {
 
     const dx = player.x - e.x, dy = player.y - e.y;
     const d = Math.hypot(dx, dy) || 1;
+
+    // --- dormant until something rouses it --------------------------------
+    // A body waits where the generator put it. It wakes when you come inside
+    // its notice, when you hit it, or when a neighbour that already woke
+    // passes the alarm along. Dormant bodies skip the seek and the separation
+    // pass entirely, which is most of the per-enemy cost.
+    if (!e.awake) {
+      if (e.alert > 0) {
+        e.alert -= dt;
+        if (e.alert <= 0) wakeEnemy(e);
+      } else if (noticeDist(e, d) < e.aggro) {
+        wakeEnemy(e);
+      }
+      if (!e.awake) {
+        e.drowse += dt * 1.6;
+        continue;
+      }
+    }
+
     e.angle = Math.atan2(dy, dx);
     if (Math.abs(dx) > 3) e.face = dx < 0 ? -1 : 1;
 
@@ -1741,9 +2393,13 @@ function compactEnemies() {
   enemies.length = w;
 }
 
+// The delve is populated once, at generation, and cleared by walking into it.
+// Nothing is pushed at the player on a timer any more -- the only bodies that
+// arrive mid-run are the ones the Deceiver calls. Kept as a seam so a level
+// can opt back into waves without touching the loop.
 function updateSpawning(dt) {
+  if (!LEVEL.waves) return;
   const t = run.time;
-  // Holding the portal calls the whole arena down on you — the last stand.
   const mul = portal.channel > 0 ? 2.4 : 1;
   run.spawnTimer -= dt * mul;
   if (run.spawnTimer > 0) return;
@@ -1756,11 +2412,14 @@ function update(dt) {
   run.time += dt;
   if (run.banner > 0) { run.banner -= dt;
     if (run.banner <= 0) { run.bannerText = null; run.bannerNote = null; } }
+  if (run.toast) { run.toast.life -= dt; if (run.toast.life <= 0) run.toast = null; }
+  if (run.bagWarned > 0) run.bagWarned -= dt;
   updatePlayer(dt);
   updateArcs(dt);
   updateEnemies(dt);
   compactEnemies();
   updateLoot(dt);
+  updateDrops(dt);
   updateParticles(dt);
   updateRings(dt);
   updatePortal(dt);
@@ -2485,6 +3144,127 @@ const GROUND_T = 200;              // world units per ground tile
 const GROUND_VARIANTS = 8;
 let groundTiles = [];
 
+/* --- the stain layer -----------------------------------------------------
+   Tiled ground alone is noise at one density everywhere, so nothing draws the
+   eye and the floor has no sense of place. This is a single world-scale canvas
+   baked once per delve at a quarter resolution, carrying the things that
+   depend on the *layout* rather than on the tile grid: paths worn along the
+   corridors people actually walk, damp and moss banked against the rock, and
+   broad dry/bare zones. It costs one drawImage a frame, and being upscaled 4x
+   is what makes it read as soft staining rather than as pixels.
+   --------------------------------------------------------------------- */
+const STAIN_DIV = 4;
+let stainMap = null;
+
+function buildStains(spawn, portal) {
+  const W = Math.ceil(WORLD.w / STAIN_DIV), H = Math.ceil(WORLD.h / STAIN_DIV);
+  stainMap = newCanvas(W, H);
+  const g = stainMap.getContext('2d');
+  const K = 1 / STAIN_DIV;
+  const wet = REGION.mottle[0], dry = REGION.mottle[2];
+
+  // Broad zones first: slow, large blobs of damp and of bare dry ground, so
+  // one end of the delve does not look like the other.
+  for (let i = 0; i < 24; i++) {
+    const x = Math.random() * W, y = Math.random() * H;
+    const r = (90 + Math.random() * 190) * K * STAIN_DIV * 0.25;
+    const damp = Math.random() < 0.5;
+    const c = damp ? wet : dry;
+    const grd = g.createRadialGradient(x, y, 0, x, y, r);
+    grd.addColorStop(0, 'rgba(' + c.join(',') + ',' + (damp ? 0.15 : 0.10) + ')');
+    grd.addColorStop(1, 'rgba(' + c.join(',') + ',0)');
+    g.fillStyle = grd;
+    g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+  }
+
+  // Traffic. A cell hemmed in on two or more sides is a corridor, and corridors
+  // are where the walking happens; open chamber floor stays comparatively
+  // untrodden. Stamping a soft light blob per corridor cell lays worn routes
+  // along exactly the ground a player is funnelled down.
+  g.globalCompositeOperation = 'lighter';
+  for (let cy = 1; cy < GH - 1; cy++) {
+    for (let cx = 1; cx < GW - 1; cx++) {
+      if (cellAt(cx, cy) === SOLID) continue;
+      let walled = 0;
+      if (cellAt(cx - 1, cy) === SOLID) walled++;
+      if (cellAt(cx + 1, cy) === SOLID) walled++;
+      if (cellAt(cx, cy - 1) === SOLID) walled++;
+      if (cellAt(cx, cy + 1) === SOLID) walled++;
+      if (walled < 2) continue;                      // open floor: not a route
+      const x = (cx * CELL_W + CELL_W / 2) * K, y = (cy * CELL_W + CELL_W / 2) * K;
+      const r = CELL_W * K * (0.75 + Math.random() * 0.4);
+      const a = 0.026 + walled * 0.009;
+      const grd = g.createRadialGradient(x, y, 0, x, y, r);
+      grd.addColorStop(0, 'rgba(' + dry.join(',') + ',' + a.toFixed(3) + ')');
+      grd.addColorStop(1, 'rgba(' + dry.join(',') + ',0)');
+      g.fillStyle = grd;
+      g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+    }
+  }
+
+  // The two places every run visits: the spawn pocket and the gate. Wear them
+  // hardest, so arriving anywhere near either reads as trodden ground.
+  g.globalCompositeOperation = 'source-over';
+  for (const pt of [spawn, portal]) {
+    const x = pt.x * K, y = pt.y * K, r = 150 * K;
+    const grd = g.createRadialGradient(x, y, 0, x, y, r);
+    grd.addColorStop(0, 'rgba(' + dry.join(',') + ',0.18)');
+    grd.addColorStop(1, 'rgba(' + dry.join(',') + ',0)');
+    g.fillStyle = grd;
+    g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+  }
+
+  // Each room gets the staining its archetype implies, so it reads as a place
+  // and not just a differently-shaped hole.
+  for (let i = 0; i < rooms.length; i++) {
+    const rm = rooms[i], x = rm.x * K, y = rm.y * K, r = rm.r * K;
+    if (rm.kind === 'cistern') {
+      // standing water: a dark pool with a bright rim where it has dried back
+      const grd = g.createRadialGradient(x, y, 0, x, y, r);
+      grd.addColorStop(0,    'rgba(' + wet.join(',') + ',0.85)');
+      grd.addColorStop(0.72, 'rgba(' + wet.join(',') + ',0.55)');
+      grd.addColorStop(1,    'rgba(' + wet.join(',') + ',0)');
+      g.fillStyle = grd;
+      g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+    } else if (rm.kind === 'barracks' || rm.kind === 'hall') {
+      // trodden flat by whatever used to live here
+      const grd = g.createRadialGradient(x, y, 0, x, y, r);
+      grd.addColorStop(0, 'rgba(' + dry.join(',') + ',0.30)');
+      grd.addColorStop(1, 'rgba(' + dry.join(',') + ',0)');
+      g.fillStyle = grd;
+      g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+    } else if (rm.kind === 'collapse') {
+      // dust thrown out from the fall, dry and pale
+      for (let k = 0; k < 9; k++) {
+        const a = Math.random() * TAU, d = Math.random() * r;
+        const px = x + Math.cos(a) * d, py = y + Math.sin(a) * d;
+        const pr = r * (0.2 + Math.random() * 0.3);
+        const grd = g.createRadialGradient(px, py, 0, px, py, pr);
+        grd.addColorStop(0, 'rgba(' + dry.join(',') + ',0.26)');
+        grd.addColorStop(1, 'rgba(' + dry.join(',') + ',0)');
+        g.fillStyle = grd;
+        g.beginPath(); g.arc(px, py, pr, 0, TAU); g.fill();
+      }
+    }
+  }
+
+  // Damp banked against the rock: seepage collects at the foot of a wall.
+  for (let i = 0; i < edges.length; i += 2) {
+    const e = edges[i];
+    const len = Math.hypot(e.x2 - e.x1, e.y2 - e.y1);
+    if (len < 50 || Math.random() > 0.42) continue;
+    const t = 0.2 + Math.random() * 0.6;
+    const x = (e.x1 + (e.x2 - e.x1) * t + e.nx * 14) * K;
+    const y = (e.y1 + (e.y2 - e.y1) * t + e.ny * 14) * K;
+    const r = (26 + Math.random() * 40) * K;
+    const grd = g.createRadialGradient(x, y, 0, x, y, r);
+    grd.addColorStop(0, 'rgba(' + wet.join(',') + ',0.24)');
+    grd.addColorStop(1, 'rgba(' + wet.join(',') + ',0)');
+    g.fillStyle = grd;
+    g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+  }
+}
+
 function forgeGround() {
   groundTiles = [];
   for (let v = 0; v < GROUND_VARIANTS; v++) {
@@ -2566,6 +3346,7 @@ function forgeGround() {
 // Courses of cut stone laid along a wall face. Authored running along +x with
 // the dressed, lit face toward -y, which is rotated to the wall's normal.
 let wallCourses = [];
+let wallRubble = [];
 function forgeWallCourses() {
   wallCourses = [];
   for (let v = 0; v < 3; v++) {
@@ -2610,6 +3391,50 @@ function forgeWallCourses() {
     });
     wallCourses.push([0, 1, 2, 3].map(q => rotateSprite(base, q)));
   }
+  forgeWallRubble();
+}
+
+/* Rubble spilling off the foot of a wall. Merged wall rects are all
+   axis-aligned, so without this the silhouette is an unbroken straight line
+   wherever rock meets floor and the whole map reads as a tileset. Authored in
+   the same local frame as a course and blitted with the same quarter rotation,
+   biased toward the floor side so the stones spill outward. */
+function forgeWallRubble() {
+  wallRubble = [];
+  for (let v = 0; v < 4; v++) {
+    const base = forgeRect(100, 34, g => {
+      g.translate(-50, -17);
+      const n = 7 + ((Math.random() * 6) | 0);
+      for (let i = 0; i < n; i++) {
+        // local y below centre is the floor side once rotated into place
+        const x = 6 + Math.random() * 88;
+        const y = 15 + Math.random() * 15;
+        const w = 4 + Math.random() * 11, h = 3 + Math.random() * 7;
+        const tone = 52 + Math.random() * 34;
+        g.fillStyle = 'rgba(5,4,3,.45)';                       // contact shadow
+        g.beginPath();
+        g.ellipse(x + 1.5, y + h * 0.55, w * 0.62, h * 0.42, 0, 0, TAU);
+        g.fill();
+        const grd = g.createLinearGradient(0, y - h / 2, 0, y + h / 2);
+        grd.addColorStop(0, 'rgb(' + Math.round(tone * 1.45) + ',' +
+                                     Math.round(tone * 1.38) + ',' +
+                                     Math.round(tone * 1.22) + ')');
+        grd.addColorStop(1, 'rgb(' + Math.round(tone * 0.6) + ',' +
+                                     Math.round(tone * 0.57) + ',' +
+                                     Math.round(tone * 0.5) + ')');
+        g.fillStyle = grd;
+        g.beginPath();
+        // chipped, not round: a few flat facets reads as broken stone
+        g.moveTo(x - w / 2, y);
+        g.lineTo(x - w / 4, y - h / 2);
+        g.lineTo(x + w / 3, y - h / 2.4);
+        g.lineTo(x + w / 2, y + h / 6);
+        g.lineTo(x, y + h / 2);
+        g.closePath(); g.fill();
+      }
+    });
+    wallRubble.push([0, 1, 2, 3].map(q => rotateSprite(base, q)));
+  }
 }
 
 function drawGround(x0, y0, x1, y1) {
@@ -2622,6 +3447,22 @@ function drawGround(x0, y0, x1, y1) {
       const tile = groundTiles[h % GROUND_VARIANTS];
       if (!tile) continue;
       ctx.drawImage(tile, tx * T, ty * T, T, T);
+    }
+  }
+  // One call for the whole layout-aware layer: worn routes, damp, dry zones.
+  if (stainMap && !lowFx) {
+    const sx = Math.max(0, x0 / STAIN_DIV), sy = Math.max(0, y0 / STAIN_DIV);
+    const sw = Math.min(stainMap.width - sx, (x1 - x0) / STAIN_DIV);
+    const sh = Math.min(stainMap.height - sy, (y1 - y0) / STAIN_DIV);
+    if (sw > 0 && sh > 0) {
+      // Nearest-neighbour on purpose. Bilinear upscaling this to full screen
+      // measured 3.8ms a frame on the software rasteriser -- it is a full
+      // viewport resample -- and the layer is nothing but soft gradients, so
+      // point sampling costs a fraction and looks the same.
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(stainMap, sx, sy, sw, sh,
+                    sx * STAIN_DIV, sy * STAIN_DIV, sw * STAIN_DIV, sh * STAIN_DIV);
+      ctx.imageSmoothingEnabled = true;
     }
   }
 }
@@ -2675,6 +3516,21 @@ function drawWalls(x0, y0, x1, y1) {
                                wallCourses.length) % wallCourses.length];
       const spr = set[q];
       ctx.drawImage(spr, cx - spr.spanW / 2, cy - spr.spanH / 2, spr.spanW, spr.spanH);
+
+      // Rubble on roughly every fourth course, chosen by position hash rather
+      // than by Math.random -- a per-frame roll would make the stones crawl.
+      // Every third measured 2.9ms a frame in a busy corridor, which is a lot
+      // for a silhouette detail; a quarter of the faces breaks the line just
+      // as well.
+      if (!wallRubble.length) continue;
+      const hh = (((cx * 31 + cy * 17) | 0) % 4 + 4) % 4;
+      if (hh !== 0) continue;
+      const rset = wallRubble[(((cx * 11 + cy * 23) | 0) % wallRubble.length +
+                               wallRubble.length) % wallRubble.length];
+      const rs = rset[q];
+      const rx = e.x1 + ux * d + e.nx * 4;
+      const ry = e.y1 + uy * d + e.ny * 4;
+      ctx.drawImage(rs, rx - rs.spanW / 2, ry - rs.spanH / 2, rs.spanW, rs.spanH);
     }
   }
 }
@@ -3016,6 +3872,31 @@ function drawLoot(t) {
 // Crescents are stroked, not blitted: the sweep widens with boons, so a forged
 // sprite would have to be re-baked every time one lands. Three concentric
 // strokes fake the taper a single stroke cannot.
+// Gear on the floor. Drawn live rather than from a forged sprite because the
+// colour is the item's rarity, and there are never many on screen at once.
+function drawDrops(t) {
+  for (let i = 0; i < drops.length; i++) {
+    const d = drops[i];
+    const c = rarityOf(d.item).colour;
+    const bob = Math.sin(t * 3 + d.x * 0.05) * 2.2;
+    const y = d.y + bob;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = tint(c, 1, 0.16);
+    ctx.beginPath(); ctx.ellipse(d.x, y, 15, 15, 0, 0, TAU); ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = 'rgba(6,5,4,.6)';
+    ctx.beginPath(); ctx.ellipse(d.x, d.y + 9, 8, 3.4, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = c;
+    ctx.beginPath();
+    ctx.moveTo(d.x, y - 8); ctx.lineTo(d.x + 5.5, y);
+    ctx.lineTo(d.x, y + 8);  ctx.lineTo(d.x - 5.5, y);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,250,240,.75)'; ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+}
+
 function drawArcs() {
   if (!arcs.length) return;
   const colour = HEROES[run.hero].magic;
@@ -3305,10 +4186,15 @@ function drawMinimap() {
     const w = walls[i];
     ctx.fillRect(x + w.x * k, y + w.y * k, Math.max(1, w.w * k), Math.max(1, w.h * k));
   }
+  // Only what has actually noticed you. Plotting every dormant body would hand
+  // the player the location of every pack in the delve before they set out,
+  // which is the whole thing the packs exist to avoid.
   ctx.fillStyle = 'rgba(214,96,64,.9)';
   const es = Math.max(1.7, 2.2 * mk);
   for (let i = 0; i < enemies.length; i++) {
-    ctx.fillRect(x + enemies[i].x * k - es / 2, y + enemies[i].y * k - es / 2, es, es);
+    const e = enemies[i];
+    if (!e.awake || e.hp <= 0) continue;
+    ctx.fillRect(x + e.x * k - es / 2, y + e.y * k - es / 2, es, es);
   }
   ctx.fillStyle = portal.active ? PAL.arcane : '#7a6e58';
   ctx.beginPath(); ctx.arc(x + portal.x * k, y + portal.y * k, 4 * mk, 0, TAU); ctx.fill();
@@ -3354,6 +4240,7 @@ function draw(t) {
   drawWalls(x0, y0, x1, y1);
   drawProps(x0, y0, x1, y1);
   drawLoot(t);
+  drawDrops(t);
   for (let i = 0; i < enemies.length; i++) {
     const e = enemies[i];
     if (e.x < x0 || e.x > x1 || e.y < y0 || e.y > y1) continue;
@@ -3397,6 +4284,26 @@ function draw(t) {
     ctx.restore();
     ctx.textAlign = 'left';
   }
+  // What you just picked up, in its rarity colour, under the HUD bar.
+  if (run && run.toast && state !== 'menu') {
+    const t0 = run.toast;
+    const a = Math.min(1, t0.life / 0.5);
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, a);
+    ctx.textAlign = 'center';
+    ctx.font = '400 13px Georgia, "Times New Roman", serif';
+    const w = ctx.measureText(t0.text).width + 26;
+    const bx = view.w / 2 - w / 2, by = HUD_H + 8 + view.safeT;
+    ctx.fillStyle = 'rgba(10,8,5,.82)';
+    ctx.fillRect(bx, by, w, 24);
+    ctx.strokeStyle = tint(t0.colour, 1, 0.55);
+    ctx.lineWidth = 1;
+    ctx.strokeRect(bx + 0.5, by + 0.5, w - 1, 23);
+    ctx.fillStyle = t0.colour;
+    ctx.fillText(t0.text, view.w / 2, by + 16);
+    ctx.restore();
+    ctx.textAlign = 'left';
+  }
   if (run && run.boss && run.boss.hp > 0) {
     const bs = run.boss, f = clamp(bs.hp / bs.maxHp, 0, 1);
     const w = Math.min(320, view.w - 96), x0 = (view.w - w) / 2, y0 = 84;
@@ -3430,16 +4337,21 @@ const el = {
   clock: $('clock'), lvlText: $('lvlText'), flash: $('flash'),
   start: $('start'), levelup: $('levelup'), paused: $('paused'), over: $('over'),
   cards: $('cards'), lvlNum: $('lvlNum'), lvlSub: $('lvlSub'), bestLine: $('bestLine'),
-  overTitle: $('overTitle'), overSub: $('overSub'), overStats: $('overStats')
+  overTitle: $('overTitle'), overSub: $('overSub'), overStats: $('overStats'),
+  gear: $('gear'), gearSlots: $('gearSlots'), gearStats: $('gearStats'),
+  bagGrid: $('bagGrid'), bagCount: $('bagCount'), gearDetail: $('gearDetail'),
+  gearClose: $('gearClose'), bagBtn: $('bagBtn'), bagBadge: $('bagBadge')
 };
 
 let state = 'menu';   // menu | play | levelup | pause | over
 
 function showScreen(name) {
-  for (const s of ['start', 'levelup', 'paused', 'over']) {
+  for (const s of ['start', 'levelup', 'paused', 'over', 'gear']) {
     el[s].classList.toggle('on', s === name);
   }
   el.hud.hidden = (name === 'start');
+  // The bag button belongs to the delve, not to any screen over it.
+  el.bagBtn.hidden = (name !== null);
 }
 
 const fmtTime = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
@@ -3522,22 +4434,26 @@ function resetRun(heroId, levelId) {
   generateWorld(spawn, pt);
   portal  = { x: pt.x, y: pt.y, pulse: 0, channel: 0, active: false };
   player  = makePlayer(spawn.x, spawn.y, hero);
-  enemies = []; arcs = []; loot = []; particles = []; rings = [];
+  enemies = []; arcs = []; loot = []; drops = []; particles = []; rings = [];
   enemyGrid = new SpatialHash(ENEMY_CELL);
 
   run = { time: 0, tech: 0, xp: 0, xpNeed: 11, level: 1, kills: 0,
           spawnTimer: 1.4, pendingLevels: 0, hero: hero, level_id: LEVEL.id,
           banner: 4.2,
           bannerText: null, bannerNote: null,
-          bossCalled: false, bossDown: false, boss: null };
+          bossCalled: false, bossDown: false, boss: null,
+          spawnX: spawn.x, spawnY: spawn.y, found: 0, toast: null, bagWarned: 0 };
 
   cam.x = clamp(player.x - view.w / 2, 0, Math.max(0, WORLD.w - view.w));
   cam.y = clamp(player.y - view.h / 2, 0, Math.max(0, WORLD.h - view.h));
   cam.shake = 0;
 
+  recomputeStats();
+  placePacks(spawn);
   flowFrom = -1;
   rebuildFlow();
   hudCache.hp = hudCache.tech = hudCache.time = hudCache.lvl = -1;
+  syncBagBadge();
   stickEnd();
   keys.clear();
   syncHud();
@@ -3616,13 +4532,199 @@ function openLevelUp() {
 }
 
 function takeUpgrade(u) {
-  u.apply(player);
   player.upg[u.id] = (player.upg[u.id] || 0) + 1;
+  recomputeStats();
+  if (u.onTake) u.onTake(player);
   run.pendingLevels--;
   hudCache.hp = -1;
   if (run.pendingLevels > 0) { openLevelUp(); return; }
   state = 'play';
   showScreen(null);
+}
+
+/* --- the bag ------------------------------------------------------------
+   Opening it pauses the delve. There is no drag-and-drop: on a phone that is
+   a fight with the touch target, so selection is a tap, and equipping is a
+   second tap on a button big enough to hit. Selecting anything shows it
+   measured against whatever is in its slot already, because "is this better"
+   is the only question the screen exists to answer.
+   --------------------------------------------------------------------- */
+let gearSel = null;   // {from:'bag'|'worn', index|slot}
+
+function openGear() {
+  if (state !== 'play' && state !== 'pause') return;
+  state = 'gear';
+  stickEnd();
+  keys.clear();
+  gearSel = null;
+  renderGear();
+  showScreen('gear');
+}
+
+function closeGear() {
+  if (state !== 'gear') return;
+  state = 'play';
+  showScreen(null);
+}
+
+// The stat lines worth showing on the left. Derived, so they already include
+// boons and everything equipped.
+function statLines() {
+  const p = player;
+  return [
+    ['Life',    Math.round(p.maxHp)],
+    ['Damage',  Math.round(p.damage)],
+    ['Swing',   p.fireDelay.toFixed(2) + 's'],
+    ['Reach',   Math.round(p.range)],
+    ['Sweep',   Math.round(p.sweep)],
+    ['Stride',  Math.round(p.speed)],
+    ['Ward',    Math.round((p.ward || 0) * 100) + '%'],
+    ['Mending', (p.regen || 0).toFixed(1) + '/s']
+  ];
+}
+
+function renderGear() {
+  // worn slots
+  el.gearSlots.innerHTML = '';
+  for (const sl of SLOTS) {
+    const it = player.gear[sl.id];
+    const b = document.createElement('button');
+    b.className = 'slot' + (!it ? ' empty' : '') +
+      (gearSel && gearSel.from === 'worn' && gearSel.slot === sl.id ? ' sel' : '');
+    if (it) b.style.borderLeftColor = rarityOf(it).colour;
+    b.innerHTML = '<span class="sname">' + sl.name + '</span>' +
+                  '<span class="iname">' + (it ? it.name : 'empty') + '</span>';
+    b.onclick = () => { gearSel = it ? { from: 'worn', slot: sl.id } : null; renderGear(); };
+    el.gearSlots.appendChild(b);
+  }
+
+  // derived stats
+  el.gearStats.innerHTML = statLines()
+    .map(r => '<div><span>' + r[0] + '</span><b>' + r[1] + '</b></div>').join('');
+
+  // bag
+  el.bagCount.textContent = player.bag.length + '/' + BAG_MAX;
+  el.bagGrid.innerHTML = '';
+  for (let i = 0; i < BAG_MAX; i++) {
+    const it = player.bag[i];
+    const b = document.createElement('button');
+    b.className = 'cellbtn' +
+      (gearSel && gearSel.from === 'bag' && gearSel.index === i ? ' sel' : '');
+    if (it) b.innerHTML = '<i style="background:' + rarityOf(it).colour + '"></i>';
+    b.onclick = () => { gearSel = it ? { from: 'bag', index: i } : null; renderGear(); };
+    el.bagGrid.appendChild(b);
+  }
+
+  renderDetail();
+}
+
+function selectedItem() {
+  if (!gearSel) return null;
+  return gearSel.from === 'bag' ? player.bag[gearSel.index] : player.gear[gearSel.slot];
+}
+
+// What each affix on `it` is worth against what is worn in that slot, so the
+// comparison is per-stat rather than a single made-up score.
+function compareLines(it) {
+  const worn = player.gear[it.slot];
+  const totals = {};
+  const add = (src, sign) => {
+    if (!src) return;
+    for (const af of src.affixes) {
+      const a = AFFIX_BY_ID[af.id];
+      const key = a.stat + (a.mul ? '%' : '');
+      totals[key] = (totals[key] || 0) + sign * af.v;
+    }
+  };
+  add(it, 1); add(worn, -1);
+  const NAMES = { damage:'damage', maxHp:'life', ward:'ward', speed:'stride',
+                  range:'reach', sweep:'sweep', fireDelay:'swing time',
+                  magnet:'draw', regen:'mending' };
+  const out = [];
+  for (const k in totals) {
+    const v = totals[k];
+    if (Math.abs(v) < 0.005) continue;
+    const pct = k.endsWith('%');
+    const stat = pct ? k.slice(0, -1) : k;
+    // less swing time is better, so its sign reads backwards
+    const good = stat === 'fireDelay' ? v < 0 : v > 0;
+    const txt = pct ? (v > 0 ? '+' : '') + Math.round(v * 100) + '%'
+                    : (v > 0 ? '+' : '') + (Math.abs(v) < 1 ? v.toFixed(1) : Math.round(v));
+    out.push({ txt, name: NAMES[stat] || stat, good });
+  }
+  return out;
+}
+
+function renderDetail() {
+  const it = selectedItem();
+  if (!it) {
+    el.gearDetail.innerHTML =
+      '<div class="db">Tap something worn, or something in the bag.</div>';
+    return;
+  }
+  const r = rarityOf(it);
+  const worn = player.gear[it.slot];
+  const cmp = gearSel.from === 'bag' ? compareLines(it) : [];
+  el.gearDetail.innerHTML =
+    '<div class="dt" style="color:' + r.colour + '">' + it.name + '</div>' +
+    '<div class="db">' + r.name + ' · ' + SLOT_BY_ID[it.slot].name + '</div>' +
+    '<ul>' + it.affixes.map(a => '<li>' + affixText(a) + '</li>').join('') + '</ul>' +
+    (cmp.length
+      ? '<div class="cmp">against ' + (worn ? worn.name : 'an empty slot') + ': ' +
+        cmp.map(c => '<span class="' + (c.good ? 'up' : 'dn') + '">' +
+                     c.txt + ' ' + c.name + '</span>').join(', ') + '</div>'
+      : '') +
+    '<div class="gear-acts">' +
+      (gearSel.from === 'bag'
+        ? '<button class="prime" id="gaEquip">Equip</button>' +
+          '<button id="gaDrop">Discard</button>'
+        : '<button id="gaOff">Take off</button>') +
+    '</div>';
+  const eq = document.getElementById('gaEquip');
+  if (eq) eq.onclick = equipSelected;
+  const dp = document.getElementById('gaDrop');
+  if (dp) dp.onclick = discardSelected;
+  const of = document.getElementById('gaOff');
+  if (of) of.onclick = unequipSelected;
+}
+
+function equipSelected() {
+  const it = selectedItem();
+  if (!it || gearSel.from !== 'bag') return;
+  const prev = player.gear[it.slot];
+  player.bag.splice(gearSel.index, 1);
+  player.gear[it.slot] = it;
+  if (prev) player.bag.push(prev);          // the old one goes back in the bag
+  recomputeStats();
+  gearSel = null;
+  renderGear();
+  syncBagBadge();
+}
+
+function unequipSelected() {
+  const it = selectedItem();
+  if (!it || gearSel.from !== 'worn') return;
+  if (player.bag.length >= BAG_MAX) return; // nowhere to put it
+  player.gear[gearSel.slot] = null;
+  player.bag.push(it);
+  recomputeStats();
+  gearSel = null;
+  renderGear();
+  syncBagBadge();
+}
+
+function discardSelected() {
+  if (!gearSel || gearSel.from !== 'bag') return;
+  player.bag.splice(gearSel.index, 1);
+  gearSel = null;
+  renderGear();
+  syncBagBadge();
+}
+
+function syncBagBadge() {
+  if (!player) return;
+  el.bagBadge.textContent = player.bag.length;
+  el.bagBtn.classList.toggle('hot', player.bag.length > 0);
 }
 
 /* --- pause -------------------------------------------------------------- */
@@ -3673,7 +4775,13 @@ canvas.addEventListener('contextmenu', e => e.preventDefault());
 window.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
   if (k === 'escape' || k === 'p') {
-    if (state === 'play') pauseRun(); else if (state === 'pause') resumeRun();
+    if (state === 'gear') closeGear();
+    else if (state === 'play') pauseRun();
+    else if (state === 'pause') resumeRun();
+    return;
+  }
+  if (k === 'i' || k === 'b') {
+    if (state === 'gear') closeGear(); else openGear();
     return;
   }
   if (k === ' ' || k === 'enter') {
@@ -3711,6 +4819,8 @@ window.addEventListener('orientationchange', () => setTimeout(resize, 120));
 })();
 $('againBtn').addEventListener('click', () => startRun(run && run.hero));
 $('pauseBtn').addEventListener('click', pauseRun);
+el.bagBtn.addEventListener('click', openGear);
+el.gearClose.addEventListener('click', closeGear);
 $('resumeBtn').addEventListener('click', resumeRun);
 $('abortBtn').addEventListener('click', () => {
   state = 'menu';
@@ -3748,7 +4858,7 @@ function frame(now) {
   if (state === 'play') {
     update(dt);
     syncHud();
-  } else if (state === 'levelup' || state === 'pause') {
+  } else if (state === 'levelup' || state === 'pause' || state === 'gear') {
     updateCamera(dt);
   }
   draw(t);
@@ -3761,7 +4871,7 @@ showScreen('start');
 requestAnimationFrame(frame);
 </script>
 <script>
-/* generated 2026-08-24T10:15:51Z by tools/build-debug.js — do not edit */
+/* generated 2026-08-24T11:10:56Z by tools/build-debug.js — do not edit */
 /* =============================================================================
    THE RIVENMARK — debug overlay
    Injected into debug.html by tools/build-debug.js. Never shipped in the
@@ -3978,7 +5088,15 @@ requestAnimationFrame(frame);
     ['+50 horde', () => { for (let i = 0; i < 50; i++) _spawn(run.time); }],
     ['rank up', () => { run.pendingLevels++; }],
     ['heal', () => { player.hp = player.maxHp; }],
-    ['remake map', () => resetRun(run.hero)]
+    ['remake map', () => resetRun(run.hero)],
+    ['drop item', () => { if (player.bag.length < BAG_MAX) {
+        const it = rollItem(Math.random());
+        player.bag.push(it); toast(it.name, rarityOf(it).colour); syncBagBadge(); } }],
+    ['best kit', () => { for (const sl of SLOTS) player.gear[sl.id] = rollItem(1, sl.id);
+        recomputeStats(); }],
+    ['strip kit', () => { for (const sl of SLOTS) player.gear[sl.id] = null;
+        player.bag.length = 0; recomputeStats(); syncBagBadge(); }],
+    ['open bag', () => openGear()]
   ]);
 
   // Levels own their region pool, so the region buttons are rebuilt whenever
@@ -4037,6 +5155,8 @@ requestAnimationFrame(frame);
       row('props / lamps', props.length + ' / ' + lamps.length) +
       row('walls / edges', walls.length + ' / ' + edges.length) +
       row('slag', (run ? run.tech : 0) + '/' + LEVEL.quota) +
+      row('gear worn', (player ? SLOTS.filter(sl => player.gear[sl.id]).length : 0) + '/8') +
+      row('bag / found', (player ? player.bag.length : 0) + ' / ' + (run ? run.found : 0)) +
       row('boss', run && run.boss ? Math.round(100 * run.boss.hp / run.boss.maxHp) + '%'
                                   : (run && run.bossDown ? 'down' : '-')) +
       row('seed', seeded ? seed : 'off');

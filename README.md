@@ -68,6 +68,39 @@ the only thing that made them expensive at all.
 The **Hollow-Thralls** — people who surrendered their will, every one carrying
 the asymmetrical void-brand that binds them to the silent hive-mind.
 
+### Packs, not waves
+
+The delve is **populated at generation time and cleared by walking into it**.
+Nothing is pushed at the player on a timer; the only bodies that arrive mid-run
+are the ones the Deceiver calls. A cleared room stays cleared.
+
+`placePacks` scatters ~20 pack sites across the reachable floor, kept `PACK_APART`
+(250) from each other and `PACK_SAFE` (430) from the spawn pocket — enforced on
+each **body**, not on the site, since members scatter off-site and one drifting
+back inside its own aggro radius would have the delve waking on you at spawn.
+Packs lean on heavier archetypes the deeper they sit, and placement runs until
+`PACK_SLAG` (132) is on the map against a quota of 100.
+
+Difficulty comes from **depth, not the clock**. Waves used to ramp enemy health
+with run time; a placed dungeon ramps it with distance from the spawn pocket
+(`PACK_DEPTH_HP`).
+
+### Waking
+
+A body waits where the generator put it until one of three things happens: you
+come inside its notice, you hit it, or a neighbour that already woke passes the
+alarm along (`ALERT_R` 155, one `ALERT_DELAY` beat later, so a pack rouses in
+sequence rather than snapping awake together).
+
+Notice is **path distance, not line of sight** — `noticeDist` reads the BFS flow
+field that already exists for pathing, so a pack one wall away stays deaf. Cheap
+(one array read) and it stops the whole map hearing you through rock. Measured on
+a live map: a body 132 units away by line, 680 by path, stays asleep.
+
+Dormant bodies skip the seek and the separation pass entirely, which is most of
+the per-enemy cost — so a delve holding ~110 placed bodies runs at the cost of
+the handful actually awake.
+
 - *Hollow-Thrall* — stooped, long-armed, dragging itself forward
 - *Eclipse-Marked* — fast, hooded, fraying into tatters
 - *Ghor-Breaker* — planted and over-armoured, held together by burning seams
@@ -94,6 +127,48 @@ is the seam; a level naming no `boss` simply opens its gate on quota.
 Only **The Test Delve** exists so far, and it is labelled as such on the opening
 banner. It deliberately rolls all five regions, because its job is to exercise
 every environment the generator can build.
+
+## Rooms
+
+A braided maze is uniform corridor and near-uniform chamber — nothing you would
+recognise on the way back. `carveRooms` stamps 3–5 rooms per delve with a shape
+you can name, each recording itself so the stain layer and the scenery pass can
+dress it to match:
+
+| Room | Shape | Reads as |
+|---|---|---|
+| Pillared hall | rectangle, pillars on a 3-cell grid | built rather than eroded; cover to break sightlines in a fight |
+| Cistern | disc | standing water, dark pool with a dried-back rim, moss and grates |
+| Barracks | rectangle, stub partition walls off one side | bunk rows; crates and barrels |
+| Collapse | rectangle, scattered loose blocks | a caved-in ceiling; pale dust thrown out from the fall |
+
+They are carved **after** the widening and despeckle passes — despeckle exists to
+remove lone one-cell blocks, which is exactly what a hall's pillars are — and each
+one cuts a corridor back toward the gate so no room generates stranded. Verified
+over 12 delves: 0 unreachable.
+
+## The floor
+
+Tiled ground alone is noise at one density everywhere, so nothing draws the eye.
+The **stain layer** is a single world-scale canvas baked once per delve at quarter
+resolution, carrying everything that depends on the *layout* rather than the tile
+grid: paths worn along the corridors (a cell walled on two or more sides is a
+route, open chamber floor is not), damp banked at the foot of walls, broad dry and
+damp zones, hard wear at the spawn pocket and the gate, and each room's signature
+staining.
+
+It costs one `drawImage` a frame, drawn with **`imageSmoothingEnabled = false`**.
+Bilinear upscaling it to full screen measured **3.8 ms a frame** on the software
+rasteriser — it is a whole-viewport resample — against roughly nothing for point
+sampling, and the layer is nothing but soft gradients, so the two look the same.
+
+## The walls
+
+Merged wall rects are all axis-aligned, so the silhouette where rock meets floor
+was an unbroken straight line and the map read as a tileset. A **rubble skirt** of
+chipped, faceted stones is blitted along the foot of every third course, spilling
+outward onto the floor. Which course gets rubble is chosen by **position hash, not
+`Math.random`** — a per-frame roll makes the stones crawl.
 
 ## The sundered geography
 
@@ -275,6 +350,45 @@ canvas transform.
 - The stick locks to one `pointerId`. A second finger cannot steal or disturb
   movement, and UI lives in the DOM layer above the canvas.
 
+### Gear
+
+Power comes from two places that stack: **boons**, chosen on rank-up and fixed
+for the run, and **gear**, found on the floor and swapped freely.
+
+Eight slots — blade, off-hand, mail, girdle, boots, amulet, two rings. No helm:
+the compendium is explicit that the Clear-Sighted fight unhelmeted, so there is
+nowhere to put one.
+
+Five rarities (Worn, Tempered, Spirit-wrought, Hallowed, Riven) carrying one to
+five affixes. Both the rarity roll and the affix rolls scale with how deep the
+body was standing when it died, so pushing further in is what pays — a deep drop
+is *better*, not merely more likely. Affixes are restricted per slot, so a blade
+rolls like a blade.
+
+**Nothing accumulates on the player.** Gear comes off as easily as it goes on, so
+every derived stat is rebuilt from the hero's base by `recomputeStats`: base,
+then boons re-applied from their tally, then gear — additive terms first, then
+multiplicative, so the order two items were equipped in cannot change the result.
+Current life is preserved and only clamped, or swapping a +life item would be a
+free heal. This is the invariant most likely to rot, so it is the one the harness
+leans on hardest: removing all gear must return *exactly* to base, equip order
+must not matter, and recompute must be idempotent.
+
+`ward` is the one new stat — flat damage reduction, capped at 75% so a full kit
+of it can never reach immunity.
+
+### The bag
+
+The bag button pauses the delve and opens a full screen: worn slots and derived
+stats down one side, a 20-cell bag on the other. There is **no drag-and-drop** —
+on a phone that is a fight with the touch target. Selection is a tap, equipping
+is a second tap on a button big enough to hit, and anything selected in the bag
+is shown measured **per stat** against whatever is in its slot already, because
+"is this better" is the only question the screen exists to answer.
+
+A full bag leaves the item on the floor rather than binning it silently, and says
+so once rather than on every frame it is touched.
+
 ### Upgrades & progression
 
 Ten boons, most with stack caps, offered three at a time. Levels queue if
@@ -320,17 +434,43 @@ within ~2 s of sustained load and hold without flapping.
 
 ---
 
+## Scenery
+
+Props arrive in **knots**, not scatter. An independent roll per cell produces an
+even sprinkle however it is weighted, because that is what it is — so the per-cell
+pass is now thin background texture only (cracks, moss, loose rubble), and the
+loud objects come from `scatterKnots`, which seeds clusters where debris would
+actually collect: jammed into dead ends (a cell walled on three sides), banked
+into corners, and dressed through each room to match what it was. Roughly 590
+props a delve, and the middle of a chamber stays clear so a fight reads.
+
 ## Balance
 
 Tuned against a scripted bot playing full runs headless — flees crowding,
 drifts toward loot, beelines the portal once it powers up. It is a deliberately
 mediocre player, so its results are a floor, not a ceiling.
 
-Current curve, over 80 bot runs per hero: quota reached around **85 s**, median
-run **105–115 s**, bot extracts **25/80 as Isaac (31%)** and **20/80 as Zayd
-(25%)**. Zayd running harder is intended — he is the 92-life glass cannon. Spawn
-rate more than doubles while the gate is being channelled; the last stand is the
-intended climax.
+Current curve, over 40 bot runs per hero: median run **70–85 s**, 65–79 kills,
+6–7 items found and 4–5 slots filled, bot extracts **12/40 as Isaac (30%)** and
+**14/40 as Zayd (35%)**. The bot wears what it finds — a greedy per-slot score —
+because a measurement that ignores gear says nothing about a game where gear is
+half the power.
+
+Gear is a large power budget: switching it from inert to live moved the bot from
+43% to 60%. That was met by **raising the opposition** (`LEVEL.threat`, 1.45)
+rather than by nerfing the loot, which would defeat the point of the loot.
+Affix magnitude turned out to be a weak lever — 1.0, 0.6 and 0.4 all landed
+within noise of each other — so it stays at 1.0 and threat does the work.
+
+**Quota is the difficulty lever, not enemy health.** The depth health ramp scales
+the fragile hero far harder than the tank — measured twice, before and after the
+rooms went in: at 0.55, Zayd 3/30 against Isaac 14/40; at 0.65, Zayd 7/40 against
+Isaac 15/40. Quota moves both together, so the ramp stays at 0.30 and the quota
+does the work. It sits at 125 against the ~185 slag the generator places, about a
+two-thirds clear.
+
+Adding rooms made the delve **easier** (Isaac 35% → 53%) — open ground and pillar
+cover both favour the player — which is why the quota went up with them.
 
 Sixteen runs cannot tell 31% from 56% apart on this bot — the same tuning
 returned 5/16 and then 9/16 — so tuning decisions here are made on 40-run
