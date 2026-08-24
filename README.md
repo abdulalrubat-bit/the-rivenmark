@@ -166,9 +166,18 @@ sampling, and the layer is nothing but soft gradients, so the two look the same.
 
 Merged wall rects are all axis-aligned, so the silhouette where rock meets floor
 was an unbroken straight line and the map read as a tileset. A **rubble skirt** of
-chipped, faceted stones is blitted along the foot of every third course, spilling
+chipped, faceted stones is blitted along the foot of every fourth course, spilling
 outward onto the floor. Which course gets rubble is chosen by **position hash, not
-`Math.random`** — a per-frame roll makes the stones crawl.
+`Math.random`** — a per-frame roll makes the stones crawl. Every third measured
+2.9 ms a frame in a busy corridor, which is a lot for a silhouette detail; a
+quarter of the faces breaks the line just as well.
+
+Faces are built per direction (`buildEdges` merges collinear runs), so where a
+horizontal run meets a vertical one, **neither covers the corner square** and the
+near-black wall interior showed through as a notch — which reads as a hole in the
+masonry rather than as a join. Each course run is therefore laid past both of its
+ends. The overhang lands on the perpendicular face's own dressed band and never on
+open floor, because a wall that ends has a face there too.
 
 ## The sundered geography
 
@@ -377,6 +386,22 @@ must not matter, and recompute must be idempotent.
 `ward` is the one new stat — flat damage reduction, capped at 75% so a full kit
 of it can never reach immunity.
 
+### Line of sight
+
+Rock stops a crescent, so a body with a wall in the way is **not a target at all**
+— the blade holds rather than swinging at stone. `clearShot` samples the line at
+14-unit steps, which nothing thinner than half a cell can hide between, and runs
+only for bodies already inside reach.
+
+An earlier version kept blocked bodies as a fallback "once nothing clear is left",
+which is precisely the case where the player is behind cover and every swing goes
+into rock for nothing. Holding costs nothing: `fireTimer` is only consumed on a
+swing that happens, so the blade answers the instant a target steps clear.
+
+Measured over 1,566 vantage points across six delves, **8%** had a body in reach
+but none with a clear line — low enough that the blade rarely goes quiet, and
+those are exactly the moments where a swing would have been wasted anyway.
+
 ### The bag
 
 The bag button pauses the delve and opens a full screen: worn slots and derived
@@ -450,9 +475,20 @@ Tuned against a scripted bot playing full runs headless — flees crowding,
 drifts toward loot, beelines the portal once it powers up. It is a deliberately
 mediocre player, so its results are a floor, not a ceiling.
 
-Current curve, over 40 bot runs per hero: median run **70–85 s**, 65–79 kills,
-6–7 items found and 4–5 slots filled, bot extracts **12/40 as Isaac (30%)** and
-**14/40 as Zayd (35%)**. The bot wears what it finds — a greedy per-slot score —
+Current curve, over 40 bot runs per hero: median run **64–90 s**, 53–91 kills,
+4–10 items found and 4–6 slots filled, bot extracts **17/40 as Isaac (43%)** and
+**11/40 as Zayd (28%)**.
+
+Enforcing line of sight made the game harder, as it should: you can no longer
+damage anything through a wall. It cost roughly 2 points for Isaac and 15 for
+Zayd, along with a third of the kills and half the loot found, so `LEVEL.threat`
+came down from 1.45 to 1.42 to meet it.
+
+**Threat responds steeply.** 1.45 put the bot at 28%/20% and 1.28 at 68%/50% — a
+40-point swing for a 12% change — because gear snowballs: survive the first packs,
+get kitted, and the rest follows. Anything in 1.38–1.45 is "roughly a third", and
+40-run samples carry about ±7 points of noise, so chasing a tighter number than
+that would be measuring the sampler rather than the game. The bot wears what it finds — a greedy per-slot score —
 because a measurement that ignores gear says nothing about a game where gear is
 half the power.
 
@@ -579,7 +615,7 @@ The debug build is verified the same way: panel visibility across menus, every
 toggle and action, both world overlays, the region jumps, and seed reproducibility
 (same seed → identical grid/wall/prop fingerprint; different seed → different).
 
-Combat has its own harness (16 checks) covering the crescent's geometry and the
+Combat has its own harness (21 checks) covering the crescent's geometry and the
 boons that reshape it: that a swing releases one, that it cuts a rank of three
 abreast, that it spares what is behind and to the flank, that each body is cut
 exactly once rather than ground down frame after frame, that it dies at the

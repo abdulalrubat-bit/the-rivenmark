@@ -492,7 +492,11 @@ const LEVELS = [
     // What the delve hits back with. Gear is a large power budget -- a full
     // kit took the bot from 43% to 60% -- so the opposition is scaled to meet
     // it here rather than by nerfing the loot, which is the point of the loot.
-    threat:1.45 }
+    // Threat responds steeply -- 1.45 put the bot at 28%/20% and 1.28 at
+    // 68%/50%, a 40-point swing for a 12% change -- because gear snowballs:
+    // survive the first packs, get kitted, and the rest follows. 1.42 sits in
+    // the middle of that cliff.
+    threat:1.42 }
 ];
 const LEVEL_BY_ID = {};
 for (const L of LEVELS) {
@@ -1686,26 +1690,24 @@ function fire() {
   // the avatar first. Mirages stay targetable -- being decoys is their whole
   // purpose -- except for Isaac, who is immune to the illusion and ignores
   // them outright.
-  // Rock stops a crescent, so a target has to be reachable as well as near.
-  // With the delve populated in advance there is nearly always a dormant pack
-  // through a wall somewhere inside reach, and nearest-target alone spent every
-  // swing on stone. Blocked bodies are still eligible, but only once nothing
-  // clear is left.
+  // Rock stops a crescent, so a target must be reachable as well as near, and
+  // a body with a wall in the way is not a target at all -- the blade holds
+  // rather than swinging at stone. An earlier version kept blocked bodies as a
+  // fallback "once nothing clear is left", which is exactly the case where the
+  // player is behind cover and every swing goes into rock for nothing.
   const blind = player.hero === 'isaac';
   let best = null, bestD = R * R, avatar = null, avatarD = R * R;
-  let walled = null, walledD = R * R;
   for (let i = 0; i < _near.length; i++) {
     const e = _near[i];
     if (blind && e.kind === 'mirage') continue;
+    if (!clearShot(player.x, player.y, e.x, e.y)) continue;
     const d = dist2(player.x, player.y, e.x, e.y);
+    // The avatar comes first among what can actually be hit -- nearest-target
+    // alone cannot fight a boss, because his escort soaks every crescent.
     if (e.kind === 'deceiver') { if (d < avatarD) { avatarD = d; avatar = e; } }
-    if (!clearShot(player.x, player.y, e.x, e.y)) {
-      if (d < walledD) { walledD = d; walled = e; }
-      continue;
-    }
     if (d < bestD) { bestD = d; best = e; }
   }
-  best = avatar || best || walled;
+  best = avatar || best;
   if (!best) return false;
 
   const base = Math.atan2(best.y - player.y, best.x - player.x);
@@ -3506,7 +3508,14 @@ function drawWalls(x0, y0, x1, y1) {
     const len = Math.hypot(e.x2 - e.x1, e.y2 - e.y1);
     const ux = (e.x2 - e.x1) / (len || 1), uy = (e.y2 - e.y1) / (len || 1);
     const q = ((Math.round((Math.atan2(e.ny, e.nx) + Math.PI / 2) / (Math.PI / 2)) % 4) + 4) % 4;
-    const n = Math.max(1, Math.ceil(len / L));
+    // Faces are built per direction, so where a horizontal run meets a vertical
+    // one neither covers the corner square and the near-black wall interior
+    // shows through as a notch -- which reads as a hole in the masonry rather
+    // than as a join. Running each course past both ends closes it: the
+    // overhang lands on the perpendicular face's own dressed band, never on
+    // open floor, because a wall that ends has a face there too.
+    const EXT = 12;
+    const n = Math.max(1, Math.ceil((len + EXT * 2) / L));
     const start = (len - n * L) / 2;
     for (let k = 0; k < n; k++) {
       const d = start + L * (k + 0.5);
