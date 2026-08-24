@@ -308,19 +308,16 @@ const ENEMY_TYPES = {
 
 // One place for the look. Everything on the canvas pulls from here.
 const PAL = {
-  arcane:'#5fd0ff', arcaneDim:'#2f8fae', teal:'#4fd8c0',
-  ember:'#ff5f28', gold:'#ffc24d', blood:'#c2352a',
-  wretch:'#9dbb5a', shade:'#b07cff', revenant:'#e0552a',
+  arcane:'#8fb9d6', arcaneDim:'#4a6a80', teal:'#6f9a8c',
+  ember:'#e5761f', gold:'#d9a441', blood:'#8e2b20',
+  wretch:'#7d9147', shade:'#8a7bb0', revenant:'#b8501f',
 
   // Lit flagstone underfoot, unlit rock above: the contrast the whole scene
   // hangs on. Walls are near-black inside and carry all their detail on the
   // bevelled edge, the way a raised ledge reads from overhead.
-  floor:'#232b33', floorLine:'rgba(150,180,190,.075)',
-  floorLineBold:'rgba(160,195,205,.13)',
-  stoneTop:'#1d292c', stoneMid:'#111a1d', stoneLow:'#070b0d',
-  bevelHi:'rgba(150,224,203,.85)', bevelMid:'rgba(86,158,144,.6)',
-  bevelLo:'rgba(4,8,9,.85)', rimSpill:'rgba(90,200,180,.07)',
-  bone:'#d8cdb0', coin:'#e0b356'
+  floor:'#2b2118',
+  stoneTop:'#161a1c', stoneMid:'#0c0f11', stoneLow:'#050708',
+  bone:'#c4b795', coin:'#c99a3e'
 };
 
 const UPGRADES = [
@@ -742,7 +739,8 @@ function buildScenery(spawn, portal) {
     const roll = Math.random();
     const kind = roll < 0.24 ? 'torch' : roll < 0.52 ? 'chain' :
                  roll < 0.80 ? 'banner' : 'sconce';
-    props.push({ x: mx, y: my, rot, kind });
+    const q = ((Math.round(rot / (Math.PI / 2)) % 4) + 4) % 4;
+    props.push({ x: mx, y: my, q, kind });
     // Torches are the light. Everything else is just furniture.
     if (kind === 'torch') {
       lamps.push({ x: mx + e.nx * 12, y: my + e.ny * 12, color: PAL.ember });
@@ -757,7 +755,7 @@ function buildScenery(spawn, portal) {
   // freely), and the loud ones cluster against the rock, where equipment and
   // spillage would actually accumulate. Open floor gets only quiet marks, so
   // the middle of a chamber stays readable during a fight.
-  const snap = () => (Math.random() * 4 | 0) * (Math.PI / 2);
+
   for (let i = 0; i < openCells.length; i++) {
     const c = openCells[i];
     if (dist2(c.x, c.y, spawn.x, spawn.y) < 110 * 110) continue;
@@ -767,7 +765,7 @@ function buildScenery(spawn, portal) {
     const byRock = cellAt(cx - 1, cy) === SOLID || cellAt(cx + 1, cy) === SOLID ||
                    cellAt(cx, cy - 1) === SOLID || cellAt(cx, cy + 1) === SOLID;
     const roll = Math.random();
-    let kind = null, rot = 0;
+    let kind = null;
     // The place should look looted and lived-in. Heavier against the rock
     // where things pile up, lighter in the open so a fight stays readable.
     if (byRock) {
@@ -776,15 +774,14 @@ function buildScenery(spawn, portal) {
              roll < 0.28 ? 'crate'   : roll < 0.33 ? 'grate'  : roll < 0.39 ? 'urn' :
              roll < 0.45 ? 'coins'   : roll < 0.50 ? 'sword'  : roll < 0.54 ? 'shield' :
              roll < 0.58 ? 'hornskull' : 'moss';
-      rot = (kind === 'crate' || kind === 'grate') ? snap() : Math.random() * TAU;
     } else {
       if (roll > 0.34) continue;
       kind = roll < 0.07 ? 'crack' : roll < 0.12 ? 'moss'  : roll < 0.17 ? 'bones' :
              roll < 0.22 ? 'coins' : roll < 0.26 ? 'sword' : roll < 0.30 ? 'scroll' : 'rubble';
-      rot = (kind === 'crack') ? snap() : Math.random() * TAU;
     }
     props.push({ x: c.x + rand(-C * 0.22, C * 0.22),
-                 y: c.y + rand(-C * 0.22, C * 0.22), rot, kind });
+                 y: c.y + rand(-C * 0.22, C * 0.22),
+                 q: (Math.random() * 4) | 0, kind });
   }
 }
 
@@ -1053,7 +1050,6 @@ function hurtPlayer(e) {
   hitFlashUI();
   burst(player.x + (e.x - player.x) * 0.5, player.y + (e.y - player.y) * 0.5,
         PAL.blood, 10, 180);
-  ring(player.x, player.y, PAL.blood, player.r, player.r * 3.4, 0.3);
   if (player.hp <= 0) { player.hp = 0; endRun(false); }
 }
 
@@ -1065,7 +1061,6 @@ function damageEnemy(e, dmg) {
     run.kills++;
     dropLoot(e);
     burst(e.x, e.y, e.color, e.r > 18 ? 14 : 7, 190);
-    ring(e.x, e.y, e.color, e.r * 0.5, e.r * (e.r > 18 ? 3.4 : 2.3), 0.26);
     if (e.r > 18) shake(3);
   } else {
     burst(e.x, e.y, '#e6d8bc', 2, 90);
@@ -1315,7 +1310,6 @@ function updateLoot(dt) {
     if (d < player.r + 10) {
       collectTech(l.value);
       burst(l.x, l.y, PAL.gold, 5, 120);
-      ring(l.x, l.y, PAL.gold, 3, 22, 0.22);
       continue;
     }
     loot[w++] = l;
@@ -1547,17 +1541,6 @@ function enemyPath(g, kind, r) {
 
 function forgeEnemy(kind, r, color, flash) {
   return forge(r * 2.7, g => {
-    if (flash) {
-      enemyPath(g, kind, r);
-      g.fillStyle = tint(color, 2.1, 0.92);
-      g.fill();
-      g.strokeStyle = 'rgba(0,0,0,.55)'; g.lineWidth = 2.4;
-      enemyPath(g, kind, r); g.stroke();
-      g.strokeStyle = 'rgba(255,246,232,.95)'; g.lineWidth = 1.4;
-      enemyPath(g, kind, r); g.stroke();
-      return;
-    }
-
     if (kind === 'wretch') {
       paintedBody(g, gg => enemyPath(gg, kind, r), r,
                   '#4d5340', '#252a1d', 'rgba(190,214,140,.5)');
@@ -1608,6 +1591,15 @@ function forgeEnemy(kind, r, color, flash) {
       g.beginPath(); g.arc(r * 0.5, -r * 0.2, r * 0.1, 0, TAU); g.fill();
       g.beginPath(); g.arc(r * 0.5, r * 0.2, r * 0.1, 0, TAU); g.fill();
       g.shadowBlur = 0;
+    }
+
+    if (flash) {
+      enemyPath(g, kind, r);
+      g.fillStyle = 'rgba(255,238,214,.42)';
+      g.fill();
+      g.strokeStyle = 'rgba(255,250,240,.9)';
+      g.lineWidth = 1.8;
+      enemyPath(g, kind, r); g.stroke();
     }
   });
 }
@@ -1759,6 +1751,8 @@ function forgeAll() {
   SPR.loot = forgeLoot(false);
   SPR.lootBig = forgeLoot(true);
   forgeProps();
+  forgeGround();
+  forgeWallCourses();
   vignette = forgeVignette();
 }
 
@@ -1780,50 +1774,202 @@ function resize() {
 
 /* --- world ------------------------------------------------------------- */
 
-function drawFloor(x0, y0, x1, y1) {
-  ctx.fillStyle = PAL.floor;
-  ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+/* --- ground and stonework ------------------------------------------------
+   No lines, no lattice, no glowing rims. The ground is a set of textured
+   tiles baked once at boot -- packed earth, loose grit, worn flagstone -- and
+   blitted across the view. Walls are dark rock with courses of cut masonry
+   laid along every face. All of it is texture, not geometry, so none of it
+   costs anything per frame beyond the blits.
+   ---------------------------------------------------------------------- */
 
-  const F = 50, B = 100;
-  ctx.lineWidth = 1;
-  ctx.strokeStyle = PAL.floorLine;
-  ctx.beginPath();
-  for (let x = Math.ceil(x0 / F) * F; x < x1; x += F) { ctx.moveTo(x, y0); ctx.lineTo(x, y1); }
-  for (let y = Math.ceil(y0 / F) * F; y < y1; y += F) { ctx.moveTo(x0, y); ctx.lineTo(x1, y); }
-  ctx.stroke();
+// Non-square sprite. Same 1:1 rule as forge(): the drawn size lands exactly
+// on whole source pixels.
+function forgeRect(w, h, paint) {
+  const pw = Math.ceil(w * SS), ph = Math.ceil(h * SS);
+  const c = newCanvas(pw, ph);
+  const g = c.getContext('2d');
+  g.translate(pw / 2, ph / 2);
+  g.scale(SS, SS);
+  paint(g);
+  c.spanW = pw / SS;
+  c.spanH = ph / SS;
+  return c;
+}
 
-  ctx.strokeStyle = PAL.floorLineBold;
-  ctx.lineWidth = 1.8;
-  ctx.beginPath();
-  for (let x = Math.ceil(x0 / B) * B; x < x1; x += B) { ctx.moveTo(x, y0); ctx.lineTo(x, y1); }
-  for (let y = Math.ceil(y0 / B) * B; y < y1; y += B) { ctx.moveTo(x0, y); ctx.lineTo(x1, y); }
-  ctx.stroke();
+function rotateSprite(src, q) {
+  if (!q) return src;
+  const sw = src.width, sh = src.height;
+  const swap = (q % 2) === 1;
+  const w = swap ? sh : sw, h = swap ? sw : sh;
+  const c = newCanvas(w, h);
+  const g = c.getContext('2d');
+  g.translate(w / 2, h / 2);
+  g.rotate(q * Math.PI / 2);
+  g.drawImage(src, -sw / 2, -sh / 2);
+  if (src.span !== undefined) c.span = src.span;
+  if (src.spanW !== undefined) {
+    c.spanW = swap ? src.spanH : src.spanW;
+    c.spanH = swap ? src.spanW : src.spanH;
+  }
+  return c;
+}
+
+function blitRect(spr, x, y, rot) {
+  ctx.save();
+  ctx.translate(x, y);
+  if (rot) ctx.rotate(rot);
+  ctx.drawImage(spr, -spr.spanW / 2, -spr.spanH / 2, spr.spanW, spr.spanH);
+  ctx.restore();
+}
+
+const GROUND_T = 200;              // world units per ground tile
+const GROUND_VARIANTS = 8;
+let groundTiles = [];
+
+function forgeGround() {
+  groundTiles = [];
+  for (let v = 0; v < GROUND_VARIANTS; v++) {
+    const px = Math.ceil(GROUND_T * SS);
+    const c = newCanvas(px, px);
+    const g = c.getContext('2d');
+    g.scale(SS, SS);
+    const T = GROUND_T;
+
+    // Packed earth base
+    g.fillStyle = '#3a2c1e';
+    g.fillRect(0, 0, T, T);
+
+    // Mottling: broad damp and dry patches
+    for (let i = 0; i < 340; i++) {
+      const x = Math.random() * T, y = Math.random() * T;
+      const r = 3 + Math.random() * 13;
+      const shade = Math.random();
+      g.fillStyle = shade < 0.42 ? 'rgba(26,18,11,.16)'
+                  : shade < 0.78 ? 'rgba(84,64,41,.13)'
+                                 : 'rgba(116,90,58,.10)';
+      g.beginPath();
+      g.ellipse(x, y, r, r * (0.55 + Math.random() * 0.5), Math.random() * TAU, 0, TAU);
+      g.fill();
+    }
+
+    // A worn flagstone path across most tiles: irregular slabs, gritty mortar
+    if (v % 4 > 1) {
+      const rows = 4, cols = 4, cell = T / cols;
+      const off = (v % 4 === 3) ? cell * 0.5 : 0;
+      for (let ry = 0; ry < rows; ry++) {
+        for (let cx2 = -1; cx2 < cols + 1; cx2++) {
+          if (v % 4 === 2 && ry !== 1 && ry !== 2) continue;  // a path, two slabs wide
+          if (v % 4 === 3 && (ry + cx2) % 3 === 0) continue;  // broken paving
+          const x = cx2 * cell + (ry % 2 ? off : 0) + rand(-3, 3);
+          const y = ry * cell + rand(-3, 3);
+          const w = cell - rand(5, 11), h = cell - rand(5, 11);
+          const tone = 56 + Math.random() * 26;
+          g.fillStyle = 'rgb(' + Math.round(tone * 1.05) + ',' +
+                                 Math.round(tone * 0.96) + ',' +
+                                 Math.round(tone * 0.84) + ')';
+          g.beginPath();
+          g.moveTo(x + rand(0, 3), y + rand(0, 3));
+          g.lineTo(x + w - rand(0, 3), y + rand(0, 3));
+          g.lineTo(x + w - rand(0, 3), y + h - rand(0, 3));
+          g.lineTo(x + rand(0, 3), y + h - rand(0, 3));
+          g.closePath();
+          g.fill();
+          // worn lip catching the light, dark seam below
+          g.strokeStyle = 'rgba(150,136,110,.18)';
+          g.lineWidth = 1.1;
+          g.beginPath(); g.moveTo(x + 2, y + 1.5); g.lineTo(x + w - 3, y + 1.5); g.stroke();
+          g.strokeStyle = 'rgba(10,7,5,.5)';
+          g.lineWidth = 1.4;
+          g.beginPath(); g.moveTo(x + 2, y + h - 1); g.lineTo(x + w - 3, y + h - 1); g.stroke();
+        }
+      }
+    }
+
+    // Grit and pebbles over everything
+    for (let i = 0; i < 260; i++) {
+      const x = Math.random() * T, y = Math.random() * T;
+      const r = 0.5 + Math.random() * 1.9;
+      g.fillStyle = Math.random() < 0.5 ? 'rgba(12,9,6,.5)' : 'rgba(122,106,80,.28)';
+      g.beginPath(); g.ellipse(x, y, r, r * 0.8, 0, 0, TAU); g.fill();
+    }
+    // A few larger stones half-buried
+    for (let i = 0; i < 10; i++) {
+      const x = Math.random() * T, y = Math.random() * T, r = 2.5 + Math.random() * 3.2;
+      g.fillStyle = 'rgba(74,64,48,.5)';
+      g.beginPath(); g.ellipse(x, y, r, r * 0.72, Math.random() * TAU, 0, TAU); g.fill();
+      g.fillStyle = 'rgba(8,6,4,.4)';
+      g.beginPath(); g.ellipse(x, y + r * 0.5, r * 0.9, r * 0.4, 0, 0, TAU); g.fill();
+    }
+    c.tile = true;
+    groundTiles.push(c);
+  }
+}
+
+// Courses of cut stone laid along a wall face. Authored running along +x with
+// the dressed, lit face toward -y, which is rotated to the wall's normal.
+let wallCourses = [];
+function forgeWallCourses() {
+  wallCourses = [];
+  for (let v = 0; v < 3; v++) {
+    const base = forgeRect(100, 30, g => {
+      g.translate(-50, -15);
+      // shadow the course throws onto the ground
+      g.fillStyle = 'rgba(6,4,3,.5)';
+      g.fillRect(0, -3, 100, 5);
+      let x = 0;
+      while (x < 100) {
+        const w = 20 + Math.random() * 16;
+        const h = 15 + Math.random() * 6;
+        const tone = 62 + Math.random() * 26;
+        const grd = g.createLinearGradient(0, 0, 0, h);
+        grd.addColorStop(0, 'rgb(' + Math.round(tone * 1.62) + ',' +
+                                     Math.round(tone * 1.55) + ',' +
+                                     Math.round(tone * 1.38) + ')');
+        grd.addColorStop(1, 'rgb(' + Math.round(tone * 0.55) + ',' +
+                                     Math.round(tone * 0.52) + ',' +
+                                     Math.round(tone * 0.46) + ')');
+        g.fillStyle = grd;
+        g.fillRect(x + 1, 1, w - 2, h - 1);
+        // dressed top edge and mortar joint
+        g.strokeStyle = 'rgba(176,162,134,.3)';
+        g.lineWidth = 1.2;
+        g.beginPath(); g.moveTo(x + 2, 1.6); g.lineTo(x + w - 3, 1.6); g.stroke();
+        g.strokeStyle = 'rgba(8,6,4,.75)';
+        g.lineWidth = 1.6;
+        g.beginPath(); g.moveTo(x + w - 1, 0); g.lineTo(x + w - 1, h); g.stroke();
+        // pitting
+        for (let i = 0; i < 4; i++) {
+          g.fillStyle = 'rgba(10,8,5,.22)';
+          g.beginPath();
+          g.ellipse(x + 4 + Math.random() * (w - 8), 3 + Math.random() * (h - 6),
+                    1 + Math.random() * 1.6, 1 + Math.random(), 0, 0, TAU);
+          g.fill();
+        }
+        x += w;
+      }
+      g.fillStyle = 'rgba(4,5,6,.7)';
+      g.fillRect(0, 15.5, 100, 14.5);
+    });
+    wallCourses.push([0, 1, 2, 3].map(q => rotateSprite(base, q)));
+  }
+}
+
+function drawGround(x0, y0, x1, y1) {
+  const T = GROUND_T;
+  const tx0 = Math.floor(x0 / T), tx1 = Math.floor(x1 / T);
+  const ty0 = Math.floor(y0 / T), ty1 = Math.floor(y1 / T);
+  for (let ty = ty0; ty <= ty1; ty++) {
+    for (let tx = tx0; tx <= tx1; tx++) {
+      const h = ((tx * 73856093) ^ (ty * 19349663)) >>> 0;
+      const tile = groundTiles[h % GROUND_VARIANTS];
+      if (!tile) continue;
+      ctx.drawImage(tile, tx * T, ty * T, T, T);
+    }
+  }
 }
 
 function drawWalls(x0, y0, x1, y1) {
-  const vis = [];
-  for (let i = 0; i < edges.length; i++) {
-    const e = edges[i];
-    if (e.x1 > x1 || e.y1 > y1 || e.x2 < x0 || e.y2 < y0) continue;
-    vis.push(e);
-  }
-
-  // 1. Shadow the ledge casts onto the flagstones. Drawn before the mass so
-  //    the rock covers its inward half.
-  if (!lowFx) {
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = PAL.bevelLo;
-    ctx.lineWidth = 13;
-    ctx.beginPath();
-    for (let i = 0; i < vis.length; i++) {
-      const e = vis[i];
-      ctx.moveTo(e.x1 + e.nx * 5, e.y1 + e.ny * 5);
-      ctx.lineTo(e.x2 + e.nx * 5, e.y2 + e.ny * 5);
-    }
-    ctx.stroke();
-  }
-
-  // 2. The mass itself: near-black, so all the detail lives on the edge.
+  // Rock mass: unlit stone, darker than anything on the ground.
   for (let i = 0; i < walls.length; i++) {
     const w = walls[i];
     if (w.x > x1 || w.y > y1 || w.x + w.w < x0 || w.y + w.h < y0) continue;
@@ -1834,50 +1980,26 @@ function drawWalls(x0, y0, x1, y1) {
     ctx.restore();
   }
 
-  // 3. The carved bevel. Three lines -- a wide verdigris face, a bright crest,
-  //    and a shadow biting inward -- is what makes a flat box read as a raised
-  //    stone ledge seen from above.
-  ctx.lineCap = 'butt';
-  ctx.strokeStyle = PAL.bevelMid;
-  ctx.lineWidth = 5;
-  ctx.beginPath();
-  for (let i = 0; i < vis.length; i++) {
-    const e = vis[i];
-    ctx.moveTo(e.x1 - e.nx * 1.5, e.y1 - e.ny * 1.5);
-    ctx.lineTo(e.x2 - e.nx * 1.5, e.y2 - e.ny * 1.5);
-  }
-  ctx.stroke();
-
-  ctx.strokeStyle = PAL.bevelHi;
-  ctx.lineWidth = 1.6;
-  ctx.beginPath();
-  for (let i = 0; i < vis.length; i++) {
-    const e = vis[i];
-    ctx.moveTo(e.x1 + e.nx * 0.6, e.y1 + e.ny * 0.6);
-    ctx.lineTo(e.x2 + e.nx * 0.6, e.y2 + e.ny * 0.6);
-  }
-  ctx.stroke();
-
-  if (!lowFx) {
-    ctx.strokeStyle = 'rgba(4,8,9,.75)';
-    ctx.lineWidth = 3.5;
-    ctx.beginPath();
-    for (let i = 0; i < vis.length; i++) {
-      const e = vis[i];
-      ctx.moveTo(e.x1 - e.nx * 6, e.y1 - e.ny * 6);
-      ctx.lineTo(e.x2 - e.nx * 6, e.y2 - e.ny * 6);
+  // Masonry laid along every exposed face.
+  if (!wallCourses.length) return;
+  const L = wallCourses[0][0].spanW;
+  for (let i = 0; i < edges.length; i++) {
+    const e = edges[i];
+    if (e.x1 > x1 || e.y1 > y1 || e.x2 < x0 || e.y2 < y0) continue;
+    const len = Math.hypot(e.x2 - e.x1, e.y2 - e.y1);
+    const ux = (e.x2 - e.x1) / (len || 1), uy = (e.y2 - e.y1) / (len || 1);
+    const q = ((Math.round((Math.atan2(e.ny, e.nx) + Math.PI / 2) / (Math.PI / 2)) % 4) + 4) % 4;
+    const n = Math.max(1, Math.ceil(len / L));
+    const start = (len - n * L) / 2;
+    for (let k = 0; k < n; k++) {
+      const d = start + L * (k + 0.5);
+      const cx = e.x1 + ux * d - e.nx * 7;
+      const cy = e.y1 + uy * d - e.ny * 7;
+      const set = wallCourses[(((cx * 7 + cy * 13) | 0) % wallCourses.length +
+                               wallCourses.length) % wallCourses.length];
+      const spr = set[q];
+      ctx.drawImage(spr, cx - spr.spanW / 2, cy - spr.spanH / 2, spr.spanW, spr.spanH);
     }
-    ctx.stroke();
-
-    ctx.strokeStyle = PAL.rimSpill;
-    ctx.lineWidth = 11;
-    ctx.beginPath();
-    for (let i = 0; i < vis.length; i++) {
-      const e = vis[i];
-      ctx.moveTo(e.x1 + e.nx * 7, e.y1 + e.ny * 7);
-      ctx.lineTo(e.x2 + e.nx * 7, e.y2 + e.ny * 7);
-    }
-    ctx.stroke();
   }
 }
 
@@ -1887,8 +2009,9 @@ function wallGradient(h) {
   if (!g) {
     g = ctx.createLinearGradient(0, 0, 0, k || 1);
     g.addColorStop(0, PAL.stoneTop);
-    g.addColorStop(0.25, PAL.stoneMid);
-    g.addColorStop(1, PAL.stoneLow);
+    g.addColorStop(0.18, PAL.stoneMid);
+    g.addColorStop(0.6, PAL.stoneLow);
+    g.addColorStop(1, '#0a0c0d');
     wallGrads.set(k, g);
   }
   return g;
@@ -2036,7 +2159,7 @@ function forgeProps() {
     grd.addColorStop(0, '#4a5a5e'); grd.addColorStop(1, '#1d2628');
     g.fillStyle = grd;
     g.beginPath(); g.ellipse(0, 0, 10.5, 9.5, 0, 0, TAU); g.fill();
-    g.strokeStyle = 'rgba(150,224,203,.45)'; g.lineWidth = 1.6; g.stroke();
+    g.strokeStyle = 'rgba(186,170,138,.45)'; g.lineWidth = 1.6; g.stroke();
     g.fillStyle = 'rgba(190,206,212,.7)';
     g.beginPath(); g.arc(0, 0, 3, 0, TAU); g.fill();
     g.strokeStyle = 'rgba(30,40,42,.8)'; g.lineWidth = 1;
@@ -2108,6 +2231,11 @@ function forgeProps() {
       g.beginPath(); g.moveTo(i, -11); g.lineTo(i, 11); g.stroke();
     }
   });
+
+  for (const k in SPR) {
+    if (k.indexOf('p_') !== 0 || k.length > 2 && k.charAt(k.length - 2) === '_') continue;
+    for (let q = 0; q < 4; q++) SPR[k + '_' + q] = rotateSprite(SPR[k], q);
+  }
 }
 
 function drawProps(x0, y0, x1, y1) {
@@ -2115,8 +2243,8 @@ function drawProps(x0, y0, x1, y1) {
   for (let i = 0; i < props.length; i++) {
     const p = props[i];
     if (p.x < x0 || p.x > x1 || p.y < y0 || p.y > y1) continue;
-    const spr = SPR['p_' + p.kind];
-    if (spr) blit(spr, p.x, p.y, p.rot);
+    const spr = SPR['p_' + p.kind + '_' + p.q];
+    if (spr) blit(spr, p.x, p.y);
   }
 }
 
@@ -2232,18 +2360,6 @@ function drawPlayer(t) {
   const p = player;
   const blink = p.invuln > 0 && Math.floor(t * 20) % 2 === 0;
 
-  ctx.save();
-  ctx.setLineDash([4, 10]);
-  ctx.strokeStyle = 'rgba(150,200,255,.09)';
-  ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.arc(p.x, p.y, p.range, 0, TAU); ctx.stroke();
-  ctx.restore();
-
-  const ring = p.r + 8 + Math.sin(t * 2.6) * 1.6;
-  ctx.strokeStyle = p.hitFlash > 0 ? 'rgba(224,70,50,.85)' : 'rgba(120,170,225,.26)';
-  ctx.lineWidth = 1.4;
-  ctx.beginPath(); ctx.arc(p.x, p.y, ring, 0, TAU); ctx.stroke();
-
   if (!lowFx) {
     ctx.globalCompositeOperation = 'lighter';
     blit(lightFor('#6a5330', 78), p.x, p.y, 0, 0.5);
@@ -2269,25 +2385,16 @@ function drawParticles() {
     ctx.globalAlpha = 1;
     return;
   }
-  ctx.globalCompositeOperation = 'lighter';
   for (let i = 0; i < particles.length; i++) {
     const p = particles[i];
     const a = clamp(p.life / p.max, 0, 1);
-    blit(lightFor(p.color, 9), p.x, p.y, 0, a * 0.5);
-  }
-  ctx.globalCompositeOperation = 'source-over';
-}
-
-function drawRings() {
-  for (let i = 0; i < rings.length; i++) {
-    const rg = rings[i];
-    const f = 1 - rg.life / rg.max;
-    ctx.strokeStyle = tint(rg.color, 1.25, (1 - f) * 0.4);
-    ctx.lineWidth = 2 * (1 - f) + 0.4;
+    ctx.globalAlpha = a * 0.75;
+    ctx.fillStyle = p.color;
     ctx.beginPath();
-    ctx.arc(rg.x, rg.y, rg.r0 + (rg.r1 - rg.r0) * f, 0, TAU);
-    ctx.stroke();
+    ctx.ellipse(p.x, p.y, p.size * 0.9, p.size * 0.75, 0, 0, TAU);
+    ctx.fill();
   }
+  ctx.globalAlpha = 1;
 }
 
 // Additive pass. Emissive entities carry baked glow already; this is the
@@ -2322,20 +2429,20 @@ function drawLightPass(t) {
 function drawStick() {
   if (!stick.active) return;
   ctx.save();
-  ctx.strokeStyle = 'rgba(226,196,140,.4)';
-  ctx.lineWidth = 1.6;
+  ctx.fillStyle = 'rgba(18,13,9,.42)';
+  ctx.beginPath(); ctx.arc(stick.ox, stick.oy, STICK_MAX, 0, TAU); ctx.fill();
+  ctx.strokeStyle = 'rgba(150,128,94,.5)';
+  ctx.lineWidth = 2;
   ctx.beginPath(); ctx.arc(stick.ox, stick.oy, STICK_MAX, 0, TAU); ctx.stroke();
-  ctx.strokeStyle = 'rgba(226,196,140,.15)';
-  ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.arc(stick.ox, stick.oy, STICK_MAX * STICK_DEAD, 0, TAU); ctx.stroke();
 
   const kx = stick.ox + stick.dx * stick.mag * STICK_MAX;
   const ky = stick.oy + stick.dy * stick.mag * STICK_MAX;
-  ctx.globalCompositeOperation = 'lighter';
-  blit(lightFor(PAL.gold, 96), kx, ky, 0, 0.45);
-  ctx.globalCompositeOperation = 'source-over';
-  ctx.strokeStyle = 'rgba(255,226,170,.92)';
-  ctx.lineWidth = 2;
+  const kg = ctx.createRadialGradient(kx - 5, ky - 5, 2, kx, ky, 20);
+  kg.addColorStop(0, '#6a5a44'); kg.addColorStop(1, '#241c12');
+  ctx.fillStyle = kg;
+  ctx.beginPath(); ctx.arc(kx, ky, 20, 0, TAU); ctx.fill();
+  ctx.strokeStyle = 'rgba(176,152,112,.75)';
+  ctx.lineWidth = 1.6;
   ctx.beginPath(); ctx.arc(kx, ky, 20, 0, TAU); ctx.stroke();
   ctx.restore();
 }
@@ -2372,15 +2479,15 @@ function drawPortalArrow(t) {
 // text, so the numbers stay crisp while the frame around them is scenery.
 function stonePlate(x, y, w, h) {
   const g = ctx.createLinearGradient(0, y, 0, y + h);
-  g.addColorStop(0, '#2e3a3c');
-  g.addColorStop(0.5, '#1b2426');
-  g.addColorStop(1, '#0e1516');
+  g.addColorStop(0, '#332a1a');
+  g.addColorStop(0.5, '#1e1810');
+  g.addColorStop(1, '#100c07');
   ctx.fillStyle = g;
   ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = 'rgba(150,224,203,.5)';
+  ctx.strokeStyle = 'rgba(186,170,138,.5)';
   ctx.lineWidth = 1.4;
   ctx.beginPath(); ctx.moveTo(x, y + 0.7); ctx.lineTo(x + w, y + 0.7); ctx.stroke();
-  ctx.strokeStyle = 'rgba(86,158,144,.4)';
+  ctx.strokeStyle = 'rgba(120,104,78,.4)';
   ctx.lineWidth = 2.4;
   ctx.beginPath(); ctx.moveTo(x, y + h - 1.2); ctx.lineTo(x + w, y + h - 1.2); ctx.stroke();
   ctx.strokeStyle = 'rgba(6,10,11,.85)';
@@ -2396,7 +2503,7 @@ function drawHudFrame() {
     blit(SPR.p_boss, view.w - 27, h - 26, 0, 1, 1.2);
   }
   // Chased trim across the middle of the plate
-  ctx.strokeStyle = 'rgba(150,224,203,.14)';
+  ctx.strokeStyle = 'rgba(186,170,138,.14)';
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(58, h - 12); ctx.lineTo(view.w - 58, h - 12);
@@ -2404,10 +2511,10 @@ function drawHudFrame() {
 }
 
 function drawViewFrame() {
-  ctx.strokeStyle = 'rgba(6,10,11,.9)';
+  ctx.strokeStyle = 'rgba(8,6,4,.92)';
   ctx.lineWidth = 6;
   ctx.strokeRect(3, 3, view.w - 6, view.h - 6);
-  ctx.strokeStyle = 'rgba(86,158,144,.32)';
+  ctx.strokeStyle = 'rgba(120,104,78,.32)';
   ctx.lineWidth = 1.4;
   ctx.strokeRect(6.5, 6.5, view.w - 13, view.h - 13);
 }
@@ -2423,20 +2530,20 @@ function drawMinimap() {
   fg.addColorStop(0, '#2e3a3c'); fg.addColorStop(1, '#111a1b');
   ctx.fillStyle = fg;
   ctx.fillRect(x - 7, y - 7, S + 14, S + 14);
-  ctx.strokeStyle = 'rgba(150,224,203,.4)';
+  ctx.strokeStyle = 'rgba(186,170,138,.4)';
   ctx.lineWidth = 1.2;
   ctx.strokeRect(x - 6.5, y - 6.5, S + 13, S + 13);
-  ctx.fillStyle = 'rgba(10,14,15,.9)';
+  ctx.fillStyle = 'rgba(14,10,6,.92)';
   ctx.fillRect(x, y, S, S);
-  ctx.strokeStyle = 'rgba(86,158,144,.5)';
+  ctx.strokeStyle = 'rgba(120,104,78,.5)';
   ctx.lineWidth = 1;
   ctx.strokeRect(x + 0.5, y + 0.5, S - 1, S - 1);
-  ctx.fillStyle = 'rgba(150,224,203,.55)';
+  ctx.fillStyle = 'rgba(186,170,138,.55)';
   for (const c of [[x - 7, y - 7], [x + S - 1, y - 7], [x - 7, y + S - 1], [x + S - 1, y + S - 1]]) {
     ctx.fillRect(c[0], c[1], 8, 8);
   }
 
-  ctx.fillStyle = 'rgba(150,128,96,.18)';
+  ctx.fillStyle = 'rgba(126,110,82,.22)';
   for (let i = 4; i < walls.length; i++) {
     const w = walls[i];
     ctx.fillRect(x + w.x * k, y + w.y * k, Math.max(1, w.w * k), Math.max(1, w.h * k));
@@ -2466,7 +2573,7 @@ function draw(t) {
   const x0 = cam.x - 60, y0 = cam.y - 60;
   const x1 = cam.x + view.w + 60, y1 = cam.y + view.h + 60;
 
-  drawFloor(x0, y0, x1, y1);
+  drawGround(x0, y0, x1, y1);
   drawPortal(t);
   drawWalls(x0, y0, x1, y1);
   drawProps(x0, y0, x1, y1);
@@ -2478,7 +2585,6 @@ function draw(t) {
   }
   drawPlayer(t);
   drawBullets();
-  drawRings();
   drawParticles();
   if (!lowFx) drawLightPass(t);
   ctx.restore();

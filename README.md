@@ -26,28 +26,28 @@ seconds to escape.
 
 ## Art direction
 
-Dark fantasy: verdigris-bevelled stone ledges around unlit voids, lit slate
-flagstone underfoot, guttering torchlight in warm pools and cold arcane blue
-for the player's magic.
+Dark fantasy, drawn as material rather than light. There is no grid, no glow
+rim, no additive flourish — none of the neon-era machinery survived.
 
-Walls carry all their detail on the edge — a wide verdigris face, a bright
-crest, and a shadow biting inward — which is what makes a flat box read as a
-raised ledge seen from overhead. The interiors stay near-black, so the lit
-floor and the unlit rock separate at a glance.
+**Ground** is a set of eight textured tiles baked once at boot: trodden earth
+with grit, half-buried stones, and worn flagstone paths that break up and peter
+out. Tiles are chosen by a hash of their coordinates, so the floor never
+repeats visibly and costs eight blits a frame.
 
-The floor is strewn with what people left behind: coins, dropped swords and
-shields, urns, scrolls, bones and horned skulls, crates, barrels and grates.
-Heavier against the rock where things pile up, lighter in the open so a fight
-stays readable. Carved stonework frames the readouts and the map, with horned
-skull bosses at the corners.
-Bodies are painted — a dark mass lit from above with a thin rim where the
-light catches — and glow is reserved for things that are actually magical:
-a warded blade, a revenant's bindings, a mote of essence. Nothing glows just
-because it is a game object.
+**Walls** are unlit rock with courses of cut masonry laid along every exposed
+face — dressed top edges, mortar joints, pitting, and a shadow thrown onto the
+ground. The rock interior stays near-black so lit floor and dead stone separate
+at a glance.
 
-The palette lives in one place (`PAL`, section 1). Every colour on the canvas
-pulls from it, so the whole look can be retuned without hunting through
-draw calls.
+**Light** comes only from torches: warm pools that gutter, with cold sconces
+here and there. Bodies are painted — a dark mass lit from above with a thin rim
+— and the only things that glow are magical: a warded blade, a revenant's
+bindings, a mote of essence.
+
+Every rotation in the world is a right angle, so all four orientations of each
+prop and masonry course are baked at load. The draw loop never rotates, which
+turned resampling blits into straight copies and cut the frame cost roughly in
+half.
 
 **The cast**
 - *Warden* — cloaked, helmed, blade held out front; the only cold-blue light
