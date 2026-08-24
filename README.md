@@ -1,28 +1,56 @@
-# Ashen Waygate
+# The Rivenmark
 
-Mobile-first top-down dungeon survival prototype. Vanilla HTML5 + canvas 2D,
-no libraries, no image assets, no network calls. The whole game is
-`index.html` — open it and it runs, including from `file://`.
+Mobile-first top-down survival prototype set in the Rivenmark, after the Aegis
+shattered. Vanilla HTML5 + canvas 2D, no libraries, no image assets, no network
+calls. The whole game is `index.html` — open it and it runs, from `file://`.
 
-*(Formerly "Neon Extraction" — same engine, re-skinned from neon cyberpunk to
-dark fantasy. The repository still carries the old name.)*
-
-**Play:** open `index.html` in a browser — it runs straight from `file://`.
+*(Repo is still named `neon-extraction` from the original prototype.)*
 
 ---
 
 ## Core loop
 
-Descend into a procedurally generated 2000×2000 dungeon, hold off a swarming
-horde with a warded blade that strikes on its own, draw **essence** from the
-dead, and once you have enough, find the waygate and hold its circle for four
-seconds to escape.
+Play one of the Guided Vanguard. Raw magic is lethal unless it runs through
+Spirit-wrought Steel, so your blade answers on its own. Cut **Arcane Slag**
+from the Hollow-Thralls, then find a **ley-gate** and hold it open long enough
+to carry the haul out from under the Shroud of Dúath.
 
-- **Move** — drag anywhere on the play area (floating virtual joystick), or
-  WASD / arrow keys on desktop
-- **Strike** — automatic, nearest foe inside reach
-- **Boons** — essence doubles as XP; each rank offers a choice of three boons
-- **Pause** — the HUD button, or `Esc` / `P`
+- **Move** — drag anywhere (floating stick), or WASD / arrows
+- **Strike** — automatic, nearest thrall in reach
+- **Boons** — slag doubles as XP; each rank offers three
+- **Pause** — HUD button, or `Esc` / `P`
+
+## The Guided Vanguard
+
+Two of the Clear-Sighted, both fighting **unhelmeted** — the compendium is
+explicit that they look the darkness in the eye, so the sprites show the face
+and the weapon carries the order.
+
+| | Isaac, The Unyielding Shield | Zayd, The Piercing Truth |
+|---|---|---|
+| Order | Hearth-Wardens | Frost-Scholars of Kael |
+| School | Sun-Gold | Azure |
+| Arms | Sun-emblazoned shield, golden sword | Sapphire Glaive |
+| Play | 125 life, heavier, harder hitting | 92 life, faster, bolts pierce |
+
+## The horde
+
+The **Hollow-Thralls** — people who surrendered their will, every one carrying
+the asymmetrical void-brand that binds them to the silent hive-mind.
+
+- *Hollow-Thrall* — stooped, long-armed, dragging itself forward
+- *Eclipse-Marked* — fast, hooded, fraying into tatters
+- *Ghor-Breaker* — planted and over-armoured, held together by burning seams
+
+## The sundered geography
+
+Each delve falls in one of the five regions from the map, which sets the earth,
+the rock and the colour of the torchlight, and is named on arrival:
+the Slag-Moors of Drak-Hald, the Rending Gorges of Vaelk, Kraggen-Tor, the
+Rot-Weald, and the Dead Firth.
+
+The minimap compass points **south**. The realm's natural order has inverted —
+one of the Final Signs — and the needle is drawn as it reads, not as it ought to.
 
 ## Art direction
 

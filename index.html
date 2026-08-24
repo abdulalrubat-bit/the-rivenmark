@@ -7,8 +7,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Ashen Waygate</title>
-<meta name="description" content="Ashen Waygate — a top-down dungeon survival prototype. Hold the dark, gather essence, and reach the waygate before it closes.">
+<title>The Rivenmark</title>
+<meta name="description" content="The Rivenmark — a top-down survival prototype. Scavenge Arcane Slag under the Shroud of Duath and reach a ley-gate before the Hollow-Thralls close in.">
 <style>
   :root{
     --void:#0b0908; --deep:#120f0c; --panel:#1a1611; --line:#4a3c2a;
@@ -208,7 +208,7 @@
       <div class="bar" id="techBar"><i id="techFill"></i></div>
       <div class="readout">
         <span>Life <b id="hpText">100</b></span>
-        <span id="techText">Essence 0/70</span>
+        <span id="techText">Slag 0/70</span>
       </div>
     </div>
     <div class="hud-right">
@@ -219,18 +219,19 @@
   </div>
 
   <div class="screen on" id="start">
-    <h1 class="title">Ashen<br><em>Waygate</em></h1>
-    <p class="sub">A delve beneath the ward</p>
+    <h1 class="title">The<br><em>Rivenmark</em></h1>
+    <p class="sub">The Aegis is shattered</p>
     <p class="blurb">
-      The stair behind you has fallen. Your blade answers on its own — you need
-      only carry it. Draw <b>essence</b> from the dead, then find the
-      <b>waygate</b> and hold its circle until it opens.
+      Raw magic kills now unless it runs through Spirit-wrought Steel. Cut
+      <b>Arcane Slag</b> from the Hollow-Thralls, then find a <b>ley-gate</b>
+      and hold it open long enough to carry the haul out from under the
+      Shroud of Dúath.
     </p>
-    <button class="btn" id="playBtn">Descend</button>
+    <div class="cards" id="heroPick"></div>
     <p class="hint">
       <b>Move</b> — drag anywhere, or WASD / arrows<br>
-      <b>Strike</b> — your ward looses on the nearest foe<br>
-      <b>Boons</b> — every few essence, choose a gift
+      <b>Strike</b> — your steel looses on the nearest thrall<br>
+      <b>Boons</b> — every few slag, choose a gift
     </p>
     <p class="fine" id="bestLine"></p>
   </div>
@@ -298,11 +299,11 @@ const BASE_PLAYER = {
 
 // Enemy archetypes. `weight` is the spawn share, ramped by `from` (seconds).
 const ENEMY_TYPES = {
-  wretch:   { r: 13, speed: 96,  hp: 34,  dmg: 8,  tech: 1, cd: 0.95, mass: 1.0,
+  thrall:   { r: 13, speed: 96,  hp: 34,  dmg: 8,  tech: 1, cd: 0.95, mass: 1.0,
               color: '#9dbb5a', halo: 'rgba(157,187,90,.20)', weight: 10, from: 0 },
-  shade:    { r: 11, speed: 152, hp: 22,  dmg: 6,  tech: 1, cd: 0.70, mass: 0.7,
+  eclipse:    { r: 11, speed: 152, hp: 22,  dmg: 6,  tech: 1, cd: 0.70, mass: 0.7,
               color: '#b07cff', halo: 'rgba(176,124,255,.22)', weight: 8,  from: 25 },
-  revenant: { r: 23, speed: 62,  hp: 135, dmg: 21, tech: 4, cd: 1.30, mass: 2.8,
+  breaker: { r: 23, speed: 62,  hp: 135, dmg: 21, tech: 4, cd: 1.30, mass: 2.8,
               color: '#e0552a', halo: 'rgba(224,85,42,.22)', weight: 4,  from: 55 }
 };
 
@@ -310,8 +311,7 @@ const ENEMY_TYPES = {
 const PAL = {
   arcane:'#8fb9d6', arcaneDim:'#4a6a80', teal:'#6f9a8c',
   ember:'#e5761f', gold:'#d9a441', blood:'#8e2b20',
-  wretch:'#7d9147', shade:'#8a7bb0', revenant:'#b8501f',
-
+  thrall:'#8fa06a', eclipse:'#a58fd0', breaker:'#e0552a', brand:'#cbb6ff',
   // Lit flagstone underfoot, unlit rock above: the contrast the whole scene
   // hangs on. Walls are near-black inside and carry all their detail on the
   // bevelled edge, the way a raised ledge reads from overhead.
@@ -319,6 +319,47 @@ const PAL = {
   stoneTop:'#161a1c', stoneMid:'#0c0f11', stoneLow:'#050708',
   bone:'#c4b795', coin:'#c99a3e'
 };
+
+// --- The Rivenmark ------------------------------------------------------
+// The Guided Vanguard: two of the Clear-Sighted, fighting unhelmeted.
+const HEROES = {
+  isaac: { id:'isaac', name:'Isaac', title:'The Unyielding Shield',
+           order:'Hearth-Wardens', school:'Sun-Gold',
+           magic:'#ffc24d', trim:'rgba(196,142,44,.9)', cape:[86,32,26],
+           blurb:'The vanguard’s anchor. Sun-Gold magic, a sun-emblazoned shield, ' +
+                 'and no purchase for the Deceiver’s illusions.',
+           maxHp:125, speed:196, damage:25, fireDelay:0.40, pierce:0, range:268 },
+  zayd:  { id:'zayd', name:'Zayd', title:'The Piercing Truth',
+           order:'Frost-Scholars of Kael', school:'Azure',
+           magic:'#5fd0ff', trim:'rgba(70,150,196,.9)', cape:[30,44,72],
+           blurb:'A tactician of Kael. The Sapphire Glaive severs hive-mind tethers, ' +
+                 'and inverted ley-lines hold no confusion for him.',
+           maxHp:92, speed:228, damage:19, fireDelay:0.30, pierce:1, range:290 }
+};
+
+// The sundered geography. Each delve falls in one of them.
+const REGIONS = [
+  { id:'slag',    name:'The Slag-Moors of Drak-Hald',
+    note:'Dead ash around the Weeping Keep of Tor-Varden.',
+    earth:[58,44,30], mottle:[[26,18,11],[84,64,41],[116,90,58]],
+    flag:[56,26], stone:['#241d16','#16110b','#0b0805'], lamp:'#e5761f' },
+  { id:'vaelk',   name:'The Rending Gorges of Vaelk',
+    note:'Split earth below the Kael-Dorm Redoubt.',
+    earth:[38,46,58], mottle:[[16,20,28],[52,66,86],[78,102,130]],
+    flag:[58,24], stone:['#1a2430','#101720','#070b0f'], lamp:'#5fd0ff' },
+  { id:'kraggen', name:'Kraggen-Tor, the Iron-Teeth',
+    note:'Volcanic west, holding the Shatter-Gate of Ghor.',
+    earth:[52,30,22], mottle:[[28,12,8],[86,42,24],[128,62,30]],
+    flag:[54,22], stone:['#2a1a14','#1a0f0a','#0c0705'], lamp:'#ff5f28' },
+  { id:'weald',   name:'The Rot-Weald',
+    note:'Creeping mutation in the southern forest.',
+    earth:[40,48,30], mottle:[[18,24,12],[58,74,38],[86,106,54]],
+    flag:[52,26], stone:['#1c2418','#121810','#080b07'], lamp:'#9dbb5a' },
+  { id:'firth',   name:'The Dead Firth',
+    note:'A blackened ocean, drained and refilled with drifting ash.',
+    earth:[34,32,34], mottle:[[14,13,15],[52,50,54],[78,76,82]],
+    flag:[50,20], stone:['#1c1c1f','#121215','#07070a'], lamp:'#b9c4cf' }
+];
 
 const UPGRADES = [
   { id:'dmg',    glyph:'✦', name:'Keen Edge',   desc:'your ward bites a quarter deeper',   max:99, apply:p=>p.damage      *= 1.25 },
@@ -850,8 +891,12 @@ const _near = [];
 
 let run;  // per-run state: timers, counters, difficulty
 
-function makePlayer(x, y) {
+function makePlayer(x, y, heroId) {
+  const H = HEROES[heroId] || HEROES.isaac;
   const p = Object.assign({}, BASE_PLAYER);
+  p.hero = H.id;
+  p.maxHp = H.maxHp; p.speed = H.speed; p.damage = H.damage;
+  p.fireDelay = H.fireDelay; p.pierce = H.pierce; p.range = H.range;
   p.x = x; p.y = y; p.angle = -Math.PI / 2;
   p.hp = p.maxHp;
   p.face = 1;
@@ -1378,6 +1423,7 @@ function updateSpawning(dt) {
 
 function update(dt) {
   run.time += dt;
+  if (run.banner > 0) run.banner -= dt;
   updatePlayer(dt);
   updateBullets(dt);
   updateEnemies(dt);
@@ -1508,7 +1554,7 @@ function forgeEnemy(kind, r, color, flash) {
     g.lineJoin = 'round';
     g.lineCap = 'round';
 
-    if (kind === 'wretch') {
+    if (kind === 'thrall') {
       // Stooped, long-armed, dragging itself forward.
       g.strokeStyle = lit(52, 56, 40); g.lineWidth = u * 0.26;      // legs
       g.beginPath();
@@ -1555,7 +1601,7 @@ function forgeEnemy(kind, r, color, flash) {
       g.beginPath(); g.ellipse(-u * 0.04, -u * 0.72, u * 0.07, u * 0.05, 0, 0, TAU); g.fill();
       g.beginPath(); g.ellipse(u * 0.18, -u * 0.73, u * 0.07, u * 0.05, 0, 0, TAU); g.fill();
 
-    } else if (kind === 'shade') {
+    } else if (kind === 'eclipse') {
       // Hangs rather than stands: a robe that frays into nothing.
       const rg = g.createLinearGradient(0, -u * 0.9, 0, u * 1.1);
       rg.addColorStop(0, lit(76, 64, 108));
@@ -1657,6 +1703,20 @@ function forgeEnemy(kind, r, color, flash) {
       g.shadowBlur = 0;
     }
 
+    // The void-brand: asymmetrical by doctrine, and the tell that these were
+    // people who gave up their will rather than monsters.
+    const bx = kind === 'eclipse' ? -u * 0.09 : u * 0.1;
+    const by = kind === 'eclipse' ? -u * 0.78 : kind === 'breaker' ? -u * 0.84 : -u * 0.8;
+    g.shadowColor = PAL.brand; g.shadowBlur = u * 0.3;
+    g.strokeStyle = PAL.brand; g.lineWidth = u * 0.05;
+    g.beginPath();
+    g.moveTo(bx - u * 0.08, by - u * 0.04);
+    g.lineTo(bx + u * 0.02, by + u * 0.03);
+    g.lineTo(bx - u * 0.02, by + u * 0.07);
+    g.lineTo(bx + u * 0.09, by + u * 0.01);
+    g.stroke();
+    g.shadowBlur = 0;
+
     if (flash) {
       g.globalCompositeOperation = 'source-atop';
       g.fillStyle = 'rgba(255,240,220,.5)';
@@ -1670,173 +1730,173 @@ function forgeEnemy(kind, r, color, flash) {
   });
 }
 
-// The warden.
-//
-// Drawn front-on and mirrored by heading rather than rotated with it. A human
-// seen from directly overhead is a shoulders-and-hat blob -- every attempt to
-// rotate one at this size read as a face, because concentric round masses
-// always do. Survivors-likes solve this the same way: keep the figure facing
-// the camera, flip it by travel direction, and let the bolts carry the aim.
-function forgePlayer(flash) {
-  const u = BASE_PLAYER.r * 1.28;                   // figure unit
+// The Guided Vanguard. Both fight unhelmeted -- the compendium is explicit
+// that they look the darkness in the eye -- so the face carries the identity
+// and the weapon carries the order: Isaac's sun-gold blade and sun shield,
+// Zayd's two-handed Sapphire Glaive. Drawn front-on and mirrored by heading,
+// like the rest of the cast.
+function forgeHero(id, flash) {
+  const H = HEROES[id];
+  const u = BASE_PLAYER.r * 1.28;
   const L = flash ? 1.55 : 1;
   const lit = (a, b, c) => 'rgb(' + Math.round(Math.min(255, a * L)) + ',' +
                                     Math.round(Math.min(255, b * L)) + ',' +
                                     Math.round(Math.min(255, c * L)) + ')';
+  const magic = H.magic, trim = H.trim;
 
   return forge(u * 4.0, g => {
-    g.lineJoin = 'round';
+    g.lineJoin = 'round'; g.lineCap = 'round';
 
-    // --- cape behind the figure -------------------------------------------
+    // Cloak
     const capeG = g.createLinearGradient(0, -u * 0.6, 0, u * 1.3);
-    capeG.addColorStop(0, lit(58, 26, 24));
-    capeG.addColorStop(1, lit(20, 9, 8));
+    capeG.addColorStop(0, lit(H.cape[0], H.cape[1], H.cape[2]));
+    capeG.addColorStop(1, lit(16, 13, 12));
     g.fillStyle = capeG;
     g.beginPath();
-    g.moveTo(-u * 0.62, -u * 0.34);
-    g.quadraticCurveTo(-u * 1.12, u * 0.5, -u * 0.86, u * 1.22);
-    g.lineTo(u * 0.86, u * 1.22);
-    g.quadraticCurveTo(u * 1.12, u * 0.5, u * 0.62, -u * 0.34);
+    g.moveTo(-u * 0.6, -u * 0.28);
+    g.quadraticCurveTo(-u * 1.1, u * 0.5, -u * 0.84, u * 1.2);
+    g.lineTo(u * 0.84, u * 1.2);
+    g.quadraticCurveTo(u * 1.1, u * 0.5, u * 0.6, -u * 0.28);
     g.closePath(); g.fill();
-    g.strokeStyle = 'rgba(0,0,0,.8)'; g.lineWidth = 2; g.stroke();
-    g.strokeStyle = 'rgba(0,0,0,.45)'; g.lineWidth = 1.4;
-    g.beginPath();
-    g.moveTo(-u * 0.3, -u * 0.1); g.lineTo(-u * 0.42, u * 1.2);
-    g.moveTo(u * 0.3, -u * 0.1); g.lineTo(u * 0.42, u * 1.2);
-    g.stroke();
+    g.strokeStyle = 'rgba(0,0,0,.82)'; g.lineWidth = 2; g.stroke();
 
-    // --- legs --------------------------------------------------------------
-    g.fillStyle = lit(40, 36, 31);
-    g.beginPath(); g.roundRect ? g.roundRect(-u * 0.36, u * 0.62, u * 0.28, u * 0.62, u * 0.1)
-                               : g.rect(-u * 0.36, u * 0.62, u * 0.28, u * 0.62);
-    g.fill();
-    g.beginPath(); g.roundRect ? g.roundRect(u * 0.08, u * 0.62, u * 0.28, u * 0.62, u * 0.1)
-                               : g.rect(u * 0.08, u * 0.62, u * 0.28, u * 0.62);
-    g.fill();
-    g.strokeStyle = 'rgba(0,0,0,.7)'; g.lineWidth = 1.6;
-    g.beginPath(); g.moveTo(-u * 0.22, u * 0.66); g.lineTo(-u * 0.22, u * 1.2);
-    g.moveTo(u * 0.22, u * 0.66); g.lineTo(u * 0.22, u * 1.2); g.stroke();
+    // Legs
+    g.fillStyle = lit(44, 40, 35);
+    [[-0.36, 0], [0.08, 0]].forEach(o => {
+      g.beginPath();
+      g.roundRect ? g.roundRect(u * o[0], u * 0.64, u * 0.28, u * 0.6, u * 0.1)
+                  : g.rect(u * o[0], u * 0.64, u * 0.28, u * 0.6);
+      g.fill();
+      g.strokeStyle = 'rgba(0,0,0,.7)'; g.lineWidth = 1.4; g.stroke();
+    });
 
-    // --- torso -------------------------------------------------------------
-    const tg = g.createLinearGradient(0, -u * 0.4, 0, u * 0.8);
-    tg.addColorStop(0, lit(122, 118, 108));
-    tg.addColorStop(0.5, lit(72, 68, 61));
-    tg.addColorStop(1, lit(30, 27, 23));
+    // Cuirass
+    const tg = g.createLinearGradient(0, -u * 0.34, 0, u * 0.8);
+    tg.addColorStop(0, lit(118, 114, 106));
+    tg.addColorStop(0.5, lit(66, 63, 57));
+    tg.addColorStop(1, lit(28, 26, 22));
     g.fillStyle = tg;
     g.beginPath();
-    g.moveTo(-u * 0.5, -u * 0.3);
-    g.quadraticCurveTo(-u * 0.62, u * 0.3, -u * 0.4, u * 0.68);
-    g.lineTo(u * 0.4, u * 0.68);
-    g.quadraticCurveTo(u * 0.62, u * 0.3, u * 0.5, -u * 0.3);
+    g.moveTo(-u * 0.5, -u * 0.24);
+    g.quadraticCurveTo(-u * 0.62, u * 0.32, -u * 0.4, u * 0.7);
+    g.lineTo(u * 0.4, u * 0.7);
+    g.quadraticCurveTo(u * 0.62, u * 0.32, u * 0.5, -u * 0.24);
     g.closePath(); g.fill();
-    g.strokeStyle = 'rgba(0,0,0,.8)'; g.lineWidth = 2; g.stroke();
-    // tabard
-    g.fillStyle = 'rgba(122,38,30,.85)';
+    g.strokeStyle = 'rgba(0,0,0,.82)'; g.lineWidth = 2; g.stroke();
+    // order's colour worn on the chest
+    g.fillStyle = trim;
     g.beginPath();
-    g.moveTo(-u * 0.17, -u * 0.28); g.lineTo(u * 0.17, -u * 0.28);
-    g.lineTo(u * 0.13, u * 0.68); g.lineTo(-u * 0.13, u * 0.68);
+    g.moveTo(-u * 0.15, -u * 0.22); g.lineTo(u * 0.15, -u * 0.22);
+    g.lineTo(u * 0.11, u * 0.7); g.lineTo(-u * 0.11, u * 0.7);
     g.closePath(); g.fill();
-    // belt
-    g.fillStyle = lit(58, 44, 28);
-    g.fillRect(-u * 0.44, u * 0.42, u * 0.88, u * 0.14);
-    g.fillStyle = lit(150, 122, 70);
-    g.fillRect(-u * 0.08, u * 0.42, u * 0.16, u * 0.14);
+    g.fillStyle = lit(56, 44, 28);
+    g.fillRect(-u * 0.44, u * 0.44, u * 0.88, u * 0.13);
 
-    // --- shield arm (figure's right, screen left) --------------------------
-    g.fillStyle = lit(46, 43, 38);
-    g.beginPath(); g.ellipse(-u * 0.78, u * 0.34, u * 0.3, u * 0.42, -0.12, 0, TAU); g.fill();
-    g.strokeStyle = 'rgba(0,0,0,.8)'; g.lineWidth = 2; g.stroke();
-    g.strokeStyle = 'rgba(206,190,158,.55)'; g.lineWidth = 1.2;
-    g.beginPath(); g.ellipse(-u * 0.78, u * 0.34, u * 0.22, u * 0.33, -0.12, 0, TAU); g.stroke();
-    g.fillStyle = lit(140, 134, 120);
-    g.beginPath(); g.arc(-u * 0.78, u * 0.34, u * 0.08, 0, TAU); g.fill();
+    if (id === 'isaac') {
+      // Sun-emblazoned shield
+      g.fillStyle = lit(52, 46, 38);
+      g.beginPath(); g.ellipse(-u * 0.8, u * 0.3, u * 0.34, u * 0.46, -0.1, 0, TAU); g.fill();
+      g.strokeStyle = 'rgba(0,0,0,.82)'; g.lineWidth = 2; g.stroke();
+      g.strokeStyle = magic; g.lineWidth = 1.4;
+      g.beginPath(); g.ellipse(-u * 0.8, u * 0.3, u * 0.26, u * 0.37, -0.1, 0, TAU); g.stroke();
+      g.fillStyle = magic;
+      g.beginPath(); g.arc(-u * 0.8, u * 0.3, u * 0.1, 0, TAU); g.fill();
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * TAU;
+        g.strokeStyle = magic; g.lineWidth = 1.2;
+        g.beginPath();
+        g.moveTo(-u * 0.8 + Math.cos(a) * u * 0.14, u * 0.3 + Math.sin(a) * u * 0.19);
+        g.lineTo(-u * 0.8 + Math.cos(a) * u * 0.21, u * 0.3 + Math.sin(a) * u * 0.29);
+        g.stroke();
+      }
+      // Sun-Gold sword
+      g.strokeStyle = lit(70, 66, 59); g.lineWidth = u * 0.22;
+      g.beginPath(); g.moveTo(u * 0.46, u * 0.08); g.lineTo(u * 0.74, u * 0.3); g.stroke();
+      g.strokeStyle = '#6a5432'; g.lineWidth = u * 0.14;
+      g.beginPath(); g.moveTo(u * 0.62, u * 0.4); g.lineTo(u * 0.84, u * 0.08); g.stroke();
+      g.shadowColor = magic; g.shadowBlur = u * 0.7;
+      g.strokeStyle = magic; g.lineWidth = u * 0.16;
+      g.beginPath(); g.moveTo(u * 0.82, u * 0.04); g.lineTo(u * 1.26, -u * 1.06); g.stroke();
+      g.shadowBlur = 0;
+      g.strokeStyle = 'rgba(255,248,224,.95)'; g.lineWidth = u * 0.06;
+      g.beginPath(); g.moveTo(u * 0.8, u * 0.0); g.lineTo(u * 1.22, -u * 1.02); g.stroke();
+    } else {
+      // Sapphire Glaive, held two-handed across the body
+      g.strokeStyle = '#4a3c28'; g.lineWidth = u * 0.13;
+      g.beginPath(); g.moveTo(-u * 0.62, u * 0.86); g.lineTo(u * 0.9, -u * 0.5); g.stroke();
+      g.strokeStyle = lit(70, 66, 59); g.lineWidth = u * 0.2;
+      g.beginPath(); g.moveTo(-u * 0.36, u * 0.36); g.lineTo(-u * 0.1, u * 0.16); g.stroke();
+      g.beginPath(); g.moveTo(u * 0.38, u * 0.06); g.lineTo(u * 0.6, -u * 0.14); g.stroke();
+      g.shadowColor = magic; g.shadowBlur = u * 0.75;
+      g.fillStyle = magic;
+      g.beginPath();
+      g.moveTo(u * 0.88, -u * 0.48);
+      g.quadraticCurveTo(u * 1.34, -u * 0.96, u * 1.18, -u * 1.3);
+      g.quadraticCurveTo(u * 0.98, -u * 0.92, u * 0.74, -u * 0.66);
+      g.closePath(); g.fill();
+      g.shadowBlur = 0;
+      g.strokeStyle = 'rgba(226,246,255,.95)'; g.lineWidth = u * 0.05;
+      g.beginPath(); g.moveTo(u * 0.9, -u * 0.5); g.lineTo(u * 1.16, -u * 1.24); g.stroke();
+    }
 
-    // --- sword arm and blade ----------------------------------------------
-    g.strokeStyle = lit(70, 66, 59); g.lineWidth = u * 0.24; g.lineCap = 'round';
-    g.beginPath(); g.moveTo(u * 0.46, u * 0.06); g.lineTo(u * 0.74, u * 0.3); g.stroke();
-    g.lineCap = 'butt';
-    g.strokeStyle = '#5c4a30'; g.lineWidth = u * 0.16;
-    g.beginPath(); g.moveTo(u * 0.66, u * 0.42); g.lineTo(u * 0.82, u * 0.12); g.stroke();
-    g.strokeStyle = '#7d6a48'; g.lineWidth = u * 0.1;
-    g.beginPath(); g.moveTo(u * 0.6, u * 0.1); g.lineTo(u * 0.94, u * 0.26); g.stroke();
-    g.lineCap = 'round';
-    g.strokeStyle = 'rgba(168,202,228,.3)'; g.lineWidth = u * 0.28;
-    g.beginPath(); g.moveTo(u * 0.8, u * 0.06); g.lineTo(u * 1.24, -u * 1.06); g.stroke();
-    g.strokeStyle = '#c2d3de'; g.lineWidth = u * 0.15;
-    g.beginPath(); g.moveTo(u * 0.8, u * 0.06); g.lineTo(u * 1.22, -u * 1.04); g.stroke();
-    g.strokeStyle = 'rgba(244,250,255,.95)'; g.lineWidth = u * 0.06;
-    g.beginPath(); g.moveTo(u * 0.78, u * 0.02); g.lineTo(u * 1.18, -u * 1.0); g.stroke();
-    g.lineCap = 'butt';
-
-    // --- pauldrons ---------------------------------------------------------
-    const pauldron = (sx) => {
-      const pg = g.createLinearGradient(0, -u * 0.52, 0, u * 0.06);
-      pg.addColorStop(0, lit(146, 142, 130));
-      pg.addColorStop(1, lit(48, 45, 40));
+    // Pauldrons
+    [-1, 1].forEach(sx => {
+      const pg = g.createLinearGradient(0, -u * 0.5, 0, u * 0.06);
+      pg.addColorStop(0, lit(148, 142, 130));
+      pg.addColorStop(1, lit(46, 43, 38));
       g.fillStyle = pg;
       g.beginPath();
-      g.ellipse(sx * u * 0.56, -u * 0.16, u * 0.28, u * 0.24, sx * 0.3, 0, TAU);
+      g.ellipse(sx * u * 0.56, -u * 0.12, u * 0.27, u * 0.23, sx * 0.3, 0, TAU);
       g.fill();
-      g.strokeStyle = 'rgba(0,0,0,.8)'; g.lineWidth = 1.8; g.stroke();
-      g.strokeStyle = 'rgba(238,226,198,.6)'; g.lineWidth = 1.1;
+      g.strokeStyle = 'rgba(0,0,0,.82)'; g.lineWidth = 1.8; g.stroke();
+      g.strokeStyle = trim; g.lineWidth = 1;
       g.beginPath();
-      g.ellipse(sx * u * 0.56, -u * 0.2, u * 0.2, u * 0.16, sx * 0.3, 0, TAU);
+      g.ellipse(sx * u * 0.56, -u * 0.16, u * 0.19, u * 0.15, sx * 0.3, 0, TAU);
       g.stroke();
-    };
-    pauldron(-1); pauldron(1);
+    });
 
-    // --- helm --------------------------------------------------------------
-    const hg = g.createLinearGradient(0, -u * 0.92, 0, -u * 0.2);
-    hg.addColorStop(0, lit(158, 154, 142));
-    hg.addColorStop(0.55, lit(82, 78, 70));
-    hg.addColorStop(1, lit(28, 26, 22));
-    g.fillStyle = hg;
+    // Bare head: the compendium's point, so it gets the detail
+    g.fillStyle = lit(126, 92, 64);                                  // neck
+    g.fillRect(-u * 0.12, -u * 0.36, u * 0.24, u * 0.18);
+    const fg = g.createLinearGradient(0, -u * 0.86, 0, -u * 0.26);
+    fg.addColorStop(0, lit(176, 132, 94));
+    fg.addColorStop(1, lit(108, 76, 52));
+    g.fillStyle = fg;
+    g.beginPath(); g.ellipse(0, -u * 0.56, u * 0.26, u * 0.31, 0, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(0,0,0,.7)'; g.lineWidth = 1.4; g.stroke();
+    g.fillStyle = lit(28, 20, 15);                                    // hair
     g.beginPath();
-    g.moveTo(-u * 0.3, -u * 0.34);
-    g.quadraticCurveTo(-u * 0.34, -u * 0.94, 0, -u * 0.98);
-    g.quadraticCurveTo(u * 0.34, -u * 0.94, u * 0.3, -u * 0.34);
-    g.closePath(); g.fill();
-    g.strokeStyle = 'rgba(0,0,0,.85)'; g.lineWidth = 2; g.stroke();
-    // visor slot
-    g.fillStyle = 'rgba(6,7,8,.95)';
-    g.beginPath();
-    g.roundRect ? g.roundRect(-u * 0.22, -u * 0.66, u * 0.44, u * 0.16, u * 0.05)
-                : g.rect(-u * 0.22, -u * 0.66, u * 0.44, u * 0.16);
+    g.ellipse(0, -u * 0.74, u * 0.27, u * 0.18, 0, Math.PI, TAU);
     g.fill();
-    g.fillStyle = 'rgba(150,192,220,.8)';
-    g.fillRect(-u * 0.14, -u * 0.62, u * 0.1, u * 0.08);
-    g.fillRect(u * 0.05, -u * 0.62, u * 0.1, u * 0.08);
-    // crest
-    g.fillStyle = 'rgba(122,38,30,.9)';
+    g.fillStyle = 'rgba(26,18,13,.9)';                                // beard
     g.beginPath();
-    g.moveTo(-u * 0.05, -u * 0.98);
-    g.quadraticCurveTo(0, -u * 1.24, u * 0.05, -u * 0.98);
-    g.closePath(); g.fill();
+    g.ellipse(0, -u * 0.4, u * 0.21, u * 0.14, 0, 0, Math.PI);
+    g.fill();
+    g.fillStyle = 'rgba(18,14,10,.95)';                               // eyes
+    g.fillRect(-u * 0.14, -u * 0.6, u * 0.09, u * 0.05);
+    g.fillRect(u * 0.05, -u * 0.6, u * 0.09, u * 0.05);
 
-    // Struck: wash every drawn pixel, which a per-shape tint could not do.
     if (flash) {
       g.globalCompositeOperation = 'source-atop';
       g.fillStyle = 'rgba(255,238,212,.5)';
       g.fillRect(-u * 2, -u * 2, u * 4, u * 4);
       g.globalCompositeOperation = 'source-over';
     }
-
-    // Shadow last, dropped behind everything.
     g.globalCompositeOperation = 'destination-over';
     g.fillStyle = 'rgba(0,0,0,.42)';
-    g.beginPath(); g.ellipse(0, u * 1.28, u * 0.86, u * 0.3, 0, 0, TAU); g.fill();
+    g.beginPath(); g.ellipse(0, u * 1.3, u * 0.84, u * 0.28, 0, 0, TAU); g.fill();
     g.globalCompositeOperation = 'source-over';
   });
 }
 
 // An arcane bolt: hot core, cold tail.
-function forgeBullet() {
+function forgeBolt(colour) {
   return forge(32, g => {
-    g.shadowColor = PAL.arcane; g.shadowBlur = 10;
+    g.shadowColor = colour; g.shadowBlur = 10;
     const grd = g.createLinearGradient(-15, 0, 12, 0);
-    grd.addColorStop(0, 'rgba(92,184,255,0)');
-    grd.addColorStop(0.55, 'rgba(92,184,255,.45)');
-    grd.addColorStop(0.9, 'rgba(196,232,255,.95)');
+    grd.addColorStop(0, tint(colour, 1, 0));
+    grd.addColorStop(0.55, tint(colour, 1, 0.45));
+    grd.addColorStop(0.9, tint(colour, 1.5, 0.95));
     grd.addColorStop(1, '#ffffff');
     g.fillStyle = grd;
     g.beginPath();
@@ -1907,10 +1967,13 @@ function forgeAll() {
   SS = Math.min(3, Math.max(2, view.dpr));
   LIGHTS.clear();
   wallGrads.clear();
-  SPR.player = forgePlayer(false);
-  SPR.playerHit = forgePlayer(true);
-  SPR.playerL = mirrorSprite(SPR.player);
-  SPR.playerHitL = mirrorSprite(SPR.playerHit);
+  for (const hid in HEROES) {
+    SPR['h_' + hid] = forgeHero(hid, false);
+    SPR['h_' + hid + 'Hit'] = forgeHero(hid, true);
+    SPR['h_' + hid + 'L'] = mirrorSprite(SPR['h_' + hid]);
+    SPR['h_' + hid + 'HitL'] = mirrorSprite(SPR['h_' + hid + 'Hit']);
+    SPR['bolt_' + hid] = forgeBolt(HEROES[hid].magic);
+  }
   for (const k in ENEMY_TYPES) {
     const d = ENEMY_TYPES[k];
     SPR[k] = forgeEnemy(k, d.r, d.color, false);
@@ -1918,7 +1981,7 @@ function forgeAll() {
     SPR[k + 'L'] = mirrorSprite(SPR[k]);
     SPR[k + 'HitL'] = mirrorSprite(SPR[k + 'Hit']);
   }
-  SPR.bullet = forgeBullet();
+
   SPR.loot = forgeLoot(false);
   SPR.lootBig = forgeLoot(true);
   forgeProps();
@@ -2003,6 +2066,8 @@ function blitRect(spr, x, y, rot) {
   ctx.restore();
 }
 
+let REGION = REGIONS[0];
+
 const GROUND_T = 200;              // world units per ground tile
 const GROUND_VARIANTS = 8;
 let groundTiles = [];
@@ -2017,7 +2082,7 @@ function forgeGround() {
     const T = GROUND_T;
 
     // Packed earth base
-    g.fillStyle = '#3a2c1e';
+    g.fillStyle = 'rgb(' + REGION.earth.join(',') + ')';
     g.fillRect(0, 0, T, T);
 
     // Mottling: broad damp and dry patches
@@ -2025,9 +2090,8 @@ function forgeGround() {
       const x = Math.random() * T, y = Math.random() * T;
       const r = 3 + Math.random() * 13;
       const shade = Math.random();
-      g.fillStyle = shade < 0.42 ? 'rgba(26,18,11,.16)'
-                  : shade < 0.78 ? 'rgba(84,64,41,.13)'
-                                 : 'rgba(116,90,58,.10)';
+      const mc = REGION.mottle[shade < 0.42 ? 0 : shade < 0.78 ? 1 : 2];
+      g.fillStyle = 'rgba(' + mc.join(',') + ',' + (shade < 0.42 ? .16 : shade < .78 ? .13 : .10) + ')';
       g.beginPath();
       g.ellipse(x, y, r, r * (0.55 + Math.random() * 0.5), Math.random() * TAU, 0, TAU);
       g.fill();
@@ -2044,7 +2108,7 @@ function forgeGround() {
           const x = cx2 * cell + (ry % 2 ? off : 0) + rand(-3, 3);
           const y = ry * cell + rand(-3, 3);
           const w = cell - rand(5, 11), h = cell - rand(5, 11);
-          const tone = 56 + Math.random() * 26;
+          const tone = REGION.flag[0] + Math.random() * REGION.flag[1];
           g.fillStyle = 'rgb(' + Math.round(tone * 1.05) + ',' +
                                  Math.round(tone * 0.96) + ',' +
                                  Math.round(tone * 0.84) + ')';
@@ -2521,14 +2585,14 @@ function drawLoot(t) {
 function drawBullets() {
   for (let i = 0; i < bullets.length; i++) {
     const b = bullets[i];
-    blit(SPR.bullet, b.x, b.y, b.a);
+    blit(SPR['bolt_' + run.hero] || SPR.bolt_isaac, b.x, b.y, b.a);
   }
 }
 
 function drawEnemy(e) {
   const key = e.kind + (e.hitFlash > 0 ? 'Hit' : '') + (e.face < 0 ? 'L' : '');
   blit(SPR[key] || SPR[e.kind], e.x, e.y);
-  if (e.kind === 'revenant' && e.hp < e.maxHp * 0.92) {
+  if (e.kind === 'breaker' && e.hp < e.maxHp * 0.92) {
     const w = e.r * 1.5, f = clamp(e.hp / e.maxHp, 0, 1);
     const bx = e.x - w / 2, by = e.y - e.r - 6;
     ctx.fillStyle = 'rgba(0,0,0,.55)';
@@ -2543,9 +2607,8 @@ function drawPlayer(t) {
   const blink = p.invuln > 0 && Math.floor(t * 20) % 2 === 0;
 
   const hurt = blink || p.hitFlash > 0;
-  const spr = p.face < 0 ? (hurt ? SPR.playerHitL : SPR.playerL)
-                         : (hurt ? SPR.playerHit  : SPR.player);
-  blit(spr, p.x, p.y);
+  const key = 'h_' + p.hero + (hurt ? 'Hit' : '') + (p.face < 0 ? 'L' : '');
+  blit(SPR[key] || SPR['h_' + p.hero], p.x, p.y);
 
   if (p.muzzle > 0) {
     const a = p.angle;
@@ -2736,6 +2799,19 @@ function drawMinimap() {
   ctx.beginPath(); ctx.arc(x + portal.x * k, y + portal.y * k, 3.4, 0, TAU); ctx.fill();
   ctx.fillStyle = '#ffffff';
   ctx.beginPath(); ctx.arc(x + player.x * k, y + player.y * k, 2.7, 0, TAU); ctx.fill();
+
+  // Compasses point south now. The needle is drawn as it reads, not as it
+  // ought to -- one of the Final Signs, and a standing reminder of it.
+  const nx = x + S - 13, ny = y + 13;
+  ctx.strokeStyle = 'rgba(226,196,140,.55)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(nx, ny, 7.5, 0, TAU); ctx.stroke();
+  ctx.fillStyle = 'rgba(224,120,80,.95)';
+  ctx.beginPath();
+  ctx.moveTo(nx, ny + 7); ctx.lineTo(nx - 2.6, ny); ctx.lineTo(nx + 2.6, ny);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = 'rgba(226,196,140,.9)';
+  ctx.font = '600 7px ui-monospace, monospace';
+  ctx.fillText('S', nx - 2, ny - 9.5);
   ctx.restore();
 }
 
@@ -2770,6 +2846,26 @@ function draw(t) {
   ctx.restore();
 
   if (vignette && !lowFx) ctx.drawImage(vignette, 0, 0, view.w, view.h);
+  if (run && run.banner > 0 && state !== 'menu') {
+    const a = Math.min(1, run.banner / 1.1) * Math.min(1, (4.2 - run.banner) / 0.5);
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, a);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(238,224,192,.95)';
+    ctx.font = '400 21px Georgia, "Times New Roman", serif';
+    ctx.fillText(REGION.name, view.w / 2, view.h * 0.42);
+    ctx.fillStyle = 'rgba(186,164,128,.85)';
+    ctx.font = 'italic 400 13px Georgia, "Times New Roman", serif';
+    ctx.fillText(REGION.note, view.w / 2, view.h * 0.42 + 24);
+    ctx.strokeStyle = 'rgba(196,164,116,.4)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(view.w / 2 - 90, view.h * 0.42 + 38);
+    ctx.lineTo(view.w / 2 + 90, view.h * 0.42 + 38);
+    ctx.stroke();
+    ctx.restore();
+    ctx.textAlign = 'left';
+  }
   drawPortalArrow(t);
   drawMinimap();
   drawStick();
@@ -2802,7 +2898,7 @@ function showScreen(name) {
 const fmtTime = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
 
 /* --- persistence (best-effort; private mode can throw on access) -------- */
-const STORE_KEY = 'ashen-waygate.best.v1';
+const STORE_KEY = 'rivenmark.best.v1';
 function loadBest() {
   try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; }
   catch (e) { return {}; }
@@ -2836,8 +2932,8 @@ function syncHud() {
     el.techFill.style.transform = 'scaleX(' + f + ')';
     el.techBar.classList.toggle('done', f >= 1);
     el.techText.innerHTML = f >= 1
-      ? '<b class="go">Waygate open</b>'
-      : 'Essence <b>' + run.tech + '</b>/' + EXTRACT_QUOTA;
+      ? '<b class="go">Ley-gate open</b>'
+      : 'Slag <b>' + run.tech + '</b>/' + EXTRACT_QUOTA;
   }
   const secs = Math.floor(run.time);
   if (secs !== hudCache.time) { hudCache.time = secs; el.clock.textContent = fmtTime(secs); }
@@ -2853,7 +2949,17 @@ function hitFlashUI() {
 
 /* --- run lifecycle ------------------------------------------------------ */
 
-function resetRun() {
+function resetRun(heroId) {
+  const hero = heroId || (run && run.hero) || 'isaac';
+  REGION = REGIONS[(Math.random() * REGIONS.length) | 0];
+  PAL.stoneTop = REGION.stone[0];
+  PAL.stoneMid = REGION.stone[1];
+  PAL.stoneLow = REGION.stone[2];
+  PAL.ember = REGION.lamp;
+  wallGrads.clear();
+  forgeGround();
+  forgeWallCourses();
+
   const spawn = { x: WORLD.w / 2, y: WORLD.h / 2 };
   const a = Math.random() * TAU, d = rand(700, 880);
   const pt = {
@@ -2863,12 +2969,12 @@ function resetRun() {
 
   generateWorld(spawn, pt);
   portal  = { x: pt.x, y: pt.y, pulse: 0, channel: 0, active: false };
-  player  = makePlayer(spawn.x, spawn.y);
+  player  = makePlayer(spawn.x, spawn.y, hero);
   enemies = []; bullets = []; loot = []; particles = []; rings = [];
   enemyGrid = new SpatialHash(ENEMY_CELL);
 
   run = { time: 0, tech: 0, xp: 0, xpNeed: 11, level: 1, kills: 0,
-          spawnTimer: 1.4, pendingLevels: 0 };
+          spawnTimer: 1.4, pendingLevels: 0, hero: hero, banner: 4.2 };
 
   cam.x = clamp(player.x - view.w / 2, 0, Math.max(0, WORLD.w - view.w));
   cam.y = clamp(player.y - view.h / 2, 0, Math.max(0, WORLD.h - view.h));
@@ -2882,8 +2988,8 @@ function resetRun() {
   syncHud();
 }
 
-function startRun() {
-  resetRun();
+function startRun(heroId) {
+  resetRun(heroId);
   state = 'play';
   showScreen(null);
 }
@@ -2902,12 +3008,12 @@ function endRun(won) {
 
   el.overTitle.innerHTML = won ? '<em>Escaped</em>' : '<span>Slain</span>';
   el.overSub.textContent = won
-    ? 'The circle opened. You climbed out with your haul.'
-    : 'The horde broke your guard.';
+    ? 'The ley-gate held. You carried the slag out.'
+    : 'The hive-mind claimed another of the Clear-Sighted.';
   el.overStats.innerHTML =
     '<div>Endured<b>' + fmtTime(run.time) + '</b></div>' +
     '<div>Slain<b>' + run.kills + '</b></div>' +
-    '<div>Essence<b>' + run.tech + '</b></div>' +
+    '<div>Slag<b>' + run.tech + '</b></div>' +
     '<div>Rank<b>' + run.level + '</b></div>';
   showScreen('over');
   refreshBestLine();
@@ -3016,8 +3122,7 @@ window.addEventListener('keydown', e => {
     return;
   }
   if (k === ' ' || k === 'enter') {
-    if (state === 'menu') startRun();
-    else if (state === 'over') startRun();
+    if (state === 'menu' || state === 'over') startRun(run && run.hero);
     return;
   }
   keys.add(k);
@@ -3032,8 +3137,24 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) pause
 window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', () => setTimeout(resize, 120));
 
-$('playBtn').addEventListener('click', startRun);
-$('againBtn').addEventListener('click', startRun);
+(function buildHeroPick() {
+  const wrap = $('heroPick');
+  for (const hid in HEROES) {
+    const H = HEROES[hid];
+    const card = document.createElement('button');
+    card.className = 'card';
+    card.type = 'button';
+    card.innerHTML =
+      '<span class="glyph">' + (hid === 'isaac' ? '\u2600' : '\u2726') + '</span>' +
+      '<span><h4>' + H.name + ' &middot; ' + H.title + '</h4>' +
+      '<p>' + H.blurb + ' <span class="tier">' + H.order + ' &middot; ' +
+      H.school + '</span></p></span>';
+    card.style.borderLeftColor = H.magic;
+    card.addEventListener('click', () => startRun(hid));
+    wrap.appendChild(card);
+  }
+})();
+$('againBtn').addEventListener('click', () => startRun(run && run.hero));
 $('pauseBtn').addEventListener('click', pauseRun);
 $('resumeBtn').addEventListener('click', resumeRun);
 $('abortBtn').addEventListener('click', () => {
