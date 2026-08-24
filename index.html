@@ -3,20 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#05070d">
+<meta name="theme-color" content="#0b0908">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Neon Extraction</title>
-<meta name="description" content="Neon Extraction — a top-down arena survival prototype. Survive the swarm, harvest tech, reach the extraction portal.">
+<title>Ashen Waygate</title>
+<meta name="description" content="Ashen Waygate — a top-down dungeon survival prototype. Hold the dark, gather essence, and reach the waygate before it closes.">
 <style>
   :root{
-    --void:#05070d; --deep:#0a0f1c; --panel:#0e1524; --line:#1e2c45;
-    --ink:#e8f4ff; --dim:#7d8ea8;
-    --cyan:#22e0ff; --magenta:#ff2e88; --amber:#ffd23f; --violet:#7c4dff;
-    --danger:#ff3b3b;
-    --font:'Roboto Condensed','Noto Sans Condensed','Liberation Sans Narrow','Arial Narrow',system-ui,sans-serif;
-    --mono:'Roboto Mono','Noto Sans Mono','DejaVu Sans Mono',monospace;
+    --void:#0b0908; --deep:#120f0c; --panel:#1a1611; --line:#4a3c2a;
+    --ink:#efe3c9; --dim:#a08d70; --faint:#6b5b46;
+    --arcane:#5cb8ff; --arcane-d:#2a6fae;
+    --ember:#ff9a3c; --gold:#ffc24d; --blood:#c2352a;
+    --moss:#9dbb5a; --spectre:#b07cff;
+    --font-display:'Iowan Old Style','Palatino Linotype','Book Antiqua',Palatino,Georgia,'Times New Roman',serif;
+    --font-ui:'Iowan Old Style',Georgia,'Times New Roman',serif;
     --safe-t:env(safe-area-inset-top,0px);
     --safe-b:env(safe-area-inset-bottom,0px);
     --safe-l:env(safe-area-inset-left,0px);
@@ -25,15 +26,15 @@
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html,body{
     margin:0; padding:0; height:100%; overflow:hidden; background:var(--void);
-    color:var(--ink); font-family:var(--font);
+    color:var(--ink); font-family:var(--font-ui);
     overscroll-behavior:none; touch-action:none;
     -webkit-user-select:none; user-select:none;
   }
   #stage{position:fixed; inset:0;}
   canvas{display:block; width:100%; height:100%; touch-action:none;}
 
-  /* ---------- UI overlay: DOM, not canvas, so touches on UI never reach the stick ---------- */
-  #ui{position:fixed; inset:0; pointer-events:none; font-family:var(--font);}
+  /* UI is DOM above the canvas, so a tap on a control never reaches the stick */
+  #ui{position:fixed; inset:0; pointer-events:none; font-family:var(--font-ui);}
   #ui > *{pointer-events:auto;}
 
   .hud{
@@ -45,134 +46,149 @@
   .hud-left{flex:1; min-width:0; max-width:340px;}
 
   .bar{
-    position:relative; height:13px; border:1px solid var(--line);
-    background:#08101d; border-radius:2px; overflow:hidden;
+    position:relative; height:14px; border:1px solid var(--line);
+    background:#0c0a08; border-radius:1px; overflow:hidden;
+    box-shadow:inset 0 1px 0 rgba(255,220,160,.06);
   }
   .bar i{
     display:block; height:100%; width:100%; transform-origin:left center;
     transition:transform .12s linear;
   }
-  #hpFill{background:linear-gradient(90deg,#00d9a3,#22e0ff);}
-  #hpBar.low #hpFill{background:linear-gradient(90deg,#ff3b3b,#ff2e88);}
+  #hpFill{background:linear-gradient(90deg,#7d1d16,#c2352a 60%,#e0644a);}
+  #hpBar.low #hpFill{background:linear-gradient(90deg,#5e1109,#e0342a);}
   #techBar{margin-top:6px; height:9px;}
-  #techFill{background:linear-gradient(90deg,#a06a00,var(--amber));}
-  #techBar.done{border-color:var(--amber); box-shadow:0 0 10px rgba(255,210,63,.45);}
+  #techFill{background:linear-gradient(90deg,#8a5a12,var(--gold));}
+  #techBar.done{border-color:var(--gold); box-shadow:0 0 12px rgba(255,194,77,.4);}
 
   .readout{
     display:flex; justify-content:space-between; gap:10px;
-    font-family:var(--mono); font-size:10px; letter-spacing:1.4px;
-    text-transform:uppercase; color:var(--dim); margin-top:5px;
+    font-family:var(--font-ui); font-size:11px; letter-spacing:2.2px;
+    text-transform:uppercase; color:var(--dim); margin-top:6px;
   }
   .readout b{color:var(--ink); font-weight:600;}
-  .readout .go{color:var(--amber);}
+  .readout .go{color:var(--gold);}
 
   .hud-right{
-    display:flex; flex-direction:column; align-items:flex-end; gap:8px;
+    display:flex; flex-direction:column; align-items:flex-end; gap:6px;
     pointer-events:none;
   }
   .clock{
-    font-family:var(--mono); font-size:17px; letter-spacing:2px;
-    text-shadow:0 0 12px rgba(34,224,255,.5);
+    font-family:var(--font-display); font-size:20px; letter-spacing:1px;
+    color:var(--ink); text-shadow:0 0 14px rgba(255,154,60,.35);
   }
   .lvl{
-    font-family:var(--mono); font-size:10px; letter-spacing:1.6px;
-    color:var(--cyan); text-transform:uppercase;
+    font-family:var(--font-ui); font-size:11px; letter-spacing:2.4px;
+    color:var(--gold); text-transform:uppercase;
   }
 
   .iconbtn{
-    pointer-events:auto; width:38px; height:38px; flex:0 0 38px;
-    border:1px solid var(--line); background:rgba(10,18,32,.8);
-    color:var(--ink); border-radius:3px; font-size:13px; line-height:1;
-    display:grid; place-items:center; cursor:pointer; font-family:var(--mono);
+    pointer-events:auto; width:40px; height:40px; flex:0 0 40px;
+    border:1px solid var(--line); background:linear-gradient(#241d15,#171209);
+    color:var(--ink); border-radius:2px; font-size:14px; line-height:1;
+    display:grid; place-items:center; cursor:pointer; font-family:var(--font-display);
     touch-action:manipulation;
+    box-shadow:inset 0 1px 0 rgba(255,220,160,.1);
   }
-  .iconbtn:active{background:rgba(34,224,255,.18); border-color:var(--cyan);}
+  .iconbtn:active{background:#3a2d1d; border-color:var(--gold);}
 
-  /* ---------- Modals ---------- */
+  /* ---------- Screens ---------- */
   .screen{
     position:absolute; inset:0; display:none; flex-direction:column;
     align-items:center; justify-content:center; gap:14px;
     padding:calc(24px + var(--safe-t)) 22px calc(24px + var(--safe-b));
-    background:radial-gradient(ellipse at center,rgba(5,7,13,.86),rgba(5,7,13,.97));
+    background:
+      radial-gradient(ellipse at 50% 38%,rgba(60,40,20,.30),transparent 62%),
+      radial-gradient(ellipse at center,rgba(9,7,6,.88),rgba(7,5,4,.97));
     text-align:center; overflow-y:auto;
   }
   .screen.on{display:flex;}
 
   .title{
-    font-size:clamp(30px,10vw,58px); font-weight:800; letter-spacing:6px;
-    text-transform:uppercase; margin:0; line-height:.98;
+    font-family:var(--font-display); font-size:clamp(30px,10vw,58px);
+    font-weight:400; letter-spacing:5px; text-transform:uppercase;
+    margin:0; line-height:1.02; color:var(--ink);
+    text-shadow:0 2px 18px rgba(0,0,0,.8);
   }
-  .title span{color:var(--magenta); text-shadow:0 0 22px rgba(255,46,136,.6);}
-  .title em{font-style:normal; color:var(--cyan); text-shadow:0 0 22px rgba(34,224,255,.6);}
+  .title span{color:var(--blood); text-shadow:0 0 26px rgba(194,53,42,.5);}
+  .title em{font-style:normal; color:#8fc2ea;
+    text-shadow:0 0 30px rgba(92,150,210,.3), 0 2px 16px rgba(0,0,0,.7);}
   .sub{
-    font-family:var(--mono); font-size:11px; letter-spacing:3px;
+    font-family:var(--font-ui); font-size:12px; letter-spacing:3.4px;
     text-transform:uppercase; color:var(--dim); margin:0; max-width:34ch;
   }
   .blurb{
-    font-family:var(--mono); font-size:12px; line-height:1.8; color:#b6c6da;
-    max-width:40ch; margin:4px 0 0;
+    font-family:var(--font-ui); font-size:15px; line-height:1.75; color:#cbbb9c;
+    max-width:38ch; margin:4px 0 0; font-style:italic;
   }
-  .blurb b{color:var(--amber); font-weight:600;}
+  .blurb b{color:var(--gold); font-weight:600; font-style:normal;}
 
   .btn{
-    font-family:var(--font); font-weight:700; font-size:15px; letter-spacing:3px;
-    text-transform:uppercase; padding:14px 34px; border-radius:3px; cursor:pointer;
-    border:1px solid var(--cyan); background:rgba(34,224,255,.12); color:var(--cyan);
-    touch-action:manipulation; min-width:210px;
+    font-family:var(--font-display); font-weight:400; font-size:17px;
+    letter-spacing:4px; text-transform:uppercase; padding:14px 34px;
+    border-radius:2px; cursor:pointer; touch-action:manipulation; min-width:220px;
+    border:1px solid var(--line); color:var(--gold);
+    background:linear-gradient(#2a2116,#171109);
+    box-shadow:inset 0 1px 0 rgba(255,220,160,.12), 0 2px 10px rgba(0,0,0,.6);
   }
-  .btn:active{background:rgba(34,224,255,.3);}
-  .btn.ghost{border-color:var(--line); background:transparent; color:var(--dim);
-    font-size:12px; padding:11px 22px; min-width:0; letter-spacing:2px;}
+  .btn:active{background:linear-gradient(#3b2f1f,#241a10); border-color:var(--gold);}
+  .btn.ghost{border-color:#33291d; background:transparent; color:var(--dim);
+    font-size:13px; padding:11px 22px; min-width:0; letter-spacing:2.4px;
+    box-shadow:none;}
 
   .stats{
     display:grid; grid-template-columns:repeat(2,minmax(96px,1fr)); gap:8px;
-    font-family:var(--mono); font-size:10px; letter-spacing:1.4px;
+    font-family:var(--font-ui); font-size:11px; letter-spacing:2px;
     text-transform:uppercase; color:var(--dim); margin:2px 0 4px;
   }
-  .stats div{border:1px solid var(--line); background:rgba(14,21,36,.75);
-    padding:9px 10px; border-radius:3px;}
-  .stats b{display:block; font-size:19px; color:var(--ink); letter-spacing:1px;
-    margin-top:3px; font-weight:600;}
+  .stats div{border:1px solid var(--line); background:rgba(26,22,17,.8);
+    padding:9px 10px; border-radius:2px;}
+  .stats b{display:block; font-family:var(--font-display); font-size:21px;
+    color:var(--ink); letter-spacing:1px; margin-top:3px; font-weight:400;}
 
-  /* ---------- Level-up cards ---------- */
+  /* ---------- Boon cards ---------- */
   #levelup .cards{
     display:flex; flex-direction:column; gap:10px; width:100%; max-width:400px;
   }
   .card{
     display:flex; align-items:center; gap:13px; text-align:left; cursor:pointer;
-    border:1px solid var(--line); border-left:3px solid var(--cyan);
-    background:rgba(14,21,36,.94); border-radius:4px; padding:13px 15px;
+    border:1px solid var(--line); border-left:3px solid var(--gold);
+    background:linear-gradient(100deg,#221b13,#16110c);
+    border-radius:2px; padding:13px 15px;
     touch-action:manipulation; width:100%; color:inherit; font-family:inherit;
+    box-shadow:inset 0 1px 0 rgba(255,220,160,.08);
   }
-  .card:active{background:rgba(34,224,255,.16);}
+  .card:active{background:linear-gradient(100deg,#3a2d1d,#241a10);}
   .card .glyph{
     flex:0 0 34px; height:34px; display:grid; place-items:center;
-    font-size:18px; line-height:1;
+    font-size:19px; line-height:1; color:var(--gold);
+    text-shadow:0 0 10px rgba(255,194,77,.4);
   }
   .card h4{
-    margin:0 0 3px; font-size:15px; font-weight:800; letter-spacing:1.6px;
-    text-transform:uppercase; color:var(--ink);
+    margin:0 0 3px; font-family:var(--font-display); font-size:17px;
+    font-weight:400; letter-spacing:1.4px; text-transform:uppercase; color:var(--ink);
   }
   .card p{
-    margin:0; font-family:var(--mono); font-size:11px; line-height:1.5; color:var(--dim);
+    margin:0; font-family:var(--font-ui); font-size:12.5px; line-height:1.5;
+    color:var(--dim); font-style:italic;
   }
   .card .tier{
-    font-family:var(--mono); font-size:9px; letter-spacing:1.4px; color:var(--violet);
+    font-family:var(--font-ui); font-size:10px; letter-spacing:1.4px;
+    color:var(--arcane); font-style:normal;
   }
 
   .fine{
-    font-family:var(--mono); font-size:10px; letter-spacing:1.6px;
-    text-transform:uppercase; color:#4d5c72;
+    font-family:var(--font-ui); font-size:11px; letter-spacing:2px;
+    text-transform:uppercase; color:var(--faint);
   }
   .hint{
-    font-family:var(--mono); font-size:11px; letter-spacing:1px; color:var(--dim);
-    line-height:1.9; max-width:38ch; text-align:left;
+    font-family:var(--font-ui); font-size:13px; letter-spacing:.4px; color:var(--dim);
+    line-height:1.95; max-width:34ch; text-align:left;
   }
-  .hint b{color:var(--cyan); font-weight:600;}
+  .hint b{color:var(--gold); font-weight:600;}
 
   #flash{
     position:absolute; inset:0; pointer-events:none; opacity:0;
-    background:radial-gradient(ellipse at center,transparent 42%,rgba(255,59,59,.55));
+    background:radial-gradient(ellipse at center,transparent 40%,rgba(150,20,12,.6));
     transition:opacity .16s ease-out;
   }
 </style>
@@ -189,8 +205,8 @@
       <div class="bar" id="hpBar"><i id="hpFill"></i></div>
       <div class="bar" id="techBar"><i id="techFill"></i></div>
       <div class="readout">
-        <span>INT <b id="hpText">100</b></span>
-        <span id="techText">TECH 0/70</span>
+        <span>Life <b id="hpText">100</b></span>
+        <span id="techText">Essence 0/70</span>
       </div>
     </div>
     <div class="hud-right">
@@ -201,39 +217,39 @@
   </div>
 
   <div class="screen on" id="start">
-    <h1 class="title">Neon<br><em>Extraction</em></h1>
-    <p class="sub">Arena survival prototype</p>
+    <h1 class="title">Ashen<br><em>Waygate</em></h1>
+    <p class="sub">A delve beneath the ward</p>
     <p class="blurb">
-      You are cut off behind the grid. Your rig fires on its own — you only steer.
-      Harvest <b>tech</b> from what you kill, then reach the <b>extraction portal</b>
-      and hold it long enough to get out.
+      The stair behind you has fallen. Your blade answers on its own — you need
+      only carry it. Draw <b>essence</b> from the dead, then find the
+      <b>waygate</b> and hold its circle until it opens.
     </p>
-    <button class="btn" id="playBtn">Deploy</button>
+    <button class="btn" id="playBtn">Descend</button>
     <p class="hint">
       <b>Move</b> — drag anywhere, or WASD / arrows<br>
-      <b>Fire</b> — automatic, nearest target in range<br>
-      <b>Level up</b> — every few tech, pick an upgrade
+      <b>Strike</b> — your ward looses on the nearest foe<br>
+      <b>Boons</b> — every few essence, choose a gift
     </p>
     <p class="fine" id="bestLine"></p>
   </div>
 
   <div class="screen" id="levelup">
-    <p class="sub" id="lvlSub">System upgrade available</p>
-    <h1 class="title" style="font-size:clamp(24px,7vw,38px)">Level <span id="lvlNum">2</span></h1>
+    <p class="sub" id="lvlSub">A boon is offered</p>
+    <h1 class="title" style="font-size:clamp(24px,7vw,38px)">Rank <span id="lvlNum">2</span></h1>
     <div class="cards" id="cards"></div>
   </div>
 
   <div class="screen" id="paused">
-    <h1 class="title" style="font-size:clamp(24px,8vw,44px)">Paused</h1>
-    <button class="btn" id="resumeBtn">Resume</button>
-    <button class="btn ghost" id="abortBtn">Abort run</button>
+    <h1 class="title" style="font-size:clamp(24px,8vw,44px)">Held</h1>
+    <button class="btn" id="resumeBtn">Press on</button>
+    <button class="btn ghost" id="abortBtn">Abandon the delve</button>
   </div>
 
   <div class="screen" id="over">
-    <h1 class="title" id="overTitle"><span>Terminated</span></h1>
-    <p class="sub" id="overSub">The swarm got through the plating.</p>
+    <h1 class="title" id="overTitle"><span>Slain</span></h1>
+    <p class="sub" id="overSub">The horde broke your guard.</p>
     <div class="stats" id="overStats"></div>
-    <button class="btn" id="againBtn">Redeploy</button>
+    <button class="btn" id="againBtn">Descend again</button>
   </div>
 </div>
 
@@ -280,25 +296,38 @@ const BASE_PLAYER = {
 
 // Enemy archetypes. `weight` is the spawn share, ramped by `from` (seconds).
 const ENEMY_TYPES = {
-  drone: { r: 13, speed: 96,  hp: 34,  dmg: 8,  tech: 1, cd: 0.95, mass: 1.0,
-           color: '#ff2e88', halo: 'rgba(255,46,136,.20)', weight: 10, from: 0 },
-  spike: { r: 11, speed: 152, hp: 22,  dmg: 6,  tech: 1, cd: 0.70, mass: 0.7,
-           color: '#ff6a1f', halo: 'rgba(255,106,31,.22)', weight: 8,  from: 25 },
-  brute: { r: 23, speed: 62,  hp: 135, dmg: 21, tech: 4, cd: 1.30, mass: 2.8,
-           color: '#7c4dff', halo: 'rgba(124,77,255,.22)', weight: 4,  from: 55 }
+  wretch:   { r: 13, speed: 96,  hp: 34,  dmg: 8,  tech: 1, cd: 0.95, mass: 1.0,
+              color: '#9dbb5a', halo: 'rgba(157,187,90,.20)', weight: 10, from: 0 },
+  shade:    { r: 11, speed: 152, hp: 22,  dmg: 6,  tech: 1, cd: 0.70, mass: 0.7,
+              color: '#b07cff', halo: 'rgba(176,124,255,.22)', weight: 8,  from: 25 },
+  revenant: { r: 23, speed: 62,  hp: 135, dmg: 21, tech: 4, cd: 1.30, mass: 2.8,
+              color: '#e0552a', halo: 'rgba(224,85,42,.22)', weight: 4,  from: 55 }
+};
+
+// One place for the look. Everything on the canvas pulls from here.
+const PAL = {
+  arcane:'#5cb8ff', arcaneDim:'#2f6f9e',
+  ember:'#ff9a3c', gold:'#ffc24d', blood:'#c2352a',
+  wretch:'#9dbb5a', shade:'#b07cff', revenant:'#e0552a',
+  floor:'#191510', floorLine:'rgba(206,172,120,.085)',
+  floorLineBold:'rgba(206,172,120,.15)',
+  stoneTop:'#3b342b', stoneMid:'#241e18', stoneLow:'#0d0b09',
+  rimWarm:'rgba(255,168,86,.34)', rimLight:'rgba(255,214,170,.72)',
+  rimSpill:'rgba(255,150,60,.075)', bevel:'rgba(214,180,140,.12)',
+  bone:'#cbbd9a'
 };
 
 const UPGRADES = [
-  { id:'dmg',    glyph:'◆', name:'Hollowpoint',    desc:'+25% projectile damage',       max:99, apply:p=>p.damage      *= 1.25 },
-  { id:'rate',   glyph:'⧗', name:'Overclock',      desc:'+18% fire rate',               max:8,  apply:p=>p.fireDelay   *= 0.85 },
-  { id:'speed',  glyph:'⏵', name:'Mag-Boots',      desc:'+10% movement speed',          max:6,  apply:p=>p.speed       *= 1.10 },
-  { id:'plate',  glyph:'▣', name:'Plating',        desc:'+25 max integrity, repair 25', max:99, apply:p=>{p.maxHp += 25; p.hp = Math.min(p.maxHp, p.hp + 25);} },
-  { id:'range',  glyph:'◎', name:'Targeting Array',desc:'+15% weapon range',            max:5,  apply:p=>p.range       *= 1.15 },
-  { id:'split',  glyph:'⋔', name:'Splitter',       desc:'+1 projectile per shot',       max:4,  apply:p=>p.shots       += 1 },
-  { id:'pierce', glyph:'⇉', name:'Railshot',       desc:'projectiles pierce 1 more',    max:4,  apply:p=>p.pierce      += 1 },
-  { id:'magnet', glyph:'◈', name:'Harvester',      desc:'+50% tech collection radius',  max:4,  apply:p=>p.magnet      *= 1.5 },
-  { id:'regen',  glyph:'✚', name:'Nanoweave',      desc:'repair 0.8 integrity/sec',     max:5,  apply:p=>p.regen       += 0.8 },
-  { id:'vel',    glyph:'➤', name:'Accelerator',    desc:'+25% projectile speed',        max:4,  apply:p=>p.bulletSpeed *= 1.25 }
+  { id:'dmg',    glyph:'✦', name:'Keen Edge',   desc:'your ward bites a quarter deeper',   max:99, apply:p=>p.damage      *= 1.25 },
+  { id:'rate',   glyph:'❧', name:'Quickening',  desc:'the blade answers faster',           max:8,  apply:p=>p.fireDelay   *= 0.85 },
+  { id:'speed',  glyph:'❯', name:'Windstep',    desc:'your stride lengthens',              max:6,  apply:p=>p.speed       *= 1.10 },
+  { id:'plate',  glyph:'❖', name:'Ironhide',    desc:'+25 life, and 25 mended now',        max:99, apply:p=>{p.maxHp += 25; p.hp = Math.min(p.maxHp, p.hp + 25);} },
+  { id:'range',  glyph:'◎', name:'Farsight',    desc:'your reach grows by a seventh',      max:5,  apply:p=>p.range       *= 1.15 },
+  { id:'split',  glyph:'⁂', name:'Split Bolt',  desc:'one more bolt with every strike',    max:4,  apply:p=>p.shots       += 1 },
+  { id:'pierce', glyph:'⌁', name:'Rendbolt',    desc:'bolts run through one foe more',     max:4,  apply:p=>p.pierce      += 1 },
+  { id:'magnet', glyph:'❂', name:'Soul Draw',   desc:'essence comes to you from further',  max:4,  apply:p=>p.magnet      *= 1.5 },
+  { id:'regen',  glyph:'✚', name:'Mending',     desc:'0.8 life knits back each second',    max:5,  apply:p=>p.regen       += 0.8 },
+  { id:'vel',    glyph:'➤', name:'Swift Bolt',  desc:'bolts fly a quarter faster',         max:4,  apply:p=>p.bulletSpeed *= 1.25 }
 ];
 
 /* ---------------------------------------------------------------------------
@@ -389,7 +418,6 @@ function pointInWalls(x, y, pad) {
    ---------------------------------------------------------------------- */
 
 const CELL_W = 40;                       // world units per cave cell
-const CAVE_FILL = 0.58;                  // initial rock density before smoothing
 const GW = Math.floor(WORLD.w / CELL_W);
 const GH = Math.floor(WORLD.h / CELL_W);
 const SOLID = 1, OPEN = 0;
@@ -706,13 +734,14 @@ function buildScenery(spawn, portal) {
     const mx = e.x1 + ux * clamp(d + jitter, 6, len - 6) + e.nx * 7;
     const my = e.y1 + uy * clamp(d + jitter, 6, len - 6) + e.ny * 7;
     const roll = Math.random();
-    const kind = roll < 0.34 ? 'vent' : roll < 0.62 ? 'pipes' : roll < 0.84 ? 'panel' : 'warn';
+    const kind = roll < 0.24 ? 'torch' : roll < 0.52 ? 'chain' :
+                 roll < 0.80 ? 'banner' : 'sconce';
     props.push({ x: mx, y: my, rot, kind });
-    if (kind === 'panel' && Math.random() < 0.45) {
-      lamps.push({ x: mx + e.nx * 10, y: my + e.ny * 10,
-                   color: Math.random() < 0.78 ? '#22e0ff' : '#ff2e88' });
-    } else if (kind === 'warn' && Math.random() < 0.22) {
-      lamps.push({ x: mx + e.nx * 10, y: my + e.ny * 10, color: '#ffd23f' });
+    // Torches are the light. Everything else is just furniture.
+    if (kind === 'torch') {
+      lamps.push({ x: mx + e.nx * 12, y: my + e.ny * 12, color: PAL.ember });
+    } else if (kind === 'sconce' && Math.random() < 0.28) {
+      lamps.push({ x: mx + e.nx * 12, y: my + e.ny * 12, color: PAL.arcane });
     }
     }
   }
@@ -734,14 +763,14 @@ function buildScenery(spawn, portal) {
     const roll = Math.random();
     let kind = null, rot = 0;
     if (byRock) {
-      if (roll > 0.42) continue;
-      kind = roll < 0.13 ? 'rubble' : roll < 0.22 ? 'hazard' : roll < 0.3 ? 'cable' :
-             roll < 0.37 ? 'grate' : 'stain';
-      rot = (kind === 'rubble' || kind === 'stain') ? Math.random() * TAU : snap();
+      if (roll > 0.44) continue;
+      kind = roll < 0.11 ? 'rubble' : roll < 0.19 ? 'bones' : roll < 0.26 ? 'barrel' :
+             roll < 0.32 ? 'crate' : roll < 0.38 ? 'grate' : 'moss';
+      rot = (kind === 'crate' || kind === 'grate') ? snap() : Math.random() * TAU;
     } else {
       if (roll > 0.2) continue;
-      kind = roll < 0.09 ? 'stain' : roll < 0.14 ? 'grate' : 'rubble';
-      rot = (kind === 'grate') ? snap() : Math.random() * TAU;
+      kind = roll < 0.08 ? 'crack' : roll < 0.13 ? 'moss' : roll < 0.17 ? 'bones' : 'rubble';
+      rot = (kind === 'crack') ? snap() : Math.random() * TAU;
     }
     props.push({ x: c.x + rand(-C * 0.22, C * 0.22),
                  y: c.y + rand(-C * 0.22, C * 0.22), rot, kind });
@@ -1012,8 +1041,8 @@ function hurtPlayer(e) {
   shake(6 + e.dmg * 0.25);
   hitFlashUI();
   burst(player.x + (e.x - player.x) * 0.5, player.y + (e.y - player.y) * 0.5,
-        '#ff3b3b', 10, 180);
-  ring(player.x, player.y, '#ff3b3b', player.r, player.r * 3.4, 0.3);
+        PAL.blood, 10, 180);
+  ring(player.x, player.y, PAL.blood, player.r, player.r * 3.4, 0.3);
   if (player.hp <= 0) { player.hp = 0; endRun(false); }
 }
 
@@ -1024,11 +1053,11 @@ function damageEnemy(e, dmg) {
   if (e.hp <= 0) {
     run.kills++;
     dropLoot(e);
-    burst(e.x, e.y, e.color, e.r > 18 ? 18 : 9, 200);
-    ring(e.x, e.y, e.color, e.r * 0.5, e.r * (e.r > 18 ? 4.2 : 2.9), 0.34);
+    burst(e.x, e.y, e.color, e.r > 18 ? 14 : 7, 190);
+    ring(e.x, e.y, e.color, e.r * 0.5, e.r * (e.r > 18 ? 3.4 : 2.3), 0.26);
     if (e.r > 18) shake(3);
   } else {
-    burst(e.x, e.y, '#e8f4ff', 2, 90);
+    burst(e.x, e.y, '#e6d8bc', 2, 90);
   }
 }
 
@@ -1230,7 +1259,7 @@ function updateBullets(dt) {
         if (b.x > wl.x - b.r && b.x < wl.x + wl.w + b.r &&
             b.y > wl.y - b.r && b.y < wl.y + wl.h + b.r) {
           b.dead = true;
-          burst(b.x, b.y, '#22e0ff', 4, 130);
+          burst(b.x, b.y, PAL.arcane, 4, 130);
           break;
         }
       }
@@ -1274,8 +1303,8 @@ function updateLoot(dt) {
 
     if (d < player.r + 10) {
       collectTech(l.value);
-      burst(l.x, l.y, '#ffd23f', 5, 120);
-      ring(l.x, l.y, '#ffd23f', 3, 22, 0.22);
+      burst(l.x, l.y, PAL.gold, 5, 120);
+      ring(l.x, l.y, PAL.gold, 3, 22, 0.22);
       continue;
     }
     loot[w++] = l;
@@ -1378,7 +1407,7 @@ let fxAccum = 0, fxFrames = 0, fxGood = 0;
 let SS = 2;                     // sprite supersample factor
 const SPR = {};                 // forged entity sprites
 const LIGHTS = new Map();       // radial light blobs, keyed colour|span
-let vignette = null, scanlines = null;
+let vignette = null;
 const wallGrads = new Map();
 
 /* --- forge helpers ------------------------------------------------------ */
@@ -1447,179 +1476,234 @@ function lightFor(color, span) {
   return l;
 }
 
-/* --- entity silhouettes ------------------------------------------------- */
+/* --- entity silhouettes -------------------------------------------------
+   Painted rather than neon: a body is a dark mass lit from above, with a
+   thin rim where the light catches, and glow reserved for the things that
+   are actually magical -- a warded blade, a revenant's runes, an essence
+   mote. Nothing glows just because it is a game object.
+   ---------------------------------------------------------------------- */
+
+// Dark mass, lit crown, thin rim. The shared look for everything alive.
+function paintedBody(g, pathFn, r, top, bottom, rim) {
+  pathFn(g);
+  const grd = g.createLinearGradient(0, -r, 0, r * 0.9);
+  grd.addColorStop(0, top);
+  grd.addColorStop(0.55, bottom);
+  grd.addColorStop(1, '#0a0806');
+  g.fillStyle = grd;
+  g.fill();
+
+  g.strokeStyle = 'rgba(0,0,0,.6)';
+  g.lineWidth = 2.6;
+  pathFn(g); g.stroke();
+
+  g.strokeStyle = rim;
+  g.lineWidth = 1.1;
+  pathFn(g); g.stroke();
+}
 
 function enemyPath(g, kind, r) {
   g.beginPath();
-  if (kind === 'drone') {
-    g.moveTo(r, 0);
-    g.lineTo(-r * 0.62, r * 0.78);
-    g.lineTo(-r * 0.26, 0);
-    g.lineTo(-r * 0.62, -r * 0.78);
-  } else if (kind === 'spike') {
-    g.moveTo(r * 1.5, 0);
-    g.lineTo(-r * 0.3, r * 0.5);
-    g.lineTo(-r * 0.95, r * 0.24);
-    g.lineTo(-r * 0.68, 0);
-    g.lineTo(-r * 0.95, -r * 0.24);
-    g.lineTo(-r * 0.3, -r * 0.5);
+  if (kind === 'wretch') {
+    // Hunched, lopsided: a thing that shambles.
+    g.moveTo(r * 0.95, -r * 0.1);
+    g.quadraticCurveTo(r * 0.7, r * 0.72, -r * 0.1, r * 0.9);
+    g.quadraticCurveTo(-r * 0.95, r * 0.62, -r * 0.86, -r * 0.16);
+    g.quadraticCurveTo(-r * 0.5, -r * 0.92, r * 0.2, -r * 0.8);
+    g.quadraticCurveTo(r * 0.8, -r * 0.7, r * 0.95, -r * 0.1);
+  } else if (kind === 'shade') {
+    // Tattered and streaming: a wraith drawn forward by hunger.
+    g.moveTo(r * 1.35, 0);
+    g.quadraticCurveTo(r * 0.2, r * 0.55, -r * 0.55, r * 0.95);
+    g.lineTo(-r * 0.42, r * 0.28);
+    g.quadraticCurveTo(-r * 1.15, r * 0.2, -r * 1.25, 0);
+    g.quadraticCurveTo(-r * 1.15, -r * 0.2, -r * 0.42, -r * 0.28);
+    g.lineTo(-r * 0.55, -r * 0.95);
+    g.quadraticCurveTo(r * 0.2, -r * 0.55, r * 1.35, 0);
   } else {
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * TAU;
-      const rr = r * (i % 2 === 0 ? 1 : 0.87);
-      (i === 0 ? g.moveTo : g.lineTo).call(g, Math.cos(a) * rr, Math.sin(a) * rr);
-    }
+    // Revenant: broad pauldrons over a heavy trunk.
+    g.moveTo(r * 0.78, -r * 0.34);
+    g.quadraticCurveTo(r * 1.0, 0, r * 0.78, r * 0.34);
+    g.lineTo(r * 0.34, r * 0.86);
+    g.quadraticCurveTo(0, r * 1.06, -r * 0.34, r * 0.86);
+    g.lineTo(-r * 0.8, r * 0.5);
+    g.quadraticCurveTo(-r * 1.02, 0, -r * 0.8, -r * 0.5);
+    g.lineTo(-r * 0.34, -r * 0.86);
+    g.quadraticCurveTo(0, -r * 1.06, r * 0.34, -r * 0.86);
   }
   g.closePath();
 }
 
-function playerPath(g, r) {
-  g.beginPath();
-  g.moveTo(r * 1.4, 0);
-  g.lineTo(r * 0.25, r * 0.4);
-  g.lineTo(-r * 0.5, r * 0.98);
-  g.lineTo(-r * 0.86, r * 0.5);
-  g.lineTo(-r * 0.42, 0);
-  g.lineTo(-r * 0.86, -r * 0.5);
-  g.lineTo(-r * 0.5, -r * 0.98);
-  g.lineTo(r * 0.25, -r * 0.4);
-  g.closePath();
-}
-
-// The shared neon treatment: bake the glow, fill a lit gradient body, then
-// lay a crisp rim over the top. Order matters -- glow underneath, rim last.
-function neonBody(g, pathFn, r, color, flash) {
-  g.shadowColor = color;
-  g.shadowBlur = r * 0.5;
-  g.strokeStyle = color;
-  g.lineWidth = 2.2;
-  pathFn(g); g.stroke();
-  g.shadowBlur = r * 0.26;
-  pathFn(g); g.stroke();
-  g.shadowBlur = 0;
-
-  const grd = g.createLinearGradient(0, -r, 0, r);
-  grd.addColorStop(0, tint(color, 0.34));
-  grd.addColorStop(0.45, '#0a1220');
-  grd.addColorStop(1, '#05080f');
-  g.fillStyle = flash ? tint(color, 2.4, 0.95) : grd;
-  pathFn(g); g.fill();
-
-  g.strokeStyle = flash ? '#ffffff' : color;
-  g.lineWidth = 1.7;
-  pathFn(g); g.stroke();
-
-  // Rim light along the leading edge reads as a light source above-left.
-  g.strokeStyle = flash ? '#ffffff' : tint(color, 1.6, 0.85);
-  g.lineWidth = 0.8;
-  pathFn(g); g.stroke();
-}
-
 function forgeEnemy(kind, r, color, flash) {
-  return forge(r * 2.6, g => {
-    neonBody(g, gg => enemyPath(gg, kind, r), r, color, flash);
-    if (flash) return;
-    if (kind === 'brute') {
-      g.strokeStyle = tint(color, 1.5, 0.55);
-      g.lineWidth = 1.1;
-      g.beginPath(); g.arc(0, 0, r * 0.46, 0, TAU); g.stroke();
-      g.fillStyle = tint(color, 2, 0.9);
-      g.beginPath(); g.arc(0, 0, r * 0.17, 0, TAU); g.fill();
-      g.strokeStyle = tint(color, 1.3, 0.4);
-      g.lineWidth = 1.4;
-      for (let i = -1; i <= 1; i++) {
-        g.beginPath();
-        g.moveTo(r * 0.1, i * r * 0.34);
-        g.lineTo(r * 0.52, i * r * 0.2);
-        g.stroke();
-      }
-    } else if (kind === 'drone') {
-      g.fillStyle = tint(color, 2.1, 0.95);
-      g.beginPath(); g.arc(r * 0.05, 0, r * 0.16, 0, TAU); g.fill();
-      g.strokeStyle = tint(color, 1.4, 0.45);
-      g.lineWidth = 1;
+  return forge(r * 2.7, g => {
+    if (flash) {
+      enemyPath(g, kind, r);
+      g.fillStyle = 'rgba(255,236,214,.95)';
+      g.fill();
+      g.strokeStyle = '#fff'; g.lineWidth = 1.6;
+      enemyPath(g, kind, r); g.stroke();
+      return;
+    }
+
+    if (kind === 'wretch') {
+      paintedBody(g, gg => enemyPath(gg, kind, r), r,
+                  '#4d5340', '#252a1d', 'rgba(190,214,140,.5)');
+      // Rag wrappings
+      g.strokeStyle = 'rgba(20,24,14,.75)'; g.lineWidth = 1.6;
       g.beginPath();
-      g.moveTo(-r * 0.5, r * 0.5); g.lineTo(-r * 0.28, r * 0.18);
-      g.moveTo(-r * 0.5, -r * 0.5); g.lineTo(-r * 0.28, -r * 0.18);
+      g.moveTo(-r * 0.55, -r * 0.2); g.quadraticCurveTo(0, r * 0.05, r * 0.5, -r * 0.3);
+      g.moveTo(-r * 0.5, r * 0.25); g.quadraticCurveTo(0, r * 0.45, r * 0.45, r * 0.15);
       g.stroke();
+      // Two sick little eyes
+      g.shadowColor = color; g.shadowBlur = 7;
+      g.fillStyle = color;
+      g.beginPath(); g.arc(r * 0.44, -r * 0.24, r * 0.11, 0, TAU); g.fill();
+      g.beginPath(); g.arc(r * 0.5, r * 0.16, r * 0.11, 0, TAU); g.fill();
+      g.shadowBlur = 0;
+
+    } else if (kind === 'shade') {
+      paintedBody(g, gg => enemyPath(gg, kind, r), r,
+                  '#3a3050', '#1b1628', 'rgba(176,124,255,.55)');
+      // Streaming tatters
+      g.strokeStyle = 'rgba(176,124,255,.3)'; g.lineWidth = 1.2;
+      g.beginPath();
+      g.moveTo(-r * 0.4, -r * 0.35); g.quadraticCurveTo(-r * 1.1, -r * 0.5, -r * 1.5, -r * 0.2);
+      g.moveTo(-r * 0.4, r * 0.35); g.quadraticCurveTo(-r * 1.1, r * 0.5, -r * 1.5, r * 0.2);
+      g.stroke();
+      g.shadowColor = color; g.shadowBlur = 10;
+      g.fillStyle = 'rgba(226,208,255,.95)';
+      g.beginPath(); g.ellipse(r * 0.42, 0, r * 0.2, r * 0.12, 0, 0, TAU); g.fill();
+      g.shadowBlur = 0;
+
     } else {
-      g.strokeStyle = tint(color, 2.2, 0.9);
-      g.lineWidth = 1.2;
-      g.beginPath(); g.moveTo(r * 1.2, 0); g.lineTo(-r * 0.5, 0); g.stroke();
+      paintedBody(g, gg => enemyPath(gg, kind, r), r,
+                  '#4a4038', '#221c18', 'rgba(190,170,150,.5)');
+      // Plate seams
+      g.strokeStyle = 'rgba(12,9,7,.8)'; g.lineWidth = 1.8;
+      g.beginPath();
+      g.moveTo(-r * 0.62, -r * 0.5); g.lineTo(-r * 0.3, -r * 0.14);
+      g.moveTo(-r * 0.62, r * 0.5); g.lineTo(-r * 0.3, r * 0.14);
+      g.stroke();
+      // Bound runes: the only thing keeping it upright
+      g.shadowColor = color; g.shadowBlur = 9;
+      g.strokeStyle = color; g.lineWidth = 1.9;
+      g.beginPath();
+      g.moveTo(-r * 0.1, -r * 0.46); g.lineTo(r * 0.16, -r * 0.1);
+      g.lineTo(-r * 0.1, r * 0.1); g.lineTo(r * 0.16, r * 0.46);
+      g.stroke();
+      g.fillStyle = 'rgba(255,214,190,.95)';
+      g.beginPath(); g.arc(r * 0.5, -r * 0.2, r * 0.1, 0, TAU); g.fill();
+      g.beginPath(); g.arc(r * 0.5, r * 0.2, r * 0.1, 0, TAU); g.fill();
+      g.shadowBlur = 0;
     }
   });
 }
 
+// The warden: cloak, pauldrons, helm, and a warded blade held out front.
 function forgePlayer(flash) {
   const r = BASE_PLAYER.r;
-  const C = '#22e0ff';
-  return forge(r * 2.8, g => {
-    neonBody(g, gg => playerPath(gg, r), r, C, flash);
-    if (flash) return;
-    // Cockpit
-    const grd = g.createRadialGradient(r * 0.15, 0, 0, r * 0.15, 0, r * 0.42);
-    grd.addColorStop(0, 'rgba(255,255,255,.95)');
-    grd.addColorStop(0.5, 'rgba(160,240,255,.5)');
-    grd.addColorStop(1, 'rgba(34,224,255,0)');
-    g.fillStyle = grd;
-    g.beginPath(); g.ellipse(r * 0.15, 0, r * 0.42, r * 0.26, 0, 0, TAU); g.fill();
-    // Engine ports
-    g.fillStyle = 'rgba(120,235,255,.85)';
-    g.fillRect(-r * 0.72, -r * 0.34, r * 0.16, r * 0.2);
-    g.fillRect(-r * 0.72, r * 0.14, r * 0.16, r * 0.2);
-    // Wing striping
-    g.strokeStyle = tint(C, 1.4, 0.35);
-    g.lineWidth = 0.9;
-    g.beginPath();
-    g.moveTo(-r * 0.2, r * 0.5); g.lineTo(-r * 0.55, r * 0.8);
-    g.moveTo(-r * 0.2, -r * 0.5); g.lineTo(-r * 0.55, -r * 0.8);
-    g.stroke();
+  const cloak = gg => {
+    gg.beginPath();
+    gg.moveTo(r * 0.86, 0);
+    gg.quadraticCurveTo(r * 0.62, r * 0.86, -r * 0.28, r * 1.02);
+    gg.quadraticCurveTo(-r * 1.18, r * 0.72, -r * 1.14, 0);
+    gg.quadraticCurveTo(-r * 1.18, -r * 0.72, -r * 0.28, -r * 1.02);
+    gg.quadraticCurveTo(r * 0.62, -r * 0.86, r * 0.86, 0);
+    gg.closePath();
+  };
+  return forge(r * 3.6, g => {
+    // Blade first so the body sits over its hilt
+    g.shadowColor = PAL.arcane; g.shadowBlur = flash ? 6 : 13;
+    g.strokeStyle = 'rgba(150,214,255,.9)'; g.lineWidth = 3.4; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(r * 0.5, r * 0.45); g.lineTo(r * 2.02, r * 0.16); g.stroke();
+    g.strokeStyle = '#eaf6ff'; g.lineWidth = 1.3;
+    g.beginPath(); g.moveTo(r * 0.5, r * 0.45); g.lineTo(r * 1.98, r * 0.17); g.stroke();
+    g.shadowBlur = 0;
+    // Crossguard
+    g.strokeStyle = '#6b5a44'; g.lineWidth = 2.6;
+    g.beginPath(); g.moveTo(r * 0.56, r * 0.72); g.lineTo(r * 0.72, r * 0.16); g.stroke();
+
+    // Shield, off the left arm
+    g.fillStyle = '#2b2721';
+    g.beginPath(); g.ellipse(-r * 0.1, -r * 0.86, r * 0.46, r * 0.3, -0.35, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(190,170,140,.6)'; g.lineWidth = 1.2; g.stroke();
+    g.fillStyle = PAL.arcane;
+    g.beginPath(); g.arc(-r * 0.1, -r * 0.86, r * 0.1, 0, TAU); g.fill();
+
+    // Cloak and mail
+    paintedBody(g, cloak, r,
+                flash ? '#8a7468' : '#544a40',
+                flash ? '#4a3d34' : '#241d18',
+                'rgba(238,222,190,.85)');
+    // Pauldrons
+    g.fillStyle = '#5d5e57';
+    g.beginPath(); g.ellipse(r * 0.08, r * 0.7, r * 0.4, r * 0.26, 0.5, 0, TAU); g.fill();
+    g.beginPath(); g.ellipse(r * 0.08, -r * 0.7, r * 0.4, r * 0.26, -0.5, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(240,226,196,.75)'; g.lineWidth = 1.1;
+    g.beginPath(); g.ellipse(r * 0.08, r * 0.7, r * 0.4, r * 0.26, 0.5, 0, TAU); g.stroke();
+    g.beginPath(); g.ellipse(r * 0.08, -r * 0.7, r * 0.4, r * 0.26, -0.5, 0, TAU); g.stroke();
+
+    // Helm with a lit visor slit
+    const hg = g.createLinearGradient(0, -r * 0.5, 0, r * 0.5);
+    hg.addColorStop(0, '#9aa0a0'); hg.addColorStop(1, '#3a3833');
+    g.fillStyle = hg;
+    g.beginPath(); g.ellipse(r * 0.18, 0, r * 0.52, r * 0.45, 0, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(246,236,212,.9)'; g.lineWidth = 1.3; g.stroke();
+    g.shadowColor = PAL.arcane; g.shadowBlur = 8;
+    g.fillStyle = 'rgba(180,226,255,.95)';
+    g.fillRect(r * 0.34, -r * 0.18, r * 0.3, r * 0.36);
+    g.shadowBlur = 0;
+    g.lineCap = 'butt';
   });
 }
 
+// An arcane bolt: hot core, cold tail.
 function forgeBullet() {
-  return forge(30, g => {
-    const grd = g.createLinearGradient(-15, 0, 13, 0);
-    grd.addColorStop(0,   'rgba(34,224,255,0)');
-    grd.addColorStop(0.5, 'rgba(34,224,255,.35)');
-    grd.addColorStop(0.85,'rgba(150,245,255,.95)');
-    grd.addColorStop(1,   'rgba(255,255,255,1)');
-    g.shadowColor = '#22e0ff'; g.shadowBlur = 9;
+  return forge(32, g => {
+    g.shadowColor = PAL.arcane; g.shadowBlur = 10;
+    const grd = g.createLinearGradient(-15, 0, 12, 0);
+    grd.addColorStop(0, 'rgba(92,184,255,0)');
+    grd.addColorStop(0.55, 'rgba(92,184,255,.45)');
+    grd.addColorStop(0.9, 'rgba(196,232,255,.95)');
+    grd.addColorStop(1, '#ffffff');
     g.fillStyle = grd;
     g.beginPath();
-    g.moveTo(13, 0);
-    g.quadraticCurveTo(6, 3.1, -15, 1.1);
-    g.lineTo(-15, -1.1);
-    g.quadraticCurveTo(6, -3.1, 13, 0);
+    g.moveTo(12, 0);
+    g.quadraticCurveTo(4, 3.4, -15, 1.0);
+    g.lineTo(-15, -1.0);
+    g.quadraticCurveTo(4, -3.4, 12, 0);
     g.closePath(); g.fill();
-    g.shadowBlur = 0;
     g.fillStyle = '#ffffff';
-    g.beginPath(); g.arc(11, 0, 1.7, 0, TAU); g.fill();
+    g.beginPath(); g.arc(10, 0, 1.9, 0, TAU); g.fill();
+    g.shadowBlur = 0;
   });
 }
 
+// Essence: a mote of light bound in a shard.
 function forgeLoot(big) {
-  const s = big ? 11 : 7.5;
-  return forge(s * 3.2, g => {
-    g.shadowColor = '#ffd23f'; g.shadowBlur = 11;
-    g.fillStyle = 'rgba(255,210,63,.9)';
+  const s = big ? 10 : 7;
+  return forge(s * 3.4, g => {
+    g.shadowColor = PAL.gold; g.shadowBlur = 12;
+    g.fillStyle = 'rgba(255,194,77,.92)';
     g.beginPath();
-    g.moveTo(0, -s); g.lineTo(s * 0.72, 0); g.lineTo(0, s); g.lineTo(-s * 0.72, 0);
+    g.moveTo(0, -s); g.lineTo(s * 0.62, -s * 0.2);
+    g.lineTo(s * 0.38, s * 0.85); g.lineTo(-s * 0.38, s * 0.85);
+    g.lineTo(-s * 0.62, -s * 0.2);
     g.closePath(); g.fill();
     g.shadowBlur = 0;
-    // Facet: light half against dark half sells it as a solid.
-    g.fillStyle = 'rgba(255,244,200,.95)';
+    g.fillStyle = 'rgba(255,244,214,.95)';
     g.beginPath();
-    g.moveTo(0, -s); g.lineTo(s * 0.72, 0); g.lineTo(0, 0);
+    g.moveTo(0, -s); g.lineTo(s * 0.62, -s * 0.2); g.lineTo(0, s * 0.1);
     g.closePath(); g.fill();
-    g.fillStyle = 'rgba(190,130,0,.55)';
+    g.fillStyle = 'rgba(150,86,10,.5)';
     g.beginPath();
-    g.moveTo(0, s); g.lineTo(-s * 0.72, 0); g.lineTo(0, 0);
+    g.moveTo(0, s * 0.85); g.lineTo(-s * 0.62, -s * 0.2); g.lineTo(0, s * 0.1);
     g.closePath(); g.fill();
-    g.strokeStyle = 'rgba(255,235,150,.9)';
-    g.lineWidth = 0.9;
+    g.strokeStyle = 'rgba(255,228,160,.85)'; g.lineWidth = 0.8;
     g.beginPath();
-    g.moveTo(0, -s); g.lineTo(s * 0.72, 0); g.lineTo(0, s); g.lineTo(-s * 0.72, 0);
+    g.moveTo(0, -s); g.lineTo(s * 0.62, -s * 0.2);
+    g.lineTo(s * 0.38, s * 0.85); g.lineTo(-s * 0.38, s * 0.85);
+    g.lineTo(-s * 0.62, -s * 0.2);
     g.closePath(); g.stroke();
   });
 }
@@ -1630,35 +1714,21 @@ function forgeVignette() {
   const w = Math.max(1, view.w), h = Math.max(1, view.h);
   const c = newCanvas(w, h);
   const g = c.getContext('2d');
-  const grd = g.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.32,
-                                     w / 2, h / 2, Math.max(w, h) * 0.78);
+  const grd = g.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.26,
+                                     w / 2, h / 2, Math.max(w, h) * 0.74);
   grd.addColorStop(0, 'rgba(0,0,0,0)');
-  grd.addColorStop(0.62, 'rgba(2,4,10,.34)');
-  grd.addColorStop(1, 'rgba(1,2,6,.82)');
+  grd.addColorStop(0.55, 'rgba(8,5,3,.42)');
+  grd.addColorStop(1, 'rgba(4,2,1,.92)');
   g.fillStyle = grd;
   g.fillRect(0, 0, w, h);
-  // Cool top / warm-magenta bottom: a cheap two-source lighting suggestion.
+  // Faint warmth up top, cold blue down low: torch above, something else below.
   const tg = g.createLinearGradient(0, 0, 0, h);
-  tg.addColorStop(0, 'rgba(34,224,255,.05)');
+  tg.addColorStop(0, 'rgba(255,150,60,.045)');
   tg.addColorStop(0.5, 'rgba(0,0,0,0)');
-  tg.addColorStop(1, 'rgba(255,46,136,.05)');
+  tg.addColorStop(1, 'rgba(60,110,180,.05)');
   g.fillStyle = tg;
   g.fillRect(0, 0, w, h);
-  if (scanlines) {                    // folded in: one screen-sized blit, not two
-    g.fillStyle = scanlines;
-    g.globalAlpha = 0.16;
-    g.fillRect(0, 0, w, h);
-    g.globalAlpha = 1;
-  }
   return c;
-}
-
-function forgeScanlines() {
-  const c = newCanvas(4, 4);
-  const g = c.getContext('2d');
-  g.fillStyle = 'rgba(0,0,0,.5)';
-  g.fillRect(0, 3, 4, 1);
-  return ctx.createPattern(c, 'repeat');
 }
 
 function forgeAll() {
@@ -1673,11 +1743,10 @@ function forgeAll() {
     SPR[k + 'Hit'] = forgeEnemy(k, d.r, d.color, true);
   }
   SPR.bullet = forgeBullet();
-  forgeProps();
   SPR.loot = forgeLoot(false);
   SPR.lootBig = forgeLoot(true);
-  scanlines = forgeScanlines();
-  vignette = forgeVignette();       // bakes scanlines in, so it must come last
+  forgeProps();
+  vignette = forgeVignette();
 }
 
 let forgedAt = 0;
@@ -1698,53 +1767,26 @@ function resize() {
 
 /* --- world ------------------------------------------------------------- */
 
-function drawFloor(x0, y0, x1, y1, t) {
-  ctx.fillStyle = '#080e1a';
+function drawFloor(x0, y0, x1, y1) {
+  ctx.fillStyle = PAL.floor;
   ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
 
-  // Three batched paths. A pre-rendered pattern looked identical and cost ~5x
-  // as much: a transformed pattern fill re-filters every pixel of the view,
-  // while these strokes only touch the lines themselves.
-  const F = 25, B = 100;
+  // Flagstone joints. Two batched passes, same trick as before -- a pattern
+  // fill costs several times as much for the same picture.
+  const F = 50, B = 100;
   ctx.lineWidth = 1;
-  ctx.strokeStyle = 'rgba(34,224,255,.045)';
+  ctx.strokeStyle = PAL.floorLine;
   ctx.beginPath();
   for (let x = Math.ceil(x0 / F) * F; x < x1; x += F) { ctx.moveTo(x, y0); ctx.lineTo(x, y1); }
   for (let y = Math.ceil(y0 / F) * F; y < y1; y += F) { ctx.moveTo(x0, y); ctx.lineTo(x1, y); }
   ctx.stroke();
 
-  ctx.strokeStyle = 'rgba(34,224,255,.1)';
+  ctx.strokeStyle = PAL.floorLineBold;
+  ctx.lineWidth = 1.6;
   ctx.beginPath();
   for (let x = Math.ceil(x0 / B) * B; x < x1; x += B) { ctx.moveTo(x, y0); ctx.lineTo(x, y1); }
   for (let y = Math.ceil(y0 / B) * B; y < y1; y += B) { ctx.moveTo(x0, y); ctx.lineTo(x1, y); }
   ctx.stroke();
-
-  // Corner ticks at the coarse intersections: the "clean tech grid" read.
-  ctx.strokeStyle = 'rgba(34,224,255,.3)';
-  ctx.lineWidth = 1.4;
-  ctx.beginPath();
-  for (let x = Math.ceil(x0 / B) * B; x < x1; x += B) {
-    for (let y = Math.ceil(y0 / B) * B; y < y1; y += B) {
-      ctx.moveTo(x - 6, y); ctx.lineTo(x + 6, y);
-      ctx.moveTo(x, y - 6); ctx.lineTo(x, y + 6);
-    }
-  }
-  ctx.stroke();
-
-  if (lowFx) return;
-
-  // Slow scan sweep: one gradient band, sells "live system" for almost nothing.
-  const H = 120;
-  const sweep = ((t * 90) % (WORLD.h + 900)) - 450;
-  const top = Math.max(y0, sweep - H), bot = Math.min(y1, sweep + H);
-  if (bot > top) {
-    const sg = ctx.createLinearGradient(0, sweep - H, 0, sweep + H);
-    sg.addColorStop(0, 'rgba(34,224,255,0)');
-    sg.addColorStop(0.5, 'rgba(34,224,255,.05)');
-    sg.addColorStop(1, 'rgba(34,224,255,0)');
-    ctx.fillStyle = sg;
-    ctx.fillRect(x0, top, x1 - x0, bot - top);
-  }
 }
 
 function wallGradient(h) {
@@ -1752,9 +1794,9 @@ function wallGradient(h) {
   let g = wallGrads.get(k);
   if (!g) {
     g = ctx.createLinearGradient(0, 0, 0, k || 1);
-    g.addColorStop(0, '#1a2b45');
-    g.addColorStop(0.22, '#0d1729');
-    g.addColorStop(1, '#04070e');
+    g.addColorStop(0, PAL.stoneTop);
+    g.addColorStop(0.25, PAL.stoneMid);
+    g.addColorStop(1, PAL.stoneLow);
     wallGrads.set(k, g);
   }
   return g;
@@ -1763,95 +1805,132 @@ function wallGradient(h) {
 function forgeProps() {
   const P = (kind, span, paint) => { SPR['p_' + kind] = forge(span, paint); };
 
-  // --- wall fittings: authored pointing +x, i.e. out of the rock face ------
-  P('vent', 26, g => {
-    g.fillStyle = '#0b1424'; g.strokeStyle = 'rgba(120,150,190,.5)'; g.lineWidth = 1;
-    g.fillRect(-7, -7, 11, 14); g.strokeRect(-7, -7, 11, 14);
-    g.strokeStyle = 'rgba(150,200,240,.45)';
-    for (let i = -4; i <= 4; i += 3) { g.beginPath(); g.moveTo(-5.5, i); g.lineTo(2.5, i); g.stroke(); }
+  /* --- wall fittings: authored pointing +x, out of the stone ------------ */
+  P('torch', 34, g => {
+    g.strokeStyle = '#4a3a26'; g.lineWidth = 2.6; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(-8, 0); g.lineTo(2, 0); g.stroke();       // bracket
+    g.fillStyle = '#2b2118';
+    g.beginPath(); g.ellipse(3, 0, 3.2, 4.4, 0, 0, TAU); g.fill();     // basket
+    g.strokeStyle = '#6a5334'; g.lineWidth = 1; g.stroke();
+    g.shadowColor = PAL.ember; g.shadowBlur = 13;                      // flame
+    g.fillStyle = 'rgba(255,154,60,.95)';
+    g.beginPath();
+    g.moveTo(9.5, 0); g.quadraticCurveTo(4, 4.6, 2.5, 0);
+    g.quadraticCurveTo(4, -4.6, 9.5, 0);
+    g.closePath(); g.fill();
+    g.fillStyle = 'rgba(255,240,200,.95)';
+    g.beginPath(); g.ellipse(5, 0, 2.1, 1.5, 0, 0, TAU); g.fill();
+    g.shadowBlur = 0; g.lineCap = 'butt';
   });
-  P('pipes', 30, g => {
-    g.lineCap = 'round';
+  P('banner', 34, g => {
+    g.fillStyle = '#4a1f22';
+    g.beginPath();
+    g.moveTo(-2, -6.5); g.lineTo(7, -6.5); g.lineTo(7, 6.5); g.lineTo(-2, 6.5);
+    g.lineTo(2.5, 0); g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(190,150,90,.45)'; g.lineWidth = 1; g.stroke();
+    g.strokeStyle = '#7a6440'; g.lineWidth = 1.6;
+    g.beginPath(); g.moveTo(-3, -7.5); g.lineTo(-3, 7.5); g.stroke();
+    g.fillStyle = 'rgba(214,180,120,.6)';
+    g.beginPath(); g.arc(4, 0, 1.9, 0, TAU); g.fill();
+  });
+  P('chain', 30, g => {
+    g.strokeStyle = 'rgba(150,140,124,.5)'; g.lineWidth = 1.5;
     for (let i = -1; i <= 1; i++) {
-      g.strokeStyle = i === 0 ? 'rgba(90,120,160,.65)' : 'rgba(60,85,120,.6)';
-      g.lineWidth = 3.2;
-      g.beginPath(); g.moveTo(-9, i * 4.5); g.lineTo(9, i * 4.5); g.stroke();
-      g.strokeStyle = 'rgba(160,200,240,.3)'; g.lineWidth = 0.9;
-      g.beginPath(); g.moveTo(-9, i * 4.5 - 1); g.lineTo(9, i * 4.5 - 1); g.stroke();
+      const y = i * 4.5;
+      for (let k = -7; k < 7; k += 3.4) {
+        g.beginPath(); g.ellipse(k, y, 1.7, 1.15, 0, 0, TAU); g.stroke();
+      }
     }
-    g.fillStyle = 'rgba(40,60,90,.9)';
-    g.fillRect(-2.5, -7.5, 5, 15);
   });
-  P('panel', 24, g => {
-    g.fillStyle = '#0a1322'; g.fillRect(-6, -8, 10, 16);
-    g.strokeStyle = 'rgba(34,224,255,.5)'; g.lineWidth = 1; g.strokeRect(-6, -8, 10, 16);
-    g.shadowColor = '#22e0ff'; g.shadowBlur = 7;
-    g.fillStyle = 'rgba(150,245,255,.9)'; g.fillRect(-4, -5.5, 2, 11);
-    g.shadowBlur = 0;
-    g.fillStyle = 'rgba(34,224,255,.55)';
-    g.fillRect(-1, -4, 3.5, 1.4); g.fillRect(-1, 0, 3.5, 1.4);
-  });
-  P('warn', 22, g => {
-    g.fillStyle = 'rgba(10,14,22,.9)';
-    g.beginPath(); g.moveTo(6, 0); g.lineTo(-4, 7); g.lineTo(-4, -7); g.closePath(); g.fill();
-    g.strokeStyle = 'rgba(255,210,63,.75)'; g.lineWidth = 1.3; g.stroke();
-    g.fillStyle = 'rgba(255,210,63,.85)';
-    g.fillRect(-1.5, -3.2, 1.8, 4.4);
-    g.fillRect(-1.5, 2.2, 1.8, 1.8);
+  P('sconce', 26, g => {
+    g.fillStyle = '#241d16';
+    g.beginPath(); g.ellipse(1, 0, 4.6, 5.4, 0, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(180,160,130,.45)'; g.lineWidth = 1.1; g.stroke();
+    g.fillStyle = PAL.bone;                                            // a skull
+    g.beginPath(); g.ellipse(2, 0, 3, 3.4, 0, 0, TAU); g.fill();
+    g.fillStyle = 'rgba(20,16,12,.9)';
+    g.beginPath(); g.arc(3.4, -1.2, 0.95, 0, TAU); g.fill();
+    g.beginPath(); g.arc(3.4, 1.2, 0.95, 0, TAU); g.fill();
   });
 
-  // --- floor scenery ------------------------------------------------------
-  P('grate', 34, g => {
-    g.strokeStyle = 'rgba(95,135,185,.6)'; g.lineWidth = 1;
-    g.strokeRect(-11, -11, 22, 22);
-    g.strokeStyle = 'rgba(95,135,185,.4)';
-    for (let i = -8; i <= 8; i += 4) {
-      g.beginPath(); g.moveTo(i, -11); g.lineTo(i, 11); g.stroke();
-    }
+  /* --- floor scenery ---------------------------------------------------- */
+  P('bones', 34, g => {
+    g.strokeStyle = 'rgba(203,189,154,.55)'; g.lineWidth = 1.7; g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(-8, -3); g.lineTo(1, -5);
+    g.moveTo(-7, 1); g.lineTo(3, 0);
+    g.moveTo(-5, 4.5); g.lineTo(2, 4);
+    g.stroke();
+    g.fillStyle = 'rgba(203,189,154,.62)';
+    g.beginPath(); g.ellipse(7, 1.5, 4, 3.4, 0.2, 0, TAU); g.fill();
+    g.fillStyle = 'rgba(18,14,11,.9)';
+    g.beginPath(); g.arc(8.4, 0.4, 1.1, 0, TAU); g.fill();
+    g.beginPath(); g.arc(6.2, 2.6, 1.1, 0, TAU); g.fill();
+    g.lineCap = 'butt';
   });
-  P('rubble', 28, g => {
-    g.fillStyle = 'rgba(28,40,60,.95)'; g.strokeStyle = 'rgba(105,140,185,.5)'; g.lineWidth = 0.9;
+  P('barrel', 32, g => {
+    const grd = g.createRadialGradient(-2, -2, 1, 0, 0, 10);
+    grd.addColorStop(0, '#5a4429'); grd.addColorStop(1, '#2a1f13');
+    g.fillStyle = grd;
+    g.beginPath(); g.arc(0, 0, 9.5, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(20,15,10,.8)'; g.lineWidth = 1.4; g.stroke();
+    g.strokeStyle = 'rgba(120,100,70,.5)'; g.lineWidth = 1;
+    g.beginPath(); g.arc(0, 0, 6.4, 0, TAU); g.stroke();
+    g.beginPath(); g.arc(0, 0, 3, 0, TAU); g.stroke();
+  });
+  P('crate', 32, g => {
+    g.fillStyle = '#3d2e1c';
+    g.fillRect(-8.5, -8.5, 17, 17);
+    g.strokeStyle = 'rgba(18,13,9,.85)'; g.lineWidth = 1.4;
+    g.strokeRect(-8.5, -8.5, 17, 17);
+    g.strokeStyle = 'rgba(126,102,66,.55)'; g.lineWidth = 1.2;
+    g.beginPath();
+    g.moveTo(-8.5, -8.5); g.lineTo(8.5, 8.5);
+    g.moveTo(8.5, -8.5); g.lineTo(-8.5, 8.5);
+    g.stroke();
+  });
+  P('rubble', 30, g => {
+    g.fillStyle = 'rgba(48,42,34,.95)'; g.strokeStyle = 'rgba(140,124,98,.35)';
+    g.lineWidth = 0.9;
     const chunk = (cx, cy, s) => {
       g.beginPath();
       for (let i = 0; i < 5; i++) {
-        const a = (i / 5) * TAU, rr = s * (0.6 + Math.random() * 0.5);
+        const a = (i / 5) * TAU, rr = s * (0.62 + Math.random() * 0.5);
         (i === 0 ? g.moveTo : g.lineTo).call(g, cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
       }
       g.closePath(); g.fill(); g.stroke();
     };
-    chunk(-4, -2, 4.5); chunk(3.5, 2.5, 3.4); chunk(1, -5, 2.6);
+    chunk(-4, -2, 4.8); chunk(3.6, 2.6, 3.6); chunk(1, -5, 2.8);
   });
-  P('cable', 42, g => {
-    g.strokeStyle = 'rgba(40,60,90,.75)'; g.lineWidth = 2.4; g.lineCap = 'round';
-    g.beginPath(); g.moveTo(-15, 2); g.quadraticCurveTo(0, -4, 15, 1); g.stroke();
-    g.strokeStyle = 'rgba(34,224,255,.28)'; g.lineWidth = 0.9;
-    g.beginPath(); g.moveTo(-15, 2); g.quadraticCurveTo(0, -4, 15, 1); g.stroke();
-    g.fillStyle = 'rgba(60,85,120,.9)';
-    g.fillRect(-16, -0.5, 3, 5); g.fillRect(13, -2, 3, 5);
-  });
-  P('stain', 44, g => {
-    const grd = g.createRadialGradient(0, 0, 0, 0, 0, 17);
-    grd.addColorStop(0, 'rgba(10,26,40,.5)');
-    grd.addColorStop(1, 'rgba(10,26,40,0)');
+  P('moss', 40, g => {
+    const grd = g.createRadialGradient(0, 0, 0, 0, 0, 15);
+    grd.addColorStop(0, 'rgba(74,96,44,.42)');
+    grd.addColorStop(1, 'rgba(74,96,44,0)');
     g.fillStyle = grd;
-    g.beginPath(); g.ellipse(0, 0, 17, 12, 0.4, 0, TAU); g.fill();
+    g.beginPath(); g.ellipse(0, 0, 15, 11, 0.4, 0, TAU); g.fill();
   });
-  P('hazard', 34, g => {
-    g.save();
-    g.beginPath(); g.rect(-13, -6, 26, 12); g.clip();
-    g.strokeStyle = 'rgba(255,210,63,.3)'; g.lineWidth = 4;
-    for (let i = -20; i < 22; i += 8) {
-      g.beginPath(); g.moveTo(i, -8); g.lineTo(i + 8, 8); g.stroke();
+  P('crack', 42, g => {
+    g.strokeStyle = 'rgba(10,8,6,.7)'; g.lineWidth = 1.5;
+    g.beginPath();
+    g.moveTo(-15, 2); g.lineTo(-6, -1); g.lineTo(1, 3); g.lineTo(9, -2); g.lineTo(15, 1);
+    g.moveTo(-6, -1); g.lineTo(-4, -6);
+    g.moveTo(9, -2); g.lineTo(11, 4);
+    g.stroke();
+  });
+  P('grate', 34, g => {
+    g.fillStyle = 'rgba(8,6,5,.85)';
+    g.fillRect(-11, -11, 22, 22);
+    g.strokeStyle = 'rgba(122,110,90,.5)'; g.lineWidth = 1.2;
+    g.strokeRect(-11, -11, 22, 22);
+    g.strokeStyle = 'rgba(122,110,90,.4)'; g.lineWidth = 1.4;
+    for (let i = -7; i <= 7; i += 4.6) {
+      g.beginPath(); g.moveTo(i, -11); g.lineTo(i, 11); g.stroke();
     }
-    g.restore();
-    g.strokeStyle = 'rgba(255,210,63,.38)'; g.lineWidth = 1;
-    g.strokeRect(-13, -6, 26, 12);
   });
 }
 
 function drawWalls(x0, y0, x1, y1) {
-  // 1. Rock mass. Merged rects, so this is a few dozen fills, not a few
-  //    thousand cells.
+  // 1. Stone mass. Merged rects, so a few dozen fills cover the level.
   for (let i = 0; i < walls.length; i++) {
     const w = walls[i];
     if (w.x > x1 || w.y > y1 || w.x + w.w < x0 || w.y + w.h < y0) continue;
@@ -1862,13 +1941,13 @@ function drawWalls(x0, y0, x1, y1) {
     ctx.restore();
   }
 
-  // 2. Light spilling from the rock face onto the floor, then the crisp rim.
-  //    Two batched paths over only the visible faces -- this is what turns a
-  //    grid of boxes into a carved, lit cave wall.
+  // 2. Torchlight catching the stone faces, then the lit edge itself. Batched
+  //    over visible faces only -- this is what makes a grid of boxes read as
+  //    worked masonry rather than flat blocks.
   ctx.lineCap = 'round';
   if (!lowFx) {
-    ctx.strokeStyle = 'rgba(34,224,255,.09)';
-    ctx.lineWidth = 9;
+    ctx.strokeStyle = PAL.rimSpill;
+    ctx.lineWidth = 10;
     ctx.beginPath();
     for (let i = 0; i < edges.length; i++) {
       const e = edges[i];
@@ -1879,7 +1958,7 @@ function drawWalls(x0, y0, x1, y1) {
     ctx.stroke();
   }
 
-  ctx.strokeStyle = 'rgba(34,224,255,.30)';
+  ctx.strokeStyle = PAL.rimWarm;
   ctx.lineWidth = 3;
   ctx.beginPath();
   for (let i = 0; i < edges.length; i++) {
@@ -1889,7 +1968,7 @@ function drawWalls(x0, y0, x1, y1) {
   }
   ctx.stroke();
 
-  ctx.strokeStyle = 'rgba(160,246,255,.8)';
+  ctx.strokeStyle = PAL.rimLight;
   ctx.lineWidth = 1.2;
   ctx.beginPath();
   for (let i = 0; i < edges.length; i++) {
@@ -1900,7 +1979,7 @@ function drawWalls(x0, y0, x1, y1) {
   ctx.stroke();
 
   if (!lowFx) {
-    ctx.strokeStyle = 'rgba(120,165,215,.13)';
+    ctx.strokeStyle = PAL.bevel;
     ctx.lineWidth = 4;
     ctx.beginPath();
     for (let i = 0; i < edges.length; i++) {
@@ -1924,48 +2003,65 @@ function drawProps(x0, y0, x1, y1) {
   }
 }
 
+// The waygate: a worked stone circle with a bound rune ring. Dormant until
+// enough essence is drawn, then it turns and opens.
 function drawPortal(t) {
   const active = portal.active;
-  const base = active ? '#22e0ff' : '#3d4a61';
-  const pulse = 0.5 + 0.5 * Math.sin(t * (active ? 3.2 : 1.1));
+  const pulse = 0.5 + 0.5 * Math.sin(t * (active ? 2.4 : 0.9));
 
   ctx.save();
   ctx.translate(portal.x, portal.y);
 
-  ctx.fillStyle = active ? 'rgba(34,224,255,.07)' : 'rgba(61,74,97,.05)';
+  ctx.fillStyle = active ? 'rgba(92,184,255,.07)' : 'rgba(60,54,44,.22)';
   ctx.beginPath(); ctx.arc(0, 0, PORTAL_R, 0, TAU); ctx.fill();
 
-  ctx.strokeStyle = base;
-  ctx.lineWidth = 2.4;
-  ctx.globalAlpha = active ? 1 : 0.6;
+  // Stone kerb
+  ctx.strokeStyle = '#4a4137';
+  ctx.lineWidth = 9;
+  ctx.beginPath(); ctx.arc(0, 0, PORTAL_R - 4, 0, TAU); ctx.stroke();
+  ctx.strokeStyle = 'rgba(206,180,140,.4)';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.arc(0, 0, PORTAL_R - 8, 0, TAU); ctx.stroke();
   ctx.beginPath(); ctx.arc(0, 0, PORTAL_R, 0, TAU); ctx.stroke();
 
-  ctx.lineWidth = 1.2;
-  ctx.globalAlpha = (active ? 0.32 : 0.16) + pulse * 0.45;
-  ctx.beginPath(); ctx.arc(0, 0, PORTAL_R * (0.42 + pulse * 0.42), 0, TAU); ctx.stroke();
+  const glow = active ? PAL.arcane : '#6a6152';
+  ctx.strokeStyle = glow;
+  ctx.globalAlpha = active ? 0.85 : 0.34;
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(0, 0, PORTAL_R * (0.42 + pulse * 0.3), 0, TAU); ctx.stroke();
   ctx.globalAlpha = 1;
 
+  // Rune ring
   ctx.save();
-  ctx.rotate(t * (active ? 0.75 : 0.16));
-  ctx.strokeStyle = base;
-  ctx.lineWidth = 3.4;
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * TAU;
+  ctx.rotate(t * (active ? 0.5 : 0.08));
+  ctx.strokeStyle = glow;
+  ctx.globalAlpha = active ? 0.95 : 0.4;
+  ctx.lineWidth = 2.4;
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * TAU;
+    const rr = PORTAL_R - 20;
+    const cx = Math.cos(a) * rr, cy = Math.sin(a) * rr;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(a + Math.PI / 2);
     ctx.beginPath();
-    ctx.moveTo(Math.cos(a) * (PORTAL_R - 13), Math.sin(a) * (PORTAL_R - 13));
-    ctx.lineTo(Math.cos(a) * (PORTAL_R - 4),  Math.sin(a) * (PORTAL_R - 4));
+    if (i % 3 === 0)      { ctx.moveTo(-3, -4); ctx.lineTo(3, 0); ctx.lineTo(-3, 4); }
+    else if (i % 3 === 1) { ctx.moveTo(-3, -4); ctx.lineTo(-3, 4); ctx.moveTo(-3, 0); ctx.lineTo(3, 0); }
+    else                  { ctx.moveTo(-3, 4); ctx.lineTo(0, -4); ctx.lineTo(3, 4); }
     ctx.stroke();
+    ctx.restore();
   }
   ctx.restore();
+  ctx.globalAlpha = 1;
 
-  // Counter-rotating inner glyph
+  // Sigil at the centre
   ctx.save();
-  ctx.rotate(-t * (active ? 0.45 : 0.1));
-  ctx.strokeStyle = active ? 'rgba(150,245,255,.75)' : 'rgba(80,95,120,.5)';
+  ctx.rotate(-t * (active ? 0.3 : 0.05));
+  ctx.strokeStyle = active ? 'rgba(196,232,255,.8)' : 'rgba(120,110,94,.45)';
   ctx.lineWidth = 1.6;
   ctx.beginPath();
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * TAU, rr = PORTAL_R * 0.3;
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * TAU - Math.PI / 2, rr = PORTAL_R * 0.26;
     (i === 0 ? ctx.moveTo : ctx.lineTo).call(ctx, Math.cos(a) * rr, Math.sin(a) * rr);
   }
   ctx.closePath(); ctx.stroke();
@@ -1977,10 +2073,10 @@ function drawPortal(t) {
     ctx.save();
     ctx.translate(portal.x, portal.y);
     ctx.rotate(-Math.PI / 2);
-    ctx.strokeStyle = 'rgba(255,210,63,.25)';
+    ctx.strokeStyle = 'rgba(255,194,77,.25)';
     ctx.lineWidth = 9;
     ctx.beginPath(); ctx.arc(0, 0, PORTAL_R + 10, 0, TAU * f); ctx.stroke();
-    ctx.strokeStyle = '#ffd23f';
+    ctx.strokeStyle = PAL.gold;
     ctx.lineWidth = 3.4;
     ctx.beginPath(); ctx.arc(0, 0, PORTAL_R + 10, 0, TAU * f); ctx.stroke();
     ctx.restore();
@@ -2005,12 +2101,12 @@ function drawBullets() {
 
 function drawEnemy(e) {
   blit(e.hitFlash > 0 ? SPR[e.kind + 'Hit'] : SPR[e.kind], e.x, e.y, e.angle);
-  if (e.kind === 'brute' && e.hp < e.maxHp * 0.92) {
+  if (e.kind === 'revenant' && e.hp < e.maxHp * 0.92) {
     const w = e.r * 1.5, f = clamp(e.hp / e.maxHp, 0, 1);
     const bx = e.x - w / 2, by = e.y - e.r - 6;
     ctx.fillStyle = 'rgba(0,0,0,.55)';
     ctx.fillRect(bx, by, w, 2);
-    ctx.fillStyle = f < 0.35 ? 'rgba(255,80,80,.85)' : 'rgba(190,120,255,.8)';
+    ctx.fillStyle = f < 0.35 ? 'rgba(224,70,50,.9)' : 'rgba(224,140,90,.75)';
     ctx.fillRect(bx, by, w * f, 2);
   }
 }
@@ -2021,21 +2117,26 @@ function drawPlayer(t) {
 
   ctx.save();
   ctx.setLineDash([4, 10]);
-  ctx.strokeStyle = 'rgba(34,224,255,.1)';
+  ctx.strokeStyle = 'rgba(150,200,255,.09)';
   ctx.lineWidth = 1;
   ctx.beginPath(); ctx.arc(p.x, p.y, p.range, 0, TAU); ctx.stroke();
   ctx.restore();
 
   const ring = p.r + 8 + Math.sin(t * 2.6) * 1.6;
-  ctx.strokeStyle = p.hitFlash > 0 ? 'rgba(255,59,59,.85)' : 'rgba(34,224,255,.3)';
+  ctx.strokeStyle = p.hitFlash > 0 ? 'rgba(224,70,50,.85)' : 'rgba(120,170,225,.26)';
   ctx.lineWidth = 1.4;
   ctx.beginPath(); ctx.arc(p.x, p.y, ring, 0, TAU); ctx.stroke();
 
+  if (!lowFx) {
+    ctx.globalCompositeOperation = 'lighter';
+    blit(lightFor('#6a5330', 78), p.x, p.y, 0, 0.5);
+    ctx.globalCompositeOperation = 'source-over';
+  }
   blit(blink || p.hitFlash > 0 ? SPR.playerHit : SPR.player, p.x, p.y, p.angle);
 
   if (p.muzzle > 0) {
     const a = p.angle;
-    blit(lightFor('#eaffff', 46), p.x + Math.cos(a) * (p.r + 9),
+    blit(lightFor('#cfe8ff', 46), p.x + Math.cos(a) * (p.r + 9),
          p.y + Math.sin(a) * (p.r + 9), 0, p.muzzle / 0.06);
   }
 }
@@ -2055,7 +2156,7 @@ function drawParticles() {
   for (let i = 0; i < particles.length; i++) {
     const p = particles[i];
     const a = clamp(p.life / p.max, 0, 1);
-    blit(lightFor(p.color, 11), p.x, p.y, 0, a * 0.9);
+    blit(lightFor(p.color, 9), p.x, p.y, 0, a * 0.5);
   }
   ctx.globalCompositeOperation = 'source-over';
 }
@@ -2064,8 +2165,8 @@ function drawRings() {
   for (let i = 0; i < rings.length; i++) {
     const rg = rings[i];
     const f = 1 - rg.life / rg.max;
-    ctx.strokeStyle = tint(rg.color, 1.4, (1 - f) * 0.75);
-    ctx.lineWidth = 3 * (1 - f) + 0.6;
+    ctx.strokeStyle = tint(rg.color, 1.25, (1 - f) * 0.4);
+    ctx.lineWidth = 2 * (1 - f) + 0.4;
     ctx.beginPath();
     ctx.arc(rg.x, rg.y, rg.r0 + (rg.r1 - rg.r0) * f, 0, TAU);
     ctx.stroke();
@@ -2077,23 +2178,23 @@ function drawRings() {
 // the scene feel lit rather than merely bright.
 function drawLightPass(t) {
   ctx.globalCompositeOperation = 'lighter';
-  const portalPulse = portal.active ? 0.55 + 0.2 * Math.sin(t * 3.2) : 0.16;
-  blit(lightFor(portal.active ? '#22e0ff' : '#3d4a61', PORTAL_R * 3.2),
+  const portalPulse = portal.active ? 0.55 + 0.2 * Math.sin(t * 2.4) : 0.14;
+  blit(lightFor(portal.active ? PAL.arcane : '#5a5244', PORTAL_R * 3.2),
        portal.x, portal.y, 0, portalPulse);
-  blit(lightFor('#22e0ff', 118), player.x, player.y, 0, 0.36);
+  blit(lightFor(PAL.arcane, 108), player.x, player.y, 0, 0.3);
   const lit = Math.min(loot.length, 14);
   for (let i = 0; i < lit; i++) {
-    blit(lightFor('#ffd23f', 38), loot[i].x, loot[i].y, 0, 0.32);
+    blit(lightFor(PAL.gold, 38), loot[i].x, loot[i].y, 0, 0.34);
   }
   // Wall lamps. Culled to the view, so a big cave costs no more than a small
   // one -- and they are what stops the tunnels reading as flat black.
   const vx0 = cam.x - 80, vy0 = cam.y - 80;
   const vx1 = cam.x + view.w + 80, vy1 = cam.y + view.h + 80;
-  const flick = 0.86 + 0.14 * Math.sin(t * 7.3);
+  const flick = 0.78 + 0.22 * Math.sin(t * 7.3) * Math.sin(t * 3.1);  // torch guttering
   for (let i = 0; i < lamps.length; i++) {
     const L = lamps[i];
     if (L.x < vx0 || L.x > vx1 || L.y < vy0 || L.y > vy1) continue;
-    blit(lightFor(L.color, 96), L.x, L.y, 0, 0.34 * flick);
+    blit(lightFor(L.color, 98), L.x, L.y, 0, 0.46 * flick);
   }
   ctx.globalCompositeOperation = 'source-over';
 }
@@ -2103,19 +2204,19 @@ function drawLightPass(t) {
 function drawStick() {
   if (!stick.active) return;
   ctx.save();
-  ctx.strokeStyle = 'rgba(34,224,255,.4)';
+  ctx.strokeStyle = 'rgba(226,196,140,.4)';
   ctx.lineWidth = 1.6;
   ctx.beginPath(); ctx.arc(stick.ox, stick.oy, STICK_MAX, 0, TAU); ctx.stroke();
-  ctx.strokeStyle = 'rgba(34,224,255,.15)';
+  ctx.strokeStyle = 'rgba(226,196,140,.15)';
   ctx.lineWidth = 1;
   ctx.beginPath(); ctx.arc(stick.ox, stick.oy, STICK_MAX * STICK_DEAD, 0, TAU); ctx.stroke();
 
   const kx = stick.ox + stick.dx * stick.mag * STICK_MAX;
   const ky = stick.oy + stick.dy * stick.mag * STICK_MAX;
   ctx.globalCompositeOperation = 'lighter';
-  blit(lightFor('#22e0ff', 96), kx, ky, 0, 0.5);
+  blit(lightFor(PAL.gold, 96), kx, ky, 0, 0.45);
   ctx.globalCompositeOperation = 'source-over';
-  ctx.strokeStyle = 'rgba(180,248,255,.95)';
+  ctx.strokeStyle = 'rgba(255,226,170,.92)';
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.arc(kx, ky, 20, 0, TAU); ctx.stroke();
   ctx.restore();
@@ -2132,12 +2233,12 @@ function drawPortalArrow(t) {
   const k = Math.min((cx - m) / Math.max(1e-6, Math.abs(dx)),
                      ((view.h - m - mTop) / 2) / Math.max(1e-6, Math.abs(dy)));
   const px = cx + dx * k, py = cy + dy * k;
-  const col = portal.active ? '#22e0ff' : '#5c6a84';
+  const col = portal.active ? PAL.arcane : '#7a6e58';
 
   ctx.save();
   ctx.translate(px, py);
   ctx.globalAlpha = 0.55 + (portal.active ? 0.4 * Math.abs(Math.sin(t * 3)) : 0.1);
-  ctx.fillStyle = 'rgba(5,9,18,.75)';
+  ctx.fillStyle = 'rgba(14,10,7,.8)';
   ctx.beginPath(); ctx.arc(0, 0, 15, 0, TAU); ctx.fill();
   ctx.strokeStyle = col; ctx.lineWidth = 1.2;
   ctx.beginPath(); ctx.arc(0, 0, 15, 0, TAU); ctx.stroke();
@@ -2155,12 +2256,12 @@ function drawMinimap() {
   const k = S / WORLD.w;
 
   ctx.save();
-  ctx.fillStyle = 'rgba(4,8,16,.78)';
+  ctx.fillStyle = 'rgba(12,9,7,.82)';
   ctx.fillRect(x, y, S, S);
-  ctx.strokeStyle = 'rgba(34,224,255,.28)';
+  ctx.strokeStyle = 'rgba(196,164,116,.3)';
   ctx.lineWidth = 1;
   ctx.strokeRect(x + 0.5, y + 0.5, S - 1, S - 1);
-  ctx.strokeStyle = 'rgba(34,224,255,.7)';
+  ctx.strokeStyle = 'rgba(226,196,140,.7)';
   ctx.lineWidth = 1.6;
   const b = 8;
   ctx.beginPath();
@@ -2168,16 +2269,16 @@ function drawMinimap() {
   ctx.moveTo(x + S - b, y + S); ctx.lineTo(x + S, y + S); ctx.lineTo(x + S, y + S - b);
   ctx.stroke();
 
-  ctx.fillStyle = 'rgba(34,224,255,.14)';
+  ctx.fillStyle = 'rgba(150,128,96,.18)';
   for (let i = 4; i < walls.length; i++) {
     const w = walls[i];
     ctx.fillRect(x + w.x * k, y + w.y * k, Math.max(1, w.w * k), Math.max(1, w.h * k));
   }
-  ctx.fillStyle = 'rgba(255,46,136,.8)';
+  ctx.fillStyle = 'rgba(200,90,60,.85)';
   for (let i = 0; i < enemies.length; i++) {
     ctx.fillRect(x + enemies[i].x * k - 0.8, y + enemies[i].y * k - 0.8, 1.7, 1.7);
   }
-  ctx.fillStyle = portal.active ? '#22e0ff' : '#5c6a84';
+  ctx.fillStyle = portal.active ? PAL.arcane : '#7a6e58';
   ctx.beginPath(); ctx.arc(x + portal.x * k, y + portal.y * k, 3.4, 0, TAU); ctx.fill();
   ctx.fillStyle = '#ffffff';
   ctx.beginPath(); ctx.arc(x + player.x * k, y + player.y * k, 2.7, 0, TAU); ctx.fill();
@@ -2186,7 +2287,7 @@ function drawMinimap() {
 
 function draw(t) {
   ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
-  ctx.fillStyle = '#05070d';
+  ctx.fillStyle = PAL.floor;
   ctx.fillRect(0, 0, view.w, view.h);
 
   const shx = cam.shake ? (Math.random() - 0.5) * cam.shake : 0;
@@ -2198,7 +2299,7 @@ function draw(t) {
   const x0 = cam.x - 60, y0 = cam.y - 60;
   const x1 = cam.x + view.w + 60, y1 = cam.y + view.h + 60;
 
-  drawFloor(x0, y0, x1, y1, t);
+  drawFloor(x0, y0, x1, y1);
   drawPortal(t);
   drawWalls(x0, y0, x1, y1);
   drawProps(x0, y0, x1, y1);
@@ -2247,7 +2348,7 @@ function showScreen(name) {
 const fmtTime = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
 
 /* --- persistence (best-effort; private mode can throw on access) -------- */
-const STORE_KEY = 'neon-extraction.best.v1';
+const STORE_KEY = 'ashen-waygate.best.v1';
 function loadBest() {
   try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; }
   catch (e) { return {}; }
@@ -2257,9 +2358,9 @@ function saveBest(b) {
 }
 function refreshBestLine() {
   const b = loadBest();
-  if (!b.runs) { el.bestLine.textContent = 'No runs logged'; return; }
+  if (!b.runs) { el.bestLine.textContent = 'No delve recorded'; return; }
   el.bestLine.textContent =
-    'Runs ' + b.runs + '  ·  Extractions ' + (b.extractions || 0) +
+    'Delves ' + b.runs + '  ·  Escapes ' + (b.extractions || 0) +
     '  ·  Longest ' + fmtTime(b.bestTime || 0);
 }
 
@@ -2281,12 +2382,12 @@ function syncHud() {
     el.techFill.style.transform = 'scaleX(' + f + ')';
     el.techBar.classList.toggle('done', f >= 1);
     el.techText.innerHTML = f >= 1
-      ? '<b class="go">EXTRACTION ONLINE</b>'
-      : 'TECH <b>' + run.tech + '</b>/' + EXTRACT_QUOTA;
+      ? '<b class="go">The waygate stirs</b>'
+      : 'Essence <b>' + run.tech + '</b>/' + EXTRACT_QUOTA;
   }
   const secs = Math.floor(run.time);
   if (secs !== hudCache.time) { hudCache.time = secs; el.clock.textContent = fmtTime(secs); }
-  if (run.level !== hudCache.lvl) { hudCache.lvl = run.level; el.lvlText.textContent = 'LV ' + run.level; }
+  if (run.level !== hudCache.lvl) { hudCache.lvl = run.level; el.lvlText.textContent = 'Rank ' + run.level; }
 }
 
 let flashTimer = 0;
@@ -2345,15 +2446,15 @@ function endRun(won) {
   b.bestKills = Math.max(b.bestKills || 0, run.kills);
   saveBest(b);
 
-  el.overTitle.innerHTML = won ? '<em>Extracted</em>' : '<span>Terminated</span>';
+  el.overTitle.innerHTML = won ? '<em>Escaped</em>' : '<span>Slain</span>';
   el.overSub.textContent = won
-    ? 'Portal held. You made it off the grid.'
-    : 'The swarm got through the plating.';
+    ? 'The circle opened. You climbed out with your haul.'
+    : 'The horde broke your guard.';
   el.overStats.innerHTML =
-    '<div>Survived<b>' + fmtTime(run.time) + '</b></div>' +
-    '<div>Kills<b>' + run.kills + '</b></div>' +
-    '<div>Tech<b>' + run.tech + '</b></div>' +
-    '<div>Level<b>' + run.level + '</b></div>';
+    '<div>Endured<b>' + fmtTime(run.time) + '</b></div>' +
+    '<div>Slain<b>' + run.kills + '</b></div>' +
+    '<div>Essence<b>' + run.tech + '</b></div>' +
+    '<div>Rank<b>' + run.level + '</b></div>';
   showScreen('over');
   refreshBestLine();
 }
@@ -2374,8 +2475,8 @@ function openLevelUp() {
   stickEnd();
   el.lvlNum.textContent = run.level;
   el.lvlSub.textContent = run.pendingLevels > 1
-    ? 'System upgrade · ' + run.pendingLevels + ' queued'
-    : 'System upgrade available';
+    ? run.pendingLevels + ' boons await'
+    : 'A boon is offered';
   el.cards.innerHTML = '';
 
   const offer = rollUpgrades(3);
@@ -2392,7 +2493,7 @@ function openLevelUp() {
     card.innerHTML =
       '<span class="glyph">' + u.glyph + '</span>' +
       '<span><h4>' + u.name + '</h4><p>' + u.desc +
-      (have ? ' <span class="tier">· owned ' + have + '</span>' : '') + '</p></span>';
+      (have ? ' <span class="tier">· held ' + have + '</span>' : '') + '</p></span>';
     card.addEventListener('click', () => takeUpgrade(u));
     el.cards.appendChild(card);
   }

@@ -1,8 +1,11 @@
-# Neon Extraction
+# Ashen Waygate
 
-Mobile-first top-down arena survival prototype. Vanilla HTML5 + canvas 2D,
+Mobile-first top-down dungeon survival prototype. Vanilla HTML5 + canvas 2D,
 no libraries, no image assets, no network calls. The whole game is
 `index.html` — open it and it runs, including from `file://`.
+
+*(Formerly "Neon Extraction" — same engine, re-skinned from neon cyberpunk to
+dark fantasy. The repository still carries the old name.)*
 
 **Play:** open `index.html` in a browser — it runs straight from `file://`.
 
@@ -10,15 +13,35 @@ no libraries, no image assets, no network calls. The whole game is
 
 ## Core loop
 
-Spawn in a procedurally generated 2000×2000 arena, survive a swarming horde
-with an auto-firing weapon, harvest **tech** from kills, and once you have
-enough, reach the extraction portal and hold it for four seconds to win.
+Descend into a procedurally generated 2000×2000 dungeon, hold off a swarming
+horde with a warded blade that strikes on its own, draw **essence** from the
+dead, and once you have enough, find the waygate and hold its circle for four
+seconds to escape.
 
 - **Move** — drag anywhere on the play area (floating virtual joystick), or
   WASD / arrow keys on desktop
-- **Fire** — automatic, nearest target inside weapon range
-- **Level up** — tech doubles as XP; each level offers a choice of three upgrades
+- **Strike** — automatic, nearest foe inside reach
+- **Boons** — essence doubles as XP; each rank offers a choice of three boons
 - **Pause** — the HUD button, or `Esc` / `P`
+
+## Art direction
+
+Dark fantasy: worked stone lit by guttering torchlight, steel and leather,
+cold arcane blue for the player's magic and warm rune-orange for the enemy's.
+Bodies are painted — a dark mass lit from above with a thin rim where the
+light catches — and glow is reserved for things that are actually magical:
+a warded blade, a revenant's bindings, a mote of essence. Nothing glows just
+because it is a game object.
+
+The palette lives in one place (`PAL`, section 1). Every colour on the canvas
+pulls from it, so the whole look can be retuned without hunting through
+draw calls.
+
+**The cast**
+- *Warden* — cloaked, helmed, blade held out front; the only cold-blue light
+- *Wretch* — hunched and shambling, sick green eyes
+- *Shade* — fast, tattered, streaming; spectral violet
+- *Revenant* — heavy plate held together by orange bindings, slow and hard
 
 ---
 
@@ -119,7 +142,7 @@ Ten upgrades (damage, fire rate, speed, plating, range, multishot, pierce,
 magnet, regen, projectile velocity), most with stack caps. Levels queue if
 several are earned at once and are presented one at a time.
 
-### Visual style — the sprite forge
+### The sprite forge
 
 Nothing detailed is drawn with paths at frame time. Every entity is forged once
 into an offscreen canvas at device resolution — gradient body, rim light, inner
