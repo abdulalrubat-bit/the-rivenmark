@@ -1,0 +1,3880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b0908">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>The Rivenmark — debug</title>
+<meta name="description" content="The Rivenmark — a top-down survival prototype. Scavenge Arcane Slag under the Shroud of Duath and reach a ley-gate before the Hollow-Thralls close in.">
+<style>
+  :root{
+    --void:#0b0908; --deep:#120f0c; --panel:#1a1611; --line:#4a3c2a;
+    --ink:#efe3c9; --dim:#a08d70; --faint:#6b5b46;
+    --arcane:#5cb8ff; --arcane-d:#2a6fae;
+    --ember:#ff9a3c; --gold:#ffc24d; --blood:#c2352a;
+    --moss:#9dbb5a; --spectre:#b07cff;
+    --font-display:'Iowan Old Style','Palatino Linotype','Book Antiqua',Palatino,Georgia,'Times New Roman',serif;
+    --font-ui:'Iowan Old Style',Georgia,'Times New Roman',serif;
+    --safe-t:env(safe-area-inset-top,0px);
+    --safe-b:env(safe-area-inset-bottom,0px);
+    --safe-l:env(safe-area-inset-left,0px);
+    --safe-r:env(safe-area-inset-right,0px);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{
+    margin:0; padding:0; height:100%; overflow:hidden; background:var(--void);
+    color:var(--ink); font-family:var(--font-ui);
+    overscroll-behavior:none; touch-action:none;
+    -webkit-user-select:none; user-select:none;
+  }
+  #stage{position:fixed; inset:0;}
+  canvas{display:block; width:100%; height:100%; touch-action:none;}
+
+  /* UI is DOM above the canvas, so a tap on a control never reaches the stick */
+  #ui{position:fixed; inset:0; pointer-events:none; font-family:var(--font-ui);}
+  #ui > *{pointer-events:auto;}
+
+  .hud{
+    position:absolute; top:calc(8px + var(--safe-t)); left:calc(56px + var(--safe-l));
+    right:calc(52px + var(--safe-r));
+    display:flex; align-items:flex-start; gap:10px; pointer-events:none;
+  }
+  .hud[hidden]{display:none;}
+  .hud-left{flex:1; min-width:0; max-width:340px;}
+
+  .bar{
+    position:relative; height:14px; border:1px solid var(--line);
+    background:#0c0a08; border-radius:1px; overflow:hidden;
+    box-shadow:inset 0 1px 0 rgba(255,220,160,.06);
+  }
+  .bar i{
+    display:block; height:100%; width:100%; transform-origin:left center;
+    transition:transform .12s linear;
+  }
+  #hpFill{background:linear-gradient(90deg,#7d1d16,#c2352a 60%,#e0644a);}
+  #hpBar.low #hpFill{background:linear-gradient(90deg,#5e1109,#e0342a);}
+  #techBar{margin-top:6px; height:9px;}
+  #techFill{background:linear-gradient(90deg,#8a5a12,var(--gold));}
+  #techBar.done{border-color:var(--gold); box-shadow:0 0 12px rgba(255,194,77,.4);}
+
+  .readout{
+    display:flex; justify-content:space-between; gap:10px;
+    font-family:var(--font-ui); font-size:11px; letter-spacing:1.4px;
+    text-transform:uppercase; color:var(--dim); margin-top:6px;
+    white-space:nowrap;
+  }
+  .readout span{white-space:nowrap;}
+  .readout b{color:var(--ink); font-weight:600;}
+  .readout .go{color:var(--gold);}
+
+  .hud-right{
+    display:flex; flex-direction:column; align-items:flex-end; gap:6px;
+    pointer-events:none;
+  }
+  .clock{
+    font-family:var(--font-display); font-size:20px; letter-spacing:1px;
+    color:var(--ink); text-shadow:0 0 14px rgba(255,154,60,.35);
+  }
+  .lvl{
+    font-family:var(--font-ui); font-size:11px; letter-spacing:2.4px;
+    color:var(--gold); text-transform:uppercase;
+  }
+
+  .iconbtn{
+    pointer-events:auto; width:40px; height:40px; flex:0 0 40px;
+    border:1px solid var(--line); background:linear-gradient(#241d15,#171209);
+    color:var(--ink); border-radius:2px; font-size:14px; line-height:1;
+    display:grid; place-items:center; cursor:pointer; font-family:var(--font-display);
+    touch-action:manipulation;
+    box-shadow:inset 0 1px 0 rgba(255,220,160,.1);
+  }
+  .iconbtn:active{background:#3a2d1d; border-color:var(--gold);}
+
+  /* ---------- Screens ---------- */
+  .screen{
+    position:absolute; inset:0; display:none; flex-direction:column;
+    align-items:center; justify-content:center; gap:14px;
+    padding:calc(24px + var(--safe-t)) 22px calc(24px + var(--safe-b));
+    background:
+      radial-gradient(ellipse at 50% 38%,rgba(60,40,20,.30),transparent 62%),
+      radial-gradient(ellipse at center,rgba(9,7,6,.88),rgba(7,5,4,.97));
+    text-align:center; overflow-y:auto;
+  }
+  .screen.on{display:flex;}
+
+  .title{
+    font-family:var(--font-display); font-size:clamp(30px,10vw,58px);
+    font-weight:400; letter-spacing:5px; text-transform:uppercase;
+    margin:0; line-height:1.02; color:var(--ink);
+    text-shadow:0 2px 18px rgba(0,0,0,.8);
+  }
+  .title span{color:var(--blood); text-shadow:0 0 26px rgba(194,53,42,.5);}
+  .title em{font-style:normal; color:#8fc2ea;
+    text-shadow:0 0 30px rgba(92,150,210,.3), 0 2px 16px rgba(0,0,0,.7);}
+  .sub{
+    font-family:var(--font-ui); font-size:12px; letter-spacing:3.4px;
+    text-transform:uppercase; color:var(--dim); margin:0; max-width:34ch;
+  }
+  .blurb{
+    font-family:var(--font-ui); font-size:15px; line-height:1.75; color:#cbbb9c;
+    max-width:38ch; margin:4px 0 0; font-style:italic;
+  }
+  .blurb b{color:var(--gold); font-weight:600; font-style:normal;}
+
+  .btn{
+    font-family:var(--font-display); font-weight:400; font-size:17px;
+    letter-spacing:4px; text-transform:uppercase; padding:14px 34px;
+    border-radius:2px; cursor:pointer; touch-action:manipulation; min-width:220px;
+    border:1px solid var(--line); color:var(--gold);
+    background:linear-gradient(#2a2116,#171109);
+    box-shadow:inset 0 1px 0 rgba(255,220,160,.12), 0 2px 10px rgba(0,0,0,.6);
+  }
+  .btn:active{background:linear-gradient(#3b2f1f,#241a10); border-color:var(--gold);}
+  .btn.ghost{border-color:#33291d; background:transparent; color:var(--dim);
+    font-size:13px; padding:11px 22px; min-width:0; letter-spacing:2.4px;
+    box-shadow:none;}
+
+  .stats{
+    display:grid; grid-template-columns:repeat(2,minmax(96px,1fr)); gap:8px;
+    font-family:var(--font-ui); font-size:11px; letter-spacing:2px;
+    text-transform:uppercase; color:var(--dim); margin:2px 0 4px;
+  }
+  .stats div{border:1px solid var(--line); background:rgba(26,22,17,.8);
+    padding:9px 10px; border-radius:2px;}
+  .stats b{display:block; font-family:var(--font-display); font-size:21px;
+    color:var(--ink); letter-spacing:1px; margin-top:3px; font-weight:400;}
+
+  /* ---------- Boon cards ---------- */
+  #levelup .cards{
+    display:flex; flex-direction:column; gap:10px; width:100%; max-width:400px;
+  }
+  .card{
+    display:flex; align-items:center; gap:13px; text-align:left; cursor:pointer;
+    border:1px solid var(--line); border-left:3px solid var(--gold);
+    background:linear-gradient(100deg,#221b13,#16110c);
+    border-radius:2px; padding:13px 15px;
+    touch-action:manipulation; width:100%; color:inherit; font-family:inherit;
+    box-shadow:inset 0 1px 0 rgba(255,220,160,.08);
+  }
+  .card:active{background:linear-gradient(100deg,#3a2d1d,#241a10);}
+  .card .glyph{
+    flex:0 0 34px; height:34px; display:grid; place-items:center;
+    font-size:19px; line-height:1; color:var(--gold);
+    text-shadow:0 0 10px rgba(255,194,77,.4);
+  }
+  .card h4{
+    margin:0 0 3px; font-family:var(--font-display); font-size:17px;
+    font-weight:400; letter-spacing:1.4px; text-transform:uppercase; color:var(--ink);
+  }
+  .card p{
+    margin:0; font-family:var(--font-ui); font-size:12.5px; line-height:1.5;
+    color:var(--dim); font-style:italic;
+  }
+  .card .tier{
+    font-family:var(--font-ui); font-size:10px; letter-spacing:1.4px;
+    color:var(--arcane); font-style:normal;
+  }
+
+  .fine{
+    font-family:var(--font-ui); font-size:11px; letter-spacing:2px;
+    text-transform:uppercase; color:var(--faint);
+  }
+  .hint{
+    font-family:var(--font-ui); font-size:13px; letter-spacing:.4px; color:var(--dim);
+    line-height:1.95; max-width:34ch; text-align:left;
+  }
+  .hint b{color:var(--gold); font-weight:600;}
+
+  #flash{
+    position:absolute; inset:0; pointer-events:none; opacity:0;
+    background:radial-gradient(ellipse at center,transparent 40%,rgba(150,20,12,.6));
+    transition:opacity .16s ease-out;
+  }
+</style>
+</head>
+<body>
+
+<div id="stage"><canvas id="game"></canvas></div>
+
+<div id="ui">
+  <div id="flash"></div>
+
+  <div class="hud" id="hud" hidden>
+    <div class="hud-left">
+      <div class="bar" id="hpBar"><i id="hpFill"></i></div>
+      <div class="bar" id="techBar"><i id="techFill"></i></div>
+      <div class="readout">
+        <span>Life <b id="hpText">100</b></span>
+        <span id="techText">Slag 0/70</span>
+      </div>
+    </div>
+    <div class="hud-right">
+      <div class="clock" id="clock">0:00</div>
+      <div class="lvl" id="lvlText">LV 1</div>
+    </div>
+    <button class="iconbtn" id="pauseBtn" aria-label="Pause">II</button>
+  </div>
+
+  <div class="screen on" id="start">
+    <h1 class="title">The<br><em>Rivenmark</em></h1>
+    <p class="sub">The Aegis is shattered</p>
+    <p class="blurb">
+      Raw magic kills now unless it runs through Spirit-wrought Steel. Cut
+      <b>Arcane Slag</b> from the Hollow-Thralls, then find a <b>ley-gate</b>
+      and hold it open long enough to carry the haul out from under the
+      Shroud of Dúath.
+    </p>
+    <div class="cards" id="heroPick"></div>
+    <p class="hint">
+      <b>Move</b> — drag anywhere, or WASD / arrows<br>
+      <b>Strike</b> — your steel looses on the nearest thrall<br>
+      <b>Boons</b> — every few slag, choose a gift
+    </p>
+    <p class="fine" id="bestLine"></p>
+  </div>
+
+  <div class="screen" id="levelup">
+    <p class="sub" id="lvlSub">A boon is offered</p>
+    <h1 class="title" style="font-size:clamp(24px,7vw,38px)">Rank <span id="lvlNum">2</span></h1>
+    <div class="cards" id="cards"></div>
+  </div>
+
+  <div class="screen" id="paused">
+    <h1 class="title" style="font-size:clamp(24px,8vw,44px)">Held</h1>
+    <button class="btn" id="resumeBtn">Press on</button>
+    <button class="btn ghost" id="abortBtn">Abandon the delve</button>
+  </div>
+
+  <div class="screen" id="over">
+    <h1 class="title" id="overTitle"><span>Slain</span></h1>
+    <p class="sub" id="overSub">The horde broke your guard.</p>
+    <div class="stats" id="overStats"></div>
+    <button class="btn" id="againBtn">Descend again</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* =============================================================================
+   NEON EXTRACTION — top-down arena survival prototype
+   Vanilla ES6 + canvas 2D. No libraries, no image assets, no network.
+   Everything on screen is drawn from paths at runtime.
+
+   Layout of this file:
+     1. Config & tuning        2. Math helpers
+     3. Spatial hash           4. World generation
+     5. Collision              6. Entities & spawning
+     7. Input (virtual stick)  8. Simulation
+     9. Rendering              10. UI, state machine & boot
+   ========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   1. CONFIG & TUNING
+   ------------------------------------------------------------------------ */
+
+const WORLD = { w: 2000, h: 2000 };
+
+// Spatial-hash cell sizes. Walls are static and chunky, so they get a coarse
+// grid; enemies query tiny radii for flocking, so they get a fine one.
+const WALL_CELL  = 100;
+const ENEMY_CELL = 48;
+
+const MAX_ENEMIES   = 220;   // was 40 before spatial partitioning
+const MAX_PARTICLES = 420;
+const MAX_DT        = 0.05;  // clamp after tab-switches / long frames
+
+const EXTRACT_QUOTA   = 70;  // tech needed before the portal powers up
+const EXTRACT_CHANNEL = 4.0; // seconds standing inside it to win
+const PORTAL_R        = 62;
+
+const BASE_PLAYER = {
+  r: 14, maxHp: 100, speed: 205,
+  damage: 22, fireDelay: 0.36, range: 275, bulletSpeed: 640,
+  shots: 1, pierce: 0, magnet: 118, regen: 0,
+  iframe: 0.45
+};
+
+// Enemy archetypes. `weight` is the spawn share, ramped by `from` (seconds).
+const ENEMY_TYPES = {
+  thrall:   { r: 13, speed: 96,  hp: 34,  dmg: 8,  tech: 1, cd: 0.95, mass: 1.0,
+              color: '#9dbb5a', halo: 'rgba(157,187,90,.20)', weight: 10, from: 0 },
+  eclipse:    { r: 11, speed: 152, hp: 22,  dmg: 6,  tech: 1, cd: 0.70, mass: 0.7,
+              color: '#b07cff', halo: 'rgba(176,124,255,.22)', weight: 8,  from: 25 },
+  deceiver: { r: 24, speed: 76,  hp: 540, dmg: 32, tech: 30, cd: 1.15, mass: 7.0,
+              color: '#e8c060', halo: 'rgba(232,192,96,.22)', weight: 0, from: 1e9 },
+  mirage:   { r: 20, speed: 92,  hp: 1,   dmg: 0,  tech: 0,  cd: 9.0,  mass: 0.2,
+              color: '#e8c060', halo: 'rgba(232,192,96,.18)', weight: 0, from: 1e9 },
+  breaker: { r: 23, speed: 62,  hp: 135, dmg: 21, tech: 4, cd: 1.30, mass: 2.8,
+              color: '#e0552a', halo: 'rgba(224,85,42,.22)', weight: 4,  from: 55 }
+};
+
+// One place for the look. Everything on the canvas pulls from here.
+const PAL = {
+  arcane:'#8fb9d6', arcaneDim:'#4a6a80', teal:'#6f9a8c',
+  ember:'#e5761f', gold:'#d9a441', blood:'#8e2b20',
+  thrall:'#8fa06a', eclipse:'#a58fd0', breaker:'#e0552a', brand:'#cbb6ff',
+  // Lit flagstone underfoot, unlit rock above: the contrast the whole scene
+  // hangs on. Walls are near-black inside and carry all their detail on the
+  // bevelled edge, the way a raised ledge reads from overhead.
+  floor:'#2b2118',
+  stoneTop:'#161a1c', stoneMid:'#0c0f11', stoneLow:'#050708',
+  bone:'#c4b795', coin:'#c99a3e'
+};
+
+// --- The Rivenmark ------------------------------------------------------
+// The Guided Vanguard: two of the Clear-Sighted, fighting unhelmeted.
+const HEROES = {
+  isaac: { id:'isaac', name:'Isaac', title:'The Unyielding Shield',
+           order:'Hearth-Wardens', school:'Sun-Gold',
+           magic:'#ffc24d', trim:'rgba(196,142,44,.9)', cape:[86,32,26],
+           blurb:'The vanguard’s anchor. Sun-Gold magic, a sun-emblazoned shield, ' +
+                 'and no purchase for the Deceiver’s illusions.',
+           maxHp:125, speed:196, damage:25, fireDelay:0.40, pierce:0, range:268 },
+  zayd:  { id:'zayd', name:'Zayd', title:'The Piercing Truth',
+           order:'Frost-Scholars of Kael', school:'Azure',
+           magic:'#5fd0ff', trim:'rgba(70,150,196,.9)', cape:[30,44,72],
+           blurb:'A tactician of Kael. The Sapphire Glaive severs hive-mind tethers, ' +
+                 'and inverted ley-lines hold no confusion for him.',
+           maxHp:92, speed:228, damage:19, fireDelay:0.30, pierce:1, range:290 }
+};
+
+// The sundered geography. Each delve falls in one of them.
+const REGIONS = [
+  { id:'slag',    name:'The Slag-Moors of Drak-Hald',
+    note:'Dead ash around the Weeping Keep of Tor-Varden.',
+    landmark:'The Weeping Keep of Tor-Varden', build:'keep',
+    layout:{ pitch:5, braid:0.5, rooms:2, chambers:9, rough:0.24 },
+    earth:[58,44,30], mottle:[[26,18,11],[84,64,41],[116,90,58]],
+    flag:[56,26], stone:['#241d16','#16110b','#0b0805'], lamp:'#e5761f' },
+  { id:'vaelk',   name:'The Rending Gorges of Vaelk',
+    note:'Split earth below the Kael-Dorm Redoubt.',
+    landmark:'The Kael-Dorm Redoubt', build:'redoubt',
+    layout:{ pitch:4, braid:0.18, rooms:1, chambers:3, rough:0.16, rifts:true },
+    earth:[38,46,58], mottle:[[16,20,28],[52,66,86],[78,102,130]],
+    flag:[58,24], stone:['#1a2430','#101720','#070b0f'], lamp:'#5fd0ff' },
+  { id:'kraggen', name:'Kraggen-Tor, the Iron-Teeth',
+    note:'Volcanic west, holding the Shatter-Gate of Ghor.',
+    landmark:'The Shatter-Gate of Ghor', build:'shattergate',
+    layout:{ pitch:3, braid:0.22, rooms:1, chambers:4, rough:0.34 },
+    earth:[52,30,22], mottle:[[28,12,8],[86,42,24],[128,62,30]],
+    flag:[54,22], stone:['#2a1a14','#1a0f0a','#0c0705'], lamp:'#ff5f28' },
+  { id:'weald',   name:'The Rot-Weald',
+    note:'Creeping mutation in the southern forest.',
+    landmark:'The Heart-Rot Clearing', build:'thicket',
+    layout:{ pitch:4, braid:0.55, rooms:2, chambers:10, rough:0.42 },
+    earth:[40,48,30], mottle:[[18,24,12],[58,74,38],[86,106,54]],
+    flag:[52,26], stone:['#1c2418','#121810','#080b07'], lamp:'#9dbb5a' },
+  { id:'firth',   name:'The Dead Firth',
+    note:'A blackened ocean, drained and refilled with drifting ash.',
+    landmark:'The Ash-Shoals', build:'ashflat',
+    layout:{ pitch:6, braid:0.6, rooms:3, chambers:12, rough:0.2 },
+    earth:[34,32,34], mottle:[[14,13,15],[52,50,54],[78,76,82]],
+    flag:[50,20], stone:['#1c1c1f','#121215','#07070a'], lamp:'#b9c4cf' }
+];
+
+const UPGRADES = [
+  { id:'dmg',    glyph:'✦', name:'Keen Edge',   desc:'your ward bites a quarter deeper',   max:99, apply:p=>p.damage      *= 1.25 },
+  { id:'rate',   glyph:'❧', name:'Quickening',  desc:'the blade answers faster',           max:8,  apply:p=>p.fireDelay   *= 0.85 },
+  { id:'speed',  glyph:'❯', name:'Windstep',    desc:'your stride lengthens',              max:6,  apply:p=>p.speed       *= 1.10 },
+  { id:'plate',  glyph:'❖', name:'Ironhide',    desc:'+25 life, and 25 mended now',        max:99, apply:p=>{p.maxHp += 25; p.hp = Math.min(p.maxHp, p.hp + 25);} },
+  { id:'range',  glyph:'◎', name:'Farsight',    desc:'your reach grows by a seventh',      max:5,  apply:p=>p.range       *= 1.15 },
+  { id:'split',  glyph:'⁂', name:'Split Bolt',  desc:'one more bolt with every strike',    max:4,  apply:p=>p.shots       += 1 },
+  { id:'pierce', glyph:'⌁', name:'Rendbolt',    desc:'bolts run through one foe more',     max:4,  apply:p=>p.pierce      += 1 },
+  { id:'magnet', glyph:'❂', name:'Soul Draw',   desc:'essence comes to you from further',  max:4,  apply:p=>p.magnet      *= 1.5 },
+  { id:'regen',  glyph:'✚', name:'Mending',     desc:'0.8 life knits back each second',    max:5,  apply:p=>p.regen       += 0.8 },
+  { id:'vel',    glyph:'➤', name:'Swift Bolt',  desc:'bolts fly a quarter faster',         max:4,  apply:p=>p.bulletSpeed *= 1.25 }
+];
+
+/* ---------------------------------------------------------------------------
+   2. MATH HELPERS
+   ------------------------------------------------------------------------ */
+
+const TAU = Math.PI * 2;
+const clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
+const lerp  = (a, b, t) => a + (b - a) * t;
+const rand  = (a, b) => a + Math.random() * (b - a);
+const dist2 = (ax, ay, bx, by) => { const dx = bx - ax, dy = by - ay; return dx*dx + dy*dy; };
+
+// Shortest signed angle from a to b, so rotation never spins the long way round.
+function angleDelta(a, b) {
+  let d = (b - a) % TAU;
+  if (d > Math.PI) d -= TAU;
+  if (d < -Math.PI) d += TAU;
+  return d;
+}
+
+/* ---------------------------------------------------------------------------
+   3. SPATIAL HASH
+   Replaces the prototype's O(n^2) sweeps. Buckets are reused between frames --
+   clear() empties the arrays instead of dropping them, so a steady-state frame
+   allocates nothing.
+   ------------------------------------------------------------------------ */
+
+class SpatialHash {
+  constructor(cell) {
+    this.cell = cell;
+    this.buckets = new Map();
+    this.stride = Math.ceil(Math.max(WORLD.w, WORLD.h) / cell) + 4;
+  }
+  key(cx, cy) { return (cy + 2) * this.stride + (cx + 2); }
+  clear() { for (const b of this.buckets.values()) b.length = 0; }
+  insert(item, x, y) {
+    const k = this.key(Math.floor(x / this.cell), Math.floor(y / this.cell));
+    let b = this.buckets.get(k);
+    if (!b) { b = []; this.buckets.set(k, b); }
+    b.push(item);
+  }
+  // Collects everything in the cells overlapping the circle into `out`.
+  // Callers still do the exact distance test; this only narrows the field.
+  query(x, y, r, out) {
+    out.length = 0;
+    const c = this.cell;
+    const x0 = Math.floor((x - r) / c), x1 = Math.floor((x + r) / c);
+    const y0 = Math.floor((y - r) / c), y1 = Math.floor((y + r) / c);
+    for (let cy = y0; cy <= y1; cy++) {
+      for (let cx = x0; cx <= x1; cx++) {
+        const b = this.buckets.get(this.key(cx, cy));
+        if (b) for (let i = 0; i < b.length; i++) out.push(b[i]);
+      }
+    }
+    return out;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   4. WORLD GENERATION
+   ------------------------------------------------------------------------ */
+
+let walls = [];              // {x,y,w,h}
+let wallGrid = null;         // SpatialHash of wall indices
+let wallSeen = null;         // stamp buffer for deduping multi-cell walls
+let wallStamp = 0;
+
+function pointInWalls(x, y, pad) {
+  const cand = wallsNear(x, y, pad + 2);
+  for (let i = 0; i < cand.length; i++) {
+    const w = walls[cand[i]];
+    if (x > w.x - pad && x < w.x + w.w + pad &&
+        y > w.y - pad && y < w.y + w.h + pad) return true;
+  }
+  return false;
+}
+
+/* --- cave generation ----------------------------------------------------
+   Cellular automata gives organic rock; a carved skeleton of chambers and
+   corridors gives the maze structure and guarantees the place is traversable.
+   CA runs first, the skeleton is cut through it afterwards, then a flood fill
+   from spawn fills in anything it could not reach -- so every open cell in the
+   finished map is reachable from every other one.
+
+   Collision still wants axis-aligned rectangles, so the finished grid is
+   greedy-merged into as few rects as possible and handed to the same spatial
+   hash and AABB code as before.
+   ---------------------------------------------------------------------- */
+
+const CELL_W = 40;                       // world units per cave cell
+const GW = Math.floor(WORLD.w / CELL_W);
+const GH = Math.floor(WORLD.h / CELL_W);
+const SOLID = 1, OPEN = 0;
+
+let grid = null;          // Uint8Array, row-major
+let edges = [];           // {x1,y1,x2,y2,nx,ny} lit rock/floor boundaries
+let props = [];           // {x,y,rot,kind} scenery instances
+let lamps = [];           // {x,y,color} ambient light sources
+let openCells = [];       // {x,y} world centres of every reachable cell
+
+const gi = (cx, cy) => cy * GW + cx;
+const inGrid = (cx, cy) => cx >= 0 && cy >= 0 && cx < GW && cy < GH;
+const cellAt = (cx, cy) => (inGrid(cx, cy) ? grid[gi(cx, cy)] : SOLID);
+
+function carveDisc(cx, cy, r) {
+  const r2 = r * r;
+  for (let y = Math.max(1, cy - r); y <= Math.min(GH - 2, cy + r); y++) {
+    for (let x = Math.max(1, cx - r); x <= Math.min(GW - 2, cx + r); x++) {
+      const dx = x - cx, dy = y - cy;
+      if (dx * dx + dy * dy <= r2) grid[gi(x, y)] = OPEN;
+    }
+  }
+}
+
+// L-shaped corridor, `half` cells either side of the centre line.
+function carveCorridor(ax, ay, bx, by, half) {
+  const stepX = ax < bx ? 1 : -1, stepY = ay < by ? 1 : -1;
+  for (let x = ax; x !== bx + stepX; x += stepX) carveDisc(x, ay, half);
+  for (let y = ay; y !== by + stepY; y += stepY) carveDisc(bx, y, half);
+}
+
+function carveRect(x0, y0, x1, y1) {
+  for (let y = Math.max(1, y0); y <= Math.min(GH - 2, y1); y++)
+    for (let x = Math.max(1, x0); x <= Math.min(GW - 2, x1); x++)
+      grid[gi(x, y)] = OPEN;
+}
+
+/* A depth-first maze over coarse cells, then braided: roughly a third of the
+   remaining walls are knocked through, which turns a perfect maze (all dead
+   ends, one route between any two points) into a looping network. Dead ends
+   are death in a game where a horde follows you, and loops give both sides
+   room to flank. */
+function carveMaze() {
+  const LY = REGION.layout || {};
+  const P = LY.pitch || 4;                        // fine cells per maze cell
+  const MW = Math.floor((GW - 2) / P), MH = Math.floor((GH - 2) / P);
+  const seen = new Uint8Array(MW * MH);
+  const mi = (x, y) => y * MW + x;
+  const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  const link = [];
+
+  const stack = [[(Math.random() * MW) | 0, (Math.random() * MH) | 0]];
+  seen[mi(stack[0][0], stack[0][1])] = 1;
+  while (stack.length) {
+    const [x, y] = stack[stack.length - 1];
+    const opts = [];
+    for (let i = 0; i < 4; i++) {
+      const nx = x + DIRS[i][0], ny = y + DIRS[i][1];
+      if (nx < 0 || ny < 0 || nx >= MW || ny >= MH || seen[mi(nx, ny)]) continue;
+      opts.push([nx, ny]);
+    }
+    if (!opts.length) { stack.pop(); continue; }
+    const n = opts[(Math.random() * opts.length) | 0];
+    seen[mi(n[0], n[1])] = 1;
+    link.push([x, y, n[0], n[1]]);
+    stack.push(n);
+  }
+  const braids = Math.floor(MW * MH * (LY.braid === undefined ? 0.34 : LY.braid));
+  for (let i = 0; i < braids; i++) {
+    const x = (Math.random() * MW) | 0, y = (Math.random() * MH) | 0;
+    const d = DIRS[(Math.random() * 4) | 0];
+    const nx = x + d[0], ny = y + d[1];
+    if (nx < 0 || ny < 0 || nx >= MW || ny >= MH) continue;
+    link.push([x, y, nx, ny]);
+  }
+
+  // Rooms at every junction, corridors two cells wide along each link.
+  for (let my = 0; my < MH; my++)
+    for (let mx = 0; mx < MW; mx++) {
+      const ox = 1 + mx * P, oy = 1 + my * P;
+      const rm = LY.rooms === undefined ? 1 : LY.rooms;
+      carveRect(ox, oy, ox + rm, oy + rm);
+    }
+  for (let i = 0; i < link.length; i++) {
+    const [x, y, nx, ny] = link[i];
+    const ox = 1 + x * P, oy = 1 + y * P;
+    const nox = 1 + nx * P, noy = 1 + ny * P;
+    if (y === ny) carveRect(Math.min(ox, nox), oy, Math.max(ox, nox) + 1, oy + 1);
+    else          carveRect(ox, Math.min(oy, noy), ox + 1, Math.max(oy, noy) + 1);
+  }
+
+  // A handful of the junctions open out into proper chambers.
+  const nch = LY.chambers === undefined ? 7 : LY.chambers;
+  for (let i = 0; i < nch; i++) {
+    const mx = (Math.random() * MW) | 0, my = (Math.random() * MH) | 0;
+    carveDisc(1 + mx * P, 1 + my * P, 2 + (Math.random() * 2 | 0));
+  }
+
+  // Vaelk is split earth, not tunnels: long parallel rifts torn across it.
+  if (LY.rifts) {
+    for (let i = 0; i < 5; i++) {
+      const gy = 5 + ((Math.random() * (GH - 12)) | 0);
+      const len = 12 + ((Math.random() * 22) | 0);
+      const gx = 3 + ((Math.random() * (GW - len - 6)) | 0);
+      for (let x = gx; x < gx + len; x++) {
+        for (let y = gy; y < gy + 2 + ((x % 7 === 0) ? 1 : 0); y++) {
+          if (inGrid(x, y)) grid[gi(x, y)] = SOLID;      // the rift itself
+        }
+      }
+      const bridge = gx + ((Math.random() * len) | 0);   // one crossing
+      carveRect(bridge, gy - 1, bridge + 1, gy + 3);
+    }
+  }
+  return P;
+}
+
+function generateWorld(spawn, portal) {
+  grid = new Uint8Array(GW * GH);
+  grid.fill(SOLID);
+
+  carveMaze();
+
+  // Roughen: without this the maze reads as machined corridors. Flip a few
+  // boundary cells, then one gentle smoothing pass to knock the noise into
+  // shapes -- enough to look carved, too little to dissolve the layout.
+  for (let y = 2; y < GH - 2; y++) {
+    for (let x = 2; x < GW - 2; x++) {
+      const k = gi(x, y);
+      let openN = 0;
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++)
+          if (dx || dy) openN += cellAt(x + dx, y + dy) === OPEN ? 1 : 0;
+      if (openN === 0 || openN === 8) continue;         // interiors stay put
+      if (Math.random() < ((REGION.layout && REGION.layout.rough) || 0.3))
+        grid[k] = grid[k] === OPEN ? SOLID : OPEN;
+    }
+  }
+  const smoothed = new Uint8Array(grid);
+  for (let y = 2; y < GH - 2; y++) {
+    for (let x = 2; x < GW - 2; x++) {
+      let n = 0;
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++)
+          if (dx || dy) n += cellAt(x + dx, y + dy);
+      smoothed[gi(x, y)] = n >= 6 ? SOLID : n <= 2 ? OPEN : grid[gi(x, y)];
+    }
+  }
+  grid = smoothed;
+
+  // Spawn pocket and portal apron, cut after the roughening so they are clean.
+  const sc = { x: clamp(Math.floor(spawn.x / CELL_W), 2, GW - 3),
+               y: clamp(Math.floor(spawn.y / CELL_W), 2, GH - 3) };
+  const pc = { x: clamp(Math.floor(portal.x / CELL_W), 2, GW - 3),
+               y: clamp(Math.floor(portal.y / CELL_W), 2, GH - 3) };
+  carveDisc(sc.x, sc.y, 4);
+  carveDisc(pc.x, pc.y, 3);
+  carveCorridor(sc.x, sc.y, pc.x, pc.y, 1);   // never strand the objective
+
+  widenPassages();
+
+  // Drop fully isolated single pillars. Roughening plus widening leaves a
+  // scatter of lone 40-unit blocks that read as debris rather than cave wall;
+  // anything still touching rock stays, so cover and structure survive.
+  const lone = [];
+  for (let y = 2; y < GH - 2; y++) {
+    for (let x = 2; x < GW - 2; x++) {
+      if (grid[gi(x, y)] !== SOLID) continue;
+      let n = 0;
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++)
+          if ((dx || dy) && cellAt(x + dx, y + dy) === SOLID) n++;
+      if (n === 0) lone.push(gi(x, y));
+    }
+  }
+  for (let i = 0; i < lone.length; i++) grid[lone[i]] = OPEN;
+
+  buildLandmark(pc);
+  connectPortal(sc, pc);
+
+  // Keep only what is reachable from spawn; everything else becomes rock.
+  const seen = new Uint8Array(GW * GH);
+  const stack = [gi(sc.x, sc.y)];
+  seen[stack[0]] = 1;
+  openCells = [];
+  while (stack.length) {
+    const k = stack.pop();
+    const cx = k % GW, cy = (k / GW) | 0;
+    openCells.push({ x: cx * CELL_W + CELL_W / 2, y: cy * CELL_W + CELL_W / 2 });
+    for (let i = 0; i < 4; i++) {
+      const nx = cx + (i === 0 ? 1 : i === 1 ? -1 : 0);
+      const ny = cy + (i === 2 ? 1 : i === 3 ? -1 : 0);
+      if (!inGrid(nx, ny)) continue;
+      const nk = gi(nx, ny);
+      if (seen[nk] || grid[nk] === SOLID) continue;
+      seen[nk] = 1; stack.push(nk);
+    }
+  }
+  for (let k = 0; k < grid.length; k++) if (!seen[k]) grid[k] = SOLID;
+
+  buildWallRects();
+  buildEdges();
+  buildScenery(spawn, portal);
+}
+
+// A curtain wall can seal its own gate, and Vaelk's rifts can strand a corner.
+// Rather than forbid that, prove reachability and repair the one case that
+// matters: flood from spawn, and if the gate is not in the reached set, cut
+// the shortest link to it. Scars the map far less than carving blind.
+function connectPortal(sc, pc) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const seen = new Uint8Array(GW * GH);
+    const q = [gi(sc.x, sc.y)];
+    if (grid[q[0]] === SOLID) carveDisc(sc.x, sc.y, 2);
+    seen[q[0]] = 1;
+    let best = -1, bestD = Infinity;
+    while (q.length) {
+      const k = q.pop();
+      const x = k % GW, y = (k / GW) | 0;
+      if (x === pc.x && y === pc.y) return true;
+      const d = (x - pc.x) * (x - pc.x) + (y - pc.y) * (y - pc.y);
+      if (d < bestD) { bestD = d; best = k; }
+      for (let i = 0; i < 4; i++) {
+        const nx = x + (i === 0 ? 1 : i === 1 ? -1 : 0);
+        const ny = y + (i === 2 ? 1 : i === 3 ? -1 : 0);
+        if (!inGrid(nx, ny)) continue;
+        const nk = gi(nx, ny);
+        if (seen[nk] || grid[nk] === SOLID) continue;
+        seen[nk] = 1; q.push(nk);
+      }
+    }
+    if (best < 0) return false;
+    carveCorridor(best % GW, (best / GW) | 0, pc.x, pc.y, 1);
+  }
+  return false;
+}
+
+// The place the region is named for. Built around the ley-gate, because the
+// objective should be somewhere, not a circle on blank ground.
+function setCell(cx, cy, v) { if (inGrid(cx, cy)) grid[gi(cx, cy)] = v; }
+
+function buildLandmark(pc) {
+  const kind = REGION.build;
+  const cx = clamp(pc.x, 9, GW - 10), cy = clamp(pc.y, 9, GH - 10);
+
+  if (kind === 'keep') {
+    // A ruined curtain wall with breaches on each side, and a broken
+    // inner ward: the capital that fell, not a tidy castle.
+    carveDisc(cx, cy, 8);
+    for (let a = 0; a < 360; a += 4) {
+      const r = 7, rad = a * Math.PI / 180;
+      const x = Math.round(cx + Math.cos(rad) * r), y = Math.round(cy + Math.sin(rad) * r);
+      const gap = (a > 78 && a < 102) || (a > 168 && a < 192) ||
+                  (a > 258 && a < 282) || (a < 12 || a > 348);
+      if (!gap) setCell(x, y, SOLID);
+    }
+    for (let a = 0; a < 360; a += 6) {
+      if (a % 90 < 34) continue;                       // collapsed sections
+      const rad = a * Math.PI / 180;
+      setCell(Math.round(cx + Math.cos(rad) * 3.5), Math.round(cy + Math.sin(rad) * 3.5), SOLID);
+    }
+  } else if (kind === 'redoubt') {
+    // Cliffside fort: a walled approach with one mouth.
+    carveDisc(cx, cy, 7);
+    for (let x = cx - 6; x <= cx + 6; x++) {
+      setCell(x, cy - 6, SOLID);
+      if (x < cx - 1 || x > cx + 1) setCell(x, cy + 6, SOLID);
+    }
+    for (let y = cy - 6; y <= cy + 6; y++) { setCell(cx - 6, y, SOLID); setCell(cx + 6, y, SOLID); }
+    for (let y = cy - 3; y <= cy + 3; y += 3) { setCell(cx - 3, y, SOLID); setCell(cx + 3, y, SOLID); }
+  } else if (kind === 'shattergate') {
+    // The breach itself: a ring of standing stones with four wide mouths.
+    carveDisc(cx, cy, 7);
+    for (let a = 0; a < 360; a += 5) {
+      if (a % 90 < 30) continue;
+      const rad = a * Math.PI / 180;
+      setCell(Math.round(cx + Math.cos(rad) * 6), Math.round(cy + Math.sin(rad) * 6), SOLID);
+      setCell(Math.round(cx + Math.cos(rad) * 5), Math.round(cy + Math.sin(rad) * 5), SOLID);
+    }
+  } else if (kind === 'thicket') {
+    // A clearing choked with growth: cover everywhere, sightlines nowhere.
+    carveDisc(cx, cy, 8);
+    for (let i = 0; i < 26; i++) {
+      const a = Math.random() * TAU, d = 2.4 + Math.random() * 5.2;
+      setCell(Math.round(cx + Math.cos(a) * d), Math.round(cy + Math.sin(a) * d), SOLID);
+    }
+  } else {
+    // Ash shoals: open ground broken by long drifting bars.
+    carveDisc(cx, cy, 9);
+    for (let i = 0; i < 5; i++) {
+      const y = cy - 6 + i * 3, len = 5 + ((Math.random() * 7) | 0);
+      const x0 = cx - 7 + ((Math.random() * 6) | 0);
+      for (let x = x0; x < x0 + len; x++) setCell(x, y, SOLID);
+    }
+  }
+  carveDisc(cx, cy, 2);                                 // the gate always stands clear
+}
+
+// No passage may be one cell wide: the widest enemy is 46 units across and a
+// cell is 40, so a single-cell throat is a wall the swarm would pile up behind.
+// Widen toward whichever side already has more room, so corridors open out
+// rather than punching through into unrelated pockets.
+function openness(cx, cy) {
+  let n = 0;
+  for (let dy = -1; dy <= 1; dy++)
+    for (let dx = -1; dx <= 1; dx++)
+      if (cellAt(cx + dx, cy + dy) === OPEN) n++;
+  return n;
+}
+
+function widenPassages() {
+  const snap = new Uint8Array(grid);
+  const solid = (cx, cy) => (cx < 0 || cy < 0 || cx >= GW || cy >= GH) ? 1 : snap[gi(cx, cy)];
+  const toOpen = [];
+  for (let y = 2; y < GH - 2; y++) {
+    for (let x = 2; x < GW - 2; x++) {
+      if (snap[gi(x, y)] !== OPEN) continue;
+      if (solid(x - 1, y) && solid(x + 1, y)) {
+        toOpen.push(openness(x - 1, y) >= openness(x + 1, y) ? gi(x - 1, y) : gi(x + 1, y));
+      }
+      if (solid(x, y - 1) && solid(x, y + 1)) {
+        toOpen.push(openness(x, y - 1) >= openness(x, y + 1) ? gi(x, y - 1) : gi(x, y + 1));
+      }
+    }
+  }
+  for (let i = 0; i < toOpen.length; i++) grid[toOpen[i]] = OPEN;
+}
+
+// Greedy rectangle merge: far fewer, larger boxes for the collision system
+// than one per cell, which keeps the AABB and spatial-hash work cheap.
+function buildWallRects() {
+  walls = [];
+  const used = new Uint8Array(GW * GH);
+  for (let y = 0; y < GH; y++) {
+    for (let x = 0; x < GW; x++) {
+      const k = gi(x, y);
+      if (grid[k] !== SOLID || used[k]) continue;
+      let w = 1;
+      while (x + w < GW && grid[gi(x + w, y)] === SOLID && !used[gi(x + w, y)]) w++;
+      let h = 1;
+      grow: while (y + h < GH) {
+        for (let i = 0; i < w; i++) {
+          const kk = gi(x + i, y + h);
+          if (grid[kk] !== SOLID || used[kk]) break grow;
+        }
+        h++;
+      }
+      for (let yy = 0; yy < h; yy++)
+        for (let xx = 0; xx < w; xx++) used[gi(x + xx, y + yy)] = 1;
+      walls.push({ x: x * CELL_W, y: y * CELL_W, w: w * CELL_W, h: h * CELL_W });
+    }
+  }
+
+  wallGrid = new SpatialHash(WALL_CELL);
+  wallSeen = new Int32Array(walls.length);
+  wallStamp = 0;
+  for (let i = 0; i < walls.length; i++) {
+    const w = walls[i];
+    const x0 = Math.floor(w.x / WALL_CELL), x1 = Math.floor((w.x + w.w) / WALL_CELL);
+    const y0 = Math.floor(w.y / WALL_CELL), y1 = Math.floor((w.y + w.h) / WALL_CELL);
+    for (let cy = y0; cy <= y1; cy++)
+      for (let cx = x0; cx <= x1; cx++) {
+        const k = wallGrid.key(cx, cy);
+        let b = wallGrid.buckets.get(k);
+        if (!b) { b = []; wallGrid.buckets.set(k, b); }
+        b.push(i);
+      }
+  }
+}
+
+// Every face where rock meets open floor. Drawn as one batched neon rim, which
+// is what makes a grid of boxes read as a carved cave wall.
+function buildEdges() {
+  const C = CELL_W;
+  // Collect faces per line, then merge collinear neighbours into single long
+  // segments. A straight run of wall emitted one 40-unit stub per cell; the
+  // rim is stroked three times a frame with round caps, so segment count is
+  // the cost. Merging cuts it by roughly two thirds for an identical picture.
+  const lines = new Map();
+  const add = (key, a, b) => {
+    let arr = lines.get(key);
+    if (!arr) { arr = []; lines.set(key, arr); }
+    arr.push([a, b]);
+  };
+  for (let y = 1; y < GH - 1; y++) {
+    for (let x = 1; x < GW - 1; x++) {
+      if (grid[gi(x, y)] !== SOLID) continue;
+      if (cellAt(x, y - 1) === OPEN) add('h|' + y + '|-1', x, x + 1);
+      if (cellAt(x, y + 1) === OPEN) add('h|' + (y + 1) + '|1', x, x + 1);
+      if (cellAt(x - 1, y) === OPEN) add('v|' + x + '|-1', y, y + 1);
+      if (cellAt(x + 1, y) === OPEN) add('v|' + (x + 1) + '|1', y, y + 1);
+    }
+  }
+
+  edges = [];
+  for (const [key, arr] of lines) {
+    const parts = key.split('|');
+    const horiz = parts[0] === 'h';
+    const at = +parts[1] * C;
+    const sign = +parts[2];
+    arr.sort((a, b) => a[0] - b[0]);
+    let s0 = arr[0][0], s1 = arr[0][1];
+    for (let i = 1; i <= arr.length; i++) {
+      if (i < arr.length && arr[i][0] === s1) { s1 = arr[i][1]; continue; }
+      const a = s0 * C, b = s1 * C;
+      edges.push(horiz
+        ? { x1: a, y1: at, x2: b, y2: at, nx: 0, ny: sign }
+        : { x1: at, y1: a, x2: at, y2: b, nx: sign, ny: 0 });
+      if (i < arr.length) { s0 = arr[i][0]; s1 = arr[i][1]; }
+    }
+  }
+}
+
+function buildScenery(spawn, portal) {
+  props = [];
+  lamps = [];
+  const C = CELL_W;
+
+  // Wall-mounted fittings, oriented to face the open side. Edges are merged
+  // into long runs, so step along each one rather than placing a single
+  // fitting at its midpoint -- otherwise a 20-metre wall gets one vent.
+  const STRIDE = 58;
+  for (let i = 0; i < edges.length; i++) {
+    const e = edges[i];
+    const len = Math.hypot(e.x2 - e.x1, e.y2 - e.y1);
+    const ux = (e.x2 - e.x1) / (len || 1), uy = (e.y2 - e.y1) / (len || 1);
+    const rot = Math.atan2(e.ny, e.nx);
+    for (let d = STRIDE * 0.5; d < len; d += STRIDE) {
+    if (Math.random() > 0.34) continue;
+    const jitter = rand(-9, 9);
+    const mx = e.x1 + ux * clamp(d + jitter, 6, len - 6) + e.nx * 7;
+    const my = e.y1 + uy * clamp(d + jitter, 6, len - 6) + e.ny * 7;
+    const roll = Math.random();
+    const kind = roll < 0.24 ? 'torch' : roll < 0.52 ? 'chain' :
+                 roll < 0.80 ? 'banner' : 'sconce';
+    const q = ((Math.round(rot / (Math.PI / 2)) % 4) + 4) % 4;
+    props.push({ x: mx, y: my, q, kind });
+    // Torches are the light. Everything else is just furniture.
+    if (kind === 'torch') {
+      lamps.push({ x: mx + e.nx * 12, y: my + e.ny * 12, color: PAL.ember });
+    } else if (kind === 'sconce' && Math.random() < 0.34) {
+      lamps.push({ x: mx + e.nx * 12, y: my + e.ny * 12, color: PAL.teal });
+    }
+    }
+  }
+
+  // Torch count follows the edge count, so a fretted map can light itself into
+  // a performance problem. Thin evenly rather than clipping a region dark.
+  const LAMP_CAP = 46;
+  if (lamps.length > LAMP_CAP) {
+    const keep = [];
+    const step = lamps.length / LAMP_CAP;
+    for (let i = 0; i < LAMP_CAP; i++) keep.push(lamps[Math.floor(i * step)]);
+    lamps = keep;
+  }
+
+  // Floor scenery. Two rules keep it from reading as floating debris:
+  // man-made decals snap to right angles (only rubble and stains rotate
+  // freely), and the loud ones cluster against the rock, where equipment and
+  // spillage would actually accumulate. Open floor gets only quiet marks, so
+  // the middle of a chamber stays readable during a fight.
+
+  for (let i = 0; i < openCells.length; i++) {
+    const c = openCells[i];
+    if (dist2(c.x, c.y, spawn.x, spawn.y) < 110 * 110) continue;
+    if (dist2(c.x, c.y, portal.x, portal.y) < 110 * 110) continue;
+
+    const cx = Math.floor(c.x / C), cy = Math.floor(c.y / C);
+    const byRock = cellAt(cx - 1, cy) === SOLID || cellAt(cx + 1, cy) === SOLID ||
+                   cellAt(cx, cy - 1) === SOLID || cellAt(cx, cy + 1) === SOLID;
+    const roll = Math.random();
+    let kind = null;
+    // The place should look looted and lived-in. Heavier against the rock
+    // where things pile up, lighter in the open so a fight stays readable.
+    if (byRock) {
+      if (roll > 0.62) continue;
+      kind = roll < 0.09 ? 'rubble'  : roll < 0.16 ? 'bones'  : roll < 0.22 ? 'barrel' :
+             roll < 0.28 ? 'crate'   : roll < 0.33 ? 'grate'  : roll < 0.39 ? 'urn' :
+             roll < 0.45 ? 'coins'   : roll < 0.50 ? 'sword'  : roll < 0.54 ? 'shield' :
+             roll < 0.58 ? 'hornskull' : 'moss';
+    } else {
+      if (roll > 0.34) continue;
+      kind = roll < 0.07 ? 'crack' : roll < 0.12 ? 'moss'  : roll < 0.17 ? 'bones' :
+             roll < 0.22 ? 'coins' : roll < 0.26 ? 'sword' : roll < 0.30 ? 'scroll' : 'rubble';
+    }
+    props.push({ x: c.x + rand(-C * 0.22, C * 0.22),
+                 y: c.y + rand(-C * 0.22, C * 0.22),
+                 q: (Math.random() * 4) | 0, kind });
+  }
+}
+
+const _wallOut = [], _wallHits = [];
+// Wall indices whose cells overlap the circle, deduped.
+function wallsNear(x, y, r) {
+  wallGrid.query(x, y, r, _wallOut);
+  _wallHits.length = 0;
+  wallStamp++;
+  for (let i = 0; i < _wallOut.length; i++) {
+    const idx = _wallOut[i];
+    if (wallSeen[idx] === wallStamp) continue;
+    wallSeen[idx] = wallStamp;
+    _wallHits.push(idx);
+  }
+  return _wallHits;
+}
+
+/* ---------------------------------------------------------------------------
+   5. COLLISION
+   Circle-vs-AABB, resolved one axis at a time. Doing X and Y as separate
+   passes is what produces clean sliding: a body pressed into a corner still
+   keeps whichever component of its motion is unobstructed, instead of
+   snagging the way a single-vector push-out does.
+   ------------------------------------------------------------------------ */
+
+function circleHitsRect(x, y, r, w) {
+  const nx = clamp(x, w.x, w.x + w.w);
+  const ny = clamp(y, w.y, w.y + w.h);
+  const dx = x - nx, dy = y - ny;
+  return dx * dx + dy * dy < r * r;
+}
+
+function moveEntity(e, dx, dy) {
+  if (dx !== 0) {
+    e.x += dx;
+    const hits = wallsNear(e.x, e.y, e.r);
+    for (let i = 0; i < hits.length; i++) {
+      const w = walls[hits[i]];
+      if (circleHitsRect(e.x, e.y, e.r, w)) {
+        e.x = dx > 0 ? w.x - e.r : w.x + w.w + e.r;
+      }
+    }
+  }
+  if (dy !== 0) {
+    e.y += dy;
+    const hits = wallsNear(e.x, e.y, e.r);
+    for (let i = 0; i < hits.length; i++) {
+      const w = walls[hits[i]];
+      if (circleHitsRect(e.x, e.y, e.r, w)) {
+        e.y = dy > 0 ? w.y - e.r : w.y + w.h + e.r;
+      }
+    }
+  }
+  e.x = clamp(e.x, e.r, WORLD.w - e.r);
+  e.y = clamp(e.y, e.r, WORLD.h - e.r);
+}
+
+/* ---------------------------------------------------------------------------
+   6. ENTITIES & SPAWNING
+   ------------------------------------------------------------------------ */
+
+let player, enemies, bullets, loot, particles, rings, portal;
+let enemyGrid = new SpatialHash(ENEMY_CELL);
+const _near = [];
+
+let run;  // per-run state: timers, counters, difficulty
+
+function makePlayer(x, y, heroId) {
+  const H = HEROES[heroId] || HEROES.isaac;
+  const p = Object.assign({}, BASE_PLAYER);
+  p.hero = H.id;
+  p.maxHp = H.maxHp; p.speed = H.speed; p.damage = H.damage;
+  p.fireDelay = H.fireDelay; p.pierce = H.pierce; p.range = H.range;
+  p.x = x; p.y = y; p.angle = -Math.PI / 2;
+  p.hp = p.maxHp;
+  p.face = 1;
+  p.fireTimer = 0; p.invuln = 0; p.hitFlash = 0; p.muzzle = 0;
+  p.upg = {};
+  return p;
+}
+
+function typeWeights(t) {
+  let total = 0;
+  const out = [];
+  for (const k in ENEMY_TYPES) {
+    const d = ENEMY_TYPES[k];
+    if (t < d.from) continue;
+    // Ramp in over 20s so a new archetype trickles in rather than flooding.
+    const w = d.weight * clamp((t - d.from) / 20 + 0.25, 0.25, 1);
+    total += w;
+    out.push({ k, w });
+  }
+  return { out, total };
+}
+
+function spawnEnemy(t) {
+  if (enemies.length >= MAX_ENEMIES) return;
+
+  const { out, total } = typeWeights(t);
+  let roll = Math.random() * total, kind = out[0].k;
+  for (const o of out) { roll -= o.w; if (roll <= 0) { kind = o.k; break; } }
+  const d = ENEMY_TYPES[kind];
+
+  // In a cave most of the map is rock, so sampling a ring blind mostly lands
+  // in stone. Draw from the reachable floor instead and accept the first cell
+  // in the band just past the viewport -- guaranteeing the spawn can actually
+  // walk to the player, since every open cell is connected to every other.
+  if (!openCells.length) return;
+  const ring = Math.max(view.w, view.h) * 0.55 + 60;
+  const near = ring * ring, far = (ring * 2.1) * (ring * 2.1);
+  let x = 0, y = 0, ok = false;
+  for (let tries = 0; tries < 34 && !ok; tries++) {
+    const c = openCells[(Math.random() * openCells.length) | 0];
+    const dd = dist2(c.x, c.y, player.x, player.y);
+    if (dd < near || dd > far) continue;
+    if (pointInWalls(c.x, c.y, d.r + 3)) continue;
+    x = c.x; y = c.y; ok = true;
+  }
+  if (!ok) return;
+
+  // Health creeps up with run time so late waves stay meaningful.
+  const scale = 1 + t / 200;
+  enemies.push({
+    kind, x, y, r: d.r, speed: d.speed * rand(0.92, 1.08),
+    hp: d.hp * scale, maxHp: d.hp * scale, dmg: d.dmg, tech: d.tech,
+    cd: d.cd, mass: d.mass, color: d.color, halo: d.halo,
+    atk: rand(0, d.cd), hitFlash: 0, wob: Math.random() * TAU, angle: 0, face: 1
+  });
+}
+
+function fire() {
+  // Auto-target: nearest enemy inside weapon range. The spatial hash means
+  // this is a handful of cells, not a full pass over the swarm.
+  const R = player.range;
+  enemyGrid.query(player.x, player.y, R, _near);
+  // Nearest-target alone cannot fight a boss: while he is escorted, every
+  // bolt goes into the escort and he never takes a scratch. The Vanguard put
+  // the avatar first. Mirages stay targetable -- being decoys is their whole
+  // purpose -- except for Isaac, who is immune to the illusion and ignores
+  // them outright.
+  const blind = player.hero === 'isaac';
+  let best = null, bestD = R * R, avatar = null, avatarD = R * R;
+  for (let i = 0; i < _near.length; i++) {
+    const e = _near[i];
+    if (blind && e.kind === 'mirage') continue;
+    const d = dist2(player.x, player.y, e.x, e.y);
+    if (e.kind === 'deceiver') { if (d < avatarD) { avatarD = d; avatar = e; } }
+    if (d < bestD) { bestD = d; best = e; }
+  }
+  best = avatar || best;
+  if (!best) return false;
+
+  const base = Math.atan2(best.y - player.y, best.x - player.x);
+  const spread = 0.13;
+  for (let i = 0; i < player.shots; i++) {
+    const a = base + (i - (player.shots - 1) / 2) * spread;
+    bullets.push({
+      x: player.x + Math.cos(a) * (player.r + 6),
+      y: player.y + Math.sin(a) * (player.r + 6),
+      dx: Math.cos(a), dy: Math.sin(a), a: a,
+      speed: player.bulletSpeed, dmg: player.damage,
+      pierce: player.pierce, life: 1.4, r: 3.5,
+      hit: [], dead: false
+    });
+  }
+  player.muzzle = 0.06;
+  return true;
+}
+
+function dropLoot(e) {
+  loot.push({
+    x: e.x, y: e.y,
+    vx: rand(-38, 38), vy: rand(-38, 38),
+    value: e.tech, r: 6, spin: Math.random() * TAU, life: 0, pulled: false
+  });
+}
+
+// Expanding shockwave ring — a few strokes, but it is what makes a kill read
+// as an event rather than a sprite vanishing.
+const MAX_RINGS = 40;
+function ring(x, y, color, r0, r1, life) {
+  if (rings.length >= MAX_RINGS) return;
+  rings.push({ x, y, color, r0, r1, life, max: life });
+}
+
+function burst(x, y, color, n, spd) {
+  for (let i = 0; i < n && particles.length < MAX_PARTICLES; i++) {
+    const a = Math.random() * TAU, s = rand(spd * 0.35, spd);
+    particles.push({
+      x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
+      life: rand(0.22, 0.5), max: 0.5, color, size: rand(1.4, 3.2)
+    });
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   7. INPUT — floating virtual joystick (+ keyboard on desktop)
+   Pointer events unify mouse and touch. The stick locks to one pointer id, so
+   a second finger (or a tap on the DOM HUD, which sits above the canvas and
+   swallows its own events) can never yank movement around.
+   ------------------------------------------------------------------------ */
+
+const STICK_MAX  = 64;   // px from origin for full throttle
+const STICK_DEAD = 0.15; // fraction of MAX ignored, then remapped smoothly
+
+const stick = { active: false, id: null, ox: 0, oy: 0, x: 0, y: 0,
+                dx: 0, dy: 0, mag: 0, fade: 0 };
+const keys = new Set();
+
+function stickStart(id, x, y) {
+  if (stick.active) return;              // one pointer owns movement
+  stick.active = true; stick.id = id;
+  stick.ox = stick.x = x; stick.oy = stick.y = y;
+  stick.dx = stick.dy = stick.mag = 0;
+  stick.fade = 1;
+}
+
+function stickMove(x, y) {
+  stick.x = x; stick.y = y;
+  let dx = x - stick.ox, dy = y - stick.oy;
+  const d = Math.hypot(dx, dy);
+  if (d < 0.0001) { stick.mag = 0; return; }
+  const ux = dx / d, uy = dy / d;
+  // Drag past the ring and the origin follows, so the stick never feels capped.
+  if (d > STICK_MAX) {
+    stick.ox += ux * (d - STICK_MAX);
+    stick.oy += uy * (d - STICK_MAX);
+  }
+  const norm = Math.min(d, STICK_MAX) / STICK_MAX;
+  stick.dx = ux; stick.dy = uy;
+  stick.mag = norm <= STICK_DEAD ? 0 : (norm - STICK_DEAD) / (1 - STICK_DEAD);
+}
+
+function stickEnd() {
+  stick.active = false; stick.id = null; stick.mag = 0;
+}
+
+function moveVector() {
+  if (stick.active && stick.mag > 0) {
+    return { x: stick.dx * stick.mag, y: stick.dy * stick.mag };
+  }
+  let kx = 0, ky = 0;
+  if (keys.has('a') || keys.has('arrowleft'))  kx -= 1;
+  if (keys.has('d') || keys.has('arrowright')) kx += 1;
+  if (keys.has('w') || keys.has('arrowup'))    ky -= 1;
+  if (keys.has('s') || keys.has('arrowdown'))  ky += 1;
+  if (kx || ky) {
+    const d = Math.hypot(kx, ky);
+    return { x: kx / d, y: ky / d };
+  }
+  return { x: 0, y: 0 };
+}
+
+/* ---------------------------------------------------------------------------
+   8. SIMULATION
+   ------------------------------------------------------------------------ */
+
+const view = { w: 0, h: 0, dpr: 1 };
+const cam  = { x: 0, y: 0, shake: 0 };
+
+function shake(amount) { cam.shake = Math.min(16, cam.shake + amount); }
+
+function updateCamera(dt) {
+  const tx = clamp(player.x - view.w / 2, 0, Math.max(0, WORLD.w - view.w));
+  const ty = clamp(player.y - view.h / 2, 0, Math.max(0, WORLD.h - view.h));
+  const k = Math.min(1, dt * 9);
+  cam.x = view.w >= WORLD.w ? (WORLD.w - view.w) / 2 : lerp(cam.x, tx, k);
+  cam.y = view.h >= WORLD.h ? (WORLD.h - view.h) / 2 : lerp(cam.y, ty, k);
+  cam.shake *= Math.pow(0.0015, dt);
+  if (cam.shake < 0.05) cam.shake = 0;
+}
+
+function hurtPlayer(e) {
+  if (player.invuln > 0) return;
+  player.hp -= e.dmg;
+  player.invuln = player.iframe;
+  player.hitFlash = 0.3;
+  shake(6 + e.dmg * 0.25);
+  hitFlashUI();
+  burst(player.x + (e.x - player.x) * 0.5, player.y + (e.y - player.y) * 0.5,
+        PAL.blood, 10, 180);
+  if (player.hp <= 0) { player.hp = 0; endRun(false); }
+}
+
+function damageEnemy(e, dmg) {
+  if (e.hp <= 0) return;
+  e.hp -= dmg;
+  e.hitFlash = 0.12;
+  if (e.hp <= 0) {
+    if (e.kind === 'mirage') {
+      burst(e.x, e.y, '#e8c060', 10, 150);
+      return;                                   // a lie, not a body
+    }
+    if (e.kind === 'deceiver') {
+      run.bossDown = true;
+      run.boss = null;
+      run.banner = 3.4;
+      run.bannerText = 'The ley-gate answers';
+      run.bannerNote = 'The false salvation is broken. Hold the circle.';
+      shake(14);
+      for (let i = 0; i < enemies.length; i++) {
+        if (enemies[i].kind === 'mirage') enemies[i].hp = 0;
+      }
+    }
+    run.kills++;
+    dropLoot(e);
+    burst(e.x, e.y, e.color, e.r > 18 ? 14 : 7, 190);
+    if (e.r > 18) shake(3);
+  } else {
+    burst(e.x, e.y, '#e6d8bc', 2, 90);
+  }
+}
+
+function collectTech(v) {
+  run.tech += v;
+  run.xp += v;
+  while (run.xp >= run.xpNeed) {
+    run.xp -= run.xpNeed;
+    run.level++;
+    run.xpNeed = 6 + run.level * 5;
+    run.pendingLevels++;
+  }
+}
+
+function updatePlayer(dt) {
+  const mv = moveVector();
+  if (mv.x !== 0 || mv.y !== 0) {
+    const target = Math.atan2(mv.y, mv.x);
+    player.angle += angleDelta(player.angle, target) * Math.min(1, dt * 15);
+    if (Math.abs(mv.x) > 0.12) player.face = mv.x < 0 ? -1 : 1;
+    moveEntity(player, mv.x * player.speed * dt, mv.y * player.speed * dt);
+  }
+  player.invuln  = Math.max(0, player.invuln - dt);
+  player.hitFlash = Math.max(0, player.hitFlash - dt);
+  player.muzzle  = Math.max(0, player.muzzle - dt);
+  if (player.regen > 0) player.hp = Math.min(player.maxHp, player.hp + player.regen * dt);
+
+  player.fireTimer -= dt;
+  if (player.fireTimer <= 0) {
+    // No target in range: hold the timer at zero so the next one that walks in
+    // is engaged immediately rather than after a stale cooldown.
+    player.fireTimer = fire() ? player.fireDelay : 0;
+  }
+}
+
+/* Swarm navigation.
+   Steering straight at the player works in an open arena and fails in a maze:
+   anything behind rock walks into it and stops. One breadth-first sweep of the
+   cave grid from the player's cell gives every open cell its step-distance to
+   the player, and the swarm simply walks downhill. It costs one pass over
+   2500 cells, and only when the player crosses into a new cell -- far cheaper
+   than per-enemy pathfinding, and it scales to the whole horde for free.     */
+
+let flowDist = null, flowQueue = null, flowFrom = -1;
+
+function rebuildFlow() {
+  if (!grid) return;
+  if (!flowDist) { flowDist = new Int32Array(GW * GH); flowQueue = new Int32Array(GW * GH); }
+  const pcx = clamp(Math.floor(player.x / CELL_W), 0, GW - 1);
+  const pcy = clamp(Math.floor(player.y / CELL_W), 0, GH - 1);
+  let start = gi(pcx, pcy);
+
+  // If the player is somehow inside rock, seed from the nearest open cell so
+  // the field is never empty.
+  if (grid[start] === SOLID) {
+    let best = -1, bestD = Infinity;
+    for (let i = 0; i < openCells.length; i++) {
+      const d = dist2(openCells[i].x, openCells[i].y, player.x, player.y);
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    if (best < 0) return;
+    start = gi(Math.floor(openCells[best].x / CELL_W), Math.floor(openCells[best].y / CELL_W));
+  }
+
+  flowDist.fill(-1);
+  let head = 0, tail = 0;
+  flowQueue[tail++] = start;
+  flowDist[start] = 0;
+  while (head < tail) {
+    const k = flowQueue[head++];
+    const cx = k % GW, cy = (k / GW) | 0;
+    const nd = flowDist[k] + 1;
+    for (let i = 0; i < 4; i++) {
+      const nx = cx + (i === 0 ? 1 : i === 1 ? -1 : 0);
+      const ny = cy + (i === 2 ? 1 : i === 3 ? -1 : 0);
+      if (nx < 0 || ny < 0 || nx >= GW || ny >= GH) continue;
+      const nk = gi(nx, ny);
+      if (grid[nk] === SOLID || flowDist[nk] >= 0) continue;
+      flowDist[nk] = nd;
+      flowQueue[tail++] = nk;
+    }
+  }
+  flowFrom = start;
+}
+
+// Direction downhill on the field, or null where there is nothing to follow.
+function flowDir(e, out) {
+  if (!flowDist) return false;
+  const cx = clamp(Math.floor(e.x / CELL_W), 0, GW - 1);
+  const cy = clamp(Math.floor(e.y / CELL_W), 0, GH - 1);
+  const here = flowDist[gi(cx, cy)];
+  if (here < 0) return false;
+  let bestD = here, bx = -1, by = -1;
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (!dx && !dy) continue;
+      const nx = cx + dx, ny = cy + dy;
+      if (nx < 0 || ny < 0 || nx >= GW || ny >= GH) continue;
+      // Refuse diagonals that cut a rock corner.
+      if (dx && dy && (cellAt(cx + dx, cy) === SOLID || cellAt(cx, cy + dy) === SOLID)) continue;
+      const nd = flowDist[gi(nx, ny)];
+      if (nd < 0 || nd >= bestD) continue;
+      bestD = nd; bx = nx; by = ny;
+    }
+  }
+  if (bx < 0) return false;
+  const tx = bx * CELL_W + CELL_W / 2, ty = by * CELL_W + CELL_W / 2;
+  const vx = tx - e.x, vy = ty - e.y;
+  const m = Math.hypot(vx, vy) || 1;
+  out.x = vx / m; out.y = vy / m;
+  return true;
+}
+
+const _flow = { x: 0, y: 0 };
+
+function updateEnemies(dt) {
+  const pk = gi(clamp(Math.floor(player.x / CELL_W), 0, GW - 1),
+                clamp(Math.floor(player.y / CELL_W), 0, GH - 1));
+  if (pk !== flowFrom) rebuildFlow();
+
+  enemyGrid.clear();
+  for (let i = 0; i < enemies.length; i++) {
+    const e = enemies[i];
+    enemyGrid.insert(e, e.x, e.y);
+  }
+
+  for (let i = 0; i < enemies.length; i++) {
+    const e = enemies[i];
+    if (e.hp <= 0) continue;
+    e.hitFlash = Math.max(0, e.hitFlash - dt);
+    e.wob += dt * 7;
+
+    if (e.kind === 'mirage') {
+      e.fade -= dt;
+      if (e.fade <= 0) { e.hp = 0; continue; }
+    } else if (e.kind === 'deceiver') {
+      // He does not walk the corridors -- he is an avatar, and a body this
+      // wide wedges on corners anyway. He steps out of one place and into
+      // another near you, which is both the fix and the character.
+      e.blink -= dt;
+      if (e.blink <= 0) {
+        e.blink = 4.4;
+        for (let k = 0; k < 26; k++) {
+          const a = Math.random() * TAU, dd = 140 + Math.random() * 90;
+          const nx = clamp(player.x + Math.cos(a) * dd, 50, WORLD.w - 50);
+          const ny = clamp(player.y + Math.sin(a) * dd, 50, WORLD.h - 50);
+          if (pointInWalls(nx, ny, e.r + 6)) continue;
+          burst(e.x, e.y, '#e8c060', 16, 210);
+          e.x = nx; e.y = ny;
+          burst(e.x, e.y, '#e8c060', 16, 210);
+          break;
+        }
+      }
+      e.summon -= dt;
+      if (e.summon <= 0) {
+        e.summon = 8.5;
+        const batch = 2 + ((run.time / 90) | 0);
+        for (let i = 0; i < batch; i++) spawnEnemy(run.time);
+      }
+      e.split -= dt;
+      if (e.split <= 0) {
+        e.split = 9.5;
+        let live = 0;
+        for (let i = 0; i < enemies.length; i++) if (enemies[i].kind === 'mirage') live++;
+        if (live < 3) spawnMirages(e, 3 - live);
+      }
+    }
+
+    const dx = player.x - e.x, dy = player.y - e.y;
+    const d = Math.hypot(dx, dy) || 1;
+    e.angle = Math.atan2(dy, dx);
+    if (Math.abs(dx) > 3) e.face = dx < 0 ? -1 : 1;
+
+    // --- separation (flocking): repulsion from crowded neighbours ---------
+    let rx = 0, ry = 0;
+    enemyGrid.query(e.x, e.y, e.r + 26, _near);
+    for (let k = 0; k < _near.length; k++) {
+      const o = _near[k];
+      if (o === e || o.hp <= 0) continue;
+      const ox = e.x - o.x, oy = e.y - o.y;
+      const want = e.r + o.r + 2;
+      const od2 = ox * ox + oy * oy;
+      if (od2 >= want * want) continue;
+      const od = Math.sqrt(od2) || 0.01;
+      const push = ((want - od) / want) * (o.mass / e.mass);
+      rx += (ox / od) * push;
+      ry += (oy / od) * push;
+    }
+    // Cap the repulsion so a dense pack shoves rather than launches.
+    const rl = Math.hypot(rx, ry);
+    if (rl > 1.7) { rx = rx / rl * 1.7; ry = ry / rl * 1.7; }
+
+    // --- seek / melee -----------------------------------------------------
+    let sx = 0, sy = 0;
+    const touch = e.r + player.r + 3;
+    if (d > touch) {
+      // Close in, head straight at the target so the swarm keeps its shape;
+      // further out, follow the field so rock never traps anything.
+      if (d < 78 || !flowDir(e, _flow)) {
+        sx = dx / d; sy = dy / d;
+      } else {
+        sx = _flow.x * 0.82 + (dx / d) * 0.18;
+        sy = _flow.y * 0.82 + (dy / d) * 0.18;
+        const m = Math.hypot(sx, sy) || 1;
+        sx /= m; sy /= m;
+      }
+    } else {
+      e.atk -= dt;
+      if (e.atk <= 0) { e.atk = e.cd; hurtPlayer(e); }
+    }
+
+    moveEntity(e, (sx + rx * 0.8) * e.speed * dt, (sy + ry * 0.8) * e.speed * dt);
+  }
+}
+
+function updateBullets(dt) {
+  let w = 0;
+  for (let i = 0; i < bullets.length; i++) {
+    const b = bullets[i];
+    b.life -= dt;
+    if (b.life <= 0) continue;
+
+    // Substepped travel: a fast projectile is tested along its path instead of
+    // teleporting a whole frame's distance, so it cannot tunnel a thin wall.
+    const travel = b.speed * dt;
+    const steps = Math.min(8, Math.max(1, Math.ceil(travel / 9)));
+    const st = travel / steps;
+
+    for (let s = 0; s < steps; s++) {
+      b.x += b.dx * st;
+      b.y += b.dy * st;
+      if (b.x < 0 || b.y < 0 || b.x > WORLD.w || b.y > WORLD.h) { b.dead = true; break; }
+
+      const hits = wallsNear(b.x, b.y, b.r);
+      for (let k = 0; k < hits.length; k++) {
+        const wl = walls[hits[k]];
+        if (b.x > wl.x - b.r && b.x < wl.x + wl.w + b.r &&
+            b.y > wl.y - b.r && b.y < wl.y + wl.h + b.r) {
+          b.dead = true;
+          burst(b.x, b.y, PAL.arcane, 4, 130);
+          break;
+        }
+      }
+      if (b.dead) break;
+
+      enemyGrid.query(b.x, b.y, 26 + b.r, _near);
+      for (let k = 0; k < _near.length; k++) {
+        const e = _near[k];
+        if (e.hp <= 0 || b.hit.indexOf(e) !== -1) continue;
+        const rr = e.r + b.r;
+        if (dist2(b.x, b.y, e.x, e.y) > rr * rr) continue;
+        damageEnemy(e, b.dmg);
+        b.hit.push(e);
+        if (b.pierce-- <= 0) { b.dead = true; break; }
+      }
+      if (b.dead) break;
+    }
+    if (!b.dead) bullets[w++] = b;
+  }
+  bullets.length = w;
+}
+
+function updateLoot(dt) {
+  const damp = Math.pow(0.1, dt);
+  let w = 0;
+  for (let i = 0; i < loot.length; i++) {
+    const l = loot[i];
+    l.life += dt; l.spin += dt * 3.2;
+    const dx = player.x - l.x, dy = player.y - l.y;
+    const d = Math.hypot(dx, dy) || 1;
+
+    if (!l.pulled && d < player.magnet) l.pulled = true;
+    if (l.pulled) {
+      const k = Math.min(1, dt * 7);
+      l.vx = lerp(l.vx, (dx / d) * 560, k);
+      l.vy = lerp(l.vy, (dy / d) * 560, k);
+    } else {
+      l.vx *= damp; l.vy *= damp;
+    }
+    l.x += l.vx * dt; l.y += l.vy * dt;
+
+    if (d < player.r + 10) {
+      collectTech(l.value);
+      burst(l.x, l.y, PAL.gold, 5, 120);
+      continue;
+    }
+    loot[w++] = l;
+  }
+  loot.length = w;
+}
+
+function updateParticles(dt) {
+  const damp = Math.pow(0.06, dt);
+  let w = 0;
+  for (let i = 0; i < particles.length; i++) {
+    const p = particles[i];
+    p.life -= dt;
+    if (p.life <= 0) continue;
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    p.vx *= damp; p.vy *= damp;
+    particles[w++] = p;
+  }
+  particles.length = w;
+}
+
+function updateRings(dt) {
+  let w = 0;
+  for (let i = 0; i < rings.length; i++) {
+    const r = rings[i];
+    r.life -= dt;
+    if (r.life > 0) rings[w++] = r;
+  }
+  rings.length = w;
+}
+
+function spawnDeceiver() {
+  const d = ENEMY_TYPES.deceiver;
+  const scale = 1 + run.time / 220;
+  const e = {
+    kind: 'deceiver', x: portal.x, y: portal.y - 4, r: d.r, speed: d.speed,
+    hp: d.hp * scale, maxHp: d.hp * scale, dmg: d.dmg, tech: d.tech, cd: d.cd,
+    mass: d.mass, color: d.color, halo: d.halo, atk: 1.4, hitFlash: 0,
+    wob: 0, angle: 0, face: 1, summon: 4.5, split: 7, blink: 3.2
+  };
+  enemies.push(e);
+  run.boss = e;
+  run.banner = 3.6;
+  run.bannerText = 'The Gilded Deceiver';
+  run.bannerNote = 'He offers you the gate. Look for the shattered eye.';
+  shake(10);
+}
+
+function spawnMirages(src, n) {
+  const d = ENEMY_TYPES.mirage;
+  for (let i = 0; i < n; i++) {
+    // A corridor rarely has three body-widths of clear ground at one radius,
+    // so sweep angle and distance rather than taking a single guess.
+    let x = 0, y = 0, ok = false;
+    for (let tries = 0; tries < 16 && !ok; tries++) {
+      const a = (i / n) * TAU + tries * 0.7 + Math.random() * 0.4;
+      const dist = 66 + tries * 7;
+      x = clamp(src.x + Math.cos(a) * dist, 40, WORLD.w - 40);
+      y = clamp(src.y + Math.sin(a) * dist, 40, WORLD.h - 40);
+      ok = !pointInWalls(x, y, d.r * 0.6);
+    }
+    if (!ok) continue;
+    enemies.push({
+      kind: 'mirage', x, y, r: d.r, speed: d.speed, hp: 1, maxHp: 1,
+      dmg: 0, tech: 0, cd: d.cd, mass: d.mass, color: d.color, halo: d.halo,
+      atk: 99, hitFlash: 0, wob: 0, angle: 0, face: 1, fade: 9
+    });
+  }
+}
+
+function updatePortal(dt) {
+  portal.pulse += dt;
+  // Reaching the quota does not open the gate -- it draws him to it.
+  if (run.tech >= EXTRACT_QUOTA && !run.bossCalled) {
+    run.bossCalled = true;
+    spawnDeceiver();
+  }
+  portal.active = run.tech >= EXTRACT_QUOTA && run.bossDown;
+  if (!portal.active) { portal.channel = 0; return; }
+  const inside = dist2(player.x, player.y, portal.x, portal.y) < PORTAL_R * PORTAL_R;
+  if (inside) {
+    portal.channel = Math.min(EXTRACT_CHANNEL, portal.channel + dt);
+    if (portal.channel >= EXTRACT_CHANNEL) endRun(true);
+  } else {
+    portal.channel = Math.max(0, portal.channel - dt * 0.7);
+  }
+}
+
+function compactEnemies() {
+  let w = 0;
+  for (let i = 0; i < enemies.length; i++) {
+    if (enemies[i].hp > 0) enemies[w++] = enemies[i];
+  }
+  enemies.length = w;
+}
+
+function updateSpawning(dt) {
+  const t = run.time;
+  // Holding the portal calls the whole arena down on you — the last stand.
+  const mul = portal.channel > 0 ? 2.4 : 1;
+  run.spawnTimer -= dt * mul;
+  if (run.spawnTimer > 0) return;
+  run.spawnTimer = Math.max(0.30, 1.40 - t * 0.0068);
+  const batch = 1 + Math.floor(t / 70);
+  for (let i = 0; i < batch; i++) spawnEnemy(t);
+}
+
+function update(dt) {
+  run.time += dt;
+  if (run.banner > 0) { run.banner -= dt;
+    if (run.banner <= 0) { run.bannerText = null; run.bannerNote = null; } }
+  updatePlayer(dt);
+  updateBullets(dt);
+  updateEnemies(dt);
+  compactEnemies();
+  updateLoot(dt);
+  updateParticles(dt);
+  updateRings(dt);
+  updatePortal(dt);
+  updateSpawning(dt);
+  updateCamera(dt);
+  if (run.pendingLevels > 0 && state === 'play') openLevelUp();
+}
+
+/* ---------------------------------------------------------------------------
+   9. RENDERING
+
+   Nothing detailed is drawn with paths at frame time. Every entity is forged
+   once into an offscreen canvas at device resolution -- gradients, rim light,
+   inner detail and baked glow included -- and the frame loop only blits those
+   bitmaps. That buys the fidelity (a sprite can carry far more detail than is
+   affordable 220x a frame) and the speed (one drawImage beats a dozen path
+   ops) from the same change.
+
+   Sprites are supersampled at >=2x and downscaled on draw, so edges stay
+   smooth on a 1x desktop panel as well as a 3x phone.
+   ------------------------------------------------------------------------ */
+
+const stage  = document.getElementById('stage');
+const canvas = document.getElementById('game');
+const ctx    = canvas.getContext('2d', { alpha: false });
+
+let lowFx = false;              // auto-drops the light pass on slow devices
+let fxAccum = 0, fxFrames = 0, fxGood = 0;
+
+let SS = 2;                     // sprite supersample factor
+const SPR = {};                 // forged entity sprites
+const LIGHTS = new Map();       // radial light blobs, keyed colour|span
+let vignette = null;
+const wallGrads = new Map();
+
+/* --- forge helpers ------------------------------------------------------ */
+
+function newCanvas(w, h) {
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.ceil(w));
+  c.height = Math.max(1, Math.ceil(h));
+  return c;
+}
+
+// Paint into a centred sprite `span` world-units across.
+function forge(span, paint) {
+  const px = Math.ceil(span * SS);
+  const c = newCanvas(px, px);
+  const g = c.getContext('2d');
+  g.translate(px / 2, px / 2);
+  g.scale(SS, SS);
+  paint(g);
+  // Span is derived back from the rounded pixel size so that span * dpr is
+  // exactly the source width: an unresampled blit instead of a filtered one.
+  c.span = px / SS;
+  return c;
+}
+
+function blit(spr, x, y, rot, alpha, scale) {
+  const s = spr.span * (scale || 1);
+  if (!rot) {
+    if (alpha !== undefined && alpha !== 1) ctx.globalAlpha = alpha;
+    ctx.drawImage(spr, x - s / 2, y - s / 2, s, s);
+    if (alpha !== undefined && alpha !== 1) ctx.globalAlpha = 1;
+    return;
+  }
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rot);
+  if (alpha !== undefined && alpha !== 1) ctx.globalAlpha = alpha;
+  ctx.drawImage(spr, -s / 2, -s / 2, s, s);
+  ctx.restore();
+}
+
+// #rrggbb -> rgba(), scaled toward black by `mul`.
+function tint(hex, mul, a) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.min(255, Math.round(((n >> 16) & 255) * mul));
+  const g = Math.min(255, Math.round(((n >> 8) & 255) * mul));
+  const b = Math.min(255, Math.round((n & 255) * mul));
+  return 'rgba(' + r + ',' + g + ',' + b + ',' + (a === undefined ? 1 : a) + ')';
+}
+
+function lightFor(color, span) {
+  const key = color + '|' + span;
+  let l = LIGHTS.get(key);
+  if (l) return l;
+  l = forge(span, g => {
+    const r = span / 2;
+    const grd = g.createRadialGradient(0, 0, 0, 0, 0, r);
+    grd.addColorStop(0,    tint(color, 1, 0.85));
+    grd.addColorStop(0.18, tint(color, 1, 0.42));
+    grd.addColorStop(0.45, tint(color, 0.9, 0.13));
+    grd.addColorStop(1,    tint(color, 0.8, 0));
+    g.fillStyle = grd;
+    g.beginPath(); g.arc(0, 0, r, 0, TAU); g.fill();
+  });
+  LIGHTS.set(key, l);
+  return l;
+}
+
+/* --- the dead ------------------------------------------------------------
+   Drawn front-on and mirrored by heading, like the warden, for the same
+   reason: a body seen from directly overhead is a blob, and a blob with two
+   lit dots on it reads as a face no matter what you shade it. Each one is a
+   figure with a posture -- the wretch stoops, the shade hangs, the revenant
+   plants itself -- so they are told apart by silhouette before colour.
+   ---------------------------------------------------------------------- */
+
+function forgeEnemy(kind, r, color, flash) {
+  const u = r * 1.16;
+  const L = flash ? 1.5 : 1;
+  const lit = (a, b, c) => 'rgb(' + Math.round(Math.min(255, a * L)) + ',' +
+                                    Math.round(Math.min(255, b * L)) + ',' +
+                                    Math.round(Math.min(255, c * L)) + ')';
+  const outline = (w) => { g0.strokeStyle = 'rgba(0,0,0,.82)'; g0.lineWidth = w; g0.stroke(); };
+  let g0 = null;
+
+  // Bounds sized to the figure (widest extent is the shadow at 1.28u), not a
+  // round number: at 220 bodies on screen the padding is pure fill cost.
+  return forge(u * 2.9, g => {
+    g0 = g;
+    g.lineJoin = 'round';
+    g.lineCap = 'round';
+
+    if (kind === 'thrall') {
+      // Stooped, long-armed, dragging itself forward.
+      g.strokeStyle = lit(52, 56, 40); g.lineWidth = u * 0.26;      // legs
+      g.beginPath();
+      g.moveTo(-u * 0.2, u * 0.4); g.lineTo(-u * 0.3, u * 1.05);
+      g.moveTo(u * 0.2, u * 0.4);  g.lineTo(u * 0.32, u * 1.02);
+      g.stroke();
+
+      const bg = g.createLinearGradient(0, -u * 0.6, 0, u * 0.6);   // hunched back
+      bg.addColorStop(0, lit(116, 128, 86));
+      bg.addColorStop(1, lit(44, 48, 32));
+      g.fillStyle = bg;
+      g.beginPath();
+      g.moveTo(-u * 0.52, u * 0.42);
+      g.quadraticCurveTo(-u * 0.72, -u * 0.34, -u * 0.14, -u * 0.5);
+      g.quadraticCurveTo(u * 0.62, -u * 0.44, u * 0.54, u * 0.42);
+      g.closePath(); g.fill(); outline(u * 0.13);
+
+      g.fillStyle = 'rgba(38,36,26,.85)';                            // rags
+      g.beginPath();
+      g.moveTo(-u * 0.5, u * 0.18); g.lineTo(u * 0.52, u * 0.1);
+      g.lineTo(u * 0.44, u * 0.5); g.lineTo(-u * 0.44, u * 0.52);
+      g.closePath(); g.fill();
+
+      g.strokeStyle = lit(104, 114, 76); g.lineWidth = u * 0.17;     // long arms
+      g.beginPath();
+      g.moveTo(-u * 0.44, -u * 0.2); g.quadraticCurveTo(-u * 0.86, u * 0.3, -u * 0.62, u * 0.86);
+      g.moveTo(u * 0.46, -u * 0.24); g.quadraticCurveTo(u * 0.92, u * 0.26, u * 0.7, u * 0.84);
+      g.stroke();
+      g.strokeStyle = 'rgba(0,0,0,.5)'; g.lineWidth = u * 0.06;
+      g.beginPath();
+      g.moveTo(-u * 0.62, u * 0.86); g.lineTo(-u * 0.7, u * 1.0);
+      g.moveTo(u * 0.7, u * 0.84);  g.lineTo(u * 0.78, u * 0.98);
+      g.stroke();
+
+      const hg = g.createLinearGradient(0, -u * 1.0, 0, -u * 0.4);   // sunken head
+      hg.addColorStop(0, lit(150, 160, 112));
+      hg.addColorStop(1, lit(60, 64, 44));
+      g.fillStyle = hg;
+      g.beginPath(); g.ellipse(u * 0.06, -u * 0.66, u * 0.31, u * 0.29, 0.12, 0, TAU); g.fill();
+      outline(u * 0.1);
+      g.fillStyle = 'rgba(10,12,8,.9)';                              // jaw
+      g.beginPath(); g.ellipse(u * 0.08, -u * 0.5, u * 0.16, u * 0.09, 0, 0, TAU); g.fill();
+      g.fillStyle = color;                                           // sick eyes
+      g.beginPath(); g.ellipse(-u * 0.04, -u * 0.72, u * 0.07, u * 0.05, 0, 0, TAU); g.fill();
+      g.beginPath(); g.ellipse(u * 0.18, -u * 0.73, u * 0.07, u * 0.05, 0, 0, TAU); g.fill();
+
+    } else if (kind === 'eclipse') {
+      // Hangs rather than stands: a robe that frays into nothing.
+      const rg = g.createLinearGradient(0, -u * 0.9, 0, u * 1.1);
+      rg.addColorStop(0, lit(76, 64, 108));
+      rg.addColorStop(0.6, lit(34, 28, 52));
+      rg.addColorStop(1, 'rgba(14,11,22,0)');
+      g.fillStyle = rg;
+      g.beginPath();
+      g.moveTo(-u * 0.44, -u * 0.44);
+      g.quadraticCurveTo(-u * 0.72, u * 0.3, -u * 0.5, u * 1.06);
+      g.lineTo(-u * 0.24, u * 0.78); g.lineTo(-u * 0.04, u * 1.12);
+      g.lineTo(u * 0.2, u * 0.76);  g.lineTo(u * 0.46, u * 1.04);
+      g.quadraticCurveTo(u * 0.7, u * 0.28, u * 0.44, -u * 0.44);
+      g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(0,0,0,.6)'; g.lineWidth = u * 0.1; g.stroke();
+
+      g.strokeStyle = 'rgba(176,124,255,.28)'; g.lineWidth = u * 0.09;   // trailing wisps
+      g.beginPath();
+      g.moveTo(-u * 0.42, u * 0.2); g.quadraticCurveTo(-u * 0.96, u * 0.5, -u * 1.1, u * 0.16);
+      g.moveTo(u * 0.42, u * 0.24); g.quadraticCurveTo(u * 0.96, u * 0.54, u * 1.1, u * 0.2);
+      g.stroke();
+
+      const hoodG = g.createLinearGradient(0, -u * 1.05, 0, -u * 0.3);   // hood
+      hoodG.addColorStop(0, lit(92, 78, 130));
+      hoodG.addColorStop(1, lit(28, 23, 44));
+      g.fillStyle = hoodG;
+      g.beginPath();
+      g.moveTo(-u * 0.42, -u * 0.36);
+      g.quadraticCurveTo(-u * 0.46, -u * 1.0, 0, -u * 1.04);
+      g.quadraticCurveTo(u * 0.46, -u * 1.0, u * 0.42, -u * 0.36);
+      g.closePath(); g.fill(); outline(u * 0.11);
+      g.fillStyle = 'rgba(6,5,10,.96)';                                   // hollow
+      g.beginPath(); g.ellipse(0, -u * 0.6, u * 0.26, u * 0.28, 0, 0, TAU); g.fill();
+      g.fillStyle = color;
+      g.beginPath(); g.ellipse(-u * 0.1, -u * 0.62, u * 0.06, u * 0.08, 0, 0, TAU); g.fill();
+      g.beginPath(); g.ellipse(u * 0.1, -u * 0.62, u * 0.06, u * 0.08, 0, 0, TAU); g.fill();
+
+    } else {
+      // Planted, over-armoured, bound together by burning seams.
+      g.fillStyle = lit(48, 44, 38);                                     // greaves
+      g.beginPath();
+      g.roundRect ? g.roundRect(-u * 0.44, u * 0.42, u * 0.36, u * 0.66, u * 0.1)
+                  : g.rect(-u * 0.44, u * 0.42, u * 0.36, u * 0.66);
+      g.fill(); outline(u * 0.08);
+      g.beginPath();
+      g.roundRect ? g.roundRect(u * 0.08, u * 0.42, u * 0.36, u * 0.66, u * 0.1)
+                  : g.rect(u * 0.08, u * 0.42, u * 0.36, u * 0.66);
+      g.fill(); outline(u * 0.08);
+
+      const cg = g.createLinearGradient(0, -u * 0.6, 0, u * 0.6);        // cuirass
+      cg.addColorStop(0, lit(104, 96, 86));
+      cg.addColorStop(0.5, lit(56, 50, 44));
+      cg.addColorStop(1, lit(24, 21, 18));
+      g.fillStyle = cg;
+      g.beginPath();
+      g.moveTo(-u * 0.58, -u * 0.4);
+      g.quadraticCurveTo(-u * 0.7, u * 0.2, -u * 0.44, u * 0.5);
+      g.lineTo(u * 0.44, u * 0.5);
+      g.quadraticCurveTo(u * 0.7, u * 0.2, u * 0.58, -u * 0.4);
+      g.closePath(); g.fill(); outline(u * 0.12);
+
+      g.strokeStyle = color; g.lineWidth = u * 0.09;                     // burning seams
+      g.shadowColor = color; g.shadowBlur = u * 0.5;
+      g.beginPath();
+      g.moveTo(-u * 0.3, -u * 0.3); g.lineTo(u * 0.06, u * 0.02);
+      g.lineTo(-u * 0.16, u * 0.16); g.lineTo(u * 0.2, u * 0.44);
+      g.moveTo(u * 0.34, -u * 0.22); g.lineTo(u * 0.18, u * 0.06);
+      g.stroke();
+      g.shadowBlur = 0;
+
+      const pg = g.createLinearGradient(0, -u * 0.72, 0, -u * 0.1);      // pauldrons
+      pg.addColorStop(0, lit(128, 118, 104));
+      pg.addColorStop(1, lit(40, 36, 31));
+      [-1, 1].forEach(sx => {
+        g.fillStyle = pg;
+        g.beginPath();
+        g.ellipse(sx * u * 0.62, -u * 0.3, u * 0.32, u * 0.27, sx * 0.34, 0, TAU);
+        g.fill(); outline(u * 0.1);
+        g.strokeStyle = 'rgba(216,200,170,.4)'; g.lineWidth = u * 0.05;
+        g.beginPath();
+        g.ellipse(sx * u * 0.62, -u * 0.36, u * 0.22, u * 0.17, sx * 0.34, 0, TAU);
+        g.stroke();
+      });
+
+      const hg2 = g.createLinearGradient(0, -u * 0.98, 0, -u * 0.4);     // great helm
+      hg2.addColorStop(0, lit(112, 104, 92));
+      hg2.addColorStop(1, lit(30, 27, 23));
+      g.fillStyle = hg2;
+      g.beginPath();
+      g.moveTo(-u * 0.3, -u * 0.44);
+      g.lineTo(-u * 0.26, -u * 0.92); g.lineTo(u * 0.26, -u * 0.92);
+      g.lineTo(u * 0.3, -u * 0.44);
+      g.closePath(); g.fill(); outline(u * 0.1);
+      g.fillStyle = 'rgba(6,5,4,.95)';
+      g.fillRect(-u * 0.22, -u * 0.74, u * 0.44, u * 0.13);
+      g.fillStyle = color;
+      g.shadowColor = color; g.shadowBlur = u * 0.45;
+      g.fillRect(-u * 0.17, -u * 0.72, u * 0.12, u * 0.09);
+      g.fillRect(u * 0.05, -u * 0.72, u * 0.12, u * 0.09);
+      g.shadowBlur = 0;
+    }
+
+    // The void-brand: asymmetrical by doctrine, and the tell that these were
+    // people who gave up their will rather than monsters.
+    const bx = kind === 'eclipse' ? -u * 0.09 : u * 0.1;
+    const by = kind === 'eclipse' ? -u * 0.78 : kind === 'breaker' ? -u * 0.84 : -u * 0.8;
+    g.shadowColor = PAL.brand; g.shadowBlur = u * 0.3;
+    g.strokeStyle = PAL.brand; g.lineWidth = u * 0.05;
+    g.beginPath();
+    g.moveTo(bx - u * 0.08, by - u * 0.04);
+    g.lineTo(bx + u * 0.02, by + u * 0.03);
+    g.lineTo(bx - u * 0.02, by + u * 0.07);
+    g.lineTo(bx + u * 0.09, by + u * 0.01);
+    g.stroke();
+    g.shadowBlur = 0;
+
+    if (flash) {
+      g.globalCompositeOperation = 'source-atop';
+      g.fillStyle = 'rgba(255,240,220,.5)';
+      g.fillRect(-u * 2, -u * 2, u * 4, u * 4);
+      g.globalCompositeOperation = 'source-over';
+    }
+    g.globalCompositeOperation = 'destination-over';
+    g.fillStyle = 'rgba(0,0,0,.4)';
+    g.beginPath(); g.ellipse(0, u * 1.06, u * 0.66, u * 0.22, 0, 0, TAU); g.fill();
+    g.globalCompositeOperation = 'source-over';
+  });
+}
+
+// Mal-Ghorath's avatar on earth. The compendium gives him two properties that
+// are already mechanics: he offers false salvation, and he is identifiable by
+// his shattered void-gem right eye. So he manifests on the ley-gate and holds
+// it shut, he splits into mirages, and the gem is the tell that separates him
+// from them. Isaac, immune to illusion, simply sees through them.
+const DECEIVER_DRAW = 32;
+
+function forgeDeceiver(kind, flash) {
+  const u = DECEIVER_DRAW;      // drawn larger than he collides, so he
+                                // still looms without wedging in corridors
+  const mirage = kind === 'mirage';
+  const L = flash ? 1.5 : 1;
+  const lit = (a, b, c) => 'rgb(' + Math.round(Math.min(255, a * L)) + ',' +
+                                    Math.round(Math.min(255, b * L)) + ',' +
+                                    Math.round(Math.min(255, c * L)) + ')';
+  return forge(u * 3.0, g => {
+    g.lineJoin = 'round'; g.lineCap = 'round';
+
+    // Robe, hanging to nothing
+    const rg = g.createLinearGradient(0, -u * 0.9, 0, u * 1.1);
+    rg.addColorStop(0, lit(118, 92, 40));
+    rg.addColorStop(0.55, lit(58, 44, 20));
+    rg.addColorStop(1, 'rgba(20,15,7,0)');
+    g.fillStyle = rg;
+    g.beginPath();
+    g.moveTo(-u * 0.52, -u * 0.4);
+    g.quadraticCurveTo(-u * 0.86, u * 0.3, -u * 0.62, u * 1.06);
+    g.lineTo(-u * 0.2, u * 0.8); g.lineTo(0, u * 1.12);
+    g.lineTo(u * 0.2, u * 0.8);  g.lineTo(u * 0.62, u * 1.06);
+    g.quadraticCurveTo(u * 0.86, u * 0.3, u * 0.52, -u * 0.4);
+    g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(0,0,0,.7)'; g.lineWidth = u * 0.07; g.stroke();
+
+    // Gilding: the false promise, worn on the outside
+    g.strokeStyle = lit(214, 170, 74); g.lineWidth = u * 0.05;
+    g.beginPath();
+    g.moveTo(-u * 0.4, -u * 0.2); g.lineTo(-u * 0.3, u * 0.7);
+    g.moveTo(u * 0.4, -u * 0.2);  g.lineTo(u * 0.3, u * 0.7);
+    g.moveTo(-u * 0.36, u * 0.12); g.lineTo(u * 0.36, u * 0.12);
+    g.stroke();
+
+    // Open arms: offering
+    g.strokeStyle = lit(96, 74, 32); g.lineWidth = u * 0.13;
+    g.beginPath();
+    g.moveTo(-u * 0.46, -u * 0.24); g.quadraticCurveTo(-u * 0.92, u * 0.06, -u * 0.86, u * 0.42);
+    g.moveTo(u * 0.46, -u * 0.24);  g.quadraticCurveTo(u * 0.92, u * 0.06, u * 0.86, u * 0.42);
+    g.stroke();
+
+    // Crowned head
+    const hg = g.createLinearGradient(0, -u * 0.98, 0, -u * 0.34);
+    hg.addColorStop(0, lit(150, 120, 56));
+    hg.addColorStop(1, lit(44, 34, 16));
+    g.fillStyle = hg;
+    g.beginPath(); g.ellipse(0, -u * 0.62, u * 0.3, u * 0.34, 0, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(0,0,0,.8)'; g.lineWidth = u * 0.06; g.stroke();
+    g.strokeStyle = lit(226, 186, 88); g.lineWidth = u * 0.05;
+    for (let i = -2; i <= 2; i++) {
+      g.beginPath();
+      g.moveTo(i * u * 0.12, -u * 0.86);
+      g.lineTo(i * u * 0.12, -u * 1.02 - Math.abs(i) * u * 0.03);
+      g.stroke();
+    }
+    // Left eye: gilded, whole
+    g.fillStyle = 'rgba(255,232,168,.95)';
+    g.beginPath(); g.ellipse(-u * 0.11, -u * 0.64, u * 0.06, u * 0.05, 0, 0, TAU); g.fill();
+
+    // Right eye: the shattered void-gem. The tell -- and mirages lack it.
+    if (!mirage) {
+      g.shadowColor = PAL.brand; g.shadowBlur = u * 0.5;
+      g.fillStyle = '#1a0f2c';
+      g.beginPath(); g.ellipse(u * 0.12, -u * 0.64, u * 0.09, u * 0.08, 0, 0, TAU); g.fill();
+      g.strokeStyle = PAL.brand; g.lineWidth = u * 0.035;
+      g.beginPath();
+      g.moveTo(u * 0.05, -u * 0.7); g.lineTo(u * 0.15, -u * 0.62);
+      g.moveTo(u * 0.19, -u * 0.7); g.lineTo(u * 0.08, -u * 0.58);
+      g.stroke();
+      g.shadowBlur = 0;
+    } else {
+      g.fillStyle = 'rgba(255,232,168,.95)';
+      g.beginPath(); g.ellipse(u * 0.12, -u * 0.64, u * 0.06, u * 0.05, 0, 0, TAU); g.fill();
+    }
+
+    if (flash) {
+      g.globalCompositeOperation = 'source-atop';
+      g.fillStyle = 'rgba(255,240,220,.5)';
+      g.fillRect(-u * 2, -u * 2, u * 4, u * 4);
+      g.globalCompositeOperation = 'source-over';
+    }
+    g.globalCompositeOperation = 'destination-over';
+    g.fillStyle = 'rgba(0,0,0,.4)';
+    g.beginPath(); g.ellipse(0, u * 1.0, u * 0.6, u * 0.2, 0, 0, TAU); g.fill();
+    g.globalCompositeOperation = 'source-over';
+  });
+}
+
+// The Guided Vanguard. Both fight unhelmeted -- the compendium is explicit
+// that they look the darkness in the eye -- so the face carries the identity
+// and the weapon carries the order: Isaac's sun-gold blade and sun shield,
+// Zayd's two-handed Sapphire Glaive. Drawn front-on and mirrored by heading,
+// like the rest of the cast.
+function forgeHero(id, flash) {
+  const H = HEROES[id];
+  const u = BASE_PLAYER.r * 1.28;
+  const L = flash ? 1.55 : 1;
+  const lit = (a, b, c) => 'rgb(' + Math.round(Math.min(255, a * L)) + ',' +
+                                    Math.round(Math.min(255, b * L)) + ',' +
+                                    Math.round(Math.min(255, c * L)) + ')';
+  const magic = H.magic, trim = H.trim;
+
+  return forge(u * 4.0, g => {
+    g.lineJoin = 'round'; g.lineCap = 'round';
+
+    // Cloak
+    const capeG = g.createLinearGradient(0, -u * 0.6, 0, u * 1.3);
+    capeG.addColorStop(0, lit(H.cape[0], H.cape[1], H.cape[2]));
+    capeG.addColorStop(1, lit(16, 13, 12));
+    g.fillStyle = capeG;
+    g.beginPath();
+    g.moveTo(-u * 0.6, -u * 0.28);
+    g.quadraticCurveTo(-u * 1.1, u * 0.5, -u * 0.84, u * 1.2);
+    g.lineTo(u * 0.84, u * 1.2);
+    g.quadraticCurveTo(u * 1.1, u * 0.5, u * 0.6, -u * 0.28);
+    g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(0,0,0,.82)'; g.lineWidth = 2; g.stroke();
+
+    // Legs
+    g.fillStyle = lit(44, 40, 35);
+    [[-0.36, 0], [0.08, 0]].forEach(o => {
+      g.beginPath();
+      g.roundRect ? g.roundRect(u * o[0], u * 0.64, u * 0.28, u * 0.6, u * 0.1)
+                  : g.rect(u * o[0], u * 0.64, u * 0.28, u * 0.6);
+      g.fill();
+      g.strokeStyle = 'rgba(0,0,0,.7)'; g.lineWidth = 1.4; g.stroke();
+    });
+
+    // Cuirass
+    const tg = g.createLinearGradient(0, -u * 0.34, 0, u * 0.8);
+    tg.addColorStop(0, lit(118, 114, 106));
+    tg.addColorStop(0.5, lit(66, 63, 57));
+    tg.addColorStop(1, lit(28, 26, 22));
+    g.fillStyle = tg;
+    g.beginPath();
+    g.moveTo(-u * 0.5, -u * 0.24);
+    g.quadraticCurveTo(-u * 0.62, u * 0.32, -u * 0.4, u * 0.7);
+    g.lineTo(u * 0.4, u * 0.7);
+    g.quadraticCurveTo(u * 0.62, u * 0.32, u * 0.5, -u * 0.24);
+    g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(0,0,0,.82)'; g.lineWidth = 2; g.stroke();
+    // order's colour worn on the chest
+    g.fillStyle = trim;
+    g.beginPath();
+    g.moveTo(-u * 0.15, -u * 0.22); g.lineTo(u * 0.15, -u * 0.22);
+    g.lineTo(u * 0.11, u * 0.7); g.lineTo(-u * 0.11, u * 0.7);
+    g.closePath(); g.fill();
+    g.fillStyle = lit(56, 44, 28);
+    g.fillRect(-u * 0.44, u * 0.44, u * 0.88, u * 0.13);
+
+    if (id === 'isaac') {
+      // Sun-emblazoned shield
+      g.fillStyle = lit(52, 46, 38);
+      g.beginPath(); g.ellipse(-u * 0.8, u * 0.3, u * 0.34, u * 0.46, -0.1, 0, TAU); g.fill();
+      g.strokeStyle = 'rgba(0,0,0,.82)'; g.lineWidth = 2; g.stroke();
+      g.strokeStyle = magic; g.lineWidth = 1.4;
+      g.beginPath(); g.ellipse(-u * 0.8, u * 0.3, u * 0.26, u * 0.37, -0.1, 0, TAU); g.stroke();
+      g.fillStyle = magic;
+      g.beginPath(); g.arc(-u * 0.8, u * 0.3, u * 0.1, 0, TAU); g.fill();
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * TAU;
+        g.strokeStyle = magic; g.lineWidth = 1.2;
+        g.beginPath();
+        g.moveTo(-u * 0.8 + Math.cos(a) * u * 0.14, u * 0.3 + Math.sin(a) * u * 0.19);
+        g.lineTo(-u * 0.8 + Math.cos(a) * u * 0.21, u * 0.3 + Math.sin(a) * u * 0.29);
+        g.stroke();
+      }
+      // Sun-Gold sword
+      g.strokeStyle = lit(70, 66, 59); g.lineWidth = u * 0.22;
+      g.beginPath(); g.moveTo(u * 0.46, u * 0.08); g.lineTo(u * 0.74, u * 0.3); g.stroke();
+      g.strokeStyle = '#6a5432'; g.lineWidth = u * 0.14;
+      g.beginPath(); g.moveTo(u * 0.62, u * 0.4); g.lineTo(u * 0.84, u * 0.08); g.stroke();
+      g.shadowColor = magic; g.shadowBlur = u * 0.7;
+      g.strokeStyle = magic; g.lineWidth = u * 0.16;
+      g.beginPath(); g.moveTo(u * 0.82, u * 0.04); g.lineTo(u * 1.26, -u * 1.06); g.stroke();
+      g.shadowBlur = 0;
+      g.strokeStyle = 'rgba(255,248,224,.95)'; g.lineWidth = u * 0.06;
+      g.beginPath(); g.moveTo(u * 0.8, u * 0.0); g.lineTo(u * 1.22, -u * 1.02); g.stroke();
+    } else {
+      // Sapphire Glaive, held two-handed across the body
+      g.strokeStyle = '#4a3c28'; g.lineWidth = u * 0.13;
+      g.beginPath(); g.moveTo(-u * 0.62, u * 0.86); g.lineTo(u * 0.9, -u * 0.5); g.stroke();
+      g.strokeStyle = lit(70, 66, 59); g.lineWidth = u * 0.2;
+      g.beginPath(); g.moveTo(-u * 0.36, u * 0.36); g.lineTo(-u * 0.1, u * 0.16); g.stroke();
+      g.beginPath(); g.moveTo(u * 0.38, u * 0.06); g.lineTo(u * 0.6, -u * 0.14); g.stroke();
+      g.shadowColor = magic; g.shadowBlur = u * 0.75;
+      g.fillStyle = magic;
+      g.beginPath();
+      g.moveTo(u * 0.88, -u * 0.48);
+      g.quadraticCurveTo(u * 1.34, -u * 0.96, u * 1.18, -u * 1.3);
+      g.quadraticCurveTo(u * 0.98, -u * 0.92, u * 0.74, -u * 0.66);
+      g.closePath(); g.fill();
+      g.shadowBlur = 0;
+      g.strokeStyle = 'rgba(226,246,255,.95)'; g.lineWidth = u * 0.05;
+      g.beginPath(); g.moveTo(u * 0.9, -u * 0.5); g.lineTo(u * 1.16, -u * 1.24); g.stroke();
+    }
+
+    // Pauldrons
+    [-1, 1].forEach(sx => {
+      const pg = g.createLinearGradient(0, -u * 0.5, 0, u * 0.06);
+      pg.addColorStop(0, lit(148, 142, 130));
+      pg.addColorStop(1, lit(46, 43, 38));
+      g.fillStyle = pg;
+      g.beginPath();
+      g.ellipse(sx * u * 0.56, -u * 0.12, u * 0.27, u * 0.23, sx * 0.3, 0, TAU);
+      g.fill();
+      g.strokeStyle = 'rgba(0,0,0,.82)'; g.lineWidth = 1.8; g.stroke();
+      g.strokeStyle = trim; g.lineWidth = 1;
+      g.beginPath();
+      g.ellipse(sx * u * 0.56, -u * 0.16, u * 0.19, u * 0.15, sx * 0.3, 0, TAU);
+      g.stroke();
+    });
+
+    // Bare head: the compendium's point, so it gets the detail
+    g.fillStyle = lit(126, 92, 64);                                  // neck
+    g.fillRect(-u * 0.12, -u * 0.36, u * 0.24, u * 0.18);
+    const fg = g.createLinearGradient(0, -u * 0.86, 0, -u * 0.26);
+    fg.addColorStop(0, lit(176, 132, 94));
+    fg.addColorStop(1, lit(108, 76, 52));
+    g.fillStyle = fg;
+    g.beginPath(); g.ellipse(0, -u * 0.56, u * 0.26, u * 0.31, 0, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(0,0,0,.7)'; g.lineWidth = 1.4; g.stroke();
+    g.fillStyle = lit(28, 20, 15);                                    // hair
+    g.beginPath();
+    g.ellipse(0, -u * 0.74, u * 0.27, u * 0.18, 0, Math.PI, TAU);
+    g.fill();
+    g.fillStyle = 'rgba(26,18,13,.9)';                                // beard
+    g.beginPath();
+    g.ellipse(0, -u * 0.4, u * 0.21, u * 0.14, 0, 0, Math.PI);
+    g.fill();
+    g.fillStyle = 'rgba(18,14,10,.95)';                               // eyes
+    g.fillRect(-u * 0.14, -u * 0.6, u * 0.09, u * 0.05);
+    g.fillRect(u * 0.05, -u * 0.6, u * 0.09, u * 0.05);
+
+    if (flash) {
+      g.globalCompositeOperation = 'source-atop';
+      g.fillStyle = 'rgba(255,238,212,.5)';
+      g.fillRect(-u * 2, -u * 2, u * 4, u * 4);
+      g.globalCompositeOperation = 'source-over';
+    }
+    g.globalCompositeOperation = 'destination-over';
+    g.fillStyle = 'rgba(0,0,0,.42)';
+    g.beginPath(); g.ellipse(0, u * 1.3, u * 0.84, u * 0.28, 0, 0, TAU); g.fill();
+    g.globalCompositeOperation = 'source-over';
+  });
+}
+
+// An arcane bolt: hot core, cold tail.
+function forgeBolt(colour) {
+  return forge(32, g => {
+    g.shadowColor = colour; g.shadowBlur = 10;
+    const grd = g.createLinearGradient(-15, 0, 12, 0);
+    grd.addColorStop(0, tint(colour, 1, 0));
+    grd.addColorStop(0.55, tint(colour, 1, 0.45));
+    grd.addColorStop(0.9, tint(colour, 1.5, 0.95));
+    grd.addColorStop(1, '#ffffff');
+    g.fillStyle = grd;
+    g.beginPath();
+    g.moveTo(12, 0);
+    g.quadraticCurveTo(4, 3.4, -15, 1.0);
+    g.lineTo(-15, -1.0);
+    g.quadraticCurveTo(4, -3.4, 12, 0);
+    g.closePath(); g.fill();
+    g.fillStyle = '#ffffff';
+    g.beginPath(); g.arc(10, 0, 1.9, 0, TAU); g.fill();
+    g.shadowBlur = 0;
+  });
+}
+
+// Essence: a mote of light bound in a shard.
+function forgeLoot(big) {
+  const s = big ? 10 : 7;
+  return forge(s * 3.4, g => {
+    g.shadowColor = PAL.gold; g.shadowBlur = 12;
+    g.fillStyle = 'rgba(255,194,77,.92)';
+    g.beginPath();
+    g.moveTo(0, -s); g.lineTo(s * 0.62, -s * 0.2);
+    g.lineTo(s * 0.38, s * 0.85); g.lineTo(-s * 0.38, s * 0.85);
+    g.lineTo(-s * 0.62, -s * 0.2);
+    g.closePath(); g.fill();
+    g.shadowBlur = 0;
+    g.fillStyle = 'rgba(255,244,214,.95)';
+    g.beginPath();
+    g.moveTo(0, -s); g.lineTo(s * 0.62, -s * 0.2); g.lineTo(0, s * 0.1);
+    g.closePath(); g.fill();
+    g.fillStyle = 'rgba(150,86,10,.5)';
+    g.beginPath();
+    g.moveTo(0, s * 0.85); g.lineTo(-s * 0.62, -s * 0.2); g.lineTo(0, s * 0.1);
+    g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(255,228,160,.85)'; g.lineWidth = 0.8;
+    g.beginPath();
+    g.moveTo(0, -s); g.lineTo(s * 0.62, -s * 0.2);
+    g.lineTo(s * 0.38, s * 0.85); g.lineTo(-s * 0.38, s * 0.85);
+    g.lineTo(-s * 0.62, -s * 0.2);
+    g.closePath(); g.stroke();
+  });
+}
+
+/* --- environment surfaces ---------------------------------------------- */
+
+function forgeVignette() {
+  const w = Math.max(1, view.w), h = Math.max(1, view.h);
+  const c = newCanvas(w, h);
+  const g = c.getContext('2d');
+  const grd = g.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.26,
+                                     w / 2, h / 2, Math.max(w, h) * 0.74);
+  grd.addColorStop(0, 'rgba(0,0,0,0)');
+  grd.addColorStop(0.55, 'rgba(8,5,3,.42)');
+  grd.addColorStop(1, 'rgba(4,2,1,.92)');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, w, h);
+  // Faint warmth up top, cold blue down low: torch above, something else below.
+  const tg = g.createLinearGradient(0, 0, 0, h);
+  tg.addColorStop(0, 'rgba(255,150,60,.045)');
+  tg.addColorStop(0.5, 'rgba(0,0,0,0)');
+  tg.addColorStop(1, 'rgba(60,110,180,.05)');
+  g.fillStyle = tg;
+  g.fillRect(0, 0, w, h);
+  return c;
+}
+
+function forgeAll() {
+  SS = Math.min(3, Math.max(2, view.dpr));
+  LIGHTS.clear();
+  wallGrads.clear();
+  for (const hid in HEROES) {
+    SPR['h_' + hid] = forgeHero(hid, false);
+    SPR['h_' + hid + 'Hit'] = forgeHero(hid, true);
+    SPR['h_' + hid + 'L'] = mirrorSprite(SPR['h_' + hid]);
+    SPR['h_' + hid + 'HitL'] = mirrorSprite(SPR['h_' + hid + 'Hit']);
+    SPR['bolt_' + hid] = forgeBolt(HEROES[hid].magic);
+  }
+  for (const k in ENEMY_TYPES) {
+    const d = ENEMY_TYPES[k];
+    SPR[k] = (k === 'deceiver' || k === 'mirage')
+      ? forgeDeceiver(k, false) : forgeEnemy(k, d.r, d.color, false);
+    SPR[k + 'Hit'] = (k === 'deceiver' || k === 'mirage')
+      ? forgeDeceiver(k, true) : forgeEnemy(k, d.r, d.color, true);
+    SPR[k + 'L'] = mirrorSprite(SPR[k]);
+    SPR[k + 'HitL'] = mirrorSprite(SPR[k + 'Hit']);
+  }
+
+  SPR.loot = forgeLoot(false);
+  SPR.lootBig = forgeLoot(true);
+  forgeProps();
+  forgeGround();
+  forgeWallCourses();
+  vignette = forgeVignette();
+}
+
+let forgedAt = 0;
+function resize() {
+  // Cap the ratio at 2: a 3x phone panel triples fill cost for a difference
+  // nobody can see at arm's length.
+  view.dpr = Math.min(window.devicePixelRatio || 1, 2);
+  view.w = stage.clientWidth  || window.innerWidth;
+  view.h = stage.clientHeight || window.innerHeight;
+  canvas.width  = Math.round(view.w * view.dpr);
+  canvas.height = Math.round(view.h * view.dpr);
+  canvas.style.width  = view.w + 'px';
+  canvas.style.height = view.h + 'px';
+  ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+  if (forgedAt !== view.dpr) { forgeAll(); forgedAt = view.dpr; }
+  else vignette = forgeVignette();
+}
+
+/* --- world ------------------------------------------------------------- */
+
+/* --- ground and stonework ------------------------------------------------
+   No lines, no lattice, no glowing rims. The ground is a set of textured
+   tiles baked once at boot -- packed earth, loose grit, worn flagstone -- and
+   blitted across the view. Walls are dark rock with courses of cut masonry
+   laid along every face. All of it is texture, not geometry, so none of it
+   costs anything per frame beyond the blits.
+   ---------------------------------------------------------------------- */
+
+// Non-square sprite. Same 1:1 rule as forge(): the drawn size lands exactly
+// on whole source pixels.
+function forgeRect(w, h, paint) {
+  const pw = Math.ceil(w * SS), ph = Math.ceil(h * SS);
+  const c = newCanvas(pw, ph);
+  const g = c.getContext('2d');
+  g.translate(pw / 2, ph / 2);
+  g.scale(SS, SS);
+  paint(g);
+  c.spanW = pw / SS;
+  c.spanH = ph / SS;
+  return c;
+}
+
+function mirrorSprite(src) {
+  const c = newCanvas(src.width, src.height);
+  const g = c.getContext('2d');
+  g.translate(src.width, 0);
+  g.scale(-1, 1);
+  g.drawImage(src, 0, 0);
+  c.span = src.span;
+  return c;
+}
+
+function rotateSprite(src, q) {
+  if (!q) return src;
+  const sw = src.width, sh = src.height;
+  const swap = (q % 2) === 1;
+  const w = swap ? sh : sw, h = swap ? sw : sh;
+  const c = newCanvas(w, h);
+  const g = c.getContext('2d');
+  g.translate(w / 2, h / 2);
+  g.rotate(q * Math.PI / 2);
+  g.drawImage(src, -sw / 2, -sh / 2);
+  if (src.span !== undefined) c.span = src.span;
+  if (src.spanW !== undefined) {
+    c.spanW = swap ? src.spanH : src.spanW;
+    c.spanH = swap ? src.spanW : src.spanH;
+  }
+  return c;
+}
+
+function blitRect(spr, x, y, rot) {
+  ctx.save();
+  ctx.translate(x, y);
+  if (rot) ctx.rotate(rot);
+  ctx.drawImage(spr, -spr.spanW / 2, -spr.spanH / 2, spr.spanW, spr.spanH);
+  ctx.restore();
+}
+
+let REGION = REGIONS[0];
+
+const GROUND_T = 200;              // world units per ground tile
+const GROUND_VARIANTS = 8;
+let groundTiles = [];
+
+function forgeGround() {
+  groundTiles = [];
+  for (let v = 0; v < GROUND_VARIANTS; v++) {
+    const px = Math.ceil(GROUND_T * SS);
+    const c = newCanvas(px, px);
+    const g = c.getContext('2d');
+    g.scale(SS, SS);
+    const T = GROUND_T;
+
+    // Packed earth base
+    g.fillStyle = 'rgb(' + REGION.earth.join(',') + ')';
+    g.fillRect(0, 0, T, T);
+
+    // Mottling: broad damp and dry patches
+    for (let i = 0; i < 340; i++) {
+      const x = Math.random() * T, y = Math.random() * T;
+      const r = 3 + Math.random() * 13;
+      const shade = Math.random();
+      const mc = REGION.mottle[shade < 0.42 ? 0 : shade < 0.78 ? 1 : 2];
+      g.fillStyle = 'rgba(' + mc.join(',') + ',' + (shade < 0.42 ? .16 : shade < .78 ? .13 : .10) + ')';
+      g.beginPath();
+      g.ellipse(x, y, r, r * (0.55 + Math.random() * 0.5), Math.random() * TAU, 0, TAU);
+      g.fill();
+    }
+
+    // A worn flagstone path across most tiles: irregular slabs, gritty mortar
+    if (v % 4 > 1) {
+      const rows = 4, cols = 4, cell = T / cols;
+      const off = (v % 4 === 3) ? cell * 0.5 : 0;
+      for (let ry = 0; ry < rows; ry++) {
+        for (let cx2 = -1; cx2 < cols + 1; cx2++) {
+          if (v % 4 === 2 && ry !== 1 && ry !== 2) continue;  // a path, two slabs wide
+          if (v % 4 === 3 && (ry + cx2) % 3 === 0) continue;  // broken paving
+          const x = cx2 * cell + (ry % 2 ? off : 0) + rand(-3, 3);
+          const y = ry * cell + rand(-3, 3);
+          const w = cell - rand(5, 11), h = cell - rand(5, 11);
+          const tone = REGION.flag[0] + Math.random() * REGION.flag[1];
+          g.fillStyle = 'rgb(' + Math.round(tone * 1.05) + ',' +
+                                 Math.round(tone * 0.96) + ',' +
+                                 Math.round(tone * 0.84) + ')';
+          g.beginPath();
+          g.moveTo(x + rand(0, 3), y + rand(0, 3));
+          g.lineTo(x + w - rand(0, 3), y + rand(0, 3));
+          g.lineTo(x + w - rand(0, 3), y + h - rand(0, 3));
+          g.lineTo(x + rand(0, 3), y + h - rand(0, 3));
+          g.closePath();
+          g.fill();
+          // worn lip catching the light, dark seam below
+          g.strokeStyle = 'rgba(150,136,110,.18)';
+          g.lineWidth = 1.1;
+          g.beginPath(); g.moveTo(x + 2, y + 1.5); g.lineTo(x + w - 3, y + 1.5); g.stroke();
+          g.strokeStyle = 'rgba(10,7,5,.5)';
+          g.lineWidth = 1.4;
+          g.beginPath(); g.moveTo(x + 2, y + h - 1); g.lineTo(x + w - 3, y + h - 1); g.stroke();
+        }
+      }
+    }
+
+    // Grit and pebbles over everything
+    for (let i = 0; i < 260; i++) {
+      const x = Math.random() * T, y = Math.random() * T;
+      const r = 0.5 + Math.random() * 1.9;
+      g.fillStyle = Math.random() < 0.5 ? 'rgba(12,9,6,.5)' : 'rgba(122,106,80,.28)';
+      g.beginPath(); g.ellipse(x, y, r, r * 0.8, 0, 0, TAU); g.fill();
+    }
+    // A few larger stones half-buried
+    for (let i = 0; i < 10; i++) {
+      const x = Math.random() * T, y = Math.random() * T, r = 2.5 + Math.random() * 3.2;
+      g.fillStyle = 'rgba(74,64,48,.5)';
+      g.beginPath(); g.ellipse(x, y, r, r * 0.72, Math.random() * TAU, 0, TAU); g.fill();
+      g.fillStyle = 'rgba(8,6,4,.4)';
+      g.beginPath(); g.ellipse(x, y + r * 0.5, r * 0.9, r * 0.4, 0, 0, TAU); g.fill();
+    }
+    c.tile = true;
+    groundTiles.push(c);
+  }
+}
+
+// Courses of cut stone laid along a wall face. Authored running along +x with
+// the dressed, lit face toward -y, which is rotated to the wall's normal.
+let wallCourses = [];
+function forgeWallCourses() {
+  wallCourses = [];
+  for (let v = 0; v < 3; v++) {
+    const base = forgeRect(100, 30, g => {
+      g.translate(-50, -15);
+      // shadow the course throws onto the ground
+      g.fillStyle = 'rgba(6,4,3,.5)';
+      g.fillRect(0, -3, 100, 5);
+      let x = 0;
+      while (x < 100) {
+        const w = 20 + Math.random() * 16;
+        const h = 15 + Math.random() * 6;
+        const tone = 62 + Math.random() * 26;
+        const grd = g.createLinearGradient(0, 0, 0, h);
+        grd.addColorStop(0, 'rgb(' + Math.round(tone * 1.62) + ',' +
+                                     Math.round(tone * 1.55) + ',' +
+                                     Math.round(tone * 1.38) + ')');
+        grd.addColorStop(1, 'rgb(' + Math.round(tone * 0.55) + ',' +
+                                     Math.round(tone * 0.52) + ',' +
+                                     Math.round(tone * 0.46) + ')');
+        g.fillStyle = grd;
+        g.fillRect(x + 1, 1, w - 2, h - 1);
+        // dressed top edge and mortar joint
+        g.strokeStyle = 'rgba(176,162,134,.3)';
+        g.lineWidth = 1.2;
+        g.beginPath(); g.moveTo(x + 2, 1.6); g.lineTo(x + w - 3, 1.6); g.stroke();
+        g.strokeStyle = 'rgba(8,6,4,.75)';
+        g.lineWidth = 1.6;
+        g.beginPath(); g.moveTo(x + w - 1, 0); g.lineTo(x + w - 1, h); g.stroke();
+        // pitting
+        for (let i = 0; i < 4; i++) {
+          g.fillStyle = 'rgba(10,8,5,.22)';
+          g.beginPath();
+          g.ellipse(x + 4 + Math.random() * (w - 8), 3 + Math.random() * (h - 6),
+                    1 + Math.random() * 1.6, 1 + Math.random(), 0, 0, TAU);
+          g.fill();
+        }
+        x += w;
+      }
+      g.fillStyle = 'rgba(4,5,6,.7)';
+      g.fillRect(0, 15.5, 100, 14.5);
+    });
+    wallCourses.push([0, 1, 2, 3].map(q => rotateSprite(base, q)));
+  }
+}
+
+function drawGround(x0, y0, x1, y1) {
+  const T = GROUND_T;
+  const tx0 = Math.floor(x0 / T), tx1 = Math.floor(x1 / T);
+  const ty0 = Math.floor(y0 / T), ty1 = Math.floor(y1 / T);
+  for (let ty = ty0; ty <= ty1; ty++) {
+    for (let tx = tx0; tx <= tx1; tx++) {
+      const h = ((tx * 73856093) ^ (ty * 19349663)) >>> 0;
+      const tile = groundTiles[h % GROUND_VARIANTS];
+      if (!tile) continue;
+      ctx.drawImage(tile, tx * T, ty * T, T, T);
+    }
+  }
+}
+
+function drawWalls(x0, y0, x1, y1) {
+  // Rock mass: unlit stone, darker than anything on the ground.
+  for (let i = 0; i < walls.length; i++) {
+    const w = walls[i];
+    if (w.x > x1 || w.y > y1 || w.x + w.w < x0 || w.y + w.h < y0) continue;
+    ctx.save();
+    ctx.translate(w.x, w.y);
+    ctx.fillStyle = wallGradient(w.h);
+    ctx.fillRect(0, 0, w.w, w.h);
+    ctx.restore();
+  }
+
+  // Under reduced effects the courses go and a plain dressed edge stands in:
+  // the wall still reads as worked stone, at one batched stroke instead of a
+  // blit every hundred units.
+  if (lowFx) {
+    ctx.lineCap = 'butt';
+    ctx.strokeStyle = 'rgba(150,138,112,.5)';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    for (let i = 0; i < edges.length; i++) {
+      const e = edges[i];
+      if (e.x1 > x1 || e.y1 > y1 || e.x2 < x0 || e.y2 < y0) continue;
+      ctx.moveTo(e.x1 - e.nx * 2, e.y1 - e.ny * 2);
+      ctx.lineTo(e.x2 - e.nx * 2, e.y2 - e.ny * 2);
+    }
+    ctx.stroke();
+    return;
+  }
+
+  // Masonry laid along every exposed face.
+  if (!wallCourses.length) return;
+  const L = wallCourses[0][0].spanW;
+  for (let i = 0; i < edges.length; i++) {
+    const e = edges[i];
+    if (e.x1 > x1 || e.y1 > y1 || e.x2 < x0 || e.y2 < y0) continue;
+    const len = Math.hypot(e.x2 - e.x1, e.y2 - e.y1);
+    const ux = (e.x2 - e.x1) / (len || 1), uy = (e.y2 - e.y1) / (len || 1);
+    const q = ((Math.round((Math.atan2(e.ny, e.nx) + Math.PI / 2) / (Math.PI / 2)) % 4) + 4) % 4;
+    const n = Math.max(1, Math.ceil(len / L));
+    const start = (len - n * L) / 2;
+    for (let k = 0; k < n; k++) {
+      const d = start + L * (k + 0.5);
+      const cx = e.x1 + ux * d - e.nx * 7;
+      const cy = e.y1 + uy * d - e.ny * 7;
+      const set = wallCourses[(((cx * 7 + cy * 13) | 0) % wallCourses.length +
+                               wallCourses.length) % wallCourses.length];
+      const spr = set[q];
+      ctx.drawImage(spr, cx - spr.spanW / 2, cy - spr.spanH / 2, spr.spanW, spr.spanH);
+    }
+  }
+}
+
+function wallGradient(h) {
+  const k = Math.round(h / 6) * 6;
+  let g = wallGrads.get(k);
+  if (!g) {
+    g = ctx.createLinearGradient(0, 0, 0, k || 1);
+    g.addColorStop(0, PAL.stoneTop);
+    g.addColorStop(0.18, PAL.stoneMid);
+    g.addColorStop(0.6, PAL.stoneLow);
+    g.addColorStop(1, '#0a0c0d');
+    wallGrads.set(k, g);
+  }
+  return g;
+}
+
+function forgeProps() {
+  const P = (kind, span, paint) => { SPR['p_' + kind] = forge(span, paint); };
+
+  /* --- wall fittings: authored pointing +x, out of the stone ------------ */
+  P('torch', 34, g => {
+    g.strokeStyle = '#4a3a26'; g.lineWidth = 2.6; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(-8, 0); g.lineTo(2, 0); g.stroke();       // bracket
+    g.fillStyle = '#2b2118';
+    g.beginPath(); g.ellipse(3, 0, 3.2, 4.4, 0, 0, TAU); g.fill();     // basket
+    g.strokeStyle = '#6a5334'; g.lineWidth = 1; g.stroke();
+    g.shadowColor = PAL.ember; g.shadowBlur = 13;                      // flame
+    g.fillStyle = 'rgba(255,154,60,.95)';
+    g.beginPath();
+    g.moveTo(9.5, 0); g.quadraticCurveTo(4, 4.6, 2.5, 0);
+    g.quadraticCurveTo(4, -4.6, 9.5, 0);
+    g.closePath(); g.fill();
+    g.fillStyle = 'rgba(255,240,200,.95)';
+    g.beginPath(); g.ellipse(5, 0, 2.1, 1.5, 0, 0, TAU); g.fill();
+    g.shadowBlur = 0; g.lineCap = 'butt';
+  });
+  P('banner', 34, g => {
+    g.fillStyle = '#4a1f22';
+    g.beginPath();
+    g.moveTo(-2, -6.5); g.lineTo(7, -6.5); g.lineTo(7, 6.5); g.lineTo(-2, 6.5);
+    g.lineTo(2.5, 0); g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(190,150,90,.45)'; g.lineWidth = 1; g.stroke();
+    g.strokeStyle = '#7a6440'; g.lineWidth = 1.6;
+    g.beginPath(); g.moveTo(-3, -7.5); g.lineTo(-3, 7.5); g.stroke();
+    g.fillStyle = 'rgba(214,180,120,.6)';
+    g.beginPath(); g.arc(4, 0, 1.9, 0, TAU); g.fill();
+  });
+  P('chain', 30, g => {
+    g.strokeStyle = 'rgba(150,140,124,.5)'; g.lineWidth = 1.5;
+    for (let i = -1; i <= 1; i++) {
+      const y = i * 4.5;
+      for (let k = -7; k < 7; k += 3.4) {
+        g.beginPath(); g.ellipse(k, y, 1.7, 1.15, 0, 0, TAU); g.stroke();
+      }
+    }
+  });
+  P('sconce', 26, g => {
+    g.fillStyle = '#241d16';
+    g.beginPath(); g.ellipse(1, 0, 4.6, 5.4, 0, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(180,160,130,.45)'; g.lineWidth = 1.1; g.stroke();
+    g.fillStyle = PAL.bone;                                            // a skull
+    g.beginPath(); g.ellipse(2, 0, 3, 3.4, 0, 0, TAU); g.fill();
+    g.fillStyle = 'rgba(20,16,12,.9)';
+    g.beginPath(); g.arc(3.4, -1.2, 0.95, 0, TAU); g.fill();
+    g.beginPath(); g.arc(3.4, 1.2, 0.95, 0, TAU); g.fill();
+  });
+
+  /* --- floor scenery ---------------------------------------------------- */
+  P('bones', 34, g => {
+    g.strokeStyle = 'rgba(203,189,154,.55)'; g.lineWidth = 1.7; g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(-8, -3); g.lineTo(1, -5);
+    g.moveTo(-7, 1); g.lineTo(3, 0);
+    g.moveTo(-5, 4.5); g.lineTo(2, 4);
+    g.stroke();
+    g.fillStyle = 'rgba(203,189,154,.62)';
+    g.beginPath(); g.ellipse(7, 1.5, 4, 3.4, 0.2, 0, TAU); g.fill();
+    g.fillStyle = 'rgba(18,14,11,.9)';
+    g.beginPath(); g.arc(8.4, 0.4, 1.1, 0, TAU); g.fill();
+    g.beginPath(); g.arc(6.2, 2.6, 1.1, 0, TAU); g.fill();
+    g.lineCap = 'butt';
+  });
+  P('barrel', 32, g => {
+    const grd = g.createRadialGradient(-2, -2, 1, 0, 0, 10);
+    grd.addColorStop(0, '#5a4429'); grd.addColorStop(1, '#2a1f13');
+    g.fillStyle = grd;
+    g.beginPath(); g.arc(0, 0, 9.5, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(20,15,10,.8)'; g.lineWidth = 1.4; g.stroke();
+    g.strokeStyle = 'rgba(120,100,70,.5)'; g.lineWidth = 1;
+    g.beginPath(); g.arc(0, 0, 6.4, 0, TAU); g.stroke();
+    g.beginPath(); g.arc(0, 0, 3, 0, TAU); g.stroke();
+  });
+  P('crate', 32, g => {
+    g.fillStyle = '#3d2e1c';
+    g.fillRect(-8.5, -8.5, 17, 17);
+    g.strokeStyle = 'rgba(18,13,9,.85)'; g.lineWidth = 1.4;
+    g.strokeRect(-8.5, -8.5, 17, 17);
+    g.strokeStyle = 'rgba(126,102,66,.55)'; g.lineWidth = 1.2;
+    g.beginPath();
+    g.moveTo(-8.5, -8.5); g.lineTo(8.5, 8.5);
+    g.moveTo(8.5, -8.5); g.lineTo(-8.5, 8.5);
+    g.stroke();
+  });
+  P('rubble', 30, g => {
+    g.fillStyle = 'rgba(48,42,34,.95)'; g.strokeStyle = 'rgba(140,124,98,.35)';
+    g.lineWidth = 0.9;
+    const chunk = (cx, cy, s) => {
+      g.beginPath();
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * TAU, rr = s * (0.62 + Math.random() * 0.5);
+        (i === 0 ? g.moveTo : g.lineTo).call(g, cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+      }
+      g.closePath(); g.fill(); g.stroke();
+    };
+    chunk(-4, -2, 4.8); chunk(3.6, 2.6, 3.6); chunk(1, -5, 2.8);
+  });
+  P('moss', 40, g => {
+    const grd = g.createRadialGradient(0, 0, 0, 0, 0, 15);
+    grd.addColorStop(0, 'rgba(74,96,44,.42)');
+    grd.addColorStop(1, 'rgba(74,96,44,0)');
+    g.fillStyle = grd;
+    g.beginPath(); g.ellipse(0, 0, 15, 11, 0.4, 0, TAU); g.fill();
+  });
+  P('crack', 42, g => {
+    g.strokeStyle = 'rgba(10,8,6,.7)'; g.lineWidth = 1.5;
+    g.beginPath();
+    g.moveTo(-15, 2); g.lineTo(-6, -1); g.lineTo(1, 3); g.lineTo(9, -2); g.lineTo(15, 1);
+    g.moveTo(-6, -1); g.lineTo(-4, -6);
+    g.moveTo(9, -2); g.lineTo(11, 4);
+    g.stroke();
+  });
+  P('coins', 30, g => {
+    const disc = (cx, cy, r2) => {
+      g.fillStyle = 'rgba(224,179,86,.9)';
+      g.beginPath(); g.ellipse(cx, cy, r2, r2 * 0.78, 0, 0, TAU); g.fill();
+      g.strokeStyle = 'rgba(120,84,26,.8)'; g.lineWidth = 0.7; g.stroke();
+      g.fillStyle = 'rgba(255,232,170,.7)';
+      g.beginPath(); g.ellipse(cx - r2 * 0.22, cy - r2 * 0.22, r2 * 0.34, r2 * 0.26, 0, 0, TAU); g.fill();
+    };
+    disc(-4, 1, 3.2); disc(1.5, -2.5, 2.9); disc(3.5, 3, 3.4);
+    disc(-1, 4, 2.4); disc(6, -1, 2.2);
+  });
+  P('sword', 40, g => {
+    g.strokeStyle = 'rgba(176,188,196,.75)'; g.lineWidth = 2.4; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(-12, 3); g.lineTo(11, -3); g.stroke();
+    g.strokeStyle = 'rgba(232,240,246,.5)'; g.lineWidth = 0.9;
+    g.beginPath(); g.moveTo(-11, 2.7); g.lineTo(10, -2.8); g.stroke();
+    g.strokeStyle = '#5a4530'; g.lineWidth = 3;
+    g.beginPath(); g.moveTo(-15, 4.4); g.lineTo(-12.5, 3.6); g.stroke();
+    g.strokeStyle = '#7a6440'; g.lineWidth = 2.2;
+    g.beginPath(); g.moveTo(-12, 0.4); g.lineTo(-10.5, 6.4); g.stroke();
+    g.lineCap = 'butt';
+  });
+  P('shield', 36, g => {
+    const grd = g.createRadialGradient(-3, -3, 1, 0, 0, 11);
+    grd.addColorStop(0, '#4a5a5e'); grd.addColorStop(1, '#1d2628');
+    g.fillStyle = grd;
+    g.beginPath(); g.ellipse(0, 0, 10.5, 9.5, 0, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(186,170,138,.45)'; g.lineWidth = 1.6; g.stroke();
+    g.fillStyle = 'rgba(190,206,212,.7)';
+    g.beginPath(); g.arc(0, 0, 3, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(30,40,42,.8)'; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(-9, 0); g.lineTo(9, 0); g.stroke();
+  });
+  P('urn', 32, g => {
+    const grd = g.createRadialGradient(-2, -3, 1, 0, 0, 10);
+    grd.addColorStop(0, '#7a5336'); grd.addColorStop(1, '#33210f');
+    g.fillStyle = grd;
+    g.beginPath(); g.ellipse(0, 0, 8.4, 8, 0, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(20,12,6,.8)'; g.lineWidth = 1.3; g.stroke();
+    g.strokeStyle = 'rgba(190,150,100,.45)'; g.lineWidth = 1.1;
+    g.beginPath(); g.arc(0, 0, 4.6, 0, TAU); g.stroke();
+    g.fillStyle = 'rgba(10,7,4,.85)';
+    g.beginPath(); g.arc(0, 0, 2.6, 0, TAU); g.fill();
+  });
+  P('scroll', 34, g => {
+    g.fillStyle = 'rgba(214,196,152,.85)';
+    g.beginPath(); g.roundRect ? g.roundRect(-9, -4, 18, 8, 2) : g.rect(-9, -4, 18, 8);
+    g.fill();
+    g.strokeStyle = 'rgba(120,98,62,.8)'; g.lineWidth = 1; g.stroke();
+    g.strokeStyle = 'rgba(150,126,84,.7)'; g.lineWidth = 1.2;
+    g.beginPath(); g.moveTo(-9, -4); g.lineTo(-9, 4); g.moveTo(9, -4); g.lineTo(9, 4); g.stroke();
+    g.strokeStyle = 'rgba(160,60,50,.8)'; g.lineWidth = 1.6;
+    g.beginPath(); g.moveTo(1, -4.6); g.lineTo(1, 4.6); g.stroke();
+  });
+  P('hornskull', 38, g => {
+    g.fillStyle = 'rgba(216,205,176,.75)';
+    g.beginPath(); g.ellipse(0, 1, 5.4, 6.4, 0, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(120,108,84,.7)'; g.lineWidth = 0.9; g.stroke();
+    g.strokeStyle = 'rgba(216,205,176,.72)'; g.lineWidth = 2.4; g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(-4, -3); g.quadraticCurveTo(-11, -6, -12, -12);
+    g.moveTo(4, -3);  g.quadraticCurveTo(11, -6, 12, -12);
+    g.stroke();
+    g.fillStyle = 'rgba(16,12,8,.9)';
+    g.beginPath(); g.ellipse(-2.1, 0.4, 1.5, 1.9, 0, 0, TAU); g.fill();
+    g.beginPath(); g.ellipse(2.1, 0.4, 1.5, 1.9, 0, 0, TAU); g.fill();
+    g.lineCap = 'butt';
+  });
+  P('boss', 54, g => {                     // horned skull boss for the frame
+    g.strokeStyle = 'rgba(212,200,170,.9)'; g.lineWidth = 3.4; g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(-6, -5); g.quadraticCurveTo(-15, -9, -18, -18);
+    g.moveTo(6, -5);  g.quadraticCurveTo(15, -9, 18, -18);
+    g.stroke();
+    const grd = g.createRadialGradient(-3, -4, 1, 0, 0, 12);
+    grd.addColorStop(0, '#efe6cc'); grd.addColorStop(1, '#8e8367');
+    g.fillStyle = grd;
+    g.beginPath(); g.ellipse(0, -1, 9.5, 10.5, 0, 0, TAU); g.fill();
+    g.beginPath(); g.moveTo(-5.5, 6); g.lineTo(5.5, 6); g.lineTo(3.5, 12); g.lineTo(-3.5, 12);
+    g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(60,52,38,.8)'; g.lineWidth = 1; g.stroke();
+    g.fillStyle = 'rgba(8,10,10,.92)';
+    g.beginPath(); g.ellipse(-3.6, -1.5, 2.7, 3.3, 0.15, 0, TAU); g.fill();
+    g.beginPath(); g.ellipse(3.6, -1.5, 2.7, 3.3, -0.15, 0, TAU); g.fill();
+    g.beginPath(); g.moveTo(0, 2); g.lineTo(-1.8, 5.4); g.lineTo(1.8, 5.4); g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(40,34,24,.7)'; g.lineWidth = 0.9;
+    g.beginPath(); g.moveTo(-4, 8.6); g.lineTo(4, 8.6); g.stroke();
+    g.lineCap = 'butt';
+  });
+  P('grate', 34, g => {
+    g.fillStyle = 'rgba(8,6,5,.85)';
+    g.fillRect(-11, -11, 22, 22);
+    g.strokeStyle = 'rgba(122,110,90,.5)'; g.lineWidth = 1.2;
+    g.strokeRect(-11, -11, 22, 22);
+    g.strokeStyle = 'rgba(122,110,90,.4)'; g.lineWidth = 1.4;
+    for (let i = -7; i <= 7; i += 4.6) {
+      g.beginPath(); g.moveTo(i, -11); g.lineTo(i, 11); g.stroke();
+    }
+  });
+
+  for (const k in SPR) {
+    if (k.indexOf('p_') !== 0 || k.length > 2 && k.charAt(k.length - 2) === '_') continue;
+    for (let q = 0; q < 4; q++) SPR[k + '_' + q] = rotateSprite(SPR[k], q);
+  }
+}
+
+function drawProps(x0, y0, x1, y1) {
+  if (lowFx) return;
+  for (let i = 0; i < props.length; i++) {
+    const p = props[i];
+    if (p.x < x0 || p.x > x1 || p.y < y0 || p.y > y1) continue;
+    const spr = SPR['p_' + p.kind + '_' + p.q];
+    if (spr) blit(spr, p.x, p.y);
+  }
+}
+
+// The waygate: a worked stone circle with a bound rune ring. Dormant until
+// enough essence is drawn, then it turns and opens.
+function drawPortal(t) {
+  const active = portal.active;
+  const pulse = 0.5 + 0.5 * Math.sin(t * (active ? 2.4 : 0.9));
+
+  ctx.save();
+  ctx.translate(portal.x, portal.y);
+
+  ctx.fillStyle = active ? 'rgba(92,184,255,.07)' : 'rgba(60,54,44,.22)';
+  ctx.beginPath(); ctx.arc(0, 0, PORTAL_R, 0, TAU); ctx.fill();
+
+  // Stone kerb
+  ctx.strokeStyle = '#4a4137';
+  ctx.lineWidth = 9;
+  ctx.beginPath(); ctx.arc(0, 0, PORTAL_R - 4, 0, TAU); ctx.stroke();
+  ctx.strokeStyle = 'rgba(206,180,140,.4)';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.arc(0, 0, PORTAL_R - 8, 0, TAU); ctx.stroke();
+  ctx.beginPath(); ctx.arc(0, 0, PORTAL_R, 0, TAU); ctx.stroke();
+
+  const glow = active ? PAL.arcane : '#6a6152';
+  ctx.strokeStyle = glow;
+  ctx.globalAlpha = active ? 0.85 : 0.34;
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(0, 0, PORTAL_R * (0.42 + pulse * 0.3), 0, TAU); ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // Rune ring
+  ctx.save();
+  ctx.rotate(t * (active ? 0.5 : 0.08));
+  ctx.strokeStyle = glow;
+  ctx.globalAlpha = active ? 0.95 : 0.4;
+  ctx.lineWidth = 2.4;
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * TAU;
+    const rr = PORTAL_R - 20;
+    const cx = Math.cos(a) * rr, cy = Math.sin(a) * rr;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(a + Math.PI / 2);
+    ctx.beginPath();
+    if (i % 3 === 0)      { ctx.moveTo(-3, -4); ctx.lineTo(3, 0); ctx.lineTo(-3, 4); }
+    else if (i % 3 === 1) { ctx.moveTo(-3, -4); ctx.lineTo(-3, 4); ctx.moveTo(-3, 0); ctx.lineTo(3, 0); }
+    else                  { ctx.moveTo(-3, 4); ctx.lineTo(0, -4); ctx.lineTo(3, 4); }
+    ctx.stroke();
+    ctx.restore();
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+
+  // Sigil at the centre
+  ctx.save();
+  ctx.rotate(-t * (active ? 0.3 : 0.05));
+  ctx.strokeStyle = active ? 'rgba(196,232,255,.8)' : 'rgba(120,110,94,.45)';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * TAU - Math.PI / 2, rr = PORTAL_R * 0.26;
+    (i === 0 ? ctx.moveTo : ctx.lineTo).call(ctx, Math.cos(a) * rr, Math.sin(a) * rr);
+  }
+  ctx.closePath(); ctx.stroke();
+  ctx.restore();
+  ctx.restore();
+
+  if (portal.channel > 0) {
+    const f = portal.channel / EXTRACT_CHANNEL;
+    ctx.save();
+    ctx.translate(portal.x, portal.y);
+    ctx.rotate(-Math.PI / 2);
+    ctx.strokeStyle = 'rgba(255,194,77,.25)';
+    ctx.lineWidth = 9;
+    ctx.beginPath(); ctx.arc(0, 0, PORTAL_R + 10, 0, TAU * f); ctx.stroke();
+    ctx.strokeStyle = PAL.gold;
+    ctx.lineWidth = 3.4;
+    ctx.beginPath(); ctx.arc(0, 0, PORTAL_R + 10, 0, TAU * f); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+/* --- entities ----------------------------------------------------------- */
+
+function drawLoot(t) {
+  for (let i = 0; i < loot.length; i++) {
+    const l = loot[i];
+    blit(l.value > 1 ? SPR.lootBig : SPR.loot, l.x, l.y, l.spin);
+  }
+}
+
+function drawBullets() {
+  for (let i = 0; i < bullets.length; i++) {
+    const b = bullets[i];
+    blit(SPR['bolt_' + run.hero] || SPR.bolt_isaac, b.x, b.y, b.a);
+  }
+}
+
+function drawEnemy(e) {
+  const key = e.kind + (e.hitFlash > 0 ? 'Hit' : '') + (e.face < 0 ? 'L' : '');
+  if (e.kind === 'mirage') {
+    // Isaac is immune to the Deceiver's illusions, so for him they are plainly
+    // false. Zayd has to read the shattered eye like everyone else.
+    const seen = player.hero === 'isaac';
+    blit(SPR[key] || SPR[e.kind], e.x, e.y, 0, seen ? 0.32 : 0.94);
+    if (seen) {
+      ctx.strokeStyle = 'rgba(232,192,96,.5)';
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([4, 5]);
+      ctx.beginPath(); ctx.arc(e.x, e.y, e.r * 0.8, 0, TAU); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    return;
+  }
+  blit(SPR[key] || SPR[e.kind], e.x, e.y);
+  if (e.kind === 'breaker' && e.hp < e.maxHp * 0.92) {
+    const w = e.r * 1.5, f = clamp(e.hp / e.maxHp, 0, 1);
+    const bx = e.x - w / 2, by = e.y - e.r - 6;
+    ctx.fillStyle = 'rgba(0,0,0,.55)';
+    ctx.fillRect(bx, by, w, 2);
+    ctx.fillStyle = f < 0.35 ? 'rgba(224,70,50,.9)' : 'rgba(224,140,90,.75)';
+    ctx.fillRect(bx, by, w * f, 2);
+  }
+}
+
+function drawPlayer(t) {
+  const p = player;
+  const blink = p.invuln > 0 && Math.floor(t * 20) % 2 === 0;
+
+  const hurt = blink || p.hitFlash > 0;
+  const key = 'h_' + p.hero + (hurt ? 'Hit' : '') + (p.face < 0 ? 'L' : '');
+  blit(SPR[key] || SPR['h_' + p.hero], p.x, p.y);
+
+  if (p.muzzle > 0) {
+    const a = p.angle;
+    blit(lightFor('#cfe8ff', 46), p.x + Math.cos(a) * (p.r + 9),
+         p.y + Math.sin(a) * (p.r + 9), 0, p.muzzle / 0.06);
+  }
+}
+
+function drawParticles() {
+  if (lowFx) {                    // flat quads: no additive blend, no blit
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i];
+      ctx.globalAlpha = clamp(p.life / p.max, 0, 1);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+    }
+    ctx.globalAlpha = 1;
+    return;
+  }
+  for (let i = 0; i < particles.length; i++) {
+    const p = particles[i];
+    const a = clamp(p.life / p.max, 0, 1);
+    ctx.globalAlpha = a * 0.75;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y, p.size * 0.9, p.size * 0.75, 0, 0, TAU);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// Additive pass. Emissive entities carry baked glow already; this is the
+// light they cast onto the floor around them, which is what actually makes
+// the scene feel lit rather than merely bright.
+function drawLightPass(t) {
+  ctx.globalCompositeOperation = 'lighter';
+  const portalPulse = portal.active ? 0.55 + 0.2 * Math.sin(t * 2.4) : 0.14;
+  blit(lightFor(portal.active ? PAL.arcane : '#5a5244', PORTAL_R * 3.2),
+       portal.x, portal.y, 0, portalPulse);
+  blit(lightFor(PAL.arcane, 108), player.x, player.y, 0, 0.3);
+  const lit = Math.min(loot.length, 14);
+  for (let i = 0; i < lit; i++) {
+    blit(lightFor(PAL.gold, 38), loot[i].x, loot[i].y, 0, 0.34);
+  }
+  // Wall lamps. Culled to the view, so a big cave costs no more than a small
+  // one -- and they are what stops the tunnels reading as flat black.
+  const vx0 = cam.x - 80, vy0 = cam.y - 80;
+  const vx1 = cam.x + view.w + 80, vy1 = cam.y + view.h + 80;
+  const flick = 0.78 + 0.22 * Math.sin(t * 7.3) * Math.sin(t * 3.1);  // torch guttering
+  for (let i = 0; i < lamps.length; i++) {
+    const L = lamps[i];
+    if (L.x < vx0 || L.x > vx1 || L.y < vy0 || L.y > vy1) continue;
+    blit(lightFor(L.color, L.color === PAL.ember ? 138 : 112), L.x, L.y, 0,
+         (L.color === PAL.ember ? 0.6 : 0.42) * flick);
+  }
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+/* --- screen-space overlays ---------------------------------------------- */
+
+function drawStick() {
+  if (!stick.active) return;
+  ctx.save();
+  ctx.fillStyle = 'rgba(18,13,9,.42)';
+  ctx.beginPath(); ctx.arc(stick.ox, stick.oy, STICK_MAX, 0, TAU); ctx.fill();
+  ctx.strokeStyle = 'rgba(150,128,94,.5)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(stick.ox, stick.oy, STICK_MAX, 0, TAU); ctx.stroke();
+
+  const kx = stick.ox + stick.dx * stick.mag * STICK_MAX;
+  const ky = stick.oy + stick.dy * stick.mag * STICK_MAX;
+  const kg = ctx.createRadialGradient(kx - 5, ky - 5, 2, kx, ky, 20);
+  kg.addColorStop(0, '#6a5a44'); kg.addColorStop(1, '#241c12');
+  ctx.fillStyle = kg;
+  ctx.beginPath(); ctx.arc(kx, ky, 20, 0, TAU); ctx.fill();
+  ctx.strokeStyle = 'rgba(176,152,112,.75)';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath(); ctx.arc(kx, ky, 20, 0, TAU); ctx.stroke();
+  ctx.restore();
+}
+
+function drawPortalArrow(t) {
+  const sx = portal.x - cam.x, sy = portal.y - cam.y;
+  const m = 48, mTop = 96;            // the HUD occupies the top strip
+  if (sx > m && sx < view.w - m && sy > mTop && sy < view.h - m) return;
+
+  const cx = view.w / 2, cy = (mTop + (view.h - m)) / 2;
+  const a = Math.atan2(sy - cy, sx - cx);
+  const dx = Math.cos(a), dy = Math.sin(a);
+  const k = Math.min((cx - m) / Math.max(1e-6, Math.abs(dx)),
+                     ((view.h - m - mTop) / 2) / Math.max(1e-6, Math.abs(dy)));
+  const px = cx + dx * k, py = cy + dy * k;
+  const col = portal.active ? PAL.arcane : '#7a6e58';
+
+  ctx.save();
+  ctx.translate(px, py);
+  ctx.globalAlpha = 0.55 + (portal.active ? 0.4 * Math.abs(Math.sin(t * 3)) : 0.1);
+  ctx.fillStyle = 'rgba(14,10,7,.8)';
+  ctx.beginPath(); ctx.arc(0, 0, 15, 0, TAU); ctx.fill();
+  ctx.strokeStyle = col; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.arc(0, 0, 15, 0, TAU); ctx.stroke();
+  ctx.rotate(a);
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.moveTo(9, 0); ctx.lineTo(-5, 6); ctx.lineTo(-2, 0); ctx.lineTo(-5, -6);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+// Carved stonework around the readouts. Drawn in screen space under the DOM
+// text, so the numbers stay crisp while the frame around them is scenery.
+function stonePlate(x, y, w, h) {
+  const g = ctx.createLinearGradient(0, y, 0, y + h);
+  g.addColorStop(0, '#332a1a');
+  g.addColorStop(0.5, '#1e1810');
+  g.addColorStop(1, '#100c07');
+  ctx.fillStyle = g;
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = 'rgba(186,170,138,.5)';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.moveTo(x, y + 0.7); ctx.lineTo(x + w, y + 0.7); ctx.stroke();
+  ctx.strokeStyle = 'rgba(120,104,78,.4)';
+  ctx.lineWidth = 2.4;
+  ctx.beginPath(); ctx.moveTo(x, y + h - 1.2); ctx.lineTo(x + w, y + h - 1.2); ctx.stroke();
+  ctx.strokeStyle = 'rgba(6,10,11,.85)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(x, y + h + 1); ctx.lineTo(x + w, y + h + 1); ctx.stroke();
+}
+
+function drawHudFrame() {
+  const h = 74;
+  stonePlate(-2, -2, view.w + 4, h);
+  if (SPR.p_boss) {
+    blit(SPR.p_boss, 27, h - 26, 0, 1, 1.2);
+    blit(SPR.p_boss, view.w - 27, h - 26, 0, 1, 1.2);
+  }
+  // Chased trim across the middle of the plate
+  ctx.strokeStyle = 'rgba(186,170,138,.14)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(58, h - 12); ctx.lineTo(view.w - 58, h - 12);
+  ctx.stroke();
+}
+
+function drawViewFrame() {
+  ctx.strokeStyle = 'rgba(8,6,4,.92)';
+  ctx.lineWidth = 6;
+  ctx.strokeRect(3, 3, view.w - 6, view.h - 6);
+  ctx.strokeStyle = 'rgba(120,104,78,.32)';
+  ctx.lineWidth = 1.4;
+  ctx.strokeRect(6.5, 6.5, view.w - 13, view.h - 13);
+}
+
+function drawMinimap() {
+  const S = 94, pad = 12;
+  const x = view.w - S - pad, y = view.h - S - pad;
+  const k = S / WORLD.w;
+
+  ctx.save();
+  // Stone surround with corner fittings
+  const fg = ctx.createLinearGradient(0, y - 7, 0, y + S + 7);
+  fg.addColorStop(0, '#2e3a3c'); fg.addColorStop(1, '#111a1b');
+  ctx.fillStyle = fg;
+  ctx.fillRect(x - 7, y - 7, S + 14, S + 14);
+  ctx.strokeStyle = 'rgba(186,170,138,.4)';
+  ctx.lineWidth = 1.2;
+  ctx.strokeRect(x - 6.5, y - 6.5, S + 13, S + 13);
+  ctx.fillStyle = 'rgba(14,10,6,.92)';
+  ctx.fillRect(x, y, S, S);
+  ctx.strokeStyle = 'rgba(120,104,78,.5)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 0.5, S - 1, S - 1);
+  ctx.fillStyle = 'rgba(186,170,138,.55)';
+  for (const c of [[x - 7, y - 7], [x + S - 1, y - 7], [x - 7, y + S - 1], [x + S - 1, y + S - 1]]) {
+    ctx.fillRect(c[0], c[1], 8, 8);
+  }
+
+  ctx.fillStyle = 'rgba(126,110,82,.22)';
+  for (let i = 4; i < walls.length; i++) {
+    const w = walls[i];
+    ctx.fillRect(x + w.x * k, y + w.y * k, Math.max(1, w.w * k), Math.max(1, w.h * k));
+  }
+  ctx.fillStyle = 'rgba(200,90,60,.85)';
+  for (let i = 0; i < enemies.length; i++) {
+    ctx.fillRect(x + enemies[i].x * k - 0.8, y + enemies[i].y * k - 0.8, 1.7, 1.7);
+  }
+  ctx.fillStyle = portal.active ? PAL.arcane : '#7a6e58';
+  ctx.beginPath(); ctx.arc(x + portal.x * k, y + portal.y * k, 3.4, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath(); ctx.arc(x + player.x * k, y + player.y * k, 2.7, 0, TAU); ctx.fill();
+
+  // Compasses point south now. The needle is drawn as it reads, not as it
+  // ought to -- one of the Final Signs, and a standing reminder of it.
+  const nx = x + S - 13, ny = y + 13;
+  ctx.strokeStyle = 'rgba(226,196,140,.55)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(nx, ny, 7.5, 0, TAU); ctx.stroke();
+  ctx.fillStyle = 'rgba(224,120,80,.95)';
+  ctx.beginPath();
+  ctx.moveTo(nx, ny + 7); ctx.lineTo(nx - 2.6, ny); ctx.lineTo(nx + 2.6, ny);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = 'rgba(226,196,140,.9)';
+  ctx.font = '600 7px ui-monospace, monospace';
+  ctx.fillText('S', nx - 2, ny - 9.5);
+  ctx.restore();
+}
+
+function draw(t) {
+  ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+  ctx.fillStyle = PAL.floor;
+  ctx.fillRect(0, 0, view.w, view.h);
+
+  const shx = cam.shake ? (Math.random() - 0.5) * cam.shake : 0;
+  const shy = cam.shake ? (Math.random() - 0.5) * cam.shake : 0;
+
+  ctx.save();
+  ctx.translate(-cam.x + shx, -cam.y + shy);
+
+  const x0 = cam.x - 60, y0 = cam.y - 60;
+  const x1 = cam.x + view.w + 60, y1 = cam.y + view.h + 60;
+
+  drawGround(x0, y0, x1, y1);
+  drawPortal(t);
+  drawWalls(x0, y0, x1, y1);
+  drawProps(x0, y0, x1, y1);
+  drawLoot(t);
+  for (let i = 0; i < enemies.length; i++) {
+    const e = enemies[i];
+    if (e.x < x0 || e.x > x1 || e.y < y0 || e.y > y1) continue;
+    drawEnemy(e);
+  }
+  drawPlayer(t);
+  drawBullets();
+  drawParticles();
+  if (!lowFx) drawLightPass(t);
+  ctx.restore();
+
+  if (vignette && !lowFx) ctx.drawImage(vignette, 0, 0, view.w, view.h);
+  if (run && run.banner > 0 && state !== 'menu') {
+    const a = Math.min(1, run.banner / 1.1) * Math.min(1, (4.2 - run.banner) / 0.5);
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, a);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(238,224,192,.95)';
+    ctx.font = '400 21px Georgia, "Times New Roman", serif';
+    ctx.fillText(run.bannerText || REGION.name, view.w / 2, view.h * 0.42);
+    ctx.fillStyle = 'rgba(186,164,128,.85)';
+    ctx.font = 'italic 400 13px Georgia, "Times New Roman", serif';
+    ctx.fillText(run.bannerNote || REGION.landmark || REGION.note, view.w / 2, view.h * 0.42 + 24);
+    ctx.strokeStyle = 'rgba(196,164,116,.4)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(view.w / 2 - 90, view.h * 0.42 + 38);
+    ctx.lineTo(view.w / 2 + 90, view.h * 0.42 + 38);
+    ctx.stroke();
+    ctx.restore();
+    ctx.textAlign = 'left';
+  }
+  if (run && run.boss && run.boss.hp > 0) {
+    const bs = run.boss, f = clamp(bs.hp / bs.maxHp, 0, 1);
+    const w = Math.min(320, view.w - 96), x0 = (view.w - w) / 2, y0 = 84;
+    ctx.fillStyle = 'rgba(10,7,4,.8)';
+    ctx.fillRect(x0 - 2, y0 - 2, w + 4, 12);
+    ctx.fillStyle = 'rgba(232,192,96,.9)';
+    ctx.fillRect(x0, y0, w * f, 8);
+    ctx.strokeStyle = 'rgba(206,180,140,.6)'; ctx.lineWidth = 1;
+    ctx.strokeRect(x0 - 2.5, y0 - 2.5, w + 5, 13);
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(238,224,192,.9)';
+    ctx.font = '400 12px Georgia, "Times New Roman", serif';
+    ctx.fillText('The Gilded Deceiver', view.w / 2, y0 - 7);
+    ctx.restore();
+  }
+  drawPortalArrow(t);
+  drawMinimap();
+  drawStick();
+  if (state !== 'menu') { drawViewFrame(); drawHudFrame(); }
+}
+
+/* ---------------------------------------------------------------------------
+   10. UI, STATE MACHINE & BOOT
+   ------------------------------------------------------------------------ */
+
+const $ = id => document.getElementById(id);
+const el = {
+  hud: $('hud'), hpBar: $('hpBar'), hpFill: $('hpFill'), hpText: $('hpText'),
+  techBar: $('techBar'), techFill: $('techFill'), techText: $('techText'),
+  clock: $('clock'), lvlText: $('lvlText'), flash: $('flash'),
+  start: $('start'), levelup: $('levelup'), paused: $('paused'), over: $('over'),
+  cards: $('cards'), lvlNum: $('lvlNum'), lvlSub: $('lvlSub'), bestLine: $('bestLine'),
+  overTitle: $('overTitle'), overSub: $('overSub'), overStats: $('overStats')
+};
+
+let state = 'menu';   // menu | play | levelup | pause | over
+
+function showScreen(name) {
+  for (const s of ['start', 'levelup', 'paused', 'over']) {
+    el[s].classList.toggle('on', s === name);
+  }
+  el.hud.hidden = (name === 'start');
+}
+
+const fmtTime = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+
+/* --- persistence (best-effort; private mode can throw on access) -------- */
+const STORE_KEY = 'rivenmark.best.v1';
+function loadBest() {
+  try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; }
+  catch (e) { return {}; }
+}
+function saveBest(b) {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(b)); } catch (e) { /* ignore */ }
+}
+function refreshBestLine() {
+  const b = loadBest();
+  if (!b.runs) { el.bestLine.textContent = 'No delve recorded'; return; }
+  el.bestLine.textContent =
+    'Delves ' + b.runs + '  ·  Escapes ' + (b.extractions || 0) +
+    '  ·  Longest ' + fmtTime(b.bestTime || 0);
+}
+
+/* --- HUD (written only when a value actually changes) ------------------- */
+const hudCache = { hp: -1, tech: -1, time: -1, lvl: -1 };
+
+function syncHud() {
+  const hpF = clamp(player.hp / player.maxHp, 0, 1);
+  const hpR = Math.ceil(player.hp);
+  if (hpR !== hudCache.hp) {
+    hudCache.hp = hpR;
+    el.hpFill.style.transform = 'scaleX(' + hpF + ')';
+    el.hpText.textContent = hpR;
+    el.hpBar.classList.toggle('low', hpF < 0.34);
+  }
+  if (run.tech !== hudCache.tech || run.bossDown !== hudCache.boss) {
+    hudCache.boss = run.bossDown;
+    hudCache.tech = run.tech;
+    const f = clamp(run.tech / EXTRACT_QUOTA, 0, 1);
+    el.techFill.style.transform = 'scaleX(' + f + ')';
+    el.techBar.classList.toggle('done', f >= 1);
+    el.techText.innerHTML = f < 1
+      ? 'Slag <b>' + run.tech + '</b>/' + EXTRACT_QUOTA
+      : (run.bossDown ? '<b class="go">Ley-gate open</b>'
+                      : '<b class="go">The Deceiver holds it</b>');
+  }
+  const secs = Math.floor(run.time);
+  if (secs !== hudCache.time) { hudCache.time = secs; el.clock.textContent = fmtTime(secs); }
+  if (run.level !== hudCache.lvl) { hudCache.lvl = run.level; el.lvlText.textContent = 'Rank ' + run.level; }
+}
+
+let flashTimer = 0;
+function hitFlashUI() {
+  el.flash.style.opacity = '1';
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => { el.flash.style.opacity = '0'; }, 90);
+}
+
+/* --- run lifecycle ------------------------------------------------------ */
+
+function resetRun(heroId) {
+  const hero = heroId || (run && run.hero) || 'isaac';
+  REGION = REGIONS[(Math.random() * REGIONS.length) | 0];
+  PAL.stoneTop = REGION.stone[0];
+  PAL.stoneMid = REGION.stone[1];
+  PAL.stoneLow = REGION.stone[2];
+  PAL.ember = REGION.lamp;
+  wallGrads.clear();
+  forgeGround();
+  forgeWallCourses();
+
+  const spawn = { x: WORLD.w / 2, y: WORLD.h / 2 };
+  const a = Math.random() * TAU, d = rand(700, 880);
+  const pt = {
+    x: clamp(spawn.x + Math.cos(a) * d, 150, WORLD.w - 150),
+    y: clamp(spawn.y + Math.sin(a) * d, 150, WORLD.h - 150)
+  };
+
+  generateWorld(spawn, pt);
+  portal  = { x: pt.x, y: pt.y, pulse: 0, channel: 0, active: false };
+  player  = makePlayer(spawn.x, spawn.y, hero);
+  enemies = []; bullets = []; loot = []; particles = []; rings = [];
+  enemyGrid = new SpatialHash(ENEMY_CELL);
+
+  run = { time: 0, tech: 0, xp: 0, xpNeed: 11, level: 1, kills: 0,
+          spawnTimer: 1.4, pendingLevels: 0, hero: hero, banner: 4.2,
+          bannerText: null, bannerNote: null,
+          bossCalled: false, bossDown: false, boss: null };
+
+  cam.x = clamp(player.x - view.w / 2, 0, Math.max(0, WORLD.w - view.w));
+  cam.y = clamp(player.y - view.h / 2, 0, Math.max(0, WORLD.h - view.h));
+  cam.shake = 0;
+
+  flowFrom = -1;
+  rebuildFlow();
+  hudCache.hp = hudCache.tech = hudCache.time = hudCache.lvl = -1;
+  stickEnd();
+  keys.clear();
+  syncHud();
+}
+
+function startRun(heroId) {
+  resetRun(heroId);
+  state = 'play';
+  showScreen(null);
+}
+
+function endRun(won) {
+  if (state === 'over') return;
+  state = 'over';
+  stickEnd();
+
+  const b = loadBest();
+  b.runs = (b.runs || 0) + 1;
+  if (won) b.extractions = (b.extractions || 0) + 1;
+  b.bestTime = Math.max(b.bestTime || 0, run.time);
+  b.bestKills = Math.max(b.bestKills || 0, run.kills);
+  saveBest(b);
+
+  el.overTitle.innerHTML = won ? '<em>Escaped</em>' : '<span>Slain</span>';
+  el.overSub.textContent = won
+    ? 'The ley-gate held. You carried the slag out.'
+    : 'The hive-mind claimed another of the Clear-Sighted.';
+  el.overStats.innerHTML =
+    '<div>Endured<b>' + fmtTime(run.time) + '</b></div>' +
+    '<div>Slain<b>' + run.kills + '</b></div>' +
+    '<div>Slag<b>' + run.tech + '</b></div>' +
+    '<div>Rank<b>' + run.level + '</b></div>';
+  showScreen('over');
+  refreshBestLine();
+}
+
+/* --- level-up ----------------------------------------------------------- */
+
+function rollUpgrades(n) {
+  const pool = UPGRADES.filter(u => (player.upg[u.id] || 0) < u.max);
+  const out = [];
+  while (out.length < n && pool.length) {
+    out.push(pool.splice((Math.random() * pool.length) | 0, 1)[0]);
+  }
+  return out;
+}
+
+function openLevelUp() {
+  state = 'levelup';
+  stickEnd();
+  el.lvlNum.textContent = run.level;
+  el.lvlSub.textContent = run.pendingLevels > 1
+    ? run.pendingLevels + ' boons await'
+    : 'A boon is offered';
+  el.cards.innerHTML = '';
+
+  const offer = rollUpgrades(3);
+  if (!offer.length) {                    // everything maxed — just bank it
+    run.pendingLevels = 0;
+    state = 'play';
+    return;
+  }
+  for (const u of offer) {
+    const have = player.upg[u.id] || 0;
+    const card = document.createElement('button');
+    card.className = 'card';
+    card.type = 'button';
+    card.innerHTML =
+      '<span class="glyph">' + u.glyph + '</span>' +
+      '<span><h4>' + u.name + '</h4><p>' + u.desc +
+      (have ? ' <span class="tier">· held ' + have + '</span>' : '') + '</p></span>';
+    card.addEventListener('click', () => takeUpgrade(u));
+    el.cards.appendChild(card);
+  }
+  showScreen('levelup');
+}
+
+function takeUpgrade(u) {
+  u.apply(player);
+  player.upg[u.id] = (player.upg[u.id] || 0) + 1;
+  run.pendingLevels--;
+  hudCache.hp = -1;
+  if (run.pendingLevels > 0) { openLevelUp(); return; }
+  state = 'play';
+  showScreen(null);
+}
+
+/* --- pause -------------------------------------------------------------- */
+
+function pauseRun() {
+  if (state !== 'play') return;
+  state = 'pause';
+  stickEnd();
+  keys.clear();
+  showScreen('paused');
+}
+function resumeRun() {
+  if (state !== 'pause') return;
+  state = 'play';
+  showScreen(null);
+}
+
+/* --- input listeners ---------------------------------------------------- */
+
+function localPoint(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+
+canvas.addEventListener('pointerdown', e => {
+  if (state !== 'play') return;
+  const p = localPoint(e);
+  stickStart(e.pointerId, p.x, p.y);
+  try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+  e.preventDefault();
+});
+
+canvas.addEventListener('pointermove', e => {
+  if (!stick.active || e.pointerId !== stick.id) return;
+  const p = localPoint(e);
+  stickMove(p.x, p.y);
+  e.preventDefault();
+});
+
+function releasePointer(e) {
+  if (stick.active && e.pointerId === stick.id) stickEnd();
+}
+canvas.addEventListener('pointerup', releasePointer);
+canvas.addEventListener('pointercancel', releasePointer);
+canvas.addEventListener('lostpointercapture', releasePointer);
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+window.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (k === 'escape' || k === 'p') {
+    if (state === 'play') pauseRun(); else if (state === 'pause') resumeRun();
+    return;
+  }
+  if (k === ' ' || k === 'enter') {
+    if (state === 'menu' || state === 'over') startRun(run && run.hero);
+    return;
+  }
+  keys.add(k);
+  if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k)) {
+    e.preventDefault();
+  }
+});
+window.addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
+window.addEventListener('blur', () => { keys.clear(); stickEnd(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) pauseRun(); });
+
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', () => setTimeout(resize, 120));
+
+(function buildHeroPick() {
+  const wrap = $('heroPick');
+  for (const hid in HEROES) {
+    const H = HEROES[hid];
+    const card = document.createElement('button');
+    card.className = 'card';
+    card.type = 'button';
+    card.innerHTML =
+      '<span class="glyph">' + (hid === 'isaac' ? '\u2600' : '\u2726') + '</span>' +
+      '<span><h4>' + H.name + ' &middot; ' + H.title + '</h4>' +
+      '<p>' + H.blurb + ' <span class="tier">' + H.order + ' &middot; ' +
+      H.school + '</span></p></span>';
+    card.style.borderLeftColor = H.magic;
+    card.addEventListener('click', () => startRun(hid));
+    wrap.appendChild(card);
+  }
+})();
+$('againBtn').addEventListener('click', () => startRun(run && run.hero));
+$('pauseBtn').addEventListener('click', pauseRun);
+$('resumeBtn').addEventListener('click', resumeRun);
+$('abortBtn').addEventListener('click', () => {
+  state = 'menu';
+  resetRun();
+  showScreen('start');
+});
+
+/* --- main loop ---------------------------------------------------------- */
+
+let last = 0;
+
+function frame(now) {
+  requestAnimationFrame(frame);
+  const t = now / 1000;
+  const dt = last ? Math.min(MAX_DT, t - last) : 0;
+  last = t;
+
+  // Adaptive effects: sample real frame cost and drop glow before the frame
+  // rate does. Hysteresis keeps it from flapping on the threshold.
+  fxAccum += dt; fxFrames++;
+  if (fxAccum >= 1) {
+    const avg = fxAccum / fxFrames;
+    if (!lowFx) {
+      if (avg > 0.024) { lowFx = true; fxGood = 0; }
+    } else {
+      // Turning bloom back on costs ~40% more per frame, so climb out only
+      // from a comfortable margin held for several samples. Restoring at the
+      // engage threshold would push cost straight back over it and flap.
+      fxGood = avg < 0.011 ? fxGood + 1 : 0;
+      if (fxGood >= 4) { lowFx = false; fxGood = 0; }
+    }
+    fxAccum = 0; fxFrames = 0;
+  }
+
+  if (state === 'play') {
+    update(dt);
+    syncHud();
+  } else if (state === 'levelup' || state === 'pause') {
+    updateCamera(dt);
+  }
+  draw(t);
+}
+
+resize();
+resetRun();
+refreshBestLine();
+showScreen('start');
+requestAnimationFrame(frame);
+</script>
+<script>
+/* generated 2026-08-24T08:45:20Z by tools/build-debug.js — do not edit */
+/* =============================================================================
+   THE RIVENMARK — debug overlay
+   Injected into debug.html by tools/build-debug.js. Never shipped in the
+   release page, and never edited by hand: edit this file and rebuild.
+
+   It touches the game only by wrapping global functions, so the release code
+   carries no debug branches at all.
+   ========================================================================== */
+(function () {
+  'use strict';
+
+  // --- deterministic worlds -------------------------------------------------
+  // The generator is all Math.random, so seeding it here makes any map
+  // reproducible without threading an RNG through the game. Note the seed,
+  // reproduce the bug.
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  const realRandom = Math.random;
+  let seed = (Math.random() * 1e9) | 0;
+  let seeded = false;
+  function applySeed() { Math.random = seeded ? mulberry32(seed) : realRandom; }
+
+  // --- state ----------------------------------------------------------------
+  const D = {
+    open: true, pinned: false, god: false, oneShot: false, noSpawn: false,
+    showFlow: false, showHits: false, forceLow: false, slowmo: false
+  };
+
+  // The panel is a fixed box over the left edge of the page, so on a phone it
+  // sits squarely on top of the centred hero cards and boon cards and eats the
+  // taps meant for them. Keep it off screen whenever a menu is up; the toggle
+  // pins it back when you actually want the seed box on the start screen.
+  const screenUp = () => state !== 'play';
+  let fps = 0, frames = 0, fpsT = 0, updMs = 0, drawMs = 0;
+
+  // --- wrap the loop for timings -------------------------------------------
+  const _update = update, _draw = draw;
+  update = function (dt) {
+    const t0 = performance.now();
+    _update(D.slowmo ? dt * 0.35 : dt);
+    updMs = updMs * 0.9 + (performance.now() - t0) * 0.1;
+  };
+  draw = function (t) {
+    if (D.forceLow) lowFx = true;
+    const t0 = performance.now();
+    _draw(t);
+    drawMs = drawMs * 0.9 + (performance.now() - t0) * 0.1;
+    if (D.showFlow) overlayFlow();
+    if (D.showHits) overlayHits();
+    frames++;
+    const now = performance.now();
+    if (now - fpsT > 500) { fps = frames * 1000 / (now - fpsT); frames = 0; fpsT = now; }
+    syncPanel();
+    if (D.open && !screenUp()) paint();
+  };
+
+  // --- cheats, as wrappers --------------------------------------------------
+  const _hurt = hurtPlayer;
+  hurtPlayer = function (e) { if (!D.god) _hurt(e); };
+
+  const _damage = damageEnemy;
+  damageEnemy = function (e, dmg) { _damage(e, D.oneShot ? 1e9 : dmg); };
+
+  const _spawn = spawnEnemy;
+  spawnEnemy = function (t) { if (!D.noSpawn) _spawn(t); };
+
+  const _reset = resetRun;
+  resetRun = function (h) { applySeed(); _reset(h); };
+
+  // --- world overlays -------------------------------------------------------
+  function overlayFlow() {
+    if (!flowDist) return;
+    ctx.save();
+    ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+    ctx.translate(-cam.x, -cam.y);
+    const c0x = Math.max(0, Math.floor(cam.x / CELL_W));
+    const c1x = Math.min(GW - 1, Math.ceil((cam.x + view.w) / CELL_W));
+    const c0y = Math.max(0, Math.floor(cam.y / CELL_W));
+    const c1y = Math.min(GH - 1, Math.ceil((cam.y + view.h) / CELL_W));
+    ctx.lineWidth = 1;
+    for (let cy = c0y; cy <= c1y; cy++) {
+      for (let cx = c0x; cx <= c1x; cx++) {
+        const d = flowDist[cy * GW + cx];
+        if (d < 0) continue;
+        const x = cx * CELL_W + CELL_W / 2, y = cy * CELL_W + CELL_W / 2;
+        ctx.fillStyle = 'rgba(90,200,255,' + Math.max(0.05, 0.5 - d * 0.006) + ')';
+        ctx.fillRect(x - 3, y - 3, 6, 6);
+        const probe = { x, y };
+        if (typeof flowDir === 'function' && flowDir(probe, { x: 0, y: 0 })) {
+          const o = { x: 0, y: 0 };
+          flowDir(probe, o);
+          ctx.strokeStyle = 'rgba(120,220,255,.5)';
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(x + o.x * 13, y + o.y * 13);
+          ctx.stroke();
+        }
+      }
+    }
+    ctx.restore();
+  }
+
+  function overlayHits() {
+    ctx.save();
+    ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+    ctx.translate(-cam.x, -cam.y);
+    ctx.strokeStyle = 'rgba(255,90,90,.55)';
+    ctx.lineWidth = 1;
+    const x0 = cam.x - 40, y0 = cam.y - 40, x1 = cam.x + view.w + 40, y1 = cam.y + view.h + 40;
+    for (let i = 0; i < walls.length; i++) {
+      const w = walls[i];
+      if (w.x > x1 || w.y > y1 || w.x + w.w < x0 || w.y + w.h < y0) continue;
+      ctx.strokeRect(w.x + .5, w.y + .5, w.w - 1, w.h - 1);
+    }
+    ctx.strokeStyle = 'rgba(120,255,140,.8)';
+    for (let i = 0; i < enemies.length; i++) {
+      const e = enemies[i];
+      if (e.x < x0 || e.x > x1 || e.y < y0 || e.y > y1) continue;
+      ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, TAU); ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(255,230,120,.9)';
+    ctx.beginPath(); ctx.arc(player.x, player.y, player.r, 0, TAU); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,230,120,.35)';
+    ctx.beginPath(); ctx.arc(player.x, player.y, player.range, 0, TAU); ctx.stroke();
+    ctx.restore();
+  }
+
+  // --- panel ----------------------------------------------------------------
+  const css = document.createElement('style');
+  css.textContent = `
+  #dbg{position:fixed;left:6px;top:88px;z-index:9999;width:216px;
+    font:11px/1.45 ui-monospace,Menlo,Consolas,monospace;color:#d8e6c8;
+    background:rgba(6,10,8,.9);border:1px solid #2f4a34;border-radius:4px;
+    padding:7px 8px;pointer-events:auto;-webkit-user-select:none;user-select:none}
+  #dbg.hid{display:none}
+  #dbg h5{margin:6px 0 3px;font:600 9px/1 ui-monospace,monospace;letter-spacing:1.4px;
+    color:#6f9c72;text-transform:uppercase}
+  #dbg .row{display:flex;justify-content:space-between;gap:6px}
+  #dbg .row b{color:#f0f6e8;font-weight:600}
+  #dbg .warn b{color:#ffb35c}
+  #dbg .grid{display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-top:4px}
+  #dbg button{font:600 10px/1 ui-monospace,monospace;color:#cfe4c4;
+    background:#14211a;border:1px solid #2f4a34;border-radius:3px;padding:6px 4px;
+    cursor:pointer;touch-action:manipulation}
+  #dbg button:active{background:#24382a}
+  #dbg button.on{background:#2c5a33;border-color:#5fa768;color:#eaffe4}
+  #dbgToggle{position:fixed;left:6px;top:60px;z-index:10000;width:26px;height:24px;
+    font:600 11px/1 ui-monospace,monospace;color:#cfe4c4;background:rgba(6,10,8,.9);
+    border:1px solid #2f4a34;border-radius:3px;cursor:pointer;touch-action:manipulation}
+  #dbg input{width:88px;font:11px ui-monospace,monospace;color:#eaffe4;
+    background:#0d1611;border:1px solid #2f4a34;border-radius:3px;padding:2px 4px}`;
+  document.head.appendChild(css);
+
+  const tog = document.createElement('button');
+  tog.id = 'dbgToggle'; tog.textContent = 'D';
+  document.body.appendChild(tog);
+
+  const panel = document.createElement('div');
+  panel.id = 'dbg';
+  panel.innerHTML =
+    '<div id="dbgStats"></div>' +
+    '<h5>Toggles</h5><div class="grid" id="dbgTog"></div>' +
+    '<h5>Actions</h5><div class="grid" id="dbgAct"></div>' +
+    '<h5>Region</h5><div class="grid" id="dbgReg"></div>' +
+    '<h5>Seed</h5><div class="row" style="margin-top:3px">' +
+    '<input id="dbgSeed"><button id="dbgSeedGo" style="flex:1">use</button></div>';
+  document.body.appendChild(panel);
+  function syncPanel() {
+    panel.classList.toggle('hid', !(D.open && (!screenUp() || D.pinned)));
+  }
+  function togglePanel() {
+    if (screenUp()) { D.pinned = !D.pinned; D.open = true; }
+    else { D.open = !D.open; D.pinned = false; }
+    syncPanel();
+  }
+  tog.onclick = togglePanel;
+
+  function mkButtons(host, defs) {
+    defs.forEach(([label, fn, key]) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.onclick = () => { fn(); if (key) b.classList.toggle('on', D[key]); };
+      if (key && D[key]) b.classList.add('on');
+      host.appendChild(b);
+    });
+  }
+
+  mkButtons(panel.querySelector('#dbgTog'), [
+    ['god', () => D.god = !D.god, 'god'],
+    ['1-shot', () => D.oneShot = !D.oneShot, 'oneShot'],
+    ['no spawn', () => D.noSpawn = !D.noSpawn, 'noSpawn'],
+    ['slow-mo', () => D.slowmo = !D.slowmo, 'slowmo'],
+    ['flow', () => D.showFlow = !D.showFlow, 'showFlow'],
+    ['hitboxes', () => D.showHits = !D.showHits, 'showHits'],
+    ['force low', () => { D.forceLow = !D.forceLow; if (!D.forceLow) lowFx = false; }, 'forceLow'],
+    ['seeded', () => { seeded = !seeded; applySeed(); }, 'seeded']
+  ]);
+
+  mkButtons(panel.querySelector('#dbgAct'), [
+    ['+25 slag', () => collectTech(25)],
+    ['fill slag', () => collectTech(Math.max(0, EXTRACT_QUOTA - run.tech))],
+    ['to gate', () => { player.x = portal.x; player.y = portal.y; }],
+    ['summon boss', () => { if (!run.bossCalled) { run.bossCalled = true; spawnDeceiver(); } }],
+    ['kill boss', () => { if (run.boss) { damageEnemy(run.boss, 1e9); compactEnemies(); } }],
+    ['wipe horde', () => { for (const e of enemies) if (e.kind !== 'deceiver') e.hp = 0;
+                           compactEnemies(); }],
+    ['+50 horde', () => { for (let i = 0; i < 50; i++) _spawn(run.time); }],
+    ['rank up', () => { run.pendingLevels++; }],
+    ['heal', () => { player.hp = player.maxHp; }],
+    ['remake map', () => resetRun(run.hero)]
+  ]);
+
+  const regHost = panel.querySelector('#dbgReg');
+  REGIONS.forEach(R => {
+    const b = document.createElement('button');
+    b.textContent = R.id;
+    b.onclick = () => {
+      // resetRun picks at random; roll until it lands on the one asked for.
+      for (let i = 0; i < 200 && REGION.id !== R.id; i++) resetRun(run.hero);
+      state = 'play'; showScreen(null);
+    };
+    regHost.appendChild(b);
+  });
+
+  const seedIn = panel.querySelector('#dbgSeed');
+  seedIn.value = seed;
+  panel.querySelector('#dbgSeedGo').onclick = () => {
+    const v = parseInt(seedIn.value, 10);
+    if (!isNaN(v)) { seed = v; seeded = true; applySeed(); resetRun(run.hero);
+                     state = 'play'; showScreen(null); }
+  };
+
+  const statsHost = panel.querySelector('#dbgStats');
+  function row(k, v, warn) {
+    return '<div class="row' + (warn ? ' warn' : '') + '"><span>' + k +
+           '</span><b>' + v + '</b></div>';
+  }
+  function paint() {
+    const ms = updMs + drawMs;
+    statsHost.innerHTML =
+      row('fps', fps.toFixed(0), fps < 50) +
+      row('draw / upd', drawMs.toFixed(1) + ' / ' + updMs.toFixed(2) + 'ms', ms > 16.7) +
+      row('lowFx', lowFx, lowFx) +
+      row('region', REGION.id) +
+      row('hero', (run && run.hero) || '-') +
+      row('enemies', enemies.length) +
+      row('bullets / parts', bullets.length + ' / ' + particles.length) +
+      row('props / lamps', props.length + ' / ' + lamps.length) +
+      row('walls / edges', walls.length + ' / ' + edges.length) +
+      row('slag', (run ? run.tech : 0) + '/' + EXTRACT_QUOTA) +
+      row('boss', run && run.boss ? Math.round(100 * run.boss.hp / run.boss.maxHp) + '%'
+                                  : (run && run.bossDown ? 'down' : '-')) +
+      row('seed', seeded ? seed : 'off');
+  }
+
+  window.addEventListener('keydown', e => {
+    const k = e.key.toLowerCase();
+    if (k === '`') togglePanel();
+    if (k === 'g') D.god = !D.god;
+    if (k === 'h') D.showHits = !D.showHits;
+    if (k === 'f') D.showFlow = !D.showFlow;
+  });
+
+  syncPanel();
+  paint();
+  console.log('[rivenmark] debug build — ` panel, g god, h hitboxes, f flow');
+})();
+
+</script>
+</body>
+</html>

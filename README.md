@@ -270,9 +270,50 @@ Tuning constants are grouped at the top of section 1.
 
 ---
 
+## Debug build
+
+`debug.html` is a generated page: the shipped game plus an inspection panel.
+Rebuild it after any change to the game with
+
+    node tools/build-debug.js
+
+Never edit `debug.html` by hand — edit `tools/debug-overlay.js` and rebuild, so
+the debug build cannot drift from the release page. The overlay touches the game
+only by wrapping global functions (`update`, `draw`, `hurtPlayer`, `damageEnemy`,
+`spawnEnemy`, `resetRun`), which is why `index.html` carries no debug branches at
+all: strip the injected `<script>` out of `debug.html` and what remains is
+byte-identical to `index.html`.
+
+**Panel** — tap the `D` button top-left, or press `` ` ``. It stays out of the way
+while a menu is up so it can never swallow a tap meant for a hero or boon card;
+tap `D` on the start screen to pin it there anyway when you want the seed box.
+
+**Live stats** — fps, draw/update cost, whether `lowFx` has engaged, region, hero,
+enemy/bullet/particle counts, prop and lamp counts, wall and edge counts, slag
+against quota, boss health, active seed.
+
+**Toggles** — `god`, `1-shot`, `no spawn`, `slow-mo` (0.35×), `flow` (BFS field
+and its gradient), `hitboxes` (wall rects, enemy circles, player radius and
+range), `force low` (pin reduced effects on, rather than waiting for the adaptive
+sampler), `seeded`. Shortcuts: `g` god, `h` hitboxes, `f` flow.
+
+**Actions** — `+25 slag`, `fill slag`, `to gate`, `summon boss`, `kill boss`,
+`wipe horde`, `+50 horde`, `rank up`, `heal`, `remake map`, and a jump button per
+region so an encounter can be reached without playing to it.
+
+**Seeds** — world generation is all `Math.random`, so the overlay swaps in a
+seeded `mulberry32` around `resetRun`. Type a seed, press *use*, and the same map
+comes back every time — note the seed, reproduce the bug. Turning `seeded` off
+restores the real generator.
+
+---
+
 ## Testing
 
 No test framework is committed. Verification was done by driving the built
 page in headless Chromium (Playwright) — state transitions, joystick deadzone
 curve, auto-fire cadence, geometry embedding, frame cost at load, layout at
 320/390/1440 px, and console errors. The bot simulation above runs the same way.
+The debug build is verified the same way: panel visibility across menus, every
+toggle and action, both world overlays, the region jumps, and seed reproducibility
+(same seed → identical grid/wall/prop fingerprint; different seed → different).
