@@ -303,6 +303,10 @@ const ENEMY_TYPES = {
               color: '#9dbb5a', halo: 'rgba(157,187,90,.20)', weight: 10, from: 0 },
   eclipse:    { r: 11, speed: 152, hp: 22,  dmg: 6,  tech: 1, cd: 0.70, mass: 0.7,
               color: '#b07cff', halo: 'rgba(176,124,255,.22)', weight: 8,  from: 25 },
+  deceiver: { r: 24, speed: 76,  hp: 540, dmg: 32, tech: 30, cd: 1.15, mass: 7.0,
+              color: '#e8c060', halo: 'rgba(232,192,96,.22)', weight: 0, from: 1e9 },
+  mirage:   { r: 20, speed: 92,  hp: 1,   dmg: 0,  tech: 0,  cd: 9.0,  mass: 0.2,
+              color: '#e8c060', halo: 'rgba(232,192,96,.18)', weight: 0, from: 1e9 },
   breaker: { r: 23, speed: 62,  hp: 135, dmg: 21, tech: 4, cd: 1.30, mass: 2.8,
               color: '#e0552a', halo: 'rgba(224,85,42,.22)', weight: 4,  from: 55 }
 };
@@ -341,22 +345,32 @@ const HEROES = {
 const REGIONS = [
   { id:'slag',    name:'The Slag-Moors of Drak-Hald',
     note:'Dead ash around the Weeping Keep of Tor-Varden.',
+    landmark:'The Weeping Keep of Tor-Varden', build:'keep',
+    layout:{ pitch:5, braid:0.5, rooms:2, chambers:9, rough:0.24 },
     earth:[58,44,30], mottle:[[26,18,11],[84,64,41],[116,90,58]],
     flag:[56,26], stone:['#241d16','#16110b','#0b0805'], lamp:'#e5761f' },
   { id:'vaelk',   name:'The Rending Gorges of Vaelk',
     note:'Split earth below the Kael-Dorm Redoubt.',
+    landmark:'The Kael-Dorm Redoubt', build:'redoubt',
+    layout:{ pitch:4, braid:0.18, rooms:1, chambers:3, rough:0.16, rifts:true },
     earth:[38,46,58], mottle:[[16,20,28],[52,66,86],[78,102,130]],
     flag:[58,24], stone:['#1a2430','#101720','#070b0f'], lamp:'#5fd0ff' },
   { id:'kraggen', name:'Kraggen-Tor, the Iron-Teeth',
     note:'Volcanic west, holding the Shatter-Gate of Ghor.',
+    landmark:'The Shatter-Gate of Ghor', build:'shattergate',
+    layout:{ pitch:3, braid:0.22, rooms:1, chambers:4, rough:0.34 },
     earth:[52,30,22], mottle:[[28,12,8],[86,42,24],[128,62,30]],
     flag:[54,22], stone:['#2a1a14','#1a0f0a','#0c0705'], lamp:'#ff5f28' },
   { id:'weald',   name:'The Rot-Weald',
     note:'Creeping mutation in the southern forest.',
+    landmark:'The Heart-Rot Clearing', build:'thicket',
+    layout:{ pitch:4, braid:0.55, rooms:2, chambers:10, rough:0.42 },
     earth:[40,48,30], mottle:[[18,24,12],[58,74,38],[86,106,54]],
     flag:[52,26], stone:['#1c2418','#121810','#080b07'], lamp:'#9dbb5a' },
   { id:'firth',   name:'The Dead Firth',
     note:'A blackened ocean, drained and refilled with drifting ash.',
+    landmark:'The Ash-Shoals', build:'ashflat',
+    layout:{ pitch:6, braid:0.6, rooms:3, chambers:12, rough:0.2 },
     earth:[34,32,34], mottle:[[14,13,15],[52,50,54],[78,76,82]],
     flag:[50,20], stone:['#1c1c1f','#121215','#07070a'], lamp:'#b9c4cf' }
 ];
@@ -505,7 +519,8 @@ function carveRect(x0, y0, x1, y1) {
    are death in a game where a horde follows you, and loops give both sides
    room to flank. */
 function carveMaze() {
-  const P = 4;                                    // fine cells per maze cell
+  const LY = REGION.layout || {};
+  const P = LY.pitch || 4;                        // fine cells per maze cell
   const MW = Math.floor((GW - 2) / P), MH = Math.floor((GH - 2) / P);
   const seen = new Uint8Array(MW * MH);
   const mi = (x, y) => y * MW + x;
@@ -528,7 +543,7 @@ function carveMaze() {
     link.push([x, y, n[0], n[1]]);
     stack.push(n);
   }
-  const braids = Math.floor(MW * MH * 0.34);
+  const braids = Math.floor(MW * MH * (LY.braid === undefined ? 0.34 : LY.braid));
   for (let i = 0; i < braids; i++) {
     const x = (Math.random() * MW) | 0, y = (Math.random() * MH) | 0;
     const d = DIRS[(Math.random() * 4) | 0];
@@ -541,7 +556,8 @@ function carveMaze() {
   for (let my = 0; my < MH; my++)
     for (let mx = 0; mx < MW; mx++) {
       const ox = 1 + mx * P, oy = 1 + my * P;
-      carveRect(ox, oy, ox + 1, oy + 1);
+      const rm = LY.rooms === undefined ? 1 : LY.rooms;
+      carveRect(ox, oy, ox + rm, oy + rm);
     }
   for (let i = 0; i < link.length; i++) {
     const [x, y, nx, ny] = link[i];
@@ -552,9 +568,26 @@ function carveMaze() {
   }
 
   // A handful of the junctions open out into proper chambers.
-  for (let i = 0; i < 7; i++) {
+  const nch = LY.chambers === undefined ? 7 : LY.chambers;
+  for (let i = 0; i < nch; i++) {
     const mx = (Math.random() * MW) | 0, my = (Math.random() * MH) | 0;
     carveDisc(1 + mx * P, 1 + my * P, 2 + (Math.random() * 2 | 0));
+  }
+
+  // Vaelk is split earth, not tunnels: long parallel rifts torn across it.
+  if (LY.rifts) {
+    for (let i = 0; i < 5; i++) {
+      const gy = 5 + ((Math.random() * (GH - 12)) | 0);
+      const len = 12 + ((Math.random() * 22) | 0);
+      const gx = 3 + ((Math.random() * (GW - len - 6)) | 0);
+      for (let x = gx; x < gx + len; x++) {
+        for (let y = gy; y < gy + 2 + ((x % 7 === 0) ? 1 : 0); y++) {
+          if (inGrid(x, y)) grid[gi(x, y)] = SOLID;      // the rift itself
+        }
+      }
+      const bridge = gx + ((Math.random() * len) | 0);   // one crossing
+      carveRect(bridge, gy - 1, bridge + 1, gy + 3);
+    }
   }
   return P;
 }
@@ -576,7 +609,8 @@ function generateWorld(spawn, portal) {
         for (let dx = -1; dx <= 1; dx++)
           if (dx || dy) openN += cellAt(x + dx, y + dy) === OPEN ? 1 : 0;
       if (openN === 0 || openN === 8) continue;         // interiors stay put
-      if (Math.random() < 0.30) grid[k] = grid[k] === OPEN ? SOLID : OPEN;
+      if (Math.random() < ((REGION.layout && REGION.layout.rough) || 0.3))
+        grid[k] = grid[k] === OPEN ? SOLID : OPEN;
     }
   }
   const smoothed = new Uint8Array(grid);
@@ -618,6 +652,9 @@ function generateWorld(spawn, portal) {
   }
   for (let i = 0; i < lone.length; i++) grid[lone[i]] = OPEN;
 
+  buildLandmark(pc);
+  connectPortal(sc, pc);
+
   // Keep only what is reachable from spawn; everything else becomes rock.
   const seen = new Uint8Array(GW * GH);
   const stack = [gi(sc.x, sc.y)];
@@ -641,6 +678,99 @@ function generateWorld(spawn, portal) {
   buildWallRects();
   buildEdges();
   buildScenery(spawn, portal);
+}
+
+// A curtain wall can seal its own gate, and Vaelk's rifts can strand a corner.
+// Rather than forbid that, prove reachability and repair the one case that
+// matters: flood from spawn, and if the gate is not in the reached set, cut
+// the shortest link to it. Scars the map far less than carving blind.
+function connectPortal(sc, pc) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const seen = new Uint8Array(GW * GH);
+    const q = [gi(sc.x, sc.y)];
+    if (grid[q[0]] === SOLID) carveDisc(sc.x, sc.y, 2);
+    seen[q[0]] = 1;
+    let best = -1, bestD = Infinity;
+    while (q.length) {
+      const k = q.pop();
+      const x = k % GW, y = (k / GW) | 0;
+      if (x === pc.x && y === pc.y) return true;
+      const d = (x - pc.x) * (x - pc.x) + (y - pc.y) * (y - pc.y);
+      if (d < bestD) { bestD = d; best = k; }
+      for (let i = 0; i < 4; i++) {
+        const nx = x + (i === 0 ? 1 : i === 1 ? -1 : 0);
+        const ny = y + (i === 2 ? 1 : i === 3 ? -1 : 0);
+        if (!inGrid(nx, ny)) continue;
+        const nk = gi(nx, ny);
+        if (seen[nk] || grid[nk] === SOLID) continue;
+        seen[nk] = 1; q.push(nk);
+      }
+    }
+    if (best < 0) return false;
+    carveCorridor(best % GW, (best / GW) | 0, pc.x, pc.y, 1);
+  }
+  return false;
+}
+
+// The place the region is named for. Built around the ley-gate, because the
+// objective should be somewhere, not a circle on blank ground.
+function setCell(cx, cy, v) { if (inGrid(cx, cy)) grid[gi(cx, cy)] = v; }
+
+function buildLandmark(pc) {
+  const kind = REGION.build;
+  const cx = clamp(pc.x, 9, GW - 10), cy = clamp(pc.y, 9, GH - 10);
+
+  if (kind === 'keep') {
+    // A ruined curtain wall with breaches on each side, and a broken
+    // inner ward: the capital that fell, not a tidy castle.
+    carveDisc(cx, cy, 8);
+    for (let a = 0; a < 360; a += 4) {
+      const r = 7, rad = a * Math.PI / 180;
+      const x = Math.round(cx + Math.cos(rad) * r), y = Math.round(cy + Math.sin(rad) * r);
+      const gap = (a > 78 && a < 102) || (a > 168 && a < 192) ||
+                  (a > 258 && a < 282) || (a < 12 || a > 348);
+      if (!gap) setCell(x, y, SOLID);
+    }
+    for (let a = 0; a < 360; a += 6) {
+      if (a % 90 < 34) continue;                       // collapsed sections
+      const rad = a * Math.PI / 180;
+      setCell(Math.round(cx + Math.cos(rad) * 3.5), Math.round(cy + Math.sin(rad) * 3.5), SOLID);
+    }
+  } else if (kind === 'redoubt') {
+    // Cliffside fort: a walled approach with one mouth.
+    carveDisc(cx, cy, 7);
+    for (let x = cx - 6; x <= cx + 6; x++) {
+      setCell(x, cy - 6, SOLID);
+      if (x < cx - 1 || x > cx + 1) setCell(x, cy + 6, SOLID);
+    }
+    for (let y = cy - 6; y <= cy + 6; y++) { setCell(cx - 6, y, SOLID); setCell(cx + 6, y, SOLID); }
+    for (let y = cy - 3; y <= cy + 3; y += 3) { setCell(cx - 3, y, SOLID); setCell(cx + 3, y, SOLID); }
+  } else if (kind === 'shattergate') {
+    // The breach itself: a ring of standing stones with four wide mouths.
+    carveDisc(cx, cy, 7);
+    for (let a = 0; a < 360; a += 5) {
+      if (a % 90 < 30) continue;
+      const rad = a * Math.PI / 180;
+      setCell(Math.round(cx + Math.cos(rad) * 6), Math.round(cy + Math.sin(rad) * 6), SOLID);
+      setCell(Math.round(cx + Math.cos(rad) * 5), Math.round(cy + Math.sin(rad) * 5), SOLID);
+    }
+  } else if (kind === 'thicket') {
+    // A clearing choked with growth: cover everywhere, sightlines nowhere.
+    carveDisc(cx, cy, 8);
+    for (let i = 0; i < 26; i++) {
+      const a = Math.random() * TAU, d = 2.4 + Math.random() * 5.2;
+      setCell(Math.round(cx + Math.cos(a) * d), Math.round(cy + Math.sin(a) * d), SOLID);
+    }
+  } else {
+    // Ash shoals: open ground broken by long drifting bars.
+    carveDisc(cx, cy, 9);
+    for (let i = 0; i < 5; i++) {
+      const y = cy - 6 + i * 3, len = 5 + ((Math.random() * 7) | 0);
+      const x0 = cx - 7 + ((Math.random() * 6) | 0);
+      for (let x = x0; x < x0 + len; x++) setCell(x, y, SOLID);
+    }
+  }
+  carveDisc(cx, cy, 2);                                 // the gate always stands clear
 }
 
 // No passage may be one cell wide: the widest enemy is 46 units across and a
@@ -969,12 +1099,21 @@ function fire() {
   // this is a handful of cells, not a full pass over the swarm.
   const R = player.range;
   enemyGrid.query(player.x, player.y, R, _near);
-  let best = null, bestD = R * R;
+  // Nearest-target alone cannot fight a boss: while he is escorted, every
+  // bolt goes into the escort and he never takes a scratch. The Vanguard put
+  // the avatar first. Mirages stay targetable -- being decoys is their whole
+  // purpose -- except for Isaac, who is immune to the illusion and ignores
+  // them outright.
+  const blind = player.hero === 'isaac';
+  let best = null, bestD = R * R, avatar = null, avatarD = R * R;
   for (let i = 0; i < _near.length; i++) {
     const e = _near[i];
+    if (blind && e.kind === 'mirage') continue;
     const d = dist2(player.x, player.y, e.x, e.y);
+    if (e.kind === 'deceiver') { if (d < avatarD) { avatarD = d; avatar = e; } }
     if (d < bestD) { bestD = d; best = e; }
   }
+  best = avatar || best;
   if (!best) return false;
 
   const base = Math.atan2(best.y - player.y, best.x - player.x);
@@ -1114,6 +1253,21 @@ function damageEnemy(e, dmg) {
   e.hp -= dmg;
   e.hitFlash = 0.12;
   if (e.hp <= 0) {
+    if (e.kind === 'mirage') {
+      burst(e.x, e.y, '#e8c060', 10, 150);
+      return;                                   // a lie, not a body
+    }
+    if (e.kind === 'deceiver') {
+      run.bossDown = true;
+      run.boss = null;
+      run.banner = 3.4;
+      run.bannerText = 'The ley-gate answers';
+      run.bannerNote = 'The false salvation is broken. Hold the circle.';
+      shake(14);
+      for (let i = 0; i < enemies.length; i++) {
+        if (enemies[i].kind === 'mirage') enemies[i].hp = 0;
+      }
+    }
     run.kills++;
     dropLoot(e);
     burst(e.x, e.y, e.color, e.r > 18 ? 14 : 7, 190);
@@ -1251,6 +1405,42 @@ function updateEnemies(dt) {
     if (e.hp <= 0) continue;
     e.hitFlash = Math.max(0, e.hitFlash - dt);
     e.wob += dt * 7;
+
+    if (e.kind === 'mirage') {
+      e.fade -= dt;
+      if (e.fade <= 0) { e.hp = 0; continue; }
+    } else if (e.kind === 'deceiver') {
+      // He does not walk the corridors -- he is an avatar, and a body this
+      // wide wedges on corners anyway. He steps out of one place and into
+      // another near you, which is both the fix and the character.
+      e.blink -= dt;
+      if (e.blink <= 0) {
+        e.blink = 4.4;
+        for (let k = 0; k < 26; k++) {
+          const a = Math.random() * TAU, dd = 140 + Math.random() * 90;
+          const nx = clamp(player.x + Math.cos(a) * dd, 50, WORLD.w - 50);
+          const ny = clamp(player.y + Math.sin(a) * dd, 50, WORLD.h - 50);
+          if (pointInWalls(nx, ny, e.r + 6)) continue;
+          burst(e.x, e.y, '#e8c060', 16, 210);
+          e.x = nx; e.y = ny;
+          burst(e.x, e.y, '#e8c060', 16, 210);
+          break;
+        }
+      }
+      e.summon -= dt;
+      if (e.summon <= 0) {
+        e.summon = 8.5;
+        const batch = 2 + ((run.time / 90) | 0);
+        for (let i = 0; i < batch; i++) spawnEnemy(run.time);
+      }
+      e.split -= dt;
+      if (e.split <= 0) {
+        e.split = 9.5;
+        let live = 0;
+        for (let i = 0; i < enemies.length; i++) if (enemies[i].kind === 'mirage') live++;
+        if (live < 3) spawnMirages(e, 3 - live);
+      }
+    }
 
     const dx = player.x - e.x, dy = player.y - e.y;
     const d = Math.hypot(dx, dy) || 1;
@@ -1399,9 +1589,53 @@ function updateRings(dt) {
   rings.length = w;
 }
 
+function spawnDeceiver() {
+  const d = ENEMY_TYPES.deceiver;
+  const scale = 1 + run.time / 220;
+  const e = {
+    kind: 'deceiver', x: portal.x, y: portal.y - 4, r: d.r, speed: d.speed,
+    hp: d.hp * scale, maxHp: d.hp * scale, dmg: d.dmg, tech: d.tech, cd: d.cd,
+    mass: d.mass, color: d.color, halo: d.halo, atk: 1.4, hitFlash: 0,
+    wob: 0, angle: 0, face: 1, summon: 4.5, split: 7, blink: 3.2
+  };
+  enemies.push(e);
+  run.boss = e;
+  run.banner = 3.6;
+  run.bannerText = 'The Gilded Deceiver';
+  run.bannerNote = 'He offers you the gate. Look for the shattered eye.';
+  shake(10);
+}
+
+function spawnMirages(src, n) {
+  const d = ENEMY_TYPES.mirage;
+  for (let i = 0; i < n; i++) {
+    // A corridor rarely has three body-widths of clear ground at one radius,
+    // so sweep angle and distance rather than taking a single guess.
+    let x = 0, y = 0, ok = false;
+    for (let tries = 0; tries < 16 && !ok; tries++) {
+      const a = (i / n) * TAU + tries * 0.7 + Math.random() * 0.4;
+      const dist = 66 + tries * 7;
+      x = clamp(src.x + Math.cos(a) * dist, 40, WORLD.w - 40);
+      y = clamp(src.y + Math.sin(a) * dist, 40, WORLD.h - 40);
+      ok = !pointInWalls(x, y, d.r * 0.6);
+    }
+    if (!ok) continue;
+    enemies.push({
+      kind: 'mirage', x, y, r: d.r, speed: d.speed, hp: 1, maxHp: 1,
+      dmg: 0, tech: 0, cd: d.cd, mass: d.mass, color: d.color, halo: d.halo,
+      atk: 99, hitFlash: 0, wob: 0, angle: 0, face: 1, fade: 9
+    });
+  }
+}
+
 function updatePortal(dt) {
   portal.pulse += dt;
-  portal.active = run.tech >= EXTRACT_QUOTA;
+  // Reaching the quota does not open the gate -- it draws him to it.
+  if (run.tech >= EXTRACT_QUOTA && !run.bossCalled) {
+    run.bossCalled = true;
+    spawnDeceiver();
+  }
+  portal.active = run.tech >= EXTRACT_QUOTA && run.bossDown;
   if (!portal.active) { portal.channel = 0; return; }
   const inside = dist2(player.x, player.y, portal.x, portal.y) < PORTAL_R * PORTAL_R;
   if (inside) {
@@ -1433,7 +1667,8 @@ function updateSpawning(dt) {
 
 function update(dt) {
   run.time += dt;
-  if (run.banner > 0) run.banner -= dt;
+  if (run.banner > 0) { run.banner -= dt;
+    if (run.banner <= 0) { run.bannerText = null; run.bannerNote = null; } }
   updatePlayer(dt);
   updateBullets(dt);
   updateEnemies(dt);
@@ -1740,6 +1975,101 @@ function forgeEnemy(kind, r, color, flash) {
   });
 }
 
+// Mal-Ghorath's avatar on earth. The compendium gives him two properties that
+// are already mechanics: he offers false salvation, and he is identifiable by
+// his shattered void-gem right eye. So he manifests on the ley-gate and holds
+// it shut, he splits into mirages, and the gem is the tell that separates him
+// from them. Isaac, immune to illusion, simply sees through them.
+const DECEIVER_DRAW = 32;
+
+function forgeDeceiver(kind, flash) {
+  const u = DECEIVER_DRAW;      // drawn larger than he collides, so he
+                                // still looms without wedging in corridors
+  const mirage = kind === 'mirage';
+  const L = flash ? 1.5 : 1;
+  const lit = (a, b, c) => 'rgb(' + Math.round(Math.min(255, a * L)) + ',' +
+                                    Math.round(Math.min(255, b * L)) + ',' +
+                                    Math.round(Math.min(255, c * L)) + ')';
+  return forge(u * 3.0, g => {
+    g.lineJoin = 'round'; g.lineCap = 'round';
+
+    // Robe, hanging to nothing
+    const rg = g.createLinearGradient(0, -u * 0.9, 0, u * 1.1);
+    rg.addColorStop(0, lit(118, 92, 40));
+    rg.addColorStop(0.55, lit(58, 44, 20));
+    rg.addColorStop(1, 'rgba(20,15,7,0)');
+    g.fillStyle = rg;
+    g.beginPath();
+    g.moveTo(-u * 0.52, -u * 0.4);
+    g.quadraticCurveTo(-u * 0.86, u * 0.3, -u * 0.62, u * 1.06);
+    g.lineTo(-u * 0.2, u * 0.8); g.lineTo(0, u * 1.12);
+    g.lineTo(u * 0.2, u * 0.8);  g.lineTo(u * 0.62, u * 1.06);
+    g.quadraticCurveTo(u * 0.86, u * 0.3, u * 0.52, -u * 0.4);
+    g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(0,0,0,.7)'; g.lineWidth = u * 0.07; g.stroke();
+
+    // Gilding: the false promise, worn on the outside
+    g.strokeStyle = lit(214, 170, 74); g.lineWidth = u * 0.05;
+    g.beginPath();
+    g.moveTo(-u * 0.4, -u * 0.2); g.lineTo(-u * 0.3, u * 0.7);
+    g.moveTo(u * 0.4, -u * 0.2);  g.lineTo(u * 0.3, u * 0.7);
+    g.moveTo(-u * 0.36, u * 0.12); g.lineTo(u * 0.36, u * 0.12);
+    g.stroke();
+
+    // Open arms: offering
+    g.strokeStyle = lit(96, 74, 32); g.lineWidth = u * 0.13;
+    g.beginPath();
+    g.moveTo(-u * 0.46, -u * 0.24); g.quadraticCurveTo(-u * 0.92, u * 0.06, -u * 0.86, u * 0.42);
+    g.moveTo(u * 0.46, -u * 0.24);  g.quadraticCurveTo(u * 0.92, u * 0.06, u * 0.86, u * 0.42);
+    g.stroke();
+
+    // Crowned head
+    const hg = g.createLinearGradient(0, -u * 0.98, 0, -u * 0.34);
+    hg.addColorStop(0, lit(150, 120, 56));
+    hg.addColorStop(1, lit(44, 34, 16));
+    g.fillStyle = hg;
+    g.beginPath(); g.ellipse(0, -u * 0.62, u * 0.3, u * 0.34, 0, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(0,0,0,.8)'; g.lineWidth = u * 0.06; g.stroke();
+    g.strokeStyle = lit(226, 186, 88); g.lineWidth = u * 0.05;
+    for (let i = -2; i <= 2; i++) {
+      g.beginPath();
+      g.moveTo(i * u * 0.12, -u * 0.86);
+      g.lineTo(i * u * 0.12, -u * 1.02 - Math.abs(i) * u * 0.03);
+      g.stroke();
+    }
+    // Left eye: gilded, whole
+    g.fillStyle = 'rgba(255,232,168,.95)';
+    g.beginPath(); g.ellipse(-u * 0.11, -u * 0.64, u * 0.06, u * 0.05, 0, 0, TAU); g.fill();
+
+    // Right eye: the shattered void-gem. The tell -- and mirages lack it.
+    if (!mirage) {
+      g.shadowColor = PAL.brand; g.shadowBlur = u * 0.5;
+      g.fillStyle = '#1a0f2c';
+      g.beginPath(); g.ellipse(u * 0.12, -u * 0.64, u * 0.09, u * 0.08, 0, 0, TAU); g.fill();
+      g.strokeStyle = PAL.brand; g.lineWidth = u * 0.035;
+      g.beginPath();
+      g.moveTo(u * 0.05, -u * 0.7); g.lineTo(u * 0.15, -u * 0.62);
+      g.moveTo(u * 0.19, -u * 0.7); g.lineTo(u * 0.08, -u * 0.58);
+      g.stroke();
+      g.shadowBlur = 0;
+    } else {
+      g.fillStyle = 'rgba(255,232,168,.95)';
+      g.beginPath(); g.ellipse(u * 0.12, -u * 0.64, u * 0.06, u * 0.05, 0, 0, TAU); g.fill();
+    }
+
+    if (flash) {
+      g.globalCompositeOperation = 'source-atop';
+      g.fillStyle = 'rgba(255,240,220,.5)';
+      g.fillRect(-u * 2, -u * 2, u * 4, u * 4);
+      g.globalCompositeOperation = 'source-over';
+    }
+    g.globalCompositeOperation = 'destination-over';
+    g.fillStyle = 'rgba(0,0,0,.4)';
+    g.beginPath(); g.ellipse(0, u * 1.0, u * 0.6, u * 0.2, 0, 0, TAU); g.fill();
+    g.globalCompositeOperation = 'source-over';
+  });
+}
+
 // The Guided Vanguard. Both fight unhelmeted -- the compendium is explicit
 // that they look the darkness in the eye -- so the face carries the identity
 // and the weapon carries the order: Isaac's sun-gold blade and sun shield,
@@ -1986,8 +2316,10 @@ function forgeAll() {
   }
   for (const k in ENEMY_TYPES) {
     const d = ENEMY_TYPES[k];
-    SPR[k] = forgeEnemy(k, d.r, d.color, false);
-    SPR[k + 'Hit'] = forgeEnemy(k, d.r, d.color, true);
+    SPR[k] = (k === 'deceiver' || k === 'mirage')
+      ? forgeDeceiver(k, false) : forgeEnemy(k, d.r, d.color, false);
+    SPR[k + 'Hit'] = (k === 'deceiver' || k === 'mirage')
+      ? forgeDeceiver(k, true) : forgeEnemy(k, d.r, d.color, true);
     SPR[k + 'L'] = mirrorSprite(SPR[k]);
     SPR[k + 'HitL'] = mirrorSprite(SPR[k + 'Hit']);
   }
@@ -2233,6 +2565,24 @@ function drawWalls(x0, y0, x1, y1) {
     ctx.fillStyle = wallGradient(w.h);
     ctx.fillRect(0, 0, w.w, w.h);
     ctx.restore();
+  }
+
+  // Under reduced effects the courses go and a plain dressed edge stands in:
+  // the wall still reads as worked stone, at one batched stroke instead of a
+  // blit every hundred units.
+  if (lowFx) {
+    ctx.lineCap = 'butt';
+    ctx.strokeStyle = 'rgba(150,138,112,.5)';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    for (let i = 0; i < edges.length; i++) {
+      const e = edges[i];
+      if (e.x1 > x1 || e.y1 > y1 || e.x2 < x0 || e.y2 < y0) continue;
+      ctx.moveTo(e.x1 - e.nx * 2, e.y1 - e.ny * 2);
+      ctx.lineTo(e.x2 - e.nx * 2, e.y2 - e.ny * 2);
+    }
+    ctx.stroke();
+    return;
   }
 
   // Masonry laid along every exposed face.
@@ -2601,6 +2951,20 @@ function drawBullets() {
 
 function drawEnemy(e) {
   const key = e.kind + (e.hitFlash > 0 ? 'Hit' : '') + (e.face < 0 ? 'L' : '');
+  if (e.kind === 'mirage') {
+    // Isaac is immune to the Deceiver's illusions, so for him they are plainly
+    // false. Zayd has to read the shattered eye like everyone else.
+    const seen = player.hero === 'isaac';
+    blit(SPR[key] || SPR[e.kind], e.x, e.y, 0, seen ? 0.32 : 0.94);
+    if (seen) {
+      ctx.strokeStyle = 'rgba(232,192,96,.5)';
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([4, 5]);
+      ctx.beginPath(); ctx.arc(e.x, e.y, e.r * 0.8, 0, TAU); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    return;
+  }
   blit(SPR[key] || SPR[e.kind], e.x, e.y);
   if (e.kind === 'breaker' && e.hp < e.maxHp * 0.92) {
     const w = e.r * 1.5, f = clamp(e.hp / e.maxHp, 0, 1);
@@ -2863,10 +3227,10 @@ function draw(t) {
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(238,224,192,.95)';
     ctx.font = '400 21px Georgia, "Times New Roman", serif';
-    ctx.fillText(REGION.name, view.w / 2, view.h * 0.42);
+    ctx.fillText(run.bannerText || REGION.name, view.w / 2, view.h * 0.42);
     ctx.fillStyle = 'rgba(186,164,128,.85)';
     ctx.font = 'italic 400 13px Georgia, "Times New Roman", serif';
-    ctx.fillText(REGION.note, view.w / 2, view.h * 0.42 + 24);
+    ctx.fillText(run.bannerNote || REGION.landmark || REGION.note, view.w / 2, view.h * 0.42 + 24);
     ctx.strokeStyle = 'rgba(196,164,116,.4)';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -2875,6 +3239,22 @@ function draw(t) {
     ctx.stroke();
     ctx.restore();
     ctx.textAlign = 'left';
+  }
+  if (run && run.boss && run.boss.hp > 0) {
+    const bs = run.boss, f = clamp(bs.hp / bs.maxHp, 0, 1);
+    const w = Math.min(320, view.w - 96), x0 = (view.w - w) / 2, y0 = 84;
+    ctx.fillStyle = 'rgba(10,7,4,.8)';
+    ctx.fillRect(x0 - 2, y0 - 2, w + 4, 12);
+    ctx.fillStyle = 'rgba(232,192,96,.9)';
+    ctx.fillRect(x0, y0, w * f, 8);
+    ctx.strokeStyle = 'rgba(206,180,140,.6)'; ctx.lineWidth = 1;
+    ctx.strokeRect(x0 - 2.5, y0 - 2.5, w + 5, 13);
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(238,224,192,.9)';
+    ctx.font = '400 12px Georgia, "Times New Roman", serif';
+    ctx.fillText('The Gilded Deceiver', view.w / 2, y0 - 7);
+    ctx.restore();
   }
   drawPortalArrow(t);
   drawMinimap();
@@ -2936,14 +3316,16 @@ function syncHud() {
     el.hpText.textContent = hpR;
     el.hpBar.classList.toggle('low', hpF < 0.34);
   }
-  if (run.tech !== hudCache.tech) {
+  if (run.tech !== hudCache.tech || run.bossDown !== hudCache.boss) {
+    hudCache.boss = run.bossDown;
     hudCache.tech = run.tech;
     const f = clamp(run.tech / EXTRACT_QUOTA, 0, 1);
     el.techFill.style.transform = 'scaleX(' + f + ')';
     el.techBar.classList.toggle('done', f >= 1);
-    el.techText.innerHTML = f >= 1
-      ? '<b class="go">Ley-gate open</b>'
-      : 'Slag <b>' + run.tech + '</b>/' + EXTRACT_QUOTA;
+    el.techText.innerHTML = f < 1
+      ? 'Slag <b>' + run.tech + '</b>/' + EXTRACT_QUOTA
+      : (run.bossDown ? '<b class="go">Ley-gate open</b>'
+                      : '<b class="go">The Deceiver holds it</b>');
   }
   const secs = Math.floor(run.time);
   if (secs !== hudCache.time) { hudCache.time = secs; el.clock.textContent = fmtTime(secs); }
@@ -2984,7 +3366,9 @@ function resetRun(heroId) {
   enemyGrid = new SpatialHash(ENEMY_CELL);
 
   run = { time: 0, tech: 0, xp: 0, xpNeed: 11, level: 1, kills: 0,
-          spawnTimer: 1.4, pendingLevels: 0, hero: hero, banner: 4.2 };
+          spawnTimer: 1.4, pendingLevels: 0, hero: hero, banner: 4.2,
+          bannerText: null, bannerNote: null,
+          bossCalled: false, bossDown: false, boss: null };
 
   cam.x = clamp(player.x - view.w / 2, 0, Math.max(0, WORLD.w - view.w));
   cam.y = clamp(player.y - view.h / 2, 0, Math.max(0, WORLD.h - view.h));

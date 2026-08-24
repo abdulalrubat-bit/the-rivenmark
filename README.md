@@ -44,13 +44,45 @@ the asymmetrical void-brand that binds them to the silent hive-mind.
 
 ## The sundered geography
 
-Each delve falls in one of the five regions from the map, which sets the earth,
-the rock and the colour of the torchlight, and is named on arrival:
-the Slag-Moors of Drak-Hald, the Rending Gorges of Vaelk, Kraggen-Tor, the
-Rot-Weald, and the Dead Firth.
+Each delve falls in one of the five regions from the map, and they generate
+differently rather than merely differently coloured — corridor pitch, braiding,
+chamber count and roughness all shift, and Vaelk is torn across by rifts with
+single crossings:
+
+| Region | Landmark | Character |
+|---|---|---|
+| Slag-Moors of Drak-Hald | The Weeping Keep of Tor-Varden | wide bays, ruined curtain wall |
+| Rending Gorges of Vaelk | The Kael-Dorm Redoubt | long rifts, few crossings |
+| Kraggen-Tor | The Shatter-Gate of Ghor | tight, rough, broken |
+| The Rot-Weald | The Heart-Rot Clearing | dense, looping, no sightlines |
+| The Dead Firth | The Ash-Shoals | open ground, drifting bars |
+
+The ley-gate stands inside the region's landmark, so the objective is somewhere
+rather than a circle on blank ground. Landmarks are built *after* the widening
+and despeckle passes — those exist to remove one-cell walls, which is exactly
+what a curtain wall is made of — and a reachability repair then proves the gate
+can be walked to, cutting the shortest link only if it cannot.
 
 The minimap compass points **south**. The realm's natural order has inverted —
-one of the Final Signs — and the needle is drawn as it reads, not as it ought to.
+one of the Final Signs — and the needle is drawn as it reads.
+
+## The Gilded Deceiver
+
+Reaching the slag quota does not open the gate. It draws Mal-Ghorath's avatar
+to it, and he holds it shut.
+
+His two lore properties are both mechanics. He offers **false salvation**, so
+he splits into mirages — harmless, one hit each, and worth nothing. And he is
+**identifiable by his shattered void-gem right eye**, so that gem is the tell
+the mirages lack. Isaac, immune to the illusion, sees them faded and marked and
+his auto-aim ignores them outright; Zayd has to read the eye.
+
+He does not walk. A body that wide wedges on corners, and an avatar stepping
+out of one place into another near you is both the fix and the character.
+
+Auto-aim gives him priority while he is in reach. Nearest-target alone cannot
+fight a boss: while he is escorted, every bolt lands in the escort and he takes
+nothing — measured at 100% health in 7 runs of 10 before the change.
 
 ## Art direction
 
