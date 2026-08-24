@@ -1,24 +1,127 @@
-# Neon Extraction
+# The Rivenmark
 
-Mobile-first top-down arena survival prototype. Vanilla HTML5 + canvas 2D,
-no libraries, no image assets, no network calls. The whole game is
-`index.html` — open it and it runs, including from `file://`.
+Mobile-first top-down survival prototype set in the Rivenmark, after the Aegis
+shattered. Vanilla HTML5 + canvas 2D, no libraries, no image assets, no network
+calls. The whole game is `index.html` — open it and it runs, from `file://`.
 
-**Play:** open `index.html` in a browser — it runs straight from `file://`.
+*(Repo is still named `neon-extraction` from the original prototype.)*
 
 ---
 
 ## Core loop
 
-Spawn in a procedurally generated 2000×2000 arena, survive a swarming horde
-with an auto-firing weapon, harvest **tech** from kills, and once you have
-enough, reach the extraction portal and hold it for four seconds to win.
+Play one of the Guided Vanguard. Raw magic is lethal unless it runs through
+Spirit-wrought Steel, so your blade answers on its own. Cut **Arcane Slag**
+from the Hollow-Thralls, then find a **ley-gate** and hold it open long enough
+to carry the haul out from under the Shroud of Dúath.
 
-- **Move** — drag anywhere on the play area (floating virtual joystick), or
-  WASD / arrow keys on desktop
-- **Fire** — automatic, nearest target inside weapon range
-- **Level up** — tech doubles as XP; each level offers a choice of three upgrades
-- **Pause** — the HUD button, or `Esc` / `P`
+- **Move** — drag anywhere (floating stick), or WASD / arrows
+- **Strike** — automatic, nearest thrall in reach
+- **Boons** — slag doubles as XP; each rank offers three
+- **Pause** — HUD button, or `Esc` / `P`
+
+## The Guided Vanguard
+
+Two of the Clear-Sighted, both fighting **unhelmeted** — the compendium is
+explicit that they look the darkness in the eye, so the sprites show the face
+and the weapon carries the order.
+
+| | Isaac, The Unyielding Shield | Zayd, The Piercing Truth |
+|---|---|---|
+| Order | Hearth-Wardens | Frost-Scholars of Kael |
+| School | Sun-Gold | Azure |
+| Arms | Sun-emblazoned shield, golden sword | Sapphire Glaive |
+| Play | 125 life, heavier, harder hitting | 92 life, faster, bolts pierce |
+
+## The horde
+
+The **Hollow-Thralls** — people who surrendered their will, every one carrying
+the asymmetrical void-brand that binds them to the silent hive-mind.
+
+- *Hollow-Thrall* — stooped, long-armed, dragging itself forward
+- *Eclipse-Marked* — fast, hooded, fraying into tatters
+- *Ghor-Breaker* — planted and over-armoured, held together by burning seams
+
+## The sundered geography
+
+Each delve falls in one of the five regions from the map, and they generate
+differently rather than merely differently coloured — corridor pitch, braiding,
+chamber count and roughness all shift, and Vaelk is torn across by rifts with
+single crossings:
+
+| Region | Landmark | Character |
+|---|---|---|
+| Slag-Moors of Drak-Hald | The Weeping Keep of Tor-Varden | wide bays, ruined curtain wall |
+| Rending Gorges of Vaelk | The Kael-Dorm Redoubt | long rifts, few crossings |
+| Kraggen-Tor | The Shatter-Gate of Ghor | tight, rough, broken |
+| The Rot-Weald | The Heart-Rot Clearing | dense, looping, no sightlines |
+| The Dead Firth | The Ash-Shoals | open ground, drifting bars |
+
+The ley-gate stands inside the region's landmark, so the objective is somewhere
+rather than a circle on blank ground. Landmarks are built *after* the widening
+and despeckle passes — those exist to remove one-cell walls, which is exactly
+what a curtain wall is made of — and a reachability repair then proves the gate
+can be walked to, cutting the shortest link only if it cannot.
+
+The minimap compass points **south**. The realm's natural order has inverted —
+one of the Final Signs — and the needle is drawn as it reads.
+
+## The Gilded Deceiver
+
+Reaching the slag quota does not open the gate. It draws Mal-Ghorath's avatar
+to it, and he holds it shut.
+
+His two lore properties are both mechanics. He offers **false salvation**, so
+he splits into mirages — harmless, one hit each, and worth nothing. And he is
+**identifiable by his shattered void-gem right eye**, so that gem is the tell
+the mirages lack. Isaac, immune to the illusion, sees them faded and marked and
+his auto-aim ignores them outright; Zayd has to read the eye.
+
+He does not walk. A body that wide wedges on corners, and an avatar stepping
+out of one place into another near you is both the fix and the character.
+
+Auto-aim gives him priority while he is in reach. Nearest-target alone cannot
+fight a boss: while he is escorted, every bolt lands in the escort and he takes
+nothing — measured at 100% health in 7 runs of 10 before the change.
+
+## Art direction
+
+Dark fantasy, drawn as material rather than light. There is no grid, no glow
+rim, no additive flourish — none of the neon-era machinery survived.
+
+**Ground** is a set of eight textured tiles baked once at boot: trodden earth
+with grit, half-buried stones, and worn flagstone paths that break up and peter
+out. Tiles are chosen by a hash of their coordinates, so the floor never
+repeats visibly and costs eight blits a frame.
+
+**Walls** are unlit rock with courses of cut masonry laid along every exposed
+face — dressed top edges, mortar joints, pitting, and a shadow thrown onto the
+ground. The rock interior stays near-black so lit floor and dead stone separate
+at a glance.
+
+**Light** comes only from torches: warm pools that gutter, with cold sconces
+here and there. Bodies are painted — a dark mass lit from above with a thin rim
+— and the only things that glow are magical: a warded blade, a revenant's
+bindings, a mote of essence.
+
+Every rotation in the world is a right angle, so all four orientations of each
+prop and masonry course are baked at load. The draw loop never rotates, which
+turned resampling blits into straight copies and cut the frame cost roughly in
+half.
+
+**The cast**
+- *Warden* — helm and crest, pauldrons, tabard, shield and raised blade. Drawn
+  front-on and mirrored by heading rather than rotated with it: a human seen
+  from directly overhead is a shoulders-and-hat blob, and every rotated attempt
+  read as a face, because concentric round masses always do. The bolts carry
+  the aim instead.
+- *Wretch* — stooped, long-armed, dragging itself forward on sick green eyes
+- *Shade* — hangs rather than stands; a hood over nothing, fraying into tatters
+- *Revenant* — planted and over-armoured, held together by burning seams
+
+Every figure is drawn front-on and mirrored by heading, never rotated, and each
+has a distinct posture so they are told apart by silhouette before colour. That
+also made them cheap: 220 straight copies a frame instead of 220 rotated blits.
 
 ---
 
@@ -67,16 +170,23 @@ between frames, so a steady-state frame allocates nothing.
 Walls get a coarse static grid (100 px) built once at worldgen; enemies get a
 fine one (48 px) rebuilt each frame.
 
-Measured on the packed worst case — 220 enemies, 60 projectiles and 360
-particles all simultaneously on screen, which normal play does not reach:
-
-| | ms/frame |
-|---|---|
-| `update()` at 220 enemies | **0.30** |
-| `draw()`, full effects | **13.2** |
-| `draw()`, reduced effects | **9.6** |
-
 The enemy cap is now 220. Simulation is no longer the bottleneck; drawing is.
+
+Measured under **software rasterization** (headless Chromium on SwiftShader, no
+GPU), which is the pessimistic floor — a real device's GPU canvas handles the
+full-screen blits and additive blending that dominate here far better:
+
+| ms/frame | realistic load | 220 on screen |
+|---|---|---|
+| `update()` | — | **0.47** |
+| `draw()`, full effects | **12.7** | **23.9** |
+| `draw()`, reduced effects | — | **13.5** |
+
+"220 on screen" forces every enemy plus 60 projectiles and 360 particles into
+the viewport at once; normal play never reaches it, since the swarm is spread
+across the arena and culled. Benchmarks halt the game's own `requestAnimationFrame`
+loop first — otherwise its work lands inside the timed window and the numbers
+are noise.
 
 ### Collision (was: bullets clipping thin walls, enemies snagging corners)
 
@@ -112,26 +222,37 @@ Ten upgrades (damage, fire rate, speed, plating, range, multishot, pierce,
 magnet, regen, projectile velocity), most with stack caps. Levels queue if
 several are earned at once and are presented one at a time.
 
+### The sprite forge
+
+Nothing detailed is drawn with paths at frame time. Every entity is forged once
+into an offscreen canvas at device resolution — gradient body, rim light, inner
+detail and baked glow — and the frame loop only blits those bitmaps. A sprite
+can carry far more detail than is affordable 220× a frame, and one `drawImage`
+beats a dozen path ops, so fidelity and speed come from the same change.
+
+Sprites are supersampled ≥2× and their span is derived back from the rounded
+pixel size, so `span × dpr` lands exactly on the source width — an unresampled
+blit rather than a filtered one. Rotated blits take a `save`/`restore`; the
+high-count unrotated cases (particles, lights) skip it entirely.
+
+On top of that: an additive light pass for the few things that genuinely read
+as light sources, expanding shockwave rings on kills, a baked vignette with
+scanlines folded into the same bitmap (one screen-sized composite, not two),
+and a slow scan sweep across the floor.
+
+This also closes out the handover's "replace vectors with sprite sheets" step,
+without needing art that doesn't exist: the sprites are generated procedurally
+at boot, so the project stays asset-free and offline. Swapping in authored
+sheets later means changing only the forge functions.
+
 ### Performance safety net
 
-Neon bloom is drawn as a wide translucent stroke under a crisp one rather than
-`shadowBlur`, which costs roughly 3× as much and is the single most expensive
-thing you can do 200 times a frame. Replacing it halved worst-case frame cost
-(28.2 ms → 13.2 ms).
-
-A frame-cost sampler drops bloom entirely if frames run long. Restoring it is
-deliberately sticky — it costs ~40% more per frame, so recovery requires a
+A frame-cost sampler drops the fill-heavy effects — light pass, vignette,
+scan sweep, additive particles — when frames run long. Recovery is deliberately
+sticky: restoring costs meaningfully more per frame, so it requires a
 comfortable margin held over several samples, otherwise restoring pushes cost
-straight back over the threshold and the setting oscillates.
-
-### Still open
-
-**Sprite integration** is not done — it needs art that doesn't exist yet, and
-the studio's "no external assets" position makes that a deliberate call rather
-than an oversight. The renderer is factored for it: every entity has its own
-draw function taking world coordinates, and no call site knows how a drone is
-drawn. Swapping vectors for sprite sheets means rewriting those function
-bodies and nothing else.
+straight back over the threshold and the setting oscillates. Verified to engage
+within ~2 s of sustained load and hold without flapping.
 
 ---
 
@@ -149,9 +270,50 @@ Tuning constants are grouped at the top of section 1.
 
 ---
 
+## Debug build
+
+`debug.html` is a generated page: the shipped game plus an inspection panel.
+Rebuild it after any change to the game with
+
+    node tools/build-debug.js
+
+Never edit `debug.html` by hand — edit `tools/debug-overlay.js` and rebuild, so
+the debug build cannot drift from the release page. The overlay touches the game
+only by wrapping global functions (`update`, `draw`, `hurtPlayer`, `damageEnemy`,
+`spawnEnemy`, `resetRun`), which is why `index.html` carries no debug branches at
+all: strip the injected `<script>` out of `debug.html` and what remains is
+byte-identical to `index.html`.
+
+**Panel** — tap the `D` button top-left, or press `` ` ``. It stays out of the way
+while a menu is up so it can never swallow a tap meant for a hero or boon card;
+tap `D` on the start screen to pin it there anyway when you want the seed box.
+
+**Live stats** — fps, draw/update cost, whether `lowFx` has engaged, region, hero,
+enemy/bullet/particle counts, prop and lamp counts, wall and edge counts, slag
+against quota, boss health, active seed.
+
+**Toggles** — `god`, `1-shot`, `no spawn`, `slow-mo` (0.35×), `flow` (BFS field
+and its gradient), `hitboxes` (wall rects, enemy circles, player radius and
+range), `force low` (pin reduced effects on, rather than waiting for the adaptive
+sampler), `seeded`. Shortcuts: `g` god, `h` hitboxes, `f` flow.
+
+**Actions** — `+25 slag`, `fill slag`, `to gate`, `summon boss`, `kill boss`,
+`wipe horde`, `+50 horde`, `rank up`, `heal`, `remake map`, and a jump button per
+region so an encounter can be reached without playing to it.
+
+**Seeds** — world generation is all `Math.random`, so the overlay swaps in a
+seeded `mulberry32` around `resetRun`. Type a seed, press *use*, and the same map
+comes back every time — note the seed, reproduce the bug. Turning `seeded` off
+restores the real generator.
+
+---
+
 ## Testing
 
 No test framework is committed. Verification was done by driving the built
 page in headless Chromium (Playwright) — state transitions, joystick deadzone
 curve, auto-fire cadence, geometry embedding, frame cost at load, layout at
 320/390/1440 px, and console errors. The bot simulation above runs the same way.
+The debug build is verified the same way: panel visibility across menus, every
+toggle and action, both world overlays, the region jumps, and seed reproducibility
+(same seed → identical grid/wall/prop fingerprint; different seed → different).
