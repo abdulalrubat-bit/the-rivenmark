@@ -111,9 +111,20 @@
     background:
       radial-gradient(ellipse at 50% 38%,rgba(60,40,20,.30),transparent 62%),
       radial-gradient(ellipse at center,rgba(9,7,6,.88),rgba(7,5,4,.97));
+    /* The hall is drawn on the canvas underneath. The start screen is the one
+       place the player is meant to see it, so it sits behind a veil rather
+       than behind a wall. */
     text-align:center; overflow-y:auto;
   }
   .screen.on{display:flex;}
+  /* The one screen that shows the room it is about. The cards sit in the lower
+     two thirds and the gate-house itself is visible above them, so a stone
+     laid is a thing you can see rather than a number that went up. */
+  #hall{padding-top:calc(30vh + var(--safe-t));
+    background:linear-gradient(180deg,
+      rgba(6,5,4,.10) 0%, rgba(6,5,4,.10) 22%,
+      rgba(7,5,4,.74) 34%, rgba(7,5,4,.95) 46%, rgba(7,5,4,.97) 100%);}
+  #hall .sub{text-shadow:0 2px 10px rgba(0,0,0,.95);}
 
   .title{
     font-family:var(--font-display); font-size:clamp(30px,10vw,58px);
@@ -203,11 +214,43 @@
     background:linear-gradient(100deg,#2a2015,#181109);}
   .mbtn:active{background:linear-gradient(100deg,#3a2d1d,#241a10);}
   .card.sel{border-color:var(--gold); background:linear-gradient(100deg,#33271a,#1d150d);}
+  /* The ladder is its own scroll box, so its min-content height is zero. As a
+     flex child of a screen whose content overflows the phone it was therefore
+     the one item that could shrink, and it collapsed to nothing -- fifty-two
+     rungs in the DOM and no way to see or pick any of them. Pin the height. */
+  .ladder{flex:0 0 auto; height:min(34vh,260px); overflow-y:auto; padding-right:3px;}
+  /* And a screen taller than the viewport has to start at the top: centred
+     flex content that overflows puts its first rows above the scroll origin,
+     where nothing can reach them. */
+  #delve, #gear, #vendor, #hall{justify-content:flex-start;}
+  /* Fifty-two rungs plus heroes plus difficulties overflows a short phone, and
+     the one control you always need is at the bottom -- so it stays put rather
+     than being something you have to go looking for. */
+  #delve .menu{position:sticky; bottom:0; padding-top:8px; margin-top:2px;
+    background:linear-gradient(0deg,rgba(9,7,5,.97) 68%,rgba(9,7,5,0));}
+  .card.rung{position:relative; padding-right:96px;}
+  .card.poor{opacity:.5;}
+  .vslots{grid-template-columns:repeat(2,1fr);}
+  .vslots button{font:600 10px/1.2 ui-monospace,monospace; color:#cbbf9f;
+    background:#1d1710; border:1px solid var(--line); border-radius:2px;
+    padding:8px 6px; cursor:pointer; touch-action:manipulation;}
+  .card.rung .standing{position:absolute; right:12px; top:50%; transform:translateY(-50%);
+    font:600 9px/1.3 ui-monospace,monospace; letter-spacing:.6px; text-align:right;
+    width:76px;}
+  #pwLine{color:#c4b795; letter-spacing:0;}
   .card .tier{font:600 9px/1 ui-monospace,monospace; letter-spacing:1.4px;
     color:#8a7c60; text-transform:uppercase;}
   .setline{width:100%; max-width:520px; font:11px/1.5 ui-monospace,monospace;
     color:#8a7c60; text-align:left;}
   .setline b{color:#e0563f;}
+  .loadouts{width:100%; max-width:520px; text-align:left;}
+  .lrow{display:flex; flex-wrap:wrap; gap:5px;}
+  .lrow button{flex:1 1 auto; min-width:96px; font:600 11px/1.2 ui-monospace,monospace;
+    color:#cbbf9f; background:#1d1710; border:1px solid var(--line); border-radius:2px;
+    padding:7px 8px; cursor:pointer; touch-action:manipulation; text-align:left;}
+  .lrow button i{display:block; font-style:normal; font-size:9px; color:#8a7c60;
+    margin-top:2px;}
+  .lnote{font:11px/1.5 ui-monospace,monospace; color:#8a7c60; margin-top:5px;}
   .setline .on{color:#e6dcc4;}
 
   /* ---------- Gear ---------- */
@@ -253,6 +296,40 @@
     font:600 10px/1 ui-monospace,monospace; cursor:pointer; touch-action:manipulation;}
   #bagBtn b{display:block; font-size:15px; margin-bottom:2px;}
   #bagBtn.hot{border-color:var(--gold); color:#f0e4c6;}
+
+  /* The open ley-gate. Top-centre, not bottom: the movement stick floats
+     wherever a thumb lands, so a button down there would eat a walk. */
+  /* Left-aligned, not centred: the minimap holds the top-right corner, and a
+     centred button of this width runs under it on a narrow phone. */
+  #gateBtn{z-index:7; position:absolute; left:calc(14px + var(--safe-l));
+    top:calc(74px + var(--safe-t)); padding:9px 16px 8px;
+    border:1px solid var(--gold); border-radius:2px; text-align:left;
+    background:linear-gradient(180deg,rgba(56,40,17,.94),rgba(22,16,10,.95));
+    color:#f4e7c4; font-family:var(--font-ui); cursor:pointer;
+    touch-action:manipulation; box-shadow:0 0 24px rgba(255,194,77,.20);}
+  #gateBtn b{display:block; font:600 13px/1 var(--font-ui);
+    letter-spacing:.12em; text-transform:uppercase;}
+  #gateBtn i{display:block; margin-top:4px; font-style:normal; white-space:nowrap;
+    font:400 10px/1.3 ui-monospace,monospace; color:#c6ae7c;}
+  #gateBtn:active{background:#4a361a;}
+  .owed{font:600 9px/1 ui-monospace,monospace; letter-spacing:.08em;
+    text-transform:uppercase; color:#9fc2d8; vertical-align:middle;}
+  .ward{display:block; margin-top:3px; font:400 10.5px/1.3 Georgia,serif;
+    font-style:italic; color:#b09a6e;}
+  .teach{display:block; margin-top:3px; font:600 9.5px/1.35 ui-monospace,monospace;
+    letter-spacing:.04em; color:#7fa8b8;}
+  .pips{font-size:11px; letter-spacing:2px; color:var(--gold);}
+  .hrow{display:flex; gap:9px; align-items:baseline; padding:5px 0;
+    border-bottom:1px solid rgba(120,104,78,.22);
+    font:400 11.5px/1.35 Georgia,serif; color:#9d8f74;}
+  .hrow.have{color:#e2d3ad;}
+  .hrow span:first-child{color:var(--gold); font-size:10px;}
+  .hrow span:nth-child(2){flex:1;}
+  .hrow b{font:600 10px/1 ui-monospace,monospace; color:#c6ae7c; white-space:nowrap;}
+  #gateBtn.held{border-color:var(--blood); box-shadow:0 0 26px rgba(194,53,42,.34);}
+  #gateBtn.held i{color:#e0a08c;}
+  #gateBtn.lull{border-color:#7fb0a0; box-shadow:0 0 26px rgba(127,176,160,.28);}
+  #gateBtn.lull i{color:#a9cfc2;}
 
   /* ---------- Boon cards ---------- */
   #levelup .cards{
@@ -342,16 +419,36 @@
         <b>Descend</b><i>choose a delve and how hard it bites</i></button>
       <button class="mbtn" id="toKit">
         <b>The Kit</b><i><span id="kitLine">nothing recovered</span></i></button>
+      <button class="mbtn" id="toVendor">
+        <b>The Vendor</b><i><span id="vendorLine">no coin</span></i></button>
+      <button class="mbtn" id="toHall">
+        <b>The Hall</b><i><span id="hallLine">four stations, all of them cold</span></i></button>
     </div>
     <p class="fine" id="bestLine"></p>
+  </div>
+
+  <div class="screen" id="hall">
+    <p class="sub">The Hall</p>
+    <p class="fine" id="hallPurse"></p>
+    <div class="cards" id="hallList"></div>
+    <div class="gear-detail" id="hallDetail"></div>
+    <button class="btn" id="hallBack">Back to the gate-house</button>
+  </div>
+
+  <div class="screen" id="vendor">
+    <p class="sub">The Gate-house Vendor</p>
+    <p class="fine" id="purseLine"></p>
+    <div class="cards" id="vendorList"></div>
+    <div class="gear-detail" id="vendorDetail"></div>
+    <button class="btn" id="vendorBack">Back to the gate-house</button>
   </div>
 
   <div class="screen" id="delve">
     <p class="sub">Choose your ground</p>
     <h5 class="gear-h">The Vanguard</h5>
     <div class="cards" id="heroPick"></div>
-    <h5 class="gear-h">The delve</h5>
-    <div class="cards" id="levelPick"></div>
+    <h5 class="gear-h">The delve <span id="pwLine"></span></h5>
+    <div class="cards ladder" id="levelPick"></div>
     <h5 class="gear-h">How hard it bites</h5>
     <div class="cards" id="diffPick"></div>
     <div class="menu">
@@ -367,6 +464,7 @@
     <span class="corner c-bl">☠</span><span class="corner c-br">☠</span>
   </div>
 
+  <button id="gateBtn" hidden><b>Step through</b><i></i></button>
   <button id="bagBtn" aria-label="Bag"><b>▣</b><span id="bagBadge">0</span></button>
 
   <div class="screen" id="gear">
@@ -384,14 +482,10 @@
     </div>
     <div class="gear-detail" id="gearDetail"></div>
     <div class="setline" id="setLine"></div>
+    <div class="loadouts" id="loadouts"></div>
     <button class="btn" id="gearClose">Back to the delve</button>
   </div>
 
-  <div class="screen" id="levelup">
-    <p class="sub" id="lvlSub">A boon is offered</p>
-    <h1 class="title" style="font-size:clamp(24px,7vw,38px)">Rank <span id="lvlNum">2</span></h1>
-    <div class="cards" id="cards"></div>
-  </div>
 
   <div class="screen" id="paused">
     <h1 class="title" style="font-size:clamp(24px,8vw,44px)">Held</h1>
@@ -433,7 +527,11 @@ const WORLD = { w: 2000, h: 2000 };
 const WALL_CELL  = 100;
 const ENEMY_CELL = 48;
 
-const MAX_ENEMIES   = 220;   // was 40 before spatial partitioning
+let MAX_ENEMIES     = 340;   // measured: population is ~0.4ms of update at any
+                             // size the spatial hash sees, and draw cost tracks
+                             // bodies on screen rather than bodies placed. 220
+                             // was clipping the deep rungs below their own slag
+                             // budget, which is the one thing it must not do.
 
 // --- packs and waking -----------------------------------------------------
 // The delve is populated at generation time and cleared by walking into it,
@@ -441,12 +539,22 @@ const MAX_ENEMIES   = 220;   // was 40 before spatial partitioning
 // until something wakes them, so pressure comes from what you walk into.
 const PACK_SAFE     = 430;   // no pack closer than this to the spawn pocket
 const PACK_APART    = 250;   // minimum spacing between pack sites
-let PACK_SLAG       = 175;  // slag placed on the map, against the level quota
+// Slag placed on the map, as a multiple of the level's own quota. A fixed
+// budget was the old shape and it made the deep ladder unwinnable: the quota
+// climbs 125 -> 270 across the fifty-two rungs, so past the middle the delve
+// simply did not contain enough slag to open its own gate and the run could
+// only time out. The population is tied to the quota now, with headroom so
+// some packs can still be left alone.
+let SLAG_HEAD       = 1.42;
 const AGGRO_NEAR    = 250;   // a body notices you inside this
 const AGGRO_FAR     = 340;   // ...and the bigger, slower ones a little sooner
 const ALERT_R       = 155;   // a woken body pulls its neighbours up with it
 const ALERT_DELAY   = 0.18;  // ...one beat later, so a pack rouses in sequence
 const ELITE_CHANCE  = 0.16;  // share of packs led by a branded champion
+// Odds a pack site gets pitch beside it. Lives here with the other placement
+// knobs rather than down with the scenery it describes, because buildLevels
+// reads it and that runs long before the scenery section is reached.
+let PITCH_RATE      = 0.55;
 const ELITE_HP      = 2.6;   // and what that champion is worth fighting through
 // Health ramp from the spawn pocket to the far edge of the delve -- this is
 // what replaced the old run-time ramp, since a placed dungeon gets harder by
@@ -464,6 +572,30 @@ const MAX_DT        = 0.05;  // clamp after tab-switches / long frames
 // about where the light is -- which is most of what sells depth in a flat view.
 const LIGHT = { x: 0.62, y: 0.78, wall: 11, body: 5 };
 const HUD_H           = 78;   // canvas UI clears the HUD panel by this much
+// Holding the gate is the delve's second act, and the only part of a run that
+// can be stretched: a delve itself is bounded at roughly two minutes because a
+// player clears bodies as fast as a populated map can present them, and no
+// quota large enough to change that fits under the body cap. So the hold runs
+// in surges rather than as one smooth ramp -- each is a build, a crest and a
+// short lull, and the lull is the window where leaving is a real choice rather
+// than a scramble. Ride ten of them and the delve is a five-minute sitting.
+const HOLD_WAVE       = 30;   // seconds per surge
+const HOLD_LULL       = 6;    // the quiet tail of one, where you can get out
+const HOLD_COIN       = 35;   // paid for outlasting the first surge, rising after
+const HOLD_POW        = 1.15; // and how sharply that payout climbs per surge
+// The gate is being forced open against the delve and it will not stay that
+// way. Ten surges is five minutes -- with a two-minute delve in front of it
+// that is a session, and a ceiling the economy can be balanced against. It is
+// also the only thing that stops the hold paying for itself: an unbounded
+// hold hands you gear faster than it can threaten you, and a good player
+// simply farms it forever. Measured, one did: twenty-eight surges, no deaths,
+// a hundred and sixty times a delve's own coin.
+const HOLD_MAX        = 10;
+const CORPSE_CARRY    = 10;   // pieces a corpse can hold on to for you
+const AMBUSH_MIN      = 3;    // champions that answer a reclaimed corpse
+const AMBUSH_MAX      = 7;
+const AMBUSH_R        = 175;  // and how far out the ring of them forms
+const CORPSE_HUE      = '#9fc2d8';
 const SWING_TIME      = 0.17; // how long the blade takes to come round
 const EXTRACT_QUOTA   = 70;  // slag needed before the ley-gate powers up
 const EXTRACT_CHANNEL = 4.0; // seconds standing inside it to win
@@ -481,18 +613,69 @@ const BASE_PLAYER = {
 };
 
 // Enemy archetypes. `weight` is the spawn share, ramped by `from` (seconds).
+// role decides how a body fights, not how hard. Until now every kind pressed
+// straight in and differed only in speed and hit points, which makes a horde
+// of five types read as one type at five sizes.
+//   press  -- walks at you. The baseline the others are read against.
+//   flank  -- refuses the front. Arcs wide across open ground and commits
+//             only once it is off your shoulder; funnels like anything else
+//             in a corridor, because there is no room to go round.
+//   anchor -- holds ground instead of chasing. Takes the narrowest cell it
+//             can find near where it woke and guards it, and braces on a
+//             rhythm you can read: shielded and immovable, then open.
 const ENEMY_TYPES = {
   thrall:   { r: 13, speed: 96,  hp: 34,  dmg: 8,  tech: 1, cd: 0.95, mass: 1.0,
+              role: 'press',
               color: '#9dbb5a', halo: 'rgba(157,187,90,.20)', weight: 10, from: 0 },
   eclipse:    { r: 11, speed: 152, hp: 22,  dmg: 6,  tech: 1, cd: 0.70, mass: 0.7,
+              role: 'flank',
               color: '#b07cff', halo: 'rgba(176,124,255,.22)', weight: 8,  from: 25 },
   deceiver: { r: 24, speed: 76,  hp: 540, dmg: 32, tech: 30, cd: 1.15, mass: 7.0,
+              role: 'press',
               color: '#e8c060', halo: 'rgba(232,192,96,.22)', weight: 0, from: 1e9 },
   mirage:   { r: 20, speed: 92,  hp: 1,   dmg: 0,  tech: 0,  cd: 9.0,  mass: 0.2,
+              role: 'press',
               color: '#e8c060', halo: 'rgba(232,192,96,.18)', weight: 0, from: 1e9 },
   breaker: { r: 23, speed: 62,  hp: 135, dmg: 21, tech: 4, cd: 1.30, mass: 2.8,
-              color: '#e0552a', halo: 'rgba(224,85,42,.22)', weight: 4,  from: 55 }
+              role: 'anchor',
+              color: '#e0552a', halo: 'rgba(224,85,42,.22)', weight: 4,  from: 55 },
+  // The Deceiver's own. They never appear in the horde roster -- they arrive
+  // with him and they are the reason he is hard to reach.
+  lieutenant: { r: 21, speed: 80, hp: 300, dmg: 26, tech: 12, cd: 1.15, mass: 4.4,
+              role: 'press', slam: true,
+              color: '#c2352a', halo: 'rgba(232,192,96,.30)', weight: 0, from: 1e9 }
 };
+
+// --- the slam -------------------------------------------------------------
+// A blow with a wind-up you can see and outrun. The ring is drawn at its full
+// reach the whole time it is winding, so the ground it will take is known from
+// the first frame -- a telegraph that grows with the timer tells you when but
+// not where, which is the half that matters.
+/* --- the invader ----------------------------------------------------------
+   The avatar at the gate is scheduled: you know he is coming because you can
+   see the slag counter fill. This one is not. Somewhere in a delve he simply
+   arrives, hunts you, and is worth a piece of the Regalia if you put him
+   down -- and running is a real answer, because he gives up if you keep away
+   from him long enough.
+   -------------------------------------------------------------------- */
+const INVADE_EARLY = 34;   // never before this, so a run has started properly
+const INVADE_HUNT  = 78;   // and he leaves after this long without reaching you
+const INVADE_GIVEUP = 380; // "without reaching you" means staying this far off
+
+const SLAM_R     = 104;   // reach
+const SLAM_WIND  = 0.9;   // seconds of warning
+const SLAM_CD    = 4.6;   // and how often one may be thrown
+let slams = [];
+
+// --- role tuning ----------------------------------------------------------
+const FLANK_OPEN   = 190;  // inside this it stops manoeuvring and commits
+const FLANK_SWING  = 1.75; // radians round the player it wants to come from
+const FLANK_COMMIT = 2.6;  // seconds it presses before it may manoeuvre again
+const ANCHOR_POST  = 260;  // how far it will look for ground worth holding
+const ANCHOR_GUARD = 330;  // and how far off that post it will step to meet you
+const BRACE_UP     = 2.2;  // seconds shielded
+const BRACE_DOWN   = 1.7;  // and seconds open, which is your window
+const BRACE_SOAK   = 0.26; // damage that gets through the guard
 
 // One place for the look. Everything on the canvas pulls from here.
 const PAL = {
@@ -572,22 +755,183 @@ const REGIONS = [
    Only the test delve exists so far. It deliberately rolls all five regions,
    because its job is to exercise every environment the generator can build.
    ------------------------------------------------------------------------ */
-const LEVELS = [
-  { id:'test', name:'The Test Delve', tag:'TEST LEVEL',
-    note:'A proving ground cut across all five regions of the Shattered Realm.',
-    regions:['slag','vaelk','kraggen','weald','firth'],
-    horde:['thrall','eclipse','breaker'],
-    boss:'deceiver',
-    // 125 against the ~185 slag the generator places -- about a two-thirds
-    // clear. Quota is the difficulty lever rather than enemy health: the depth
-    // health ramp scales the fragile hero far harder than the tank (at 0.65 it
-    // put Zayd at 7/40 against Isaac's 15/40), where quota moves both together.
-    quota:125, channel:4.0,
-    // What the delve hits back with. Gear is a large power budget -- a full
-    // kit took the bot from 43% to 60% -- so the opposition is scaled to meet
-    // it here rather than by nerfing the loot, which is the point of the loot.
-    }
+/* Fifty-two delves, generated rather than authored: each one names the region
+   it is cut from, what walks it, how much slag buys passage out, and the power
+   it expects you to bring. The ladder is the spine of the game -- the power
+   level you carry is measured against `power` here, and the delve tells you
+   plainly whether you are under it. */
+const LEVEL_COUNT = 52;
+const DELVE_NAMES = [
+  'The Test Delve', 'Ashfall Shallows', 'The Weeping Stair', 'Tor-Varden Undercroft',
+  'The Rending Cut', 'Kael-Dorm Approach', 'The Iron Teeth', 'Ghor Slagworks',
+  'The Rot-Weald Verge', 'Heart-Rot Hollow', 'The Ash Shoals', 'Drowned Barrows',
+  'The Sundered Span', 'Vaelk Deepcut', 'The Cinder Vault', 'Hollow Processional',
+  'The Thrall Pits', 'Brand-Marked Halls', 'The Silent Choir', 'Dúath Threshold',
+  'The Long Dark', 'Bonewright Yard', 'The Shattered Ward', 'Gilded Approach',
+  'The Deceiver\u2019s Antechamber'
 ];
+
+/* --- procedural bosses ----------------------------------------------------
+   Fifty-two rungs cannot each have a hand-built boss, and fifty-two copies of
+   one boss is worse than having none. The avatar at the end of a delve is the
+   Deceiver either way -- he is the fiction -- but what he is capable of is
+   rolled per rung and stays rolled: the same rung always answers with the same
+   thing, so a delve is learnable, and two rungs apart are not the same fight.
+
+   Every mutator has to be visible in play. A boss that quietly has more hit
+   points is not a different boss, it is the same boss taking longer, so each
+   of these changes something you can see and respond to.
+   -------------------------------------------------------------------- */
+const MUTATORS = [
+  { id: 'sundering', name: 'the Sundering',
+    note: 'His hand comes down where you stand.',
+    apply: b => { b.slam = true; b.slamCd = 2.2; b.slamR = 1.5; } },
+  { id: 'legion', name: 'the Legion',
+    note: 'He does not come with two. He comes with five.',
+    apply: b => { b.extraGuard = 2; } },
+  { id: 'wreathed', name: 'the Wreathed',
+    note: 'More of him is a lie than usual.',
+    apply: b => { b.split = 4.5; b.mirages = 5; } },
+  { id: 'unblinking', name: 'the Unblinking',
+    note: 'This one does not step away. It walks.',
+    apply: b => { b.blink = 1e9; b.speed *= 1.5; b.hp = b.maxHp = b.maxHp * 1.35; } },
+  { id: 'ravenous', name: 'the Ravenous',
+    note: 'He eats what dies near him.',
+    apply: b => { b.ravenous = true; } },
+  { id: 'riftborn', name: 'the Riftborn',
+    note: 'The ground does not close behind him.',
+    apply: b => { b.riftborn = true; } },
+  { id: 'unbroken', name: 'the Unbroken',
+    note: 'He gathers himself, and for a moment almost nothing touches him.',
+    apply: b => { b.guardCd = 7.5; } }
+];
+const MUTATOR_BY_ID = {};
+for (const m of MUTATORS) MUTATOR_BY_ID[m.id] = m;
+
+// A cheap integer hash, so a rung's boss is a property of the rung rather than
+// of the run. Rolling it per delve would make the ladder unlearnable.
+function hash32(n) {
+  n = (n ^ 61) ^ (n >>> 16);
+  n = (n + (n << 3)) | 0;
+  n = n ^ (n >>> 4);
+  n = Math.imul(n, 0x27d4eb2d);
+  return (n ^ (n >>> 15)) >>> 0;
+}
+
+// The name a rung's boss will carry, built from the same roll the fight uses.
+function bossTitle(L) {
+  return deceiverName((L.mutators || []).map(id => MUTATOR_BY_ID[id]).filter(Boolean));
+}
+
+// The first thing that is unusual about a rung's boss, said plainly. This is
+// where the mutator flavour lives -- read before you descend, not shouted at
+// you while he arrives.
+function bossNote(L) {
+  const m = MUTATOR_BY_ID[(L.mutators || [])[0]];
+  return m ? ' \u2014 ' + m.note : '';
+}
+
+function deceiverName(ms) {
+  if (!ms.length) return 'The Gilded Deceiver';
+  const n = ms.map(m => m.name);
+  const last = n.pop();
+  return 'The Deceiver, ' + (n.length ? n.join(', ') + ' and ' + last : last);
+}
+
+function rollMutators(index, depth) {
+  // Math.min/max rather than clamp: this runs while LEVELS is being built,
+  // which is before clamp's own const is initialised. The same shape of bug
+  // took the whole page down once before.
+  const want = Math.max(1, Math.min(3, 1 + Math.round(depth * 2)));
+  const out = [];
+  let h = hash32(index * 2654435761 + 17);
+  for (let i = 0; i < want; i++) {
+    for (let k = 0; k < MUTATORS.length; k++) {
+      const pick = MUTATORS[(h + k * 7) % MUTATORS.length];
+      if (out.indexOf(pick.id) >= 0) continue;
+      out.push(pick.id);
+      break;
+    }
+    h = hash32(h + i + 1);
+  }
+  return out;
+}
+
+/* --- the onboarding ramp --------------------------------------------------
+   The first three rungs teach the game by leaving things out of it, not by
+   explaining them. Each one adds exactly one thing the player has to have an
+   answer for, and until they have met it nothing else is allowed to arrive at
+   the same time:
+
+     the mouth   thralls and the gate, and nothing else. Walk, cut, gather,
+                 leave. No champion, no pitch, no invader, no epithet on the
+                 avatar, and no escort holding him.
+     the second  eclipses. Something that does not come at you down the middle,
+                 met while nothing else is complicating the room.
+     the third   breakers and pitch. Ground that has to be taken, and ground
+                 that cannot be stood on.
+
+   From the fourth the delve is the whole game. Nothing here is announced --
+   the player is not told a lesson is happening, only handed one thing at a
+   time until they are not being handed things any more.
+   -------------------------------------------------------------------- */
+const RAMP = [
+  { horde: ['thrall'],
+    elites: 0, pitch: 0, invade: 0, guard: 0, mutate: false,
+    lesson: 'Cut, gather, and find the ley-gate.' },
+  { horde: ['thrall', 'eclipse'],
+    elites: 0.05, pitch: 0, invade: 0, guard: 1, mutate: false,
+    lesson: 'Some of them will not come at you down the middle.' },
+  { horde: ['thrall', 'eclipse', 'breaker'],
+    elites: 0.11, pitch: 0.4, invade: 0, guard: 1, mutate: true,
+    lesson: 'Some ground is held. Some cannot be stood on.' }
+];
+
+function buildLevels() {
+  const out = [];
+  const regions = ['slag', 'vaelk', 'kraggen', 'weald', 'firth'];
+  for (let i = 0; i < LEVEL_COUNT; i++) {
+    const d = i / (LEVEL_COUNT - 1);                 // 0 at the mouth, 1 at the deep
+    const name = i < DELVE_NAMES.length
+      ? DELVE_NAMES[i]
+      : DELVE_NAMES[i % DELVE_NAMES.length] + ' \u00b7 ' +
+        ['II', 'III', 'IV'][Math.floor(i / DELVE_NAMES.length) - 1];
+    // Region pool widens as you go down: the first delves are one place, the
+    // deepest could be cut from anywhere in the realm.
+    const pool = i === 0 ? regions.slice()
+               : regions.slice(0, Math.min(regions.length, 1 + Math.floor(d * 5)));
+    const ramp = RAMP[i];
+    const horde = ramp ? ramp.horde.slice() : ['thrall', 'eclipse', 'breaker'];
+    out.push({
+      id: i === 0 ? 'test' : 'delve' + i,
+      name: name,
+      tag: i === 0 ? 'TEST LEVEL' : 'DELVE ' + i,
+      note: i === 0
+        ? 'A proving ground cut across all five regions of the Shattered Realm.'
+        : 'Cut from ' + pool.length + (pool.length === 1 ? ' region' : ' regions') +
+          ' of the Shattered Realm.',
+      regions: pool,
+      horde: horde,
+      boss: 'deceiver',
+      // The first rungs meet the avatar plainly. An epithet is a rule you have
+      // to read, and there is nothing to read it against yet.
+      mutators: (!ramp || ramp.mutate) ? rollMutators(i, d) : [],
+      elites: ramp ? ramp.elites : ELITE_CHANCE,
+      pitch: ramp ? ramp.pitch : PITCH_RATE,
+      invade: ramp ? ramp.invade : 1,
+      guard: ramp ? ramp.guard : -1,       // -1 means "however deep it is"
+      lesson: ramp ? ramp.lesson : null,
+      // Expected power, and the terms that follow from it.
+      power: Math.round(4 + d * 96),
+      depth: d,
+      quota: Math.round(125 + d * 145),
+      channel: 4.0
+    });
+  }
+  return out;
+}
+const LEVELS = buildLevels();
+
 /* Difficulty is the bargain the genre runs on: harder ground pays better.
    Threat scales enemy health and damage; the loot rates scale how often gear
    falls and how often a piece of the Regalia is among it. `riven` carries the
@@ -610,8 +954,67 @@ for (const L of LEVELS) {
   if (L.channel == null) L.channel = EXTRACT_CHANNEL;
   LEVEL_BY_ID[L.id] = L;
 }
+
+// How a delve's expected power compares with what you are carrying. Advisory,
+// not a gate: the ladder guides, it does not lock the door.
+function delveStanding(L, pw) {
+  const d = pw - L.power;
+  if (d >= 14) return { id: 'trivial', text: 'well within you', colour: '#7fa869' };
+  if (d >= 0)  return { id: 'even',    text: 'an even match',   colour: '#c4b795' };
+  if (d >= -12) return { id: 'hard',   text: 'above your weight', colour: '#c9863e' };
+  return { id: 'deadly', text: 'far beyond you', colour: '#c0503f' };
+}
 const REGION_BY_ID = {};
 for (const R of REGIONS) REGION_BY_ID[R.id] = R;
+
+/* --- the Vanguard's own strength ------------------------------------------
+   Slag is experience now and nothing else: it drives a hero level that
+   persists across delves. Boons chosen mid-run are gone -- power comes from
+   the level you have earned and the gear you are wearing, and both survive
+   the delve that won them.
+   ---------------------------------------------------------------------- */
+const HERO_MAX_LEVEL = 60;
+
+// Slag needed to reach a given level, from 1. Deliberately shallow early and
+// steep late, so the first delves move and the fiftieth still means something.
+function xpForLevel(l) {
+  return Math.round(38 * Math.pow(l, 1.62));
+}
+function levelForXp(xp) {
+  let l = 1;
+  while (l < HERO_MAX_LEVEL && xp >= xpForLevel(l + 1)) l++;
+  return l;
+}
+
+// What a level is worth on the sheet. Flat and legible rather than clever:
+// the interesting numbers are supposed to come off the gear.
+function heroLevelBonus(l) {
+  const n = l - 1;
+  return { maxHp: n * 6, damage: n * 1.15, ward: Math.min(0.12, n * 0.0022) };
+}
+
+/* Power level: one number for "how strong am I", averaging what the hero
+   brings with what the kit brings, so a level-40 hero in rags and a level-10
+   hero in a full set both read honestly. It is what the delve ladder is
+   measured against. */
+function itemPower(it) {
+  if (!it) return 0;
+  const tier = RARITY.findIndex(r => r.id === it.rarity);
+  let p = 6 + tier * 5;
+  for (const af of it.affixes) {
+    const a = AFFIX_BY_ID[af.id];
+    if (!a) continue;
+    p += a.mul ? Math.abs(af.v) * 90 : Math.abs(af.v) * (a.id === 'life' ? 0.5 : 2.2);
+  }
+  return p;
+}
+function powerLevel(gear, level) {
+  let kit = 0;
+  for (const sl of SLOTS) kit += itemPower(gear && gear[sl.id]);
+  kit /= SLOTS.length;                       // average, not sum
+  return Math.max(1, Math.round((level * 2.1 + kit) / 2));
+}
+const stashPower = () => powerLevel(stash.gear, stash.level || 1);
 
 const UPGRADES = [
   { id:'dmg',    glyph:'✦', name:'Keen Edge',   desc:'your ward bites a quarter deeper',   max:99, apply:p=>p.damage      *= 1.25 },
@@ -734,6 +1137,30 @@ const AFFIXES = [
 // from 30% to 73%. Left mutable so the balance harness can sweep it.
 let AFFIX_SCALE = 1;
 
+/* Some affixes suit one hero far more than the other, and say so. A `hero`
+   tag pays a bonus when it is worn by the Vanguard it was made for, which
+   turns "which is the bigger number" into "which is the bigger number for me"
+   -- and gives the two heroes genuinely different best-in-slot. */
+const SYNERGY = [
+  { id:'isaacWard',  hero:'isaac', stat:'ward',   mul:false, lo:0.04, hi:0.10, dp:0,
+    name:"Warden's",  word:'@ harm turned',
+    slots:['offhand','mail','girdle','ring1','ring2'] },
+  { id:'isaacSweep', hero:'isaac', stat:'sweep',  mul:true,  lo:0.10, hi:0.26, dp:0,
+    name:'Sun-Wide',  word:'+@ sweep',
+    slots:['blade','offhand','amulet'] },
+  { id:'zaydReach',  hero:'zayd',  stat:'range',  mul:true,  lo:0.10, hi:0.24, dp:0,
+    name:'Glaive-Cut', word:'+@ reach',
+    slots:['blade','amulet','ring1','ring2'] },
+  { id:'zaydHaste',  hero:'zayd',  stat:'fireDelay', mul:true, lo:-0.20, hi:-0.08, dp:0,
+    name:'Frost-Quick', word:'@ swing time',
+    slots:['blade','boots','ring1','ring2'] }
+];
+for (const sy of SYNERGY) AFFIXES.push(sy);
+// The slot pools are declared below, so registering into them waits until
+// they exist -- see the loop after SLOT_AFFIXES.
+// Worn by the hero it was forged for, a synergy affix is worth half again.
+const SYNERGY_BONUS = 1.5;
+
 const AFFIX_BY_ID = {};
 for (const a of AFFIXES) AFFIX_BY_ID[a.id] = a;
 
@@ -748,6 +1175,14 @@ const SLOT_AFFIXES = {
   ring1:   ['damage','damageP','life','ward','speed','magnet','cadence'],
   ring2:   ['damage','damageP','life','ward','speed','magnet','cadence']
 };
+
+// Hero-tagged affixes join the pools of the slots they were forged for. Done
+// here rather than beside SYNERGY itself because the pools are declared after
+// it, and touching them earlier is a temporal-dead-zone error that takes the
+// whole page down at load.
+for (const sy of SYNERGY) {
+  for (const sl of sy.slots) if (SLOT_AFFIXES[sl]) SLOT_AFFIXES[sl].push(sy.id);
+}
 
 function rollRarity(depth) {
   // Deeper ground gives up better things. Shift weight off the bottom tier.
@@ -778,7 +1213,7 @@ function rollItem(depth, slotId) {
   const n = Math.min(rarity.affixes, pool.length);
   // Item level lifts the rolls, so a deep drop is better than a shallow one of
   // the same rarity rather than merely more likely.
-  const ilvl = (0.55 + clamp(depth, 0, 1) * 0.75) * AFFIX_SCALE;
+  const ilvl = (0.55 + clamp(depth, 0, 1) * 0.75 + (LEVEL.depth || 0) * 0.9) * AFFIX_SCALE;
   for (let i = 0; i < n; i++) {
     const id = pool.splice((Math.random() * pool.length) | 0, 1)[0];
     const a = AFFIX_BY_ID[id];
@@ -790,13 +1225,19 @@ function rollItem(depth, slotId) {
            name: affixes.length ? AFFIX_BY_ID[affixes[0].id].name + ' ' + base : base };
 }
 
-function affixText(af) {
+function affixText(af, hero) {
   const a = AFFIX_BY_ID[af.id];
+  if (!a) return '';
   let v;
   if (a.mul) v = (af.v >= 0 ? '+' : '') + Math.round(af.v * 100) + '%';
   else if (a.id === 'ward') v = Math.round(af.v * 100) + '%';
   else v = (af.v >= 0 ? '+' : '') + (a.dp ? af.v.toFixed(a.dp) : af.v);
-  return a.word.replace('+@', v).replace('@', v);
+  let out = a.word.replace('+@', v).replace('@', v);
+  if (a.hero) {
+    out += ' \u2014 ' + HEROES[a.hero].name +
+           (hero === a.hero ? ' (worn: half again)' : '');
+  }
+  return out;
 }
 
 const rarityOf = it => RARITY.find(r => r.id === it.rarity) || RARITY[0];
@@ -814,11 +1255,18 @@ function recomputeStats() {
   base.sweep = H.sweep; base.arcSpeed = H.arcSpeed;
   base.ward = 0;
 
-  // Boons, re-applied from the tally rather than remembered as a total.
-  for (const u of UPGRADES) {
-    const n = p.upg[u.id] || 0;
-    for (let i = 0; i < n; i++) u.apply(base);
-  }
+  // What the hero has earned. Applied before gear so the kit multiplies a
+  // level's worth of strength rather than the other way round.
+  const hb = heroLevelBonus(p.level || 1);
+  base.maxHp += hb.maxHp;
+  base.damage += hb.damage;
+  base.ward += hb.ward;
+
+  // The hall's own. Additive with the hero's level for the same reason: gear
+  // should multiply everything you brought, not everything except this.
+  const ws = wardStone();
+  base.maxHp += ws.maxHp;
+  base.ward += ws.ward;
 
   // Gear on top: additive terms first, then the multiplicative ones, so the
   // order two items were equipped in cannot change the result.
@@ -828,8 +1276,12 @@ function recomputeStats() {
     if (!it) continue;
     for (const af of it.affixes) {
       const a = AFFIX_BY_ID[af.id];
-      if (a.mul) mul[a.stat] = (mul[a.stat] === undefined ? 1 : mul[a.stat]) * (1 + af.v);
-      else add[a.stat] = (add[a.stat] || 0) + af.v;
+      if (!a) continue;
+      // An affix forged for this Vanguard pays more in their hands.
+      const k = (a.hero && a.hero === p.hero) ? SYNERGY_BONUS : 1;
+      const v = af.v * k;
+      if (a.mul) mul[a.stat] = (mul[a.stat] === undefined ? 1 : mul[a.stat]) * (1 + v);
+      else add[a.stat] = (add[a.stat] || 0) + v;
     }
   }
   // Set bonuses ride in on the same two piles, so they cannot be applied twice
@@ -951,8 +1403,14 @@ const SOLID = 1, OPEN = 0;
 let grid = null;          // Uint8Array, row-major
 let edges = [];           // {x1,y1,x2,y2,nx,ny} lit rock/floor boundaries
 let props = [];           // {x,y,rot,kind} scenery instances
+// Just the ones that can be broken, so the crescent's per-substep test walks a
+// handful of entries rather than the several hundred pieces of furniture in a
+// delve.
+let propGrid = [];
 let lamps = [];           // {x,y,color} ambient light sources
 let openCells = [];       // {x,y} world centres of every reachable cell
+// Walls touching each open cell, 0..4. A corridor scores 2, a dead end 3.
+const narrowGrid = new Uint8Array(GW * GH);
 
 const gi = (cx, cy) => cy * GW + cx;
 const inGrid = (cx, cy) => cx >= 0 && cy >= 0 && cx < GW && cy < GH;
@@ -1119,10 +1577,19 @@ function generateWorld(spawn, portal) {
   const stack = [gi(sc.x, sc.y)];
   seen[stack[0]] = 1;
   openCells = [];
+  narrowGrid.fill(0);
   while (stack.length) {
     const k = stack.pop();
     const cx = k % GW, cy = (k / GW) | 0;
     openCells.push({ x: cx * CELL_W + CELL_W / 2, y: cy * CELL_W + CELL_W / 2 });
+    // How penned in this cell is, 0 (a crossroads) to 4 (a dead end). The
+    // anchors read it to find ground worth holding.
+    let walls = 0;
+    if (cellAt(cx + 1, cy) === SOLID) walls++;
+    if (cellAt(cx - 1, cy) === SOLID) walls++;
+    if (cellAt(cx, cy + 1) === SOLID) walls++;
+    if (cellAt(cx, cy - 1) === SOLID) walls++;
+    narrowGrid[k] = walls;
     for (let i = 0; i < 4; i++) {
       const nx = cx + (i === 0 ? 1 : i === 1 ? -1 : 0);
       const ny = cy + (i === 2 ? 1 : i === 3 ? -1 : 0);
@@ -1575,6 +2042,7 @@ function buildScenery(spawn, portal) {
 
   scatterKnots(spawn, portal);
   standPillars(spawn, portal);
+  indexBreakables();
 }
 
 // Columns, set where a hall would have been built with them: down the middle
@@ -1759,6 +2227,7 @@ function makePlayer(x, y, heroId) {
   p.fireTimer = 0; p.invuln = 0; p.hitFlash = 0;
   p.swing = 0; p.swingA = 0; p.swingDir = 1;
   p.upg = {};
+  p.level = stash.level || 1;
   p.gear = {};
   // Wear what came home from the last delve.
   for (const sl of SLOTS) p.gear[sl.id] = (stash.gear && stash.gear[sl.id]) || null;
@@ -1788,15 +2257,17 @@ function typeWeights(t) {
 function placeEnemy(kind, x, y, depth) {
   if (enemies.length >= MAX_ENEMIES) return null;
   const d = ENEMY_TYPES[kind];
-  const scale = (1 + depth * PACK_DEPTH_HP) * DIFF.threat;
-  const e = {
-    kind, x, y, r: d.r, speed: d.speed * rand(0.92, 1.08),
-    hp: d.hp * scale, maxHp: d.hp * scale, dmg: d.dmg * DIFF.threat, tech: d.tech,
-    cd: d.cd, mass: d.mass, color: d.color, halo: d.halo,
-    atk: rand(0, d.cd), hitFlash: 0, wob: Math.random() * TAU, angle: 0, face: 1,
-    awake: false, alert: 0, home: { x, y }, drowse: Math.random() * TAU,
-    aggro: d.r >= 20 ? AGGRO_FAR : AGGRO_NEAR, elite: false
-  };
+  const scale = (1 + depth * PACK_DEPTH_HP) * DIFF.threat * (1 + (LEVEL.depth || 0) * 1.6);
+  // Same body newBody makes, then the things that only a placed one has: it is
+  // asleep where the generator put it, it remembers that spot, and a heavy one
+  // notices further off.
+  const e = newBody(kind, x, y, 0);
+  e.hp = e.maxHp = d.hp * scale;
+  e.dmg = d.dmg * DIFF.threat;
+  e.awake = false;
+  e.home = { x, y };
+  e.aggro = d.r >= 20 ? AGGRO_FAR : AGGRO_NEAR;
+  e.elite = false;
   enemies.push(e);
   return e;
 }
@@ -1860,8 +2331,13 @@ function placePacks(spawn) {
   const sites = [];
   const roster = LEVEL.horde;
 
+  const budget = Math.round((LEVEL.quota || 125) * SLAG_HEAD);
   // Reservoir of candidate sites, kept apart so packs read as separate groups.
-  for (let tries = 0; tries < 4000 && sites.length < 26; tries++) {
+  // A deep delve needs more of them to carry its larger budget, but they still
+  // have to fit: the cap is a ceiling, and the loop stops early if the floor
+  // cannot hold that many at PACK_APART.
+  const wantSites = clamp(Math.round(14 + budget / 11), 20, 44);
+  for (let tries = 0; tries < 7000 && sites.length < wantSites; tries++) {
     const c = openCells[(Math.random() * openCells.length) | 0];
     const ds = Math.hypot(c.x - spawn.x, c.y - spawn.y);
     if (ds < PACK_SAFE) continue;
@@ -1877,9 +2353,10 @@ function placePacks(spawn) {
   sites.sort((a, b) => a.depth - b.depth);
 
   let slag = 0;
-  for (let i = 0; i < sites.length && slag < PACK_SLAG; i++) {
+  for (let i = 0; i < sites.length && slag < budget; i++) {
     const st = sites[i];
-    const n = 3 + ((Math.random() * 3) | 0) + (st.depth > 0.55 ? 1 : 0);
+    const n = 3 + ((Math.random() * 3) | 0) + (st.depth > 0.55 ? 1 : 0) +
+              Math.round((LEVEL.depth || 0) * 2);
     for (let k = 0; k < n; k++) {
       // Deeper packs lean on the heavier archetypes; near ones are thralls.
       let kind = roster[0];
@@ -1896,9 +2373,45 @@ function placePacks(spawn) {
         // One champion at most, and only in some packs -- an elite in every
         // group is just a tougher baseline rather than a thing you notice.
         if (k === 0 && Math.random() <
-            (ELITE_CHANCE + st.depth * 0.14) * DIFF.setRate) makeElite(e);
+            ((LEVEL.elites === undefined ? ELITE_CHANCE : LEVEL.elites) +
+             st.depth * 0.14 * (LEVEL.elites === 0 ? 0 : 1)) *
+            DIFF.setRate) makeElite(e);
         slag += e.tech;
       }
+    }
+  }
+
+  // If the ground would not hold enough separate sites for the budget, the
+  // shortfall goes back into the sites that did fit rather than leaving the
+  // delve short of its own quota. Packs get denser at depth; they never get
+  // fewer than the quota needs.
+  for (let pass = 0; pass < 4 && slag < budget; pass++) {
+    for (let i = 0; i < sites.length && slag < budget; i++) {
+      const st = sites[i];
+      let kind = roster[0];
+      const r = Math.random();
+      if (st.depth > 0.62 && r < 0.28 && roster.indexOf('breaker') >= 0) kind = 'breaker';
+      else if (st.depth > 0.3 && r < 0.55 && roster.indexOf('eclipse') >= 0) kind = 'eclipse';
+      const pos = scatterNear(st.x, st.y, 110, ENEMY_TYPES[kind].r + 4, spawn);
+      if (!pos) continue;
+      const e = placeEnemy(kind, pos.x, pos.y, st.depth);
+      if (e) slag += e.tech;
+    }
+  }
+
+  // Pitch where the fighting will be. Scattered by the scenery pass a delve
+  // averaged five barrels across four million square units -- you would go
+  // whole runs without ever standing near one, and a tactic you cannot reach
+  // is not a tactic. They go beside the packs instead, which is the only place
+  // a barrel is interesting: something has to be standing next to it.
+  for (let i = 0; i < sites.length; i++) {
+    if (Math.random() > (LEVEL.pitch === undefined ? PITCH_RATE : LEVEL.pitch)) continue;
+    const st = sites[i];
+    const n = 1 + ((Math.random() * 2) | 0);
+    for (let k = 0; k < n; k++) {
+      const pos = scatterNear(st.x, st.y, 74, 16, spawn);
+      if (!pos) continue;
+      props.push({ x: pos.x, y: pos.y, q: (Math.random() * 4) | 0, kind: 'barrel' });
     }
   }
 
@@ -1908,8 +2421,14 @@ function placePacks(spawn) {
     const kind = k < 2 && roster.indexOf('breaker') >= 0 ? 'breaker' : roster[0];
     const pos = scatterNear(portal.x, portal.y, 150, ENEMY_TYPES[kind].r + 4, spawn);
     const g = pos && placeEnemy(kind, pos.x, pos.y, 0.85);
-    if (g && k < 2) makeElite(g);      // the gate is held by champions
+    // The gate is held by champions -- except on a rung that has not shown the
+    // player one yet, where the two standing guards were the only champions in
+    // the delve and walked straight through the ramp's whole point.
+    if (g && k < 2 && LEVEL.elites !== 0) makeElite(g);
   }
+
+  // The barrels above were added after the scenery pass indexed itself.
+  indexBreakables();
 }
 
 // A free spot within `spread` of a point, clear of rock. Returns null rather
@@ -1926,7 +2445,10 @@ function scatterNear(x, y, spread, pad, keepFrom) {
   return null;
 }
 
-function spawnEnemy(t) {
+// lo/hi scale the band the body arrives in, as multiples of the default ring.
+// The hold passes a tight band so its surges land just off screen instead of
+// two screens out, where they dissolve on the walk in.
+function spawnEnemy(t, lo, hi) {
   if (enemies.length >= MAX_ENEMIES) return;
 
   const { out, total } = typeWeights(t);
@@ -1940,7 +2462,8 @@ function spawnEnemy(t) {
   // walk to the player, since every open cell is connected to every other.
   if (!openCells.length) return;
   const ring = Math.max(view.w, view.h) * 0.55 + 60;
-  const near = ring * ring, far = (ring * 2.1) * (ring * 2.1);
+  const r0 = ring * (lo || 1), r1 = ring * (hi || 2.1);
+  const near = r0 * r0, far = r1 * r1;
   let x = 0, y = 0, ok = false;
   for (let tries = 0; tries < 34 && !ok; tries++) {
     const c = openCells[(Math.random() * openCells.length) | 0];
@@ -1951,16 +2474,108 @@ function spawnEnemy(t) {
   }
   if (!ok) return;
 
-  // Health creeps up with run time so late waves stay meaningful.
-  const scale = (1 + t / 200) * DIFF.threat;
-  enemies.push({
+  enemies.push(newBody(kind, x, y, t));
+  return enemies[enemies.length - 1];
+}
+
+// One body of the given kind, standing where it was put and already awake --
+// anything raised through here was called to the player rather than stumbled
+// on, so it never needs rousing. Health creeps up with run time so late
+// arrivals stay meaningful.
+function newBody(kind, x, y, t) {
+  const d = ENEMY_TYPES[kind];
+  const scale = (1 + (t || 0) / 200) * DIFF.threat;
+  return {
     kind, x, y, r: d.r, speed: d.speed * rand(0.92, 1.08),
     hp: d.hp * scale, maxHp: d.hp * scale, dmg: d.dmg * DIFF.threat, tech: d.tech,
     cd: d.cd, mass: d.mass, color: d.color, halo: d.halo,
     atk: rand(0, d.cd), hitFlash: 0, wob: Math.random() * TAU, angle: 0, face: 1,
-    // Summoned bodies arrive awake: they were called to you, not stumbled on.
-    awake: true, alert: 0, drowse: Math.random() * TAU, aggro: AGGRO_NEAR
-  });
+    awake: true, alert: 0, drowse: Math.random() * TAU, aggro: AGGRO_NEAR,
+    role: d.role || 'press', spin: Math.random() < 0.5 ? -1 : 1,
+    markX: 0, markY: 0, markT: 0, markCd: 0,
+    slam: !!d.slam, slamCd: rand(1.2, SLAM_CD),
+    postX: 0, postY: 0, posted: false, guard: rand(0, BRACE_UP), braced: false
+  };
+}
+
+// The ground an anchor decides to hold.
+//
+// Not a corridor: a heavy body is forty-six units across and a corridor cell
+// is forty, so it cannot stand in one -- measured, a breaker fits half the
+// open cells in a delve and a thrall fits ninety-eight per cent of them. That
+// split is worth keeping (it is why the Deceiver blinks instead of walking),
+// so the anchor holds the *mouth* instead: ground it fits on whose neighbours
+// are pinched. That is the cell you have to come through anyway.
+//
+// Score is its own walls plus the tightest of its neighbours', tie broken by
+// distance. On genuinely open floor with no mouth in reach it holds where it
+// woke, which is the right answer for a body with nothing to guard.
+function takePost(e) {
+  e.postX = e.x; e.postY = e.y;
+  e.posted = true;
+  const cx = clamp(Math.floor(e.x / CELL_W), 0, GW - 1);
+  const cy = clamp(Math.floor(e.y / CELL_W), 0, GH - 1);
+  const span = Math.ceil(ANCHOR_POST / CELL_W);
+  const mouth = (x, y) => {
+    let best = 0;
+    if (cellAt(x + 1, y) !== SOLID) best = Math.max(best, narrowGrid[gi(x + 1, y)]);
+    if (cellAt(x - 1, y) !== SOLID) best = Math.max(best, narrowGrid[gi(x - 1, y)]);
+    if (cellAt(x, y + 1) !== SOLID) best = Math.max(best, narrowGrid[gi(x, y + 1)]);
+    if (cellAt(x, y - 1) !== SOLID) best = Math.max(best, narrowGrid[gi(x, y - 1)]);
+    return narrowGrid[gi(x, y)] + best;
+  };
+  let bestS = -1, bestD = 0;
+  for (let y = cy - span; y <= cy + span; y++) {
+    for (let x = cx - span; x <= cx + span; x++) {
+      if (x < 0 || y < 0 || x >= GW || y >= GH) continue;
+      if (cellAt(x, y) === SOLID) continue;
+      const wx = x * CELL_W + CELL_W / 2, wy = y * CELL_W + CELL_W / 2;
+      const dd = dist2(wx, wy, e.x, e.y);
+      if (dd > ANCHOR_POST * ANCHOR_POST) continue;
+      const sc = mouth(x, y);
+      if (sc < bestS) continue;
+      if (sc === bestS && dd >= bestD) continue;
+      if (pointInWalls(wx, wy, e.r + 2)) continue;
+      bestS = sc; bestD = dd; e.postX = wx; e.postY = wy;
+    }
+  }
+}
+
+// A ring of champions closing on a point. Used by the corpse ambush: the
+// bodies form up *around* you at a distance you can still see across, so the
+// beat reads as being surrounded rather than as a swarm materialising on top
+// of you. Spots are taken from open ground the flow field says is actually
+// walkable, so nothing spawns sealed behind rock.
+function spawnAmbush(cx, cy, n) {
+  const kinds = ['breaker', 'thrall', 'thrall', 'eclipse'];
+  let born = 0;
+  for (let i = 0; i < n; i++) {
+    if (enemies.length >= MAX_ENEMIES) break;
+    const kind = kinds[(Math.random() * kinds.length) | 0];
+    const rr0 = ENEMY_TYPES[kind].r + 6;
+    const base = (i / n) * TAU;
+    let x = 0, y = 0, ok = false;
+    for (let tries = 0; tries < 26 && !ok; tries++) {
+      const a = base + rand(-0.36, 0.36);
+      const rad = AMBUSH_R * rand(0.72, 1.3);
+      x = clamp(cx + Math.cos(a) * rad, 60, WORLD.w - 60);
+      y = clamp(cy + Math.sin(a) * rad, 60, WORLD.h - 60);
+      if (pointInWalls(x, y, rr0)) continue;
+      if (flowDist) {
+        const gx = clamp(Math.floor(x / CELL_W), 0, GW - 1);
+        const gy = clamp(Math.floor(y / CELL_W), 0, GH - 1);
+        if (flowDist[gi(gx, gy)] < 0) continue;   // no path: it would just stand there
+      }
+      ok = true;
+    }
+    if (!ok) continue;
+    const e = newBody(kind, x, y, run.time);
+    enemies.push(e);
+    makeElite(e);
+    ring(e.x, e.y, CORPSE_HUE, 6, 46, 0.5);
+    born++;
+  }
+  return born;
 }
 
 function fire() {
@@ -2068,14 +2683,25 @@ function maybeDropItem(e) {
   chance *= (1 + depth * 0.8) * DIFF.lootRate;
   const n = e.kind === 'deceiver' ? 3 : e.elite ? 2 : 1;
 
-  // Regalia pieces come off champions and the avatar only.
-  const setOdds = e.kind === 'deceiver' ? 0.55 : e.elite ? 0.14 : 0;
+  // Regalia pieces come off champions and the avatar only -- and an invader
+  // always. Being hunted through a delve you did not plan to fight in is the
+  // price, and it should be paid.
+  const setOdds = e.invader ? 1 : e.kind === 'deceiver' ? 0.55 : e.elite ? 0.14 : 0;
+  // Coin falls with the gear. It is the only thing in the delve that is not
+  // luck: whatever the drops do, coin accumulates, which is what makes it the
+  // right currency for buying your way past a bad streak.
+  const purse = e.kind === 'deceiver' ? 90 : e.elite ? 26 : e.kind === 'breaker' ? 9 : 2;
+  if (purse) {
+    run.coins += Math.round(purse * (0.7 + Math.random() * 0.7) *
+                            (1 + (LEVEL.depth || 0) * 1.4) * DIFF.lootRate);
+  }
+
   const push = it => drops.push({
     x: e.x + rand(-14, 14), y: e.y + rand(-14, 14),
     vx: rand(-46, 46), vy: rand(-46, 46),
     item: it, r: 9, life: 0, pulled: false });
 
-  if (setOdds && Math.random() < setOdds * DIFF.setRate) {
+  if (setOdds && Math.random() < setOdds * DIFF.setRate * setBoost()) {
     push(rollSetPiece());
     if (e.kind !== 'deceiver') return;      // one piece is the whole prize
   }
@@ -2084,6 +2710,216 @@ function maybeDropItem(e) {
     // Quality floor by what it came off, so a champion never hands you rags.
     const floor = e.kind === 'deceiver' ? 0.85 : e.elite ? 0.7 : 0;
     push(rollItem(Math.max(depth, floor)));
+  }
+}
+
+/* --- hazards --------------------------------------------------------------
+   Ground you cannot stand on. A slam is a moment; a hazard is a place, and
+   the difference is what turns a room into terrain. The Riftborn leaves them
+   where he steps out of the world.
+   -------------------------------------------------------------------- */
+const HAZARD_TICK = 0.4;   // how often standing in one costs you
+let hazards = [];
+
+/* --- reactive scenery -----------------------------------------------------
+   The player has a stick and an automatic blade, so the only tactical input
+   they have is *where* they fight. That is what this is for: a room with a
+   pitch barrel in it is a different room, and standing in the right part of
+   it is a decision the controls can actually express.
+
+   A barrel takes a beat to go up after it is broken, so setting one off and
+   then standing in it is your own fault rather than the auto-aim's. A pillar
+   comes down at once, because a column of stone does not hesitate.
+   -------------------------------------------------------------------- */
+const PROP_HP    = { barrel: 26, pillar: 70 };
+// Long enough to walk out of at hero speed with room to spare. The blade aims
+// itself, so the player cannot choose not to break a barrel between them and
+// what they are hitting -- the fuse is the whole of their agency here, and it
+// has to be generous enough that being caught is a mistake rather than a tax.
+const BARREL_FUSE = 1.1;
+const BARREL_R    = 96;
+const PILLAR_R    = 78;
+// Shorter than a barrel's -- a column of stone does not hesitate long -- but
+// not nothing. The blade aims itself, so an instant collapse for a third of a
+// hero's life is a blow the player was never offered the chance to avoid.
+const PILLAR_FUSE = 0.5;
+
+// Everything in reach, player included. Scenery does not take sides.
+function blastAt(x, y, r, dmg, hue) {
+  shake(8);
+  burst(x, y, hue, 22, 300);
+  ring(x, y, hue, r * 0.35, r, 0.34);
+  enemyGrid.query(x, y, r + 30, _near);
+  for (let i = 0; i < _near.length; i++) {
+    const e = _near[i];
+    if (e.hp <= 0) continue;
+    const d = Math.hypot(e.x - x, e.y - y);
+    if (d > r + e.r) continue;
+    damageEnemy(e, dmg * (1 - Math.min(0.6, d / (r * 2))));
+  }
+  if (dist2(player.x, player.y, x, y) < r * r) {
+    const was = player.invuln;
+    player.invuln = 0;
+    hurtPlayerBy(dmg * 0.4, x, y);
+    player.invuln = Math.max(player.invuln, was);
+  }
+}
+
+function hurtProp(pr, dmg) {
+  const cap = PROP_HP[pr.kind];
+  if (!cap || pr.gone) return;
+  if (pr.hp === undefined) pr.hp = cap;
+  pr.hp -= dmg;
+  pr.shake = 0.16;
+  if (pr.hp > 0) return;
+  pr.gone = true;
+  // Both queue a marked circle, drawn like a slam so every promise the floor
+  // makes reads the same way. What differs is how long you have.
+  if (pr.kind === 'barrel') {
+    slams.push({ x: pr.x, y: pr.y, r: BARREL_R, wind: BARREL_FUSE, t: 0,
+                 dmg: 0, struck: false, barrel: true });
+  } else {
+    slams.push({ x: pr.x, y: pr.y, r: PILLAR_R, wind: PILLAR_FUSE, t: 0,
+                 dmg: 0, struck: false, pillar: true });
+  }
+}
+
+// A struck barrel rocks before it goes. Cheap, and it is the only warning the
+// player gets that the thing they are standing next to is now a bomb.
+function updateProps(dt) {
+  for (let i = 0; i < propGrid.length; i++) {
+    const pr = propGrid[i];
+    if (pr.shake > 0) pr.shake = Math.max(0, pr.shake - dt);
+  }
+}
+
+// Whatever is standing inside a radius and can be broken.
+function hurtPropsNear(x, y, r, dmg) {
+  for (let i = 0; i < props.length; i++) {
+    const pr = props[i];
+    if (pr.gone || !PROP_HP[pr.kind]) continue;
+    if (dist2(pr.x, pr.y, x, y) > r * r) continue;
+    hurtProp(pr, dmg);
+  }
+}
+
+function addHazard(x, y, r, dps, life, hue) {
+  if (hazards.length > 40) hazards.shift();
+  hazards.push({ x, y, r, dps, life, max: life, tick: 0,
+                 hue: hue || '#b07cff', wob: Math.random() * TAU });
+}
+
+function updateHazards(dt) {
+  for (let i = hazards.length - 1; i >= 0; i--) {
+    const h = hazards[i];
+    h.life -= dt;
+    h.wob += dt;
+    if (h.life <= 0) { hazards.splice(i, 1); continue; }
+    h.tick -= dt;
+    if (h.tick <= 0 && dist2(player.x, player.y, h.x, h.y) < h.r * h.r) {
+      h.tick = HAZARD_TICK;
+      // A hazard is not a hit: it ignores the invulnerability a hit grants,
+      // or standing in one would be free for as long as something else was
+      // also touching you.
+      const was = player.invuln;
+      player.invuln = 0;
+      hurtPlayerBy(h.dps * HAZARD_TICK, h.x, h.y);
+      player.invuln = Math.max(player.invuln, was);
+    }
+  }
+}
+
+function drawHazards(t) {
+  for (let i = 0; i < hazards.length; i++) {
+    const h = hazards[i];
+    const fade = clamp(h.life / Math.min(1.4, h.max), 0, 1);
+    const p = 0.7 + 0.3 * Math.sin(h.wob * 2.4);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const g = ctx.createRadialGradient(h.x, h.y, 0, h.x, h.y, h.r);
+    g.addColorStop(0, tint(h.hue, 1.1, 0.26 * fade * p));
+    g.addColorStop(0.7, tint(h.hue, 1, 0.15 * fade));
+    g.addColorStop(1, tint(h.hue, 1, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.ellipse(h.x, h.y, h.r, h.r * 0.72, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = tint(h.hue, 1.2, 0.42 * fade);
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 7]);
+    ctx.lineDashOffset = h.wob * 12;
+    ctx.beginPath(); ctx.ellipse(h.x, h.y, h.r * 0.86, h.r * 0.62, 0, 0, TAU); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+}
+
+// Slams land on their own clock rather than on the thrower's, so a lieutenant
+// killed mid-wind still lands the blow it had already committed to.
+function updateSlams(dt) {
+  for (let i = slams.length - 1; i >= 0; i--) {
+    const s = slams[i];
+    s.t += dt;
+    if (!s.struck && s.t >= s.wind) {
+      s.struck = true;
+      if (s.barrel) {
+        const dmg = 62 * (1 + (LEVEL.depth || 0));
+        blastAt(s.x, s.y, s.r, dmg, '#ff9a3c');
+        // and it keeps burning, so the ground it took stays taken
+        addHazard(s.x, s.y, s.r * 0.78, dmg * 0.22, 4.5, '#ff9a3c');
+        // pitch spreads: a barrel takes its neighbours with it
+        hurtPropsNear(s.x, s.y, s.r, 999);
+      } else if (s.pillar) {
+        blastAt(s.x, s.y, s.r, 88 * (1 + (LEVEL.depth || 0)), '#cbbfa4');
+        for (let i = 0; i < 5; i++) {
+          props.push({ x: s.x + rand(-24, 24), y: s.y + rand(-16, 16),
+                       q: (Math.random() * 4) | 0, kind: 'rubble' });
+        }
+      } else {
+        shake(7);
+        burst(s.x, s.y, '#ffce70', 20, 260);
+        ring(s.x, s.y, '#ffce70', s.r * 0.5, s.r, 0.32);
+        // and a slam brings scenery down with it
+        hurtPropsNear(s.x, s.y, s.r, s.dmg);
+        if (dist2(player.x, player.y, s.x, s.y) < s.r * s.r) {
+          hurtPlayerBy(s.dmg, s.x, s.y);
+        }
+      }
+    }
+    if (s.t >= s.wind + 0.34) slams.splice(i, 1);
+  }
+}
+
+function drawSlams(t) {
+  for (let i = 0; i < slams.length; i++) {
+    const s = slams[i];
+    if (s.struck) continue;
+    const f = clamp(s.t / s.wind, 0, 1);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    // The floor it will take, held at full size, filling as the timer runs.
+    // This was a tenth of its current strength and simply did not register
+    // against a lit floor -- for a blow that takes half a hero's life the
+    // warning has to be the brightest thing on the ground.
+    // Falling stone is dust, not fire.
+    const warm = s.pillar ? [198, 186, 160] : [226, 120, 44];
+    const rim  = s.pillar ? [232, 222, 196] : [255, 206, 112];
+    const rgba = (c, a) => 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a.toFixed(3) + ')';
+    const fill = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.r);
+    fill.addColorStop(0, rgba(warm, 0.06 + 0.16 * f));
+    fill.addColorStop(0.72, rgba(warm, 0.04 + 0.12 * f));
+    fill.addColorStop(1, rgba(rim, 0.10 + 0.22 * f));
+    ctx.fillStyle = fill;
+    ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, TAU); ctx.fill();
+    ctx.strokeStyle = rgba(rim, 0.55 + 0.45 * f);
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(s.x, s.y, s.r - 1.5, 0, TAU); ctx.stroke();
+    // and a closing sweep, so the wind-up reads as a countdown and not a stain
+    ctx.strokeStyle = 'rgba(255,244,214,.95)';
+    ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(s.x, s.y, s.r - 5, -Math.PI / 2, -Math.PI / 2 + TAU * f);
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+    ctx.restore();
   }
 }
 
@@ -2097,7 +2933,10 @@ function updateDrops(dt) {
     const d = Math.hypot(dx, dy) || 1;
     // Gear is drawn in at a shorter reach than slag: it should be picked up
     // on purpose, not hoovered off the far side of a room.
-    if (!d0.pulled && d < player.magnet * 0.55) d0.pulled = true;
+    // Vacuum looting. Gear used to need a deliberate walk-over; with the bag
+    // now sorted between delves rather than during one, there is nothing to
+    // decide in the moment, so picking it up should never cost tempo.
+    if (!d0.pulled && d < player.magnet * 1.6) d0.pulled = true;
     if (d0.pulled) {
       const k = Math.min(1, dt * 6);
       d0.vx = lerp(d0.vx, (dx / d) * 420, k);
@@ -2106,7 +2945,7 @@ function updateDrops(dt) {
     d0.x += d0.vx * dt; d0.y += d0.vy * dt;
 
     if (d < player.r + 12) {
-      if (player.bag.length < BAG_MAX) {
+      if (player.bag.length < bagCap()) {
         player.bag.push(d0.item);
         run.found++;
         syncBagBadge();
@@ -2123,6 +2962,89 @@ function updateDrops(dt) {
     drops[w++] = d0;
   }
   drops.length = w;
+}
+
+/* --- the corpse run -------------------------------------------------------
+   Dying is not a reset. Everything unbanked -- the bag and the run's coin --
+   stays in the delve, and the delve keeps it: descend into the same level
+   again and it is lying where you fell. Only one corpse exists at a time, so
+   dying on the way back to a corpse costs you the first one. That is the
+   whole tension, and it is why the walk back is worth anything.
+   -------------------------------------------------------------------- */
+
+// Where you fell, snapped onto ground that exists *this* descent. The delve is
+// cut fresh every time, so the recorded point is a hint rather than an
+// address.
+function placeCorpse() {
+  const c = stash.corpse;
+  if (!c || c.level_id !== LEVEL.id || !openCells.length) return null;
+  if (!(c.items && c.items.length) && !c.coins) return null;
+  let best = null, bestD = Infinity;
+  for (let i = 0; i < openCells.length; i++) {
+    const o = openCells[i];
+    if (pointInWalls(o.x, o.y, 16)) continue;
+    const d = dist2(o.x, o.y, c.x, c.y);
+    if (d < bestD) { bestD = d; best = o; }
+  }
+  if (!best) return null;
+  return { x: best.x, y: best.y, items: c.items || [], coins: c.coins || 0,
+           pulse: Math.random() * TAU, taken: 0 };
+}
+
+// Reclaiming it is the ambush: the delve raises a ring of champions and forces
+// the ley-gate open. You get your things back and a way out at the same
+// moment, and no time at all to spend deciding which.
+function claimCorpse() {
+  const c = run.corpse;
+  if (!c || c.taken) return;
+  c.taken = 1;
+
+  let took = 0;
+  for (const it of c.items) {
+    if (player.bag.length >= bagCap()) break;
+    player.bag.push(it);
+    took++;
+  }
+  const left = c.items.length - took;
+  run.found += took;
+  run.coins += c.coins;
+  syncBagBadge();
+
+  // Anything the bag could not hold stays on the floor as ordinary drops
+  // rather than evaporating.
+  for (let i = took; i < c.items.length; i++) {
+    drops.push({ x: c.x + rand(-26, 26), y: c.y + rand(-26, 26),
+                 vx: rand(-40, 40), vy: rand(-40, 40),
+                 item: c.items[i], r: 9, life: 0, pulled: false });
+  }
+
+  stash.corpse = null;
+  saveStash();
+
+  burst(c.x, c.y, CORPSE_HUE, 30, 240);
+  ring(c.x, c.y, CORPSE_HUE, 10, 150, 0.7);
+  cam.shake = Math.max(cam.shake, 9);
+
+  run.forcedOpen = true;
+  portal.channel = 0;
+  const n = clamp(Math.round(AMBUSH_MIN + (LEVEL.depth || 0) * 4.5),
+                  AMBUSH_MIN, AMBUSH_MAX);
+  const raised = spawnAmbush(c.x, c.y, n);
+
+  run.banner = 3.4;
+  run.bannerText = 'The delve gives up your dead';
+  run.bannerNote = raised
+    ? 'It wants them back. The ley-gate is open -- go.'
+    : 'The ley-gate is open -- go.';
+  toast(left ? 'Reclaimed ' + took + ' of ' + c.items.length : 'Corpse reclaimed',
+        CORPSE_HUE);
+}
+
+function updateCorpse(dt) {
+  const c = run.corpse;
+  if (!c || c.taken) return;
+  c.pulse += dt;
+  if (dist2(player.x, player.y, c.x, c.y) < 34 * 34) claimCorpse();
 }
 
 // A short line above the HUD: what you just picked up, in its rarity colour.
@@ -2225,16 +3147,22 @@ function updateCamera(dt) {
   if (cam.shake < 0.05) cam.shake = 0;
 }
 
-function hurtPlayer(e) {
+function hurtPlayer(e) { hurtPlayerBy(e.dmg, e.x, e.y); }
+
+// Damage from something that is not a body -- a slam, a hazard -- comes
+// through here. fx/fy is only where the spray comes from.
+function hurtPlayerBy(dmg, fx, fy) {
   if (player.invuln > 0) return;
   // Ward is flat damage reduction off gear, capped well short of immunity.
-  const taken = e.dmg * (1 - (player.ward || 0));
+  const taken = dmg * (1 - (player.ward || 0));
   player.hp -= taken;
   player.invuln = player.iframe;
   player.hitFlash = 0.3;
   shake(6 + taken * 0.25);
   hitFlashUI();
-  burst(player.x + (e.x - player.x) * 0.5, player.y + (e.y - player.y) * 0.5,
+  const ox = fx === undefined ? player.x : fx;
+  const oy = fy === undefined ? player.y : fy;
+  burst(player.x + (ox - player.x) * 0.5, player.y + (oy - player.y) * 0.5,
         PAL.blood, 10, 180);
   if (player.hp <= 0) { player.hp = 0; endRun(false); }
 }
@@ -2242,6 +3170,20 @@ function hurtPlayer(e) {
 function damageEnemy(e, dmg) {
   if (e.hp <= 0) return;
   if (!e.awake) wakeEnemy(e);          // struck from the dark: everyone hears
+  // He is held up by his escort. Hitting him through it is not forbidden, just
+  // close to pointless -- so the read is "kill the crimson ones" rather than a
+  // rule the game refuses to let you break.
+  if (e.kind === 'deceiver' && escortAlive()) {
+    dmg *= 0.14;
+    burst(e.x, e.y, '#e8c060', 2, 120);
+  }
+  // A braced anchor eats most of it. It cannot move or swing while it does,
+  // and it has to drop the guard on a rhythm, so the answer is to back off and
+  // come back rather than to keep hitting the shield.
+  if (e.braced) {
+    dmg *= BRACE_SOAK;
+    burst(e.x, e.y, '#ffe6a8', 2, 130);
+  }
   e.hp -= dmg;
   e.hitFlash = 0.12;
   if (e.hp <= 0) {
@@ -2250,17 +3192,40 @@ function damageEnemy(e, dmg) {
       return;                                   // a lie, not a body
     }
     if (e.kind === 'deceiver') {
-      run.bossDown = true;
-      run.boss = null;
-      run.banner = 3.4;
-      run.bannerText = 'The ley-gate answers';
-      run.bannerNote = 'The false salvation is broken. Hold the circle.';
-      shake(14);
+      // An invader is not the avatar the delve is waiting on. Killing him must
+      // not open the ley-gate, or the quota stops meaning anything the moment
+      // one turns up.
+      if (e.invader) {
+        run.invader = null;
+        run.invadeKills = (run.invadeKills || 0) + 1;
+        run.banner = 3.2;
+        run.bannerText = 'The uninvited is broken';
+        run.bannerNote = 'He was carrying something that was never his.';
+        shake(12);
+      } else {
+        run.bossDown = true;
+        run.boss = null;
+        run.banner = 3.4;
+        run.bannerText = 'The ley-gate answers';
+        run.bannerNote = 'The false salvation is broken. Hold the circle.';
+        shake(14);
+      }
       for (let i = 0; i < enemies.length; i++) {
         if (enemies[i].kind === 'mirage') enemies[i].hp = 0;
       }
     }
     run.kills++;
+    // Ravenous: whatever dies near him goes into him. Fighting through the
+    // horde at his feet is actively worse than pulling him off it.
+    const bs = run && run.boss;
+    if (bs && bs.hp > 0 && bs.ravenous && e !== bs &&
+        dist2(e.x, e.y, bs.x, bs.y) < 260 * 260) {
+      const fed = Math.min(bs.maxHp * 0.03, bs.maxHp - bs.hp);
+      if (fed > 0) {
+        bs.hp += fed;
+        ring(bs.x, bs.y, '#c2352a', 6, 34, 0.35);
+      }
+    }
     dropLoot(e);
     burst(e.x, e.y, e.color, e.r > 18 ? 14 : 7, 190);
     if (e.r > 18) shake(3);
@@ -2269,15 +3234,10 @@ function damageEnemy(e, dmg) {
   }
 }
 
+// Slag is experience. It is banked on the hero at the end of the delve rather
+// than spent on a card mid-fight, so the run is never interrupted to choose.
 function collectTech(v) {
   run.tech += v;
-  run.xp += v;
-  while (run.xp >= run.xpNeed) {
-    run.xp -= run.xpNeed;
-    run.level++;
-    run.xpNeed = 6 + run.level * 5;
-    run.pendingLevels++;
-  }
 }
 
 function updatePlayer(dt) {
@@ -2405,6 +3365,7 @@ function updateEnemies(dt) {
       // He does not walk the corridors -- he is an avatar, and a body this
       // wide wedges on corners anyway. He steps out of one place and into
       // another near you, which is both the fix and the character.
+      // Unblinking sets this to effectively never, and walks instead.
       e.blink -= dt;
       if (e.blink <= 0) {
         e.blink = 4.4;
@@ -2414,9 +3375,22 @@ function updateEnemies(dt) {
           const ny = clamp(player.y + Math.sin(a) * dd, 50, WORLD.h - 50);
           if (pointInWalls(nx, ny, e.r + 6)) continue;
           burst(e.x, e.y, '#e8c060', 16, 210);
+          // Riftborn: the hole he stepped through does not close.
+          if (e.riftborn) addHazard(e.x, e.y, 74, e.dmg * 0.85, 7.5, '#b07cff');
           e.x = nx; e.y = ny;
           burst(e.x, e.y, '#e8c060', 16, 210);
           break;
+        }
+      }
+      // Unbroken: he gathers, and for two seconds nothing touches him. The
+      // guard is drawn, so this is a window to reposition rather than a
+      // stretch of wasted swings.
+      if (e.guardCd) {
+        e.guardT -= dt;
+        if (e.guardT <= 0) {
+          e.braced = !e.braced;
+          e.guardT = e.braced ? 2.0 : e.guardCd;
+          if (e.braced) ring(e.x, e.y, '#e8c060', 10, 90, 0.5);
         }
       }
       e.summon -= dt;
@@ -2427,10 +3401,11 @@ function updateEnemies(dt) {
       }
       e.split -= dt;
       if (e.split <= 0) {
-        e.split = 9.5;
+        e.split = e.mutators && e.mutators.indexOf('wreathed') >= 0 ? 4.5 : 9.5;
+        const want = e.mirages || 3;
         let live = 0;
         for (let i = 0; i < enemies.length; i++) if (enemies[i].kind === 'mirage') live++;
-        if (live < 3) spawnMirages(e, 3 - live);
+        if (live < want) spawnMirages(e, want - live);
       }
     }
 
@@ -2458,6 +3433,33 @@ function updateEnemies(dt) {
     e.angle = Math.atan2(dy, dx);
     if (Math.abs(dx) > 3) e.face = dx < 0 ? -1 : 1;
 
+    // A slam is thrown at where you are now, and lands where it was thrown --
+    // the whole attack is the distance between those two, so it is aimed at
+    // range rather than in contact, where there would be nowhere to go.
+    if (e.slam) {
+      e.slamCd -= dt;
+      const reach = SLAM_R * (e.slamR || 1);
+      if (e.slamCd <= 0 && d < reach * 2.2 && d > e.r + player.r + 10) {
+        // Three Lieutenants throwing on their own clocks carpet the floor and
+        // the telegraph stops meaning anything. One marked circle at a time in
+        // any given place: the others wait a beat and aim somewhere you have
+        // moved to.
+        let clash = false;
+        for (let k = 0; k < slams.length; k++) {
+          const o = slams[k];
+          if (o.struck) continue;
+          if (dist2(o.x, o.y, player.x, player.y) < o.r * o.r) { clash = true; break; }
+        }
+        if (!clash) {
+          e.slamCd = SLAM_CD * rand(0.85, 1.2);
+          slams.push({ x: player.x, y: player.y, r: SLAM_R * (e.slamR || 1),
+                       wind: SLAM_WIND, t: 0, dmg: e.dmg * 1.3, struck: false });
+        } else {
+          e.slamCd = 0.5;
+        }
+      }
+    }
+
     // --- separation (flocking): repulsion from crowded neighbours ---------
     let rx = 0, ry = 0;
     enemyGrid.query(e.x, e.y, e.r + 26, _near);
@@ -2477,10 +3479,37 @@ function updateEnemies(dt) {
     const rl = Math.hypot(rx, ry);
     if (rl > 1.7) { rx = rx / rl * 1.7; ry = ry / rl * 1.7; }
 
+    // --- role ------------------------------------------------------------
+    // An anchor guards ground rather than chasing. It takes the most penned-in
+    // cell it can find near where it woke, and steps off that post only as far
+    // as ANCHOR_GUARD -- so it holds a corridor and you either fight it there
+    // or go the long way, which is the whole point of a maze.
+    let leash = false;
+    if (e.role === 'anchor') {
+      if (!e.posted) takePost(e);
+      e.guard -= dt;
+      if (e.guard <= 0) {
+        e.braced = !e.braced;
+        e.guard = e.braced ? BRACE_UP : BRACE_DOWN;
+      }
+      const pd = dist2(player.x, player.y, e.postX, e.postY);
+      leash = pd > ANCHOR_GUARD * ANCHOR_GUARD;
+    }
+
     // --- seek / melee -----------------------------------------------------
     let sx = 0, sy = 0;
     const touch = e.r + player.r + 3;
-    if (d > touch) {
+    // Braced, it is a wall: it does not advance and it does not swing.
+    if (e.braced) {
+      moveEntity(e, rx * 0.4 * e.speed * dt, ry * 0.4 * e.speed * dt);
+      continue;
+    }
+    if (leash) {
+      // Back to its post, and stand there once it arrives.
+      const px = e.postX - e.x, py = e.postY - e.y;
+      const pm = Math.hypot(px, py);
+      if (pm > 14) { sx = px / pm; sy = py / pm; }
+    } else if (d > touch) {
       // Close in, head straight at the target so the swarm keeps its shape;
       // further out, follow the field so rock never traps anything.
       if (d < 78 || !flowDir(e, _flow)) {
@@ -2490,6 +3519,50 @@ function updateEnemies(dt) {
         sy = _flow.y * 0.82 + (dy / d) * 0.18;
         const m = Math.hypot(sx, sy) || 1;
         sx /= m; sy /= m;
+      }
+      // A flanker picks a mark off the player's shoulder and runs at that
+      // instead, then commits once it is close. The mark is latched when it
+      // first has room to use one: recomputed every frame it recedes as the
+      // body moves and the flanker just orbits, which is what a continuous
+      // tangent bias does and why that version never closed at all.
+      //
+      // Only on a clear line: in a corridor there is nothing to go round, and
+      // running at a mark through rock wedges it against a wall for the whole
+      // approach.
+      if (e.role === 'flank') {
+        if (e.markX !== 0) {
+          // Run the mark down. Crucially this is checked before the range
+          // test: a straight line from out wide to a mark off the shoulder
+          // passes nearer the player than the mark itself, so a version that
+          // dropped the mark the moment range closed abandoned the manoeuvre
+          // a third of the way through it and swung twenty degrees instead of
+          // a hundred.
+          e.markT -= dt;
+          const vx = e.markX - e.x, vy = e.markY - e.y;
+          const m = Math.hypot(vx, vy);
+          if (m < 34 || e.markT <= 0) {
+            e.markX = 0; e.markY = 0;
+            // Press for a beat before manoeuvring again. Without this it
+            // latches a fresh mark the frame it spends one and spirals: a
+            // sixth of them never reached the player inside eight seconds.
+            e.markCd = FLANK_COMMIT;
+          } else { sx = vx / m; sy = vy / m; }
+        } else if (e.markCd > 0) {
+          e.markCd -= dt;
+        } else if (d > FLANK_OPEN && clearShot(e.x, e.y, player.x, player.y)) {
+          const bear = Math.atan2(e.y - player.y, e.x - player.x);
+          for (let k = 0; k < 3; k++) {
+            const want = bear + e.spin * FLANK_SWING * (1 - k * 0.33);
+            const mx = player.x + Math.cos(want) * FLANK_OPEN;
+            const my = player.y + Math.sin(want) * FLANK_OPEN;
+            if (pointInWalls(mx, my, e.r + 2)) continue;
+            e.markX = mx; e.markY = my; e.markT = 4;
+            sx = (mx - e.x); sy = (my - e.y);
+            const mm = Math.hypot(sx, sy) || 1;
+            sx /= mm; sy /= mm;
+            break;
+          }
+        }
       }
     } else {
       e.atk -= dt;
@@ -2561,6 +3634,18 @@ function updateArcs(dt) {
         damageEnemy(e, b.dmg);
         b.hit.push(e);
       }
+      // Scenery is in the way of an edge too. Only the leading centre is
+      // tested against it rather than the whole sweep: a barrel is a thing you
+      // aim at by standing somewhere, and cutting one down every time a horn
+      // happened to clip it would make the room disassemble itself.
+      for (let k = 0; k < propGrid.length; k++) {
+        const pr = propGrid[k];
+        if (pr.gone || b.hit.indexOf(pr) !== -1) continue;
+        const rr = pr.kind === 'pillar' ? 18 : 13;
+        if (dist2(b.x, b.y, pr.x, pr.y) > rr * rr) continue;
+        hurtProp(pr, b.dmg);
+        b.hit.push(pr);
+      }
     }
     if (!b.dead) arcs[w++] = b;
   }
@@ -2622,6 +3707,79 @@ function updateRings(dt) {
 
 // The level names its boss; the Deceiver is the only one built so far, so a
 // level with no boss simply opens the gate on quota.
+// Odds a delve is invaded at all, and when. Rolled per run rather than per
+// rung: a scheduled ambush is not an ambush.
+function rollInvasion() {
+  if (LEVEL.invade === 0) return 0;      // not while the game is still teaching
+  const dep = LEVEL.depth || 0;
+  const odds = (0.16 + dep * 0.24) * (DIFF.setRate || 1);
+  if (Math.random() >= odds) return 0;
+  return INVADE_EARLY + Math.random() * 70;
+}
+
+function spawnInvader() {
+  const d = ENEMY_TYPES.deceiver;
+  const dep = LEVEL.depth || 0;
+  // Far enough that the arrival is a warning rather than a hit.
+  let x = 0, y = 0, ok = false;
+  for (let k = 0; k < 40 && !ok; k++) {
+    const a = Math.random() * TAU, dd = 420 + Math.random() * 260;
+    x = clamp(player.x + Math.cos(a) * dd, 60, WORLD.w - 60);
+    y = clamp(player.y + Math.sin(a) * dd, 60, WORLD.h - 60);
+    ok = !pointInWalls(x, y, d.r + 6);
+  }
+  if (!ok) return null;
+
+  const e = newBody('deceiver', x, y, 0);
+  // Lighter than the one at the gate -- he is a fight you did not plan for and
+  // may not be equipped for, and the answer to him is allowed to be running.
+  e.hp = e.maxHp = d.hp * (0.55 + dep * 0.7) * DIFF.threat;
+  e.dmg = d.dmg * DIFF.threat;
+  e.speed = d.speed * 1.15;
+  e.atk = 1.2; e.wob = 0;
+  e.summon = 1e9;                 // he hunts alone
+  e.split = 6.5; e.blink = 2.6;
+  e.slamR = 1; e.mirages = 2; e.extraGuard = 0;
+  e.ravenous = false; e.riftborn = true;
+  e.guardCd = 0; e.guardT = 0;
+  e.invader = true;
+  e.title = 'The Gilded Deceiver, Uninvited';
+  e.mutators = [];
+  enemies.push(e);
+  run.invader = e;
+  run.invadeSince = run.time;
+  run.banner = 3.4;
+  run.bannerText = 'Something has come for you';
+  run.bannerNote = 'He was not called. Kill him, or lose him in the dark.';
+  shake(9);
+  return e;
+}
+
+function updateInvasion(dt) {
+  const e = run.invader;
+  if (!e) {
+    if (run.invadeAt && run.time >= run.invadeAt && !run.gateOpen) {
+      run.invadeAt = 0;
+      spawnInvader();
+    }
+    return;
+  }
+  if (e.hp <= 0) { run.invader = null; return; }
+  // Losing him is a win of a kind: keep clear and he stops looking.
+  const far = dist2(player.x, player.y, e.x, e.y) > INVADE_GIVEUP * INVADE_GIVEUP;
+  e.lost = (e.lost || 0) + (far ? dt : -dt * 2);
+  if (e.lost < 0) e.lost = 0;
+  if (e.lost >= INVADE_HUNT) {
+    burst(e.x, e.y, '#e8c060', 22, 240);
+    e.hp = 0;                       // gone, not killed: no loot, no kill count
+    e.gaveUp = true;
+    run.invader = null;
+    run.banner = 2.6;
+    run.bannerText = 'He has lost you';
+    run.bannerNote = 'For now.';
+  }
+}
+
 function spawnBoss() {
   if (!LEVEL.boss) { run.bossDown = true; return; }
   if (LEVEL.boss === 'deceiver') spawnDeceiver();
@@ -2630,18 +3788,75 @@ function spawnBoss() {
 function spawnDeceiver() {
   const d = ENEMY_TYPES.deceiver;
   const scale = 1 + run.time / 220;
-  const e = {
-    kind: 'deceiver', x: portal.x, y: portal.y - 4, r: d.r, speed: d.speed,
-    hp: d.hp * scale, maxHp: d.hp * scale, dmg: d.dmg, tech: d.tech, cd: d.cd,
-    mass: d.mass, color: d.color, halo: d.halo, atk: 1.4, hitFlash: 0,
-    wob: 0, angle: 0, face: 1, summon: 4.5, split: 7, blink: 3.2
-  };
+  const e = newBody('deceiver', portal.x, portal.y - 4, 0);
+  e.hp = e.maxHp = d.hp * scale;
+  e.dmg = d.dmg; e.speed = d.speed; e.atk = 1.4; e.wob = 0;
+  e.summon = 4.5; e.split = 7; e.blink = 3.2;
+  // Mutator defaults. Each one that is off has to be off explicitly, or a
+  // mutator that only ever raises a value cannot be told from one that is
+  // absent.
+  e.slamR = 1; e.mirages = 3; e.extraGuard = 0;
+  e.ravenous = false; e.riftborn = false;
+  e.guardCd = 0; e.guardT = 0;
+  const rolled = LEVEL.mutators || [];
+  const epithets = [];
+  for (const id of rolled) {
+    const m = MUTATOR_BY_ID[id];
+    if (!m) continue;
+    m.apply(e);
+    epithets.push(m);
+  }
+  e.mutators = rolled.slice();
   enemies.push(e);
   run.boss = e;
-  run.banner = 3.6;
-  run.bannerText = 'The Gilded Deceiver';
-  run.bannerNote = 'He offers you the gate. Look for the shattered eye.';
+  // He does not arrive alone. The Lieutenants are the reason he is hard to
+  // reach: while one of them stands he takes almost nothing, so the fight has
+  // an order to it rather than being a single large health bar with a swarm
+  // in front of it.
+  // The escort ramps with the ladder like everything else. A flat pair of
+  // three-hundred-hit-point guards halved the extraction rate on the first
+  // delve, where the horde is thirty-four-hit-point thralls and the hero has
+  // power four: the fight has to be learnable before it is hard.
+  const dep = LEVEL.depth || 0;
+  const guard = (LEVEL.guard >= 0 ? LEVEL.guard : 1 + Math.round(dep * 2)) +
+                e.extraGuard;
+  for (let i = 0; i < guard; i++) {
+    let ok = false, x = 0, y = 0;
+    for (let k = 0; k < 20 && !ok; k++) {
+      const a = (i / guard) * TAU + k * 0.6 + Math.random() * 0.5;
+      const dd = 96 + k * 9;
+      x = clamp(e.x + Math.cos(a) * dd, 50, WORLD.w - 50);
+      y = clamp(e.y + Math.sin(a) * dd, 50, WORLD.h - 50);
+      ok = !pointInWalls(x, y, ENEMY_TYPES.lieutenant.r + 3);
+    }
+    if (!ok) continue;
+    const L = newBody('lieutenant', x, y, run.time);
+    L.hp = L.maxHp = L.maxHp * (0.5 + dep * 1.3);
+    enemies.push(L);
+  }
+  // The name states what he is capable of, so the fight is legible before it
+  // starts rather than after it has killed you once.
+  e.title = deceiverName(epithets);
+  run.bossTitle = e.title;
+  run.banner = 3.8;
+  run.bannerText = e.title;
+  // The title already names what he is; the note is for the thing you have to
+  // do about it. Letting a mutator's line take this slot buried the escort
+  // instruction, and since every rung rolls at least one mutator it buried it
+  // permanently. The flavour lives on the rung card instead.
+  run.bannerNote = guard
+    ? 'His Lieutenants hold him. Break them first.'
+    : 'He offers you the gate. Look for the shattered eye.';
   shake(10);
+}
+
+// Is anything still standing between him and you?
+function escortAlive() {
+  for (let i = 0; i < enemies.length; i++) {
+    const e = enemies[i];
+    if (e.kind === 'lieutenant' && e.hp > 0) return true;
+  }
+  return false;
 }
 
 function spawnMirages(src, n) {
@@ -2658,11 +3873,10 @@ function spawnMirages(src, n) {
       ok = !pointInWalls(x, y, d.r * 0.6);
     }
     if (!ok) continue;
-    enemies.push({
-      kind: 'mirage', x, y, r: d.r, speed: d.speed, hp: 1, maxHp: 1,
-      dmg: 0, tech: 0, cd: d.cd, mass: d.mass, color: d.color, halo: d.halo,
-      atk: 99, hitFlash: 0, wob: 0, angle: 0, face: 1, fade: 9
-    });
+    const m = newBody('mirage', x, y, 0);
+    m.speed = d.speed; m.hp = m.maxHp = 1; m.dmg = 0; m.tech = 0;
+    m.atk = 99; m.wob = 0; m.fade = 9;
+    enemies.push(m);
   }
 }
 
@@ -2673,15 +3887,105 @@ function updatePortal(dt) {
     run.bossCalled = true;
     spawnBoss();
   }
-  portal.active = run.tech >= LEVEL.quota && run.bossDown;
-  if (!portal.active) { portal.channel = 0; return; }
+  portal.active = (run.tech >= LEVEL.quota && run.bossDown) || run.forcedOpen;
+  if (!portal.active) { portal.channel = 0; portal.inside = false; return; }
   const inside = dist2(player.x, player.y, portal.x, portal.y) < PORTAL_R * PORTAL_R;
-  if (inside) {
-    portal.channel = Math.min(LEVEL.channel, portal.channel + dt);
-    if (portal.channel >= LEVEL.channel) endRun(true);
-  } else {
-    portal.channel = Math.max(0, portal.channel - dt * 0.7);
+  portal.inside = inside;
+
+  if (!run.gateOpen) {
+    // Winding it open. Nothing is escalating yet.
+    if (inside) {
+      portal.channel = Math.min(LEVEL.channel, portal.channel + dt);
+      if (portal.channel >= LEVEL.channel) {
+        run.gateOpen = true;
+        run.holdTime = 0;
+        run.holdTicks = 0;
+        run.banner = 3.0;
+        run.bannerText = 'The ley-gate stands open';
+        run.bannerNote = 'Step through, or hold it and let them come.';
+      }
+    } else {
+      portal.channel = Math.max(0, portal.channel - dt * 0.7);
+    }
+    return;
   }
+
+  // Open. Standing in it pays, and calls the delve down on you -- the two
+  // rise together, which is the whole decision.
+  if (!inside) return;
+  run.holdTime += dt;
+
+  // Where in the surge we are. The old curve closed the spawn interval to its
+  // floor inside twenty-two seconds and then grew the batch every twelve, which
+  // saturated the body cap in under a minute -- an escalation with no room left
+  // to escalate into. A surge spends a fixed budget of bodies over its active
+  // window instead, so the pressure has somewhere to go for ten minutes.
+  const wave   = Math.floor(run.holdTime / HOLD_WAVE);
+  const inWave = run.holdTime - wave * HOLD_WAVE;
+  const push   = HOLD_WAVE - HOLD_LULL;
+  const lull   = inWave >= push;
+  run.holdWave = wave;
+  run.holdLull = lull;
+
+  if (!lull) {
+    run.holdSpawn -= dt;
+    if (run.holdSpawn <= 0) {
+      const budget = 12 + wave * 7;          // bodies this surge is worth
+      run.holdSpawn = push / budget;
+      // Close in, not out at the usual spawn band: a body that has to cross two
+      // screens to reach the gate is dead before it arrives, and the surge
+      // dilutes itself into nothing however many it sends.
+      const e = spawnEnemy(run.time, 0.72, 1.15);
+      if (e) {
+        // Bodies the gate calls are harder than bodies the delve was cut with,
+        // and each surge harder than the last. Without this the escalation is
+        // only ever a larger number of the same thing, which a kitted hero
+        // out-damages indefinitely.
+        const k = 1 + wave * 0.55;
+        e.hp = e.maxHp = e.maxHp * k;
+        e.dmg *= 1 + wave * 0.28;
+        if (wave >= 1 && Math.random() < Math.min(0.5, 0.08 + wave * 0.03)) makeElite(e);
+      }
+    }
+  } else if (!run.holdCrest) {
+    // The crest has passed: name the lull so it reads as an offer, not a bug.
+    run.holdCrest = true;
+  }
+
+  // Paid at the crest of each surge you outlast, so the reward lands with the
+  // breathing room rather than in the middle of the next build.
+  while (run.holdTime >= run.holdTicks * HOLD_WAVE + push) {
+    run.holdTicks++;
+    run.holdCrest = false;
+    const pay = Math.round(HOLD_COIN * Math.pow(run.holdTicks, HOLD_POW) *
+                           (1 + (LEVEL.depth || 0)));
+    run.coins += pay;
+    toast('Surge ' + run.holdTicks + ' held \u00b7 ' + pay + ' coin', PAL.coin);
+    // Every other surge, and not the best rolls until late: a piece per surge
+    // arms you against the surge that follows it, and the hold ends up paying
+    // for its own difficulty.
+    if (run.holdTicks % 2 === 0) {
+      const it = rollItem(Math.min(1, 0.42 + run.holdTicks * 0.055));
+      drops.push({ x: portal.x + rand(-40, 40), y: portal.y + rand(-40, 40),
+                   vx: 0, vy: 0, item: it, r: 9, life: 0, pulled: false });
+    }
+    // And the gate shuts on the last one, taking you with it. Being thrown out
+    // of a delve you survived is an extraction, not a death.
+    if (run.holdTicks >= HOLD_MAX) {
+      run.banner = 3.2;
+      run.bannerText = 'The ley-gate closes';
+      run.bannerNote = 'It has been held as long as it can be.';
+      endRun(true);
+      return;
+    }
+  }
+}
+
+// Step through: the run ends and everything banks. Only offered once the gate
+// actually stands open.
+function stepThrough() {
+  if (state !== 'play' || !run.gateOpen || !portal.inside) return;
+  endRun(true);
 }
 
 function compactEnemies() {
@@ -2718,13 +4022,17 @@ function update(dt) {
   updateEnemies(dt);
   compactEnemies();
   updateLoot(dt);
+  updateInvasion(dt);
+  updateProps(dt);
+  updateSlams(dt);
+  updateHazards(dt);
   updateDrops(dt);
+  updateCorpse(dt);
   updateParticles(dt);
   updateRings(dt);
   updatePortal(dt);
   updateSpawning(dt);
   updateCamera(dt);
-  if (run.pendingLevels > 0 && state === 'play') openLevelUp();
 }
 
 /* ---------------------------------------------------------------------------
@@ -2991,12 +4299,35 @@ function forgeEnemy(kind, r, color, flash) {
       g.fillRect(-u * 0.17, -u * 0.72, u * 0.12, u * 0.09);
       g.fillRect(u * 0.05, -u * 0.72, u * 0.12, u * 0.09);
       g.shadowBlur = 0;
+
+      // A Lieutenant wears his master's gold over the same plate, so the two
+      // read as one household without needing a second silhouette.
+      if (kind === 'lieutenant') {
+        g.strokeStyle = 'rgba(232,192,96,.92)';
+        g.lineWidth = u * 0.07;
+        g.beginPath();                                    // circlet
+        g.moveTo(-u * 0.28, -u * 0.86); g.lineTo(u * 0.28, -u * 0.86);
+        g.stroke();
+        g.beginPath();                                    // and its points
+        g.moveTo(-u * 0.2, -u * 0.86); g.lineTo(-u * 0.14, -u * 1.0);
+        g.lineTo(-u * 0.08, -u * 0.86);
+        g.moveTo(u * 0.08, -u * 0.86); g.lineTo(u * 0.14, -u * 1.0);
+        g.lineTo(u * 0.2, -u * 0.86);
+        g.stroke();
+        g.lineWidth = u * 0.045;                          // pauldron trim
+        [-1, 1].forEach(sx => {
+          g.beginPath();
+          g.ellipse(sx * u * 0.62, -u * 0.3, u * 0.3, u * 0.25, sx * 0.34, 0, TAU);
+          g.stroke();
+        });
+      }
     }
 
     // The void-brand: asymmetrical by doctrine, and the tell that these were
     // people who gave up their will rather than monsters.
     const bx = kind === 'eclipse' ? -u * 0.09 : u * 0.1;
-    const by = kind === 'eclipse' ? -u * 0.78 : kind === 'breaker' ? -u * 0.84 : -u * 0.8;
+    const by = kind === 'eclipse' ? -u * 0.78 :
+               (kind === 'breaker' || kind === 'lieutenant') ? -u * 0.84 : -u * 0.8;
     g.shadowColor = PAL.brand; g.shadowBlur = u * 0.3;
     g.strokeStyle = PAL.brand; g.lineWidth = u * 0.05;
     g.beginPath();
@@ -4378,6 +5709,24 @@ function forgeProps() {
   }
 }
 
+// The breakable subset, gathered once a delve is cut. Pillars and pitch
+// barrels only -- a crate is furniture.
+function indexBreakables() {
+  // A rung that has not taught pitch yet does not contain any. The scenery
+  // scatter puts barrels down on its own, quite apart from the pass that seeds
+  // them beside the packs, so suppressing one source is not enough.
+  if (LEVEL && LEVEL.pitch === 0) props = props.filter(pr => pr.kind !== 'barrel');
+  propGrid = [];
+  for (let i = 0; i < props.length; i++) {
+    const pr = props[i];
+    if (!PROP_HP[pr.kind]) continue;
+    pr.hp = PROP_HP[pr.kind];
+    pr.gone = false;
+    pr.shake = 0;
+    propGrid.push(pr);
+  }
+}
+
 // Scenery that stands up rather than lying flat. These are drawn with the
 // bodies, sorted by depth, so a thrall can pass behind a pillar and be hidden
 // by it -- which is the cheapest verticality a flat view can buy.
@@ -4403,7 +5752,7 @@ function drawStanding(t, x0, y0, x1, y1) {
   if (!lowFx) {
     for (let i = 0; i < props.length; i++) {
       const p = props[i];
-      if (!STANDING[p.kind]) continue;
+      if (!STANDING[p.kind] || p.gone) continue;
       if (p.x < x0 || p.x > x1 || p.y < y0 || p.y > y1) continue;
       _sortable.push(p);
     }
@@ -4429,7 +5778,11 @@ function drawStanding(t, x0, y0, x1, y1) {
     if (o === player) { drawPlayer(t); continue; }
     if (o.kind && STANDING[o.kind]) {
       const spr = SPR['p_' + o.kind + '_' + o.q];
-      if (spr) blit(spr, o.x, o.y);
+      // A struck barrel rocks on its base, so a room tells you it is about to
+      // be a worse room.
+      if (spr && o.shake > 0) {
+        blit(spr, o.x + Math.sin(o.shake * 90) * 2.4, o.y);
+      } else if (spr) blit(spr, o.x, o.y);
     } else {
       drawEnemy(o);
     }
@@ -4536,6 +5889,67 @@ function drawLoot(t) {
 // over to it. Rarer drops throw a taller, brighter beam.
 const BEACON_H = { worn: 54, tempered: 74, wrought: 98, hallowed: 124, riven: 150, mythic: 190 };
 
+// The corpse reads as a colder light than any drop: a pale shaft with a
+// cairn under it, so it never gets mistaken for gear at a glance across a
+// room.
+function drawCorpse(t) {
+  const c = run && run.corpse;
+  if (!c || c.taken) return;
+  const pulse = 0.66 + 0.34 * Math.sin(t * 1.7);
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  if (!lowFx) {
+    const h = 108;
+    const beam = ctx.createLinearGradient(0, c.y - h, 0, c.y + 6);
+    beam.addColorStop(0, tint(CORPSE_HUE, 1, 0));
+    beam.addColorStop(0.45, tint(CORPSE_HUE, 1, 0.20 * pulse));
+    beam.addColorStop(1, tint(CORPSE_HUE, 1.3, 0.58 * pulse));
+    ctx.fillStyle = beam;
+    ctx.beginPath();
+    ctx.moveTo(c.x - 20, c.y - h); ctx.lineTo(c.x + 20, c.y - h);
+    ctx.lineTo(c.x + 9, c.y + 6);  ctx.lineTo(c.x - 9, c.y + 6);
+    ctx.closePath(); ctx.fill();
+  }
+  const pool = ctx.createRadialGradient(c.x, c.y + 5, 0, c.x, c.y + 5, 40);
+  pool.addColorStop(0, tint(CORPSE_HUE, 1.2, 0.52 * pulse));
+  pool.addColorStop(1, tint(CORPSE_HUE, 1, 0));
+  ctx.fillStyle = pool;
+  ctx.beginPath(); ctx.ellipse(c.x, c.y + 5, 40, 18, 0, 0, TAU); ctx.fill();
+  ctx.restore();
+
+  // The cairn: stacked stones with your own blade driven into them, canted off
+  // vertical and broken short. Upright and symmetrical it read as a crucifix,
+  // which is the one thing this marker must not look like.
+  ctx.fillStyle = 'rgba(6,5,4,.62)';
+  ctx.beginPath(); ctx.ellipse(c.x, c.y + 10, 19, 7, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#494540';
+  ctx.beginPath(); ctx.ellipse(c.x, c.y + 5, 16, 6.5, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#5c574e';
+  ctx.beginPath(); ctx.ellipse(c.x - 2, c.y - 2, 11, 4.6, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#6a6459';
+  ctx.beginPath(); ctx.ellipse(c.x + 3, c.y - 7, 6.5, 3, 0, 0, TAU); ctx.fill();
+
+  ctx.save();
+  ctx.translate(c.x + 2, c.y - 8);
+  ctx.rotate(-0.22);
+  // blade, snapped off square at the top rather than tapering to a point
+  ctx.fillStyle = tint(CORPSE_HUE, 1.15, 0.92);
+  ctx.beginPath();
+  ctx.moveTo(-2.6, 2); ctx.lineTo(-2.0, -26); ctx.lineTo(2.0, -26); ctx.lineTo(2.6, 2);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = tint(CORPSE_HUE, 0.7, 0.85);
+  ctx.fillRect(-0.5, -26, 1.4, 28);
+  // guard, low and swept, and a pommel bead above it
+  ctx.fillStyle = '#8d8577';
+  ctx.beginPath();
+  ctx.moveTo(-9, -1); ctx.lineTo(9, -3); ctx.lineTo(9, 0.4); ctx.lineTo(-9, 2.4);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#a49a86';
+  ctx.beginPath(); ctx.arc(0, 5.5, 2.6, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+
 function drawDrops(t) {
   for (let i = 0; i < drops.length; i++) {
     const d = drops[i];
@@ -4640,6 +6054,38 @@ function drawEnemy(e) {
     }
     return;
   }
+  // Gold, additive, and cheap: a filled radial rather than a shadowBlur, which
+  // measured at seven milliseconds a body when the crescents used one.
+  if (e.kind === 'lieutenant') {
+    const p = 0.62 + 0.38 * Math.sin(e.wob * 0.9);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const au = ctx.createRadialGradient(e.x, e.y, e.r * 0.3, e.x, e.y, e.r * 2.1);
+    au.addColorStop(0, 'rgba(255,206,112,' + (0.40 * p).toFixed(3) + ')');
+    au.addColorStop(0.5, 'rgba(226,150,60,' + (0.20 * p).toFixed(3) + ')');
+    au.addColorStop(1, 'rgba(232,192,96,0)');
+    ctx.fillStyle = au;
+    ctx.beginPath(); ctx.arc(e.x, e.y, e.r * 2.1, 0, TAU); ctx.fill();
+    // and a hard ring at the body, so the gold survives a bright floor
+    ctx.strokeStyle = 'rgba(255,214,130,' + (0.55 * p).toFixed(3) + ')';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(e.x, e.y + e.r * 0.5, e.r * 1.05, 0, TAU); ctx.stroke();
+    // The line back to the man he is holding up. Without it the Deceiver just
+    // looks invulnerable for no stated reason.
+    const b = run && run.boss;
+    if (b && b.hp > 0) {
+      const g2 = ctx.createLinearGradient(e.x, e.y, b.x, b.y);
+      g2.addColorStop(0, 'rgba(232,192,96,.34)');
+      g2.addColorStop(1, 'rgba(232,192,96,.07)');
+      ctx.strokeStyle = g2;
+      ctx.lineWidth = 1.6;
+      ctx.setLineDash([7, 9]);
+      ctx.lineDashOffset = -e.wob * 9;
+      ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    ctx.restore();
+  }
   if (e.elite) {
     // A brand around the feet: the same void-mark the thralls carry, but lit.
     const p = 0.6 + 0.4 * Math.sin(e.wob * 0.7);
@@ -4662,7 +6108,27 @@ function drawEnemy(e) {
     ctx.beginPath(); ctx.arc(e.x, e.y, e.r * 1.1, 0, TAU); ctx.fill();
     ctx.restore();
   }
-  if ((e.kind === 'breaker' || e.elite) && e.hp < e.maxHp * 0.92) {
+  // The guard has to be readable across a room or the rhythm is not a rhythm:
+  // a plate of light across its front while it is up, gone the instant it
+  // drops. That gap is the whole tactic.
+  if (e.braced) {
+    const a = e.angle;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = 'rgba(255,214,140,.34)';
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, e.r + 7, a - 1.05, a + 1.05);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,236,196,.72)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, e.r + 7, a - 1.05, a + 1.05);
+    ctx.stroke();
+    ctx.restore();
+  }
+  if ((e.kind === 'breaker' || e.kind === 'lieutenant' || e.elite) &&
+      e.hp < e.maxHp * 0.92) {
     const w = e.r * 1.5, f = clamp(e.hp / e.maxHp, 0, 1);
     const bx = e.x - w / 2, by = e.y - e.r - 6;
     ctx.fillStyle = 'rgba(0,0,0,.55)';
@@ -4905,6 +6371,26 @@ function drawMinimap() {
   }
   ctx.fillStyle = portal.active ? PAL.arcane : '#7a6e58';
   ctx.beginPath(); ctx.arc(x + portal.x * k, y + portal.y * k, 4 * mk, 0, TAU); ctx.fill();
+  // The invader is plotted whatever else is hidden: losing him is a decision
+  // you make, not a thing that happens because you could not find him.
+  const inv = run.invader;
+  if (inv && inv.hp > 0) {
+    const ix = x + inv.x * k, iy = y + inv.y * k;
+    ctx.fillStyle = 'rgba(232,192,96,.95)';
+    ctx.beginPath(); ctx.arc(ix, iy, 3.4 * mk, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(226,120,44,.8)'; ctx.lineWidth = 1.4 * mk;
+    ctx.beginPath(); ctx.arc(ix, iy, 6.4 * mk, 0, TAU); ctx.stroke();
+  }
+  // Your own corpse is always plotted. Finding it is not meant to be the
+  // challenge -- getting to it and back out is.
+  if (run.corpse && !run.corpse.taken) {
+    const c = run.corpse, cx = x + c.x * k, cy = y + c.y * k, r = 4 * mk;
+    ctx.strokeStyle = CORPSE_HUE; ctx.lineWidth = 1.6 * mk;
+    ctx.beginPath();
+    ctx.moveTo(cx - r, cy - r); ctx.lineTo(cx + r, cy + r);
+    ctx.moveTo(cx + r, cy - r); ctx.lineTo(cx - r, cy + r);
+    ctx.stroke();
+  }
   // The player pip carries a dark ring so it stays readable over pale rock.
   ctx.strokeStyle = 'rgba(0,0,0,.75)'; ctx.lineWidth = 1.6 * mk;
   ctx.beginPath(); ctx.arc(x + player.x * k, y + player.y * k, 3.2 * mk, 0, TAU); ctx.stroke();
@@ -4928,7 +6414,274 @@ function drawMinimap() {
   ctx.restore();
 }
 
+/* --- the hall, drawn ------------------------------------------------------
+   The place itself, behind the menu. A gate-house with four alcoves in it,
+   and every alcove is as built as the coin spent on it: cold and bare at
+   nothing, lit and full at three. This is the whole point of a hub you can
+   upgrade -- if the only evidence is a number on a card, the coin bought a
+   spreadsheet row rather than a room.
+   -------------------------------------------------------------------- */
+function drawHall(t) {
+  const W = view.w, H = view.h;
+  // The Hall screen leaves the top three tenths of the frame uncovered, so the
+  // whole room has to live there. With the horizon at four tenths the wall
+  // filled the visible band and every station sat below the veil.
+  const horizon = H * 0.19;
+  const K = Math.min(1.5, Math.max(1, W / 330));
+
+  // Back wall, and the flagstone running away from it.
+  const wall = ctx.createLinearGradient(0, 0, 0, horizon);
+  wall.addColorStop(0, '#0a0d0e');
+  wall.addColorStop(1, '#1b2022');
+  ctx.fillStyle = wall;
+  ctx.fillRect(0, 0, W, horizon);
+  const fl = ctx.createLinearGradient(0, horizon, 0, H);
+  fl.addColorStop(0, '#2b2118');
+  fl.addColorStop(0.55, '#1d160f');
+  fl.addColorStop(1, '#0c0906');
+  ctx.fillStyle = fl;
+  ctx.fillRect(0, horizon, W, H - horizon);
+
+  // Courses on the wall, and flags on the floor, both in perspective enough
+  // to say which way is away.
+  ctx.strokeStyle = 'rgba(150,132,98,.10)';
+  ctx.lineWidth = 1;
+  for (let y = 14; y < horizon; y += 22) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    const off = (y / 22) % 2 ? 0 : 46;
+    for (let x = off; x < W; x += 92) {
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + 22); ctx.stroke();
+    }
+  }
+  ctx.strokeStyle = 'rgba(150,132,98,.09)';
+  let step = 13;
+  for (let y = horizon + step; y < H; y += step) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    step *= 1.16;
+  }
+  for (let i = -3; i <= 3; i++) {
+    ctx.beginPath();
+    ctx.moveTo(W / 2 + i * (W * 0.11), horizon);
+    ctx.lineTo(W / 2 + i * (W * 0.36), H);
+    ctx.stroke();
+  }
+
+  // The ley-gate the whole house is built around.
+  const gx = W / 2, gy = horizon * 0.99, gr = Math.min(W * 0.13, 60);
+  const pulse = 0.72 + 0.28 * Math.sin(t * 0.9);
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const glow = ctx.createRadialGradient(gx, gy, 0, gx, gy, gr * 2.4);
+  glow.addColorStop(0, tint(PAL.arcane, 1.1, 0.30 * pulse));
+  glow.addColorStop(0.5, tint(PAL.arcane, 1, 0.10 * pulse));
+  glow.addColorStop(1, tint(PAL.arcane, 1, 0));
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.arc(gx, gy, gr * 2.4, 0, TAU); ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = '#05070a';
+  ctx.beginPath();
+  ctx.moveTo(gx - gr, gy);
+  ctx.lineTo(gx - gr, gy - gr * 0.5);
+  ctx.quadraticCurveTo(gx, gy - gr * 2.05, gx + gr, gy - gr * 0.5);
+  ctx.lineTo(gx + gr, gy);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = tint(PAL.arcane, 1, 0.5); ctx.lineWidth = 2; ctx.stroke();
+
+  // Four alcoves. Order matches the cards so the room and the list agree.
+  // All four sit in the upper third, where the Hall screen leaves the room
+  // uncovered. Spread down the frame they were simply behind the cards.
+  const spots = [
+    { x: W * 0.15, y: horizon + (H - horizon) * 0.045 },
+    { x: W * 0.85, y: horizon + (H - horizon) * 0.045 },
+    { x: W * 0.30, y: horizon + (H - horizon) * 0.125 },
+    { x: W * 0.70, y: horizon + (H - horizon) * 0.125 }
+  ];
+  for (let i = 0; i < HALL.length; i++) {
+    ctx.save();
+    ctx.translate(spots[i].x, spots[i].y);
+    ctx.scale(K, K);
+    drawStation(HALL[i].id, hallTier(HALL[i].id), 0, 0, t);
+    ctx.restore();
+  }
+
+  // Braziers, and one more of them for every stone laid.
+  const lit = hallTotal();
+  for (let i = 0; i < 2 + Math.floor(lit / 4); i++) {
+    const bx = W * (0.42 + 0.16 * (i % 2)) + (i > 1 ? (i % 2 ? 74 : -74) : 0);
+    const by = horizon + (H - horizon) * (0.03 + 0.10 * Math.floor(i / 2));
+    drawBrazier(bx, by, t + i * 1.7);
+  }
+
+  // Dark at the edges, so the eye goes to the gate.
+  const vg = ctx.createRadialGradient(W / 2, H * 0.22, Math.min(W, H) * 0.26,
+                                      W / 2, H * 0.22, Math.max(W, H) * 0.72);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(0,0,0,.72)');
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, W, H);
+}
+
+// A flame painted in opaque warm colours with only a small additive halo
+// around it. Built from stacked additive gradients it went white: three of
+// these and a lit station in the same corner of the frame add up past 1 in
+// every channel, and the room reads as fog rather than firelight.
+function drawFlame(x, y, h, t) {
+  const f = 0.82 + 0.18 * Math.sin(t * 4.6);
+  const H = h * f;
+  const body = (w, hh, col) => {
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.moveTo(x, y - hh);
+    ctx.quadraticCurveTo(x + w, y - hh * 0.42, x + w * 0.72, y);
+    ctx.quadraticCurveTo(x, y + hh * 0.16, x - w * 0.72, y);
+    ctx.quadraticCurveTo(x - w, y - hh * 0.42, x, y - hh);
+    ctx.fill();
+  };
+  body(H * 0.44, H, '#8a3410');
+  body(H * 0.32, H * 0.78, '#d9601b');
+  body(H * 0.19, H * 0.52, '#f6b040');
+  body(H * 0.09, H * 0.26, '#ffe6ae');
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const g = ctx.createRadialGradient(x, y - H * 0.4, 0, x, y - H * 0.4, H * 2.6);
+  g.addColorStop(0, tint(PAL.ember, 1.15, 0.20));
+  g.addColorStop(0.4, tint(PAL.ember, 1, 0.07));
+  g.addColorStop(1, tint(PAL.ember, 1, 0));
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(x, y - H * 0.4, H * 2.6, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+
+function drawBrazier(x, y, t) {
+  ctx.fillStyle = 'rgba(4,3,2,.55)';
+  ctx.beginPath(); ctx.ellipse(x, y + 12, 15, 5, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#2e2a25';
+  ctx.beginPath();
+  ctx.moveTo(x - 4, y + 10); ctx.lineTo(x + 4, y + 10);
+  ctx.lineTo(x + 8, y - 6); ctx.lineTo(x - 8, y - 6);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#3d3830';
+  ctx.beginPath(); ctx.ellipse(x, y - 6, 11, 4, 0, 0, TAU); ctx.fill();
+  drawFlame(x, y - 7, 17, t);
+}
+
+// Each station is a silhouette that gains parts, and light, per stone laid.
+function drawStation(id, tier, x, y, t) {
+  const lit = tier > 0;
+  // Halved from where this started: four lit stations and three braziers in
+  // one band of the frame were adding past white.
+  const glow = (hue, r, a) => {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const g = ctx.createRadialGradient(x, y - 8, 0, x, y - 8, r);
+    g.addColorStop(0, tint(hue, 1.1, a * 0.5));
+    g.addColorStop(0.45, tint(hue, 1, a * 0.18));
+    g.addColorStop(1, tint(hue, 1, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y - 8, r, 0, TAU); ctx.fill();
+    ctx.restore();
+  };
+  ctx.fillStyle = 'rgba(4,3,2,.5)';
+  ctx.beginPath(); ctx.ellipse(x, y + 14, 26, 8, 0, 0, TAU); ctx.fill();
+
+  if (id === 'vault') {
+    // Shelves, filling up.
+    ctx.fillStyle = lit ? '#4a4038' : '#2a2622';
+    ctx.fillRect(x - 24, y - 34, 48, 48);
+    ctx.strokeStyle = 'rgba(10,8,6,.8)'; ctx.lineWidth = 2;
+    ctx.strokeRect(x - 24, y - 34, 48, 48);
+    ctx.strokeStyle = 'rgba(150,132,98,.35)'; ctx.lineWidth = 1;
+    for (let r = 1; r < 3; r++) {
+      ctx.beginPath();
+      ctx.moveTo(x - 24, y - 34 + r * 16); ctx.lineTo(x + 24, y - 34 + r * 16);
+      ctx.stroke();
+    }
+    for (let i = 0; i < tier * 3; i++) {
+      ctx.fillStyle = i % 2 ? PAL.coin : '#8a7b5e';
+      const rr = Math.floor(i / 3), cc = i % 3;
+      ctx.fillRect(x - 20 + cc * 14, y - 30 + rr * 16, 10, 11);
+    }
+    if (lit) glow(PAL.coin, 46, 0.10 * tier);
+
+  } else if (id === 'forge') {
+    // Anvil, and a fire that grows.
+    // A hearth with an anvil in front of it, so the fire has somewhere to be.
+    ctx.fillStyle = '#241f1a';
+    ctx.beginPath();
+    ctx.moveTo(x - 22, y - 6);
+    ctx.lineTo(x - 22, y - 30);
+    ctx.quadraticCurveTo(x, y - 44, x + 22, y - 30);
+    ctx.lineTo(x + 22, y - 6);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#443c33'; ctx.lineWidth = 2.5; ctx.stroke();
+    if (lit) drawFlame(x, y - 9, 11 + tier * 5, t);
+    ctx.fillStyle = '#332c25';
+    ctx.fillRect(x - 12, y + 2, 24, 12);
+    ctx.fillStyle = '#443c33';
+    ctx.beginPath();
+    ctx.moveTo(x - 17, y - 4); ctx.lineTo(x + 17, y - 4);
+    ctx.lineTo(x + 10, y + 2); ctx.lineTo(x - 10, y + 2);
+    ctx.closePath(); ctx.fill();
+    if (lit) glow(PAL.ember, 40 + tier * 14, 0.16 + 0.06 * tier);
+
+  } else if (id === 'reliquary') {
+    // A plinth, then a case, then candles round it.
+    ctx.fillStyle = lit ? '#463f36' : '#292522';
+    ctx.fillRect(x - 16, y - 20, 32, 34);
+    ctx.fillStyle = lit ? '#585045' : '#33302b';
+    ctx.fillRect(x - 20, y - 24, 40, 6);
+    if (tier >= 1) {
+      ctx.strokeStyle = tint(PAL.gold, 1, 0.75); ctx.lineWidth = 1.6;
+      ctx.strokeRect(x - 11, y - 42, 22, 20);
+      ctx.fillStyle = tint(PAL.arcane, 1, 0.32 + 0.16 * tier);
+      ctx.fillRect(x - 9, y - 40, 18, 16);
+    }
+    for (let i = 0; i < (tier >= 2 ? 2 : 0) + (tier >= 3 ? 2 : 0); i++) {
+      const cx = x - 18 + (i % 2) * 36, cy = y - 26 - Math.floor(i / 2) * 12;
+      ctx.fillStyle = '#d8cba6';
+      ctx.fillRect(cx - 1.5, cy - 8, 3, 8);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = tint(PAL.ember, 1.4, 0.7);
+      ctx.beginPath(); ctx.arc(cx, cy - 10, 2.2, 0, TAU); ctx.fill();
+      ctx.restore();
+    }
+    if (lit) glow(PAL.arcane, 44 + tier * 10, 0.10 + 0.06 * tier);
+
+  } else {
+    // The wardstone: a cracked menhir whose seams take light.
+    ctx.fillStyle = lit ? '#3f4448' : '#24272a';
+    ctx.beginPath();
+    ctx.moveTo(x - 15, y + 14); ctx.lineTo(x - 11, y - 40);
+    ctx.lineTo(x + 10, y - 44); ctx.lineTo(x + 16, y + 14);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(8,10,11,.85)'; ctx.lineWidth = 2; ctx.stroke();
+    if (lit) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = tint(PAL.arcane, 1, 0.42 + 0.12 * tier);
+      ctx.lineWidth = 2.2;
+      for (let i = 0; i < tier; i++) {
+        const yy = y - 34 + i * 14;
+        ctx.beginPath();
+        ctx.moveTo(x - 8, yy); ctx.lineTo(x + 3, yy + 5);
+        ctx.lineTo(x - 2, yy + 9); ctx.lineTo(x + 9, yy + 6);
+        ctx.stroke();
+      }
+      ctx.restore();
+      glow(PAL.arcane, 44 + tier * 14, 0.12 + 0.07 * tier);
+    }
+  }
+}
+
 function draw(t) {
+  // In the gate-house there is no delve to look at, and the last one is not
+  // where the player is standing.
+  if (state === 'menu') {
+    ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+    drawHall(t);
+    return;
+  }
   ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
   ctx.fillStyle = PAL.floor;
   ctx.fillRect(0, 0, view.w, view.h);
@@ -4951,6 +6704,9 @@ function draw(t) {
   drawWalls(x0, y0, x1, y1);
   drawProps(x0, y0, x1, y1);
   drawLoot(t);
+  drawHazards(t);
+  drawSlams(t);
+  drawCorpse(t);
   drawDrops(t);
   drawStanding(t, x0, y0, x1, y1);
   drawArcs();
@@ -4981,7 +6737,11 @@ function draw(t) {
     ctx.fillText(run.bannerText || LEVEL.name, view.w / 2, view.h * 0.42);
     ctx.fillStyle = 'rgba(186,164,128,.85)';
     ctx.font = 'italic 400 13px Georgia, "Times New Roman", serif';
-    ctx.fillText(run.bannerNote || REGION.name, view.w / 2, view.h * 0.42 + 24);
+    // On a ramp rung the opening line is the one thing this delve is for. It
+    // is phrased as an instruction to a Vanguard rather than a tutorial hint,
+    // and it only ever appears on the first three.
+    ctx.fillText(run.bannerNote || LEVEL.lesson || REGION.name,
+                 view.w / 2, view.h * 0.42 + 24);
     ctx.strokeStyle = 'rgba(196,164,116,.4)';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -5011,12 +6771,16 @@ function draw(t) {
     ctx.restore();
     ctx.textAlign = 'left';
   }
-  if (run && run.boss && run.boss.hp > 0) {
-    const bs = run.boss, f = clamp(bs.hp / bs.maxHp, 0, 1);
+  // An invader is the nearer problem: while one is standing he owns the bar,
+  // because he is the thing about to kill you.
+  const shown = run && ((run.invader && run.invader.hp > 0) ? run.invader :
+                        (run.boss && run.boss.hp > 0) ? run.boss : null);
+  if (shown) {
+    const bs = shown, f = clamp(bs.hp / bs.maxHp, 0, 1);
     const w = Math.min(320, view.w - 96), x0 = (view.w - w) / 2, y0 = 84;
     ctx.fillStyle = 'rgba(10,7,4,.8)';
     ctx.fillRect(x0 - 2, y0 - 2, w + 4, 12);
-    ctx.fillStyle = 'rgba(232,192,96,.9)';
+    ctx.fillStyle = bs.invader ? 'rgba(226,120,44,.95)' : 'rgba(232,192,96,.9)';
     ctx.fillRect(x0, y0, w * f, 8);
     ctx.strokeStyle = 'rgba(206,180,140,.6)'; ctx.lineWidth = 1;
     ctx.strokeRect(x0 - 2.5, y0 - 2.5, w + 5, 13);
@@ -5024,7 +6788,7 @@ function draw(t) {
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(238,224,192,.9)';
     ctx.font = '400 12px Georgia, "Times New Roman", serif';
-    ctx.fillText('The Gilded Deceiver', view.w / 2, y0 - 7);
+    ctx.fillText(bs.title || 'The Gilded Deceiver', view.w / 2, y0 - 7);
     ctx.restore();
   }
   drawPortalArrow(t);
@@ -5042,24 +6806,34 @@ const el = {
   hud: $('hud'), hpBar: $('hpBar'), hpFill: $('hpFill'), hpText: $('hpText'),
   techBar: $('techBar'), techFill: $('techFill'), techText: $('techText'),
   clock: $('clock'), lvlText: $('lvlText'), flash: $('flash'),
-  start: $('start'), levelup: $('levelup'), paused: $('paused'), over: $('over'),
-  cards: $('cards'), lvlNum: $('lvlNum'), lvlSub: $('lvlSub'), bestLine: $('bestLine'),
+  start: $('start'), paused: $('paused'), over: $('over'),
+  bestLine: $('bestLine'),
   overTitle: $('overTitle'), overSub: $('overSub'), overStats: $('overStats'),
   delve: $('delve'), kitLine: $('kitLine'), gearSub: $('gearSub'), setLine: $('setLine'),
+  loadouts: $('loadouts'),
+  vendor: $('vendor'), vendorList: $('vendorList'), vendorDetail: $('vendorDetail'),
+  purseLine: $('purseLine'), vendorLine: $('vendorLine'),
   gear: $('gear'), gearSlots: $('gearSlots'), gearStats: $('gearStats'),
   bagGrid: $('bagGrid'), bagCount: $('bagCount'), gearDetail: $('gearDetail'),
-  gearClose: $('gearClose'), bagBtn: $('bagBtn'), bagBadge: $('bagBadge')
+  gearClose: $('gearClose'), bagBtn: $('bagBtn'), bagBadge: $('bagBadge'),
+  gateBtn: $('gateBtn'), gateNote: $('gateBtn').querySelector('i'),
+  hall: $('hall'), hallList: $('hallList'), hallDetail: $('hallDetail'),
+  hallPurse: $('hallPurse'), hallLine: $('hallLine')
 };
 
 let state = 'menu';   // menu | play | levelup | pause | over
 
 function showScreen(name) {
-  for (const s of ['start', 'delve', 'levelup', 'paused', 'over', 'gear']) {
+  for (const s of ['start', 'delve', 'vendor', 'hall', 'paused', 'over', 'gear']) {
     el[s].classList.toggle('on', s === name);
   }
-  el.hud.hidden = (name === 'start' || name === 'delve');
+  // The HUD belongs to a delve. It was hidden only on two of the hub screens,
+  // so the vendor, the kit and the hall all showed a life bar and a slag
+  // counter for a run nobody was in.
+  el.hud.hidden = (name !== null && name !== 'paused' && name !== 'over');
   // The bag button belongs to the delve, not to any screen over it.
   el.bagBtn.hidden = (name !== null);
+  if (name !== null) el.gateBtn.hidden = true;
 }
 
 const fmtTime = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
@@ -5082,10 +6856,84 @@ function saveBest(b) {
 const STASH_KEY = 'rivenmark.stash.v1';
 const VAULT_MAX = 60;
 
+/* --- the gate-house -------------------------------------------------------
+   Coin was worth exactly three things: a commissioned piece, a temper, and a
+   reliquary. All three are consumables, so a good run bought a slightly better
+   next run and nothing else -- there was nowhere for the money to accumulate
+   into. The hall is that place. Four stations, three tiers each, every tier
+   paid for once and kept forever, and each one changes a number the player can
+   already feel.
+   -------------------------------------------------------------------- */
+const HALL = [
+  { id: 'vault', name: 'The Vault', mark: '\u25a4',
+    note: 'Shelves, and the stone to hold them.',
+    tiers: [
+      { cost: 900,  text: '+20 vault, +1 kit preset' },
+      { cost: 2600, text: '+40 vault, +2 kit presets' },
+      { cost: 6200, text: '+60 vault, +3 kit presets' }
+    ] },
+  { id: 'forge', name: 'The Forge', mark: '\u2692',
+    note: 'A fire hot enough to argue with.',
+    tiers: [
+      { cost: 1100, text: 'Commissions and tempers cost 12% less' },
+      { cost: 3000, text: '24% less' },
+      { cost: 7000, text: '36% less, and a wider bag by four' }
+    ] },
+  { id: 'reliquary', name: 'The Reliquary', mark: '\u2735',
+    note: 'Somewhere to keep what the delve gives up.',
+    tiers: [
+      { cost: 1400, text: 'Regalia falls 15% more often' },
+      { cost: 3600, text: '30% more often, reliquaries cost 15% less' },
+      { cost: 8000, text: '50% more often, reliquaries cost 30% less' }
+    ] },
+  { id: 'wardstone', name: 'The Wardstone', mark: '\u25c8',
+    note: 'It remembers every Vanguard who came back.',
+    tiers: [
+      { cost: 1200, text: '+10 life, +1.5% ward' },
+      { cost: 3200, text: '+22 life, +3% ward' },
+      { cost: 7500, text: '+38 life, +5% ward' }
+    ] }
+];
+const HALL_BY_ID = {};
+for (const h of HALL) HALL_BY_ID[h.id] = h;
+const HALL_MAX = 3;
+
+const hallTier = id => clamp((stash.hall && stash.hall[id]) || 0, 0, HALL_MAX);
+const hallTotal = () => HALL.reduce((n, h) => n + hallTier(h.id), 0);
+
+// The caps the hall moves. Read through these rather than the constants, or a
+// tier bought is a tier that does nothing.
+const vaultCap   = () => VAULT_MAX + 20 * hallTier('vault');
+const loadoutCap = () => LOADOUT_MAX + hallTier('vault');
+const bagCap     = () => BAG_MAX + (hallTier('forge') >= 3 ? 4 : 0);
+const forgeCut   = () => 1 - 0.12 * hallTier('forge');
+const relicCut   = () => 1 - 0.15 * Math.max(0, hallTier('reliquary') - 1);
+const setBoost   = () => 1 + [0, 0.15, 0.30, 0.50][hallTier('reliquary')];
+const wardStone  = () => ({ maxHp: [0, 10, 22, 38][hallTier('wardstone')],
+                            ward:  [0, 0.015, 0.03, 0.05][hallTier('wardstone')] });
+
+function hallCost(h) {
+  const t = hallTier(h.id);
+  return t >= HALL_MAX ? 0 : h.tiers[t].cost;
+}
+
+function hallBuy(h) {
+  const t = hallTier(h.id);
+  if (t >= HALL_MAX) return 'already whole';
+  const cost = h.tiers[t].cost;
+  if ((stash.coins || 0) < cost) return 'not enough coin';
+  stash.coins -= cost;
+  stash.hall[h.id] = t + 1;
+  saveStash();
+  return null;
+}
+
 function blankStash() {
   const g = {};
   for (const sl of SLOTS) g[sl.id] = null;
-  return { gear: g, vault: [], hero: 'isaac', seq: 0 };
+  return { gear: g, vault: [], hero: 'isaac', seq: 0, xp: 0, level: 1,
+           coins: 0, pity: 0, loadouts: [], corpse: null,
+           hall: { vault: 0, forge: 0, reliquary: 0, wardstone: 0 } };
 }
 
 function loadStash() {
@@ -5099,10 +6947,49 @@ function loadStash() {
     if (validItem(st.gear[sl.id], sl.id)) out.gear[sl.id] = st.gear[sl.id];
   }
   if (Array.isArray(st.vault)) {
-    out.vault = st.vault.filter(it => validItem(it)).slice(0, VAULT_MAX);
+    out.vault = st.vault.filter(it => validItem(it)).slice(0, vaultCap());
   }
   if (HEROES[st.hero]) out.hero = st.hero;
   out.seq = +st.seq || 0;
+  out.xp = Math.max(0, +st.xp || 0);
+  out.level = levelForXp(out.xp);            // derived, never trusted from disk
+  out.coins = Math.max(0, +st.coins || 0);
+  out.pity = clamp(+st.pity || 0, 0, 20);
+  // Tiers are the only thing on disk that cannot be re-earned, so they are
+  // filtered as carefully as the gear: an id that no longer exists is dropped
+  // rather than carried, and a tier above the ceiling is clamped to it.
+  if (st.hall && typeof st.hall === 'object') {
+    for (const h of HALL) out.hall[h.id] = clamp(+st.hall[h.id] || 0, 0, HALL_MAX);
+  }
+  // Loadouts hold item ids, not items, so a preset can never resurrect a
+  // piece that has since been sold, tempered away or left in a delve.
+  if (Array.isArray(st.loadouts)) {
+    out.loadouts = st.loadouts.slice(0, loadoutCap()).map(L => ({
+      name: String(L && L.name || 'Kit').slice(0, 18),
+      hero: HEROES[L && L.hero] ? L.hero : 'isaac',
+      slots: (() => {
+        const o = {};
+        for (const sl of SLOTS) {
+          const v = L && L.slots && L.slots[sl.id];
+          o[sl.id] = typeof v === 'number' ? v : null;
+        }
+        return o;
+      })()
+    }));
+  }
+  // The corpse is filtered like everything else: a level id that no longer
+  // exists, or items that no longer validate, simply stop being owed to you.
+  const cp = st.corpse;
+  if (cp && typeof cp === 'object' && LEVEL_BY_ID[cp.level_id]) {
+    const items = Array.isArray(cp.items)
+      ? cp.items.filter(it => validItem(it)).slice(0, CORPSE_CARRY) : [];
+    const coins = Math.max(0, +cp.coins || 0);
+    if (items.length || coins) {
+      out.corpse = { level_id: cp.level_id,
+                     hero: HEROES[cp.hero] ? cp.hero : 'isaac',
+                     x: +cp.x || 0, y: +cp.y || 0, items, coins };
+    }
+  }
   return out;
 }
 
@@ -5127,10 +7014,16 @@ let stash = blankStash();
 // Carried home from a finished delve. Equipped kit always; the bag only if the
 // Vanguard actually walked out.
 function bankRun(extracted) {
+  // Slag is only worth anything if it leaves the delve with you.
+  if (extracted) {
+    stash.xp = (stash.xp || 0) + run.tech;
+    stash.level = levelForXp(stash.xp);
+    stash.coins = (stash.coins || 0) + run.coins;
+  }
   for (const sl of SLOTS) stash.gear[sl.id] = player.gear[sl.id] || null;
   if (extracted) {
     for (const it of player.bag) {
-      if (stash.vault.length >= VAULT_MAX) break;
+      if (stash.vault.length >= vaultCap()) break;
       stash.vault.push(it);
     }
   }
@@ -5147,7 +7040,7 @@ function refreshBestLine() {
 }
 
 /* --- HUD (written only when a value actually changes) ------------------- */
-const hudCache = { hp: -1, tech: -1, time: -1, lvl: -1 };
+const hudCache = { hp: -1, tech: -1, time: -1, lvl: -1, gate: '' };
 
 function syncHud() {
   const hpF = clamp(player.hp / player.maxHp, 0, 1);
@@ -5171,7 +7064,45 @@ function syncHud() {
   }
   const secs = Math.floor(run.time);
   if (secs !== hudCache.time) { hudCache.time = secs; el.clock.textContent = fmtTime(secs); }
-  if (run.level !== hudCache.lvl) { hudCache.lvl = run.level; el.lvlText.textContent = 'Rank ' + run.level; }
+  // The HUD shows the hero's standing power, not a per-run rank -- there is
+  // no per-run rank any more.
+  if (player.level !== hudCache.lvl) {
+    hudCache.lvl = player.level;
+    el.lvlText.textContent = 'Lv ' + player.level;
+  }
+  syncGateBtn();
+}
+
+/* The way out. It only exists once the gate actually stands open and you are
+   standing in it, because the offer it makes -- leave now, or hold and take
+   what the hold pays -- is only a real decision from inside the circle. The
+   sub-line is the price of staying, so the button itself carries the whole
+   risk/reward read without a second panel. */
+function syncGateBtn() {
+  const on = state === 'play' && run.gateOpen && portal.inside;
+  if (!on) {
+    if (!el.gateBtn.hidden) { el.gateBtn.hidden = true; hudCache.gate = ''; }
+    return;
+  }
+  el.gateBtn.hidden = false;
+  const held = run.holdTime > 0.35;
+  const push = HOLD_WAVE - HOLD_LULL;
+  const nextIn = Math.max(0, run.holdTicks * HOLD_WAVE + push - run.holdTime);
+  const pay = Math.round(HOLD_COIN * Math.pow(run.holdTicks + 1, HOLD_POW) *
+                         (1 + (LEVEL.depth || 0)));
+  const key = held ? Math.ceil(nextIn) + '/' + run.holdTicks + (run.holdLull ? 'L' : '') : 'idle';
+  if (key === hudCache.gate) return;
+  hudCache.gate = key;
+  el.gateBtn.classList.toggle('held', held && !run.holdLull);
+  el.gateBtn.classList.toggle('lull', held && run.holdLull);
+  // In the lull the button stops counting down and starts asking the question:
+  // that pause is the whole point of running the hold in surges.
+  el.gateNote.textContent = !held
+    ? 'or stand here and hold it open'
+    : run.holdLull
+      ? run.holdTicks + ' held  ·  quiet  ·  take surge ' + (run.holdTicks + 1) + '?'
+      : 'surge ' + (run.holdTicks + 1) + '  ·  ' + pay + ' coin in ' +
+        Math.ceil(nextIn) + 's';
 }
 
 let flashTimer = 0;
@@ -5206,18 +7137,26 @@ function resetRun(heroId, levelId, diffId) {
   };
 
   generateWorld(spawn, pt);
-  portal  = { x: pt.x, y: pt.y, pulse: 0, channel: 0, active: false };
+  portal  = { x: pt.x, y: pt.y, pulse: 0, channel: 0, active: false, inside: false };
   player  = makePlayer(spawn.x, spawn.y, hero);
   enemies = []; arcs = []; loot = []; drops = []; particles = []; rings = [];
+  slams = []; hazards = [];
   enemyGrid = new SpatialHash(ENEMY_CELL);
 
-  run = { time: 0, tech: 0, xp: 0, xpNeed: 11, level: 1, kills: 0,
-          spawnTimer: 1.4, pendingLevels: 0, hero: hero, level_id: LEVEL.id,
+  run = { time: 0, tech: 0, kills: 0,
+          spawnTimer: 1.4, hero: hero, level_id: LEVEL.id,
           diff_id: DIFF.id,
           banner: 4.2,
           bannerText: null, bannerNote: null,
           bossCalled: false, bossDown: false, boss: null,
-          spawnX: spawn.x, spawnY: spawn.y, found: 0, toast: null, bagWarned: 0 };
+          spawnX: spawn.x, spawnY: spawn.y, found: 0, toast: null, bagWarned: 0,
+          coins: 0, gateOpen: false, holdTime: 0, holdTicks: 0, holdSpawn: 1.5,
+          forcedOpen: false, corpse: null,
+          holdWave: 0, holdLull: false, holdCrest: false,
+          invader: null, invadeAt: 0, invadeKills: 0 };
+  run.invadeAt = rollInvasion();
+  // If you died in this level and never came back for it, it is still here.
+  run.corpse = placeCorpse();
 
   cam.x = clamp(player.x - view.w / 2, 0, Math.max(0, WORLD.w - view.w));
   cam.y = clamp(player.y - view.h / 2, 0, Math.max(0, WORLD.h - view.h));
@@ -5253,6 +7192,20 @@ function endRun(won) {
   saveBest(b);
 
   const carried = player.bag.length;
+  // Only a piece you actually carried out counts against the pity counter.
+  notePity(won && player.bag.some(it => it.set === SET_ID));
+  // Dying leaves everything unbanked on the floor, and the delve keeps it
+  // until you come back for it. Only one corpse exists at a time -- dying on
+  // the walk back is what makes the walk back cost something.
+  let lost = 0;
+  if (!won) {
+    const items = player.bag.slice(0, CORPSE_CARRY);
+    lost = (stash.corpse && (stash.corpse.items.length || stash.corpse.coins)) ? 1 : 0;
+    stash.corpse = (items.length || run.coins)
+      ? { level_id: LEVEL.id, hero: run.hero, x: player.x, y: player.y,
+          items, coins: run.coins }
+      : null;
+  }
   bankRun(won);
 
   el.overTitle.innerHTML = won ? '<em>Escaped</em>' : '<span>Slain</span>';
@@ -5260,68 +7213,162 @@ function endRun(won) {
     ? (carried ? 'The ley-gate held. You carried ' + carried +
                  (carried === 1 ? ' find' : ' finds') + ' out with the slag.'
                : 'The ley-gate held. You carried the slag out.')
-    : (carried ? 'The hive-mind claimed another of the Clear-Sighted. ' + carried +
-                 (carried === 1 ? ' find stays' : ' finds stay') + ' where you fell.'
-               : 'The hive-mind claimed another of the Clear-Sighted.');
+    : (stash.corpse
+        ? 'The hive-mind claimed another of the Clear-Sighted. ' +
+          (carried ? carried + (carried === 1 ? ' find' : ' finds') + ' and ' : '') +
+          run.coins + ' coin lie in ' + LEVEL.name + '. Descend again and take them back.' +
+          (lost ? ' Your older corpse is gone.' : '')
+        : 'The hive-mind claimed another of the Clear-Sighted.');
   el.overStats.innerHTML =
     '<div>Endured<b>' + fmtTime(run.time) + '</b></div>' +
     '<div>Slain<b>' + run.kills + '</b></div>' +
     '<div>Slag<b>' + run.tech + '</b></div>' +
-    '<div>' + (won ? 'Carried out' : 'Left behind') + '<b>' + carried + '</b></div>';
+    '<div>' + (won ? 'Carried out' : 'Left behind') + '<b>' + carried + '</b></div>' +
+    '<div>' + (won ? 'Coin banked' : 'Coin left') + '<b>' + run.coins + '</b></div>';
   showScreen('over');
   refreshBestLine();
 }
 
 /* --- level-up ----------------------------------------------------------- */
 
-function rollUpgrades(n) {
-  const pool = UPGRADES.filter(u => (player.upg[u.id] || 0) < u.max);
-  const out = [];
-  while (out.length < n && pool.length) {
-    out.push(pool.splice((Math.random() * pool.length) | 0, 1)[0]);
+/* rollUpgrades / openLevelUp / takeUpgrade are gone with the boons. Slag is
+   experience now, banked on the hero when the delve ends, so nothing
+   interrupts a run to offer a card. UPGRADES itself is kept only as the
+   vendor's crafting table -- see the hub. */
+
+/* --- loadouts -------------------------------------------------------------
+   A preset is a list of item ids, not a copy of the items. Anything the
+   preset names that is no longer in the kit or the vault is simply skipped,
+   so a saved loadout degrades gracefully instead of conjuring back a piece
+   that was tempered, sold or lost in a delve.
+   ---------------------------------------------------------------------- */
+const LOADOUT_MAX = 4;
+
+function findItem(uid) {
+  if (uid == null) return null;
+  for (const sl of SLOTS) {
+    const it = stash.gear[sl.id];
+    if (it && it.uid === uid) return { it, from: 'gear', slot: sl.id };
   }
-  return out;
+  for (let i = 0; i < stash.vault.length; i++) {
+    if (stash.vault[i].uid === uid) return { it: stash.vault[i], from: 'vault', index: i };
+  }
+  return null;
 }
 
-function openLevelUp() {
-  state = 'levelup';
-  stickEnd();
-  el.lvlNum.textContent = run.level;
-  el.lvlSub.textContent = run.pendingLevels > 1
-    ? run.pendingLevels + ' boons await'
-    : 'A boon is offered';
-  el.cards.innerHTML = '';
-
-  const offer = rollUpgrades(3);
-  if (!offer.length) {                    // everything maxed — just bank it
-    run.pendingLevels = 0;
-    state = 'play';
-    return;
+function saveLoadout(name) {
+  const slots = {};
+  for (const sl of SLOTS) {
+    const it = stash.gear[sl.id];
+    slots[sl.id] = it ? it.uid : null;
   }
-  for (const u of offer) {
-    const have = player.upg[u.id] || 0;
-    const card = document.createElement('button');
-    card.className = 'card';
-    card.type = 'button';
-    card.innerHTML =
-      '<span class="glyph">' + u.glyph + '</span>' +
-      '<span><h4>' + u.name + '</h4><p>' + u.desc +
-      (have ? ' <span class="tier">· held ' + have + '</span>' : '') + '</p></span>';
-    card.addEventListener('click', () => takeUpgrade(u));
-    el.cards.appendChild(card);
-  }
-  showScreen('levelup');
+  const L = { name: (name || 'Kit ' + (stash.loadouts.length + 1)).slice(0, 18),
+              hero: stash.hero || 'isaac', slots };
+  stash.loadouts.push(L);
+  if (stash.loadouts.length > loadoutCap()) stash.loadouts.shift();
+  saveStash();
+  return L;
 }
 
-function takeUpgrade(u) {
-  player.upg[u.id] = (player.upg[u.id] || 0) + 1;
-  recomputeStats();
-  if (u.onTake) u.onTake(player);
-  run.pendingLevels--;
-  hudCache.hp = -1;
-  if (run.pendingLevels > 0) { openLevelUp(); return; }
-  state = 'play';
-  showScreen(null);
+// Returns how many pieces it could actually restore, so the UI can say when a
+// preset has aged badly rather than silently equipping half a kit.
+function applyLoadout(L) {
+  if (!L) return { set: 0, missing: 0 };
+  let set = 0, missing = 0;
+  // Everything currently worn goes back to the vault first, or a swap could
+  // drop a piece on the floor of the gate-house.
+  for (const sl of SLOTS) {
+    const it = stash.gear[sl.id];
+    if (it) { stash.gear[sl.id] = null; stash.vault.push(it); }
+  }
+  for (const sl of SLOTS) {
+    const uid = L.slots[sl.id];
+    if (uid == null) continue;
+    const found = findItem(uid);
+    if (!found || found.from !== 'vault') { missing++; continue; }
+    if (found.it.slot !== sl.id) { missing++; continue; }
+    stash.vault.splice(found.index, 1);
+    stash.gear[sl.id] = found.it;
+    set++;
+  }
+  if (HEROES[L.hero]) stash.hero = L.hero;
+  saveStash();
+  return { set, missing };
+}
+
+/* --- the vendor ----------------------------------------------------------
+   Coin exists to take the sting out of luck. Everything here is a way of
+   spending it to make a specific thing happen rather than hoping it does:
+   buy a piece for a slot you have never filled, reroll a piece you nearly
+   like, or push the Regalia pity counter along.
+   ---------------------------------------------------------------------- */
+const VENDOR = [
+  { id: 'commission', name: 'Commission a piece',
+    note: 'A Spirit-wrought piece for a slot of your choosing.',
+    cost: p => Math.round((180 + p * 6) * forgeCut()), slot: true },
+  { id: 'temper', name: 'Temper a piece',
+    note: 'Reroll every affix on something you are wearing, keeping its rarity.',
+    cost: p => Math.round((120 + p * 4) * forgeCut()), worn: true },
+  { id: 'reliquary', name: 'Open a reliquary',
+    note: 'A piece of the Sundered Regalia. Costs less the longer one has ' +
+          'refused to drop.', cost: p => Math.round(Math.max(300, 1400 - (stash.pity || 0) * 55) * relicCut()) }
+];
+
+function vendorCost(v) { return Math.round(v.cost(stashPower())); }
+
+function canAfford(v) { return (stash.coins || 0) >= vendorCost(v); }
+
+// Bad-luck protection: every delve that ends without a Regalia piece pushes
+// the counter along, and the reliquary gets cheaper. Finding one resets it.
+function notePity(foundSet) {
+  if (foundSet) stash.pity = 0;
+  else stash.pity = Math.min(20, (stash.pity || 0) + 1);
+}
+
+function vendorBuy(v, arg) {
+  if (!canAfford(v)) return false;
+  const cost = vendorCost(v);
+  if (v.id === 'commission') {
+    if (!arg || !SLOT_BY_ID[arg]) return false;
+    if (stash.vault.length >= vaultCap()) return false;
+    const it = rollItem(0.75, arg);
+    it.rarity = 'wrought';
+    // A commission is worth the price: three affixes, rolled at depth.
+    const pool = SLOT_AFFIXES[arg].slice();
+    it.affixes = [];
+    for (let i = 0; i < 3 && pool.length; i++) {
+      const id = pool.splice((Math.random() * pool.length) | 0, 1)[0];
+      const a = AFFIX_BY_ID[id];
+      let val = (a.lo + Math.random() * (a.hi - a.lo)) * 1.15;
+      val = a.dp ? +val.toFixed(a.dp)
+                 : (Math.abs(a.lo) >= 1 ? Math.max(1, Math.round(val)) : val);
+      it.affixes.push({ id, v: val });
+    }
+    it.name = AFFIX_BY_ID[it.affixes[0].id].name + ' ' + it.base;
+    stash.vault.push(it);
+  } else if (v.id === 'temper') {
+    const it = arg && stash.gear[arg];
+    if (!it || it.set === SET_ID) return false;      // the Regalia is fixed
+    const pool = SLOT_AFFIXES[it.slot].slice();
+    const n = it.affixes.length;
+    it.affixes = [];
+    for (let i = 0; i < n && pool.length; i++) {
+      const id = pool.splice((Math.random() * pool.length) | 0, 1)[0];
+      const a = AFFIX_BY_ID[id];
+      let val = (a.lo + Math.random() * (a.hi - a.lo)) * (0.8 + Math.random() * 0.6);
+      val = a.dp ? +val.toFixed(a.dp)
+                 : (Math.abs(a.lo) >= 1 ? Math.max(1, Math.round(val)) : val);
+      it.affixes.push({ id, v: val });
+    }
+    it.name = AFFIX_BY_ID[it.affixes[0].id].name + ' ' + it.base;
+  } else if (v.id === 'reliquary') {
+    if (stash.vault.length >= vaultCap()) return false;
+    stash.vault.push(rollSetPiece());
+    stash.pity = 0;
+  }
+  stash.coins -= cost;
+  saveStash();
+  return true;
 }
 
 /* --- the bag ------------------------------------------------------------
@@ -5338,13 +7385,17 @@ let gearSel = null;   // {from:'bag'|'worn', index|slot}
    equip logic has to be written twice. */
 let gearCtx = null;
 
+// Mid-delve the bag is a record of what you have found, not a workbench:
+// sorting and equipping happen in the hub between delves, so a fight is never
+// paused to compare two rings.
 function runCtx() {
-  return { gear: player.gear, bag: player.bag, cap: BAG_MAX, live: true,
-           sub: "The Vanguard's kit", back: 'Back to the delve',
+  return { gear: player.gear, bag: player.bag, cap: bagCap(), live: true,
+           readOnly: true,
+           sub: 'Carried so far', back: 'Back to the delve',
            bagName: 'Bag' };
 }
 function stashCtx() {
-  return { gear: stash.gear, bag: stash.vault, cap: VAULT_MAX, live: false,
+  return { gear: stash.gear, bag: stash.vault, cap: vaultCap(), live: false,
            sub: 'What you carried home', back: 'Back to the gate-house',
            bagName: 'Vault' };
 }
@@ -5453,7 +7504,40 @@ function renderGear() {
   }
 
   renderSetLine();
+  renderLoadouts();
   renderDetail();
+}
+
+// Presets, and the button that makes one. Only in the hub -- swapping kit
+// mid-delve is exactly what the hub exists to prevent.
+function renderLoadouts() {
+  if (!el.loadouts) return;
+  if (gearCtx.live) { el.loadouts.innerHTML = ''; return; }
+  let h = '<h5 class="gear-h">Loadouts</h5><div class="lrow">';
+  stash.loadouts.forEach((L, i) => {
+    const worn = SLOTS.filter(sl => L.slots[sl.id] != null).length;
+    h += '<button data-load="' + i + '">' + L.name +
+         '<i>' + worn + '/8 \u00b7 ' + HEROES[L.hero].name + '</i></button>';
+  });
+  if (stash.loadouts.length < loadoutCap()) h += '<button data-save="1">Save current<i>as a preset</i></button>';
+  h += '</div><div class="lnote" id="lnote"></div>';
+  el.loadouts.innerHTML = h;
+
+  el.loadouts.querySelectorAll('[data-load]').forEach(b => {
+    b.onclick = () => {
+      const L = stash.loadouts[+b.dataset.load];
+      const r = applyLoadout(L);
+      gearSel = null;
+      renderGear();
+      const n = document.getElementById('lnote');
+      if (n) n.textContent = r.missing
+        ? L.name + ': ' + r.set + ' equipped, ' + r.missing + ' no longer in the vault'
+        : L.name + ': ' + r.set + ' equipped';
+    };
+    b.oncontextmenu = e => { e.preventDefault(); };
+  });
+  const sv = el.loadouts.querySelector('[data-save]');
+  if (sv) sv.onclick = () => { saveLoadout(); renderGear(); };
 }
 
 // How much of the Regalia is on, and what that is currently paying.
@@ -5518,18 +7602,21 @@ function renderDetail() {
   el.gearDetail.innerHTML =
     '<div class="dt" style="color:' + r.colour + '">' + it.name + '</div>' +
     '<div class="db">' + r.name + ' · ' + SLOT_BY_ID[it.slot].name + '</div>' +
-    '<ul>' + it.affixes.map(a => '<li>' + affixText(a) + '</li>').join('') + '</ul>' +
+    '<ul>' + it.affixes.map(a => '<li>' + affixText(a, gearCtx.live
+        ? player.hero : (stash.hero || 'isaac')) + '</li>').join('') + '</ul>' +
     (cmp.length
       ? '<div class="cmp">against ' + (worn ? worn.name : 'an empty slot') + ': ' +
         cmp.map(c => '<span class="' + (c.good ? 'up' : 'dn') + '">' +
                      c.txt + ' ' + c.name + '</span>').join(', ') + '</div>'
       : '') +
-    '<div class="gear-acts">' +
-      (gearSel.from === 'bag'
-        ? '<button class="prime" id="gaEquip">Equip</button>' +
-          '<button id="gaDrop">Discard</button>'
-        : '<button id="gaOff">Take off</button>') +
-    '</div>';
+    (gearCtx.readOnly
+      ? '<div class="cmp">Sorted back at the gate-house.</div>'
+      : '<div class="gear-acts">' +
+        (gearSel.from === 'bag'
+          ? '<button class="prime" id="gaEquip">Equip</button>' +
+            '<button id="gaDrop">Discard</button>'
+          : '<button id="gaOff">Take off</button>') +
+        '</div>');
   const eq = document.getElementById('gaEquip');
   if (eq) eq.onclick = equipSelected;
   const dp = document.getElementById('gaDrop');
@@ -5675,18 +7762,49 @@ window.addEventListener('orientationchange', () => setTimeout(resize, 120));
     heroWrap.appendChild(card);
   }
 
+  // Fifty-two delves is too many to lay out as cards, so the ladder is a
+  // scrolling list that opens on the deepest one you are equal to -- the place
+  // you would have chosen anyway.
   const lvlWrap = $('levelPick');
-  for (const L of LEVELS) {
-    const card = document.createElement('button');
-    card.className = 'card';
-    card.type = 'button';
-    card.dataset.level = L.id;
-    card.innerHTML =
-      '<span class="glyph">\u25C8</span>' +
-      '<span><h4>' + L.name + '</h4><p>' + L.note +
-      (L.tag ? ' <span class="tier">' + L.tag + '</span>' : '') + '</p></span>';
-    card.addEventListener('click', () => { pick.level = L.id; syncPick(); });
-    lvlWrap.appendChild(card);
+  function buildLadder() {
+    const pw = stashPower();
+    const owed = stash.corpse;
+    lvlWrap.innerHTML = '';
+    for (const L of LEVELS) {
+      const st = delveStanding(L, pw);
+      const hasCorpse = owed && owed.level_id === L.id;
+      const card = document.createElement('button');
+      card.className = 'card rung';
+      card.type = 'button';
+      card.dataset.level = L.id;
+      card.innerHTML =
+        '<span class="glyph">\u25C8</span>' +
+        '<span><h4>' + L.name +
+        (hasCorpse ? ' <span class="owed">\u2020 your dead</span>' : '') +
+        '</h4><p>' + (hasCorpse
+          ? owed.items.length + (owed.items.length === 1 ? ' find' : ' finds') +
+            ' and ' + owed.coins + ' coin still lie here.'
+          : L.note) +
+        ' <span class="tier">' + L.tag + ' \u00b7 power ' + L.power +
+        ' \u00b7 slag ' + L.quota + '</span>' +
+        // What waits at the gate. A rung's boss never changes, so naming it
+        // here is the difference between choosing a delve and drawing one.
+        '<span class="ward">' + bossTitle(L) + bossNote(L) + '</span>' +
+        (L.lesson ? '<span class="teach">' + L.lesson + '</span>' : '') +
+        '</p></span>' +
+        '<span class="standing" style="color:' + st.colour + '">' + st.text + '</span>';
+      card.addEventListener('click', () => { pick.level = L.id; syncPick(); });
+      lvlWrap.appendChild(card);
+    }
+  }
+  buildLadder();
+
+  // Open on the deepest delve you are an even match for.
+  function defaultLevel() {
+    const pw = stashPower();
+    let best = LEVELS[0].id;
+    for (const L of LEVELS) if (pw >= L.power) best = L.id;
+    return best;
   }
 
   const diffWrap = $('diffPick');
@@ -5706,11 +7824,15 @@ window.addEventListener('orientationchange', () => setTimeout(resize, 120));
   }
 
   function syncPick() {
+    const pwl = $('pwLine');
+    if (pwl) pwl.textContent = '\u00b7 your power ' + stashPower();
     for (const c of heroWrap.children) c.classList.toggle('sel', c.dataset.hero === pick.hero);
     for (const c of lvlWrap.children)  c.classList.toggle('sel', c.dataset.level === pick.level);
     for (const c of diffWrap.children) c.classList.toggle('sel', c.dataset.diff === pick.diff);
     const H = HEROES[pick.hero], D = DIFF_BY_ID[pick.diff], L = LEVEL_BY_ID[pick.level];
-    $('beginLine').textContent = H.name + ' \u00b7 ' + L.name + ' \u00b7 ' + D.name;
+    const st = delveStanding(L, stashPower());
+    $('beginLine').textContent = H.name + ' \u00b7 ' + L.name + ' \u00b7 ' + D.name +
+      '  \u2014  ' + st.text;
   }
 
   window.__syncPick = syncPick;
@@ -5719,17 +7841,184 @@ window.addEventListener('orientationchange', () => setTimeout(resize, 120));
 
   $('toDelve').addEventListener('click', () => {
     pick.hero = stash.hero || pick.hero;
+    buildLadder();
+    pick.level = defaultLevel();
     syncPick();
     state = 'menu';
     showScreen('delve');
+    // Scroll the chosen rung into view, or the ladder always opens at the top
+    // however deep you have got. Set the ladder's own scrollTop rather than
+    // calling scrollIntoView: that scrolls every ancestor too, and on a short
+    // phone it dragged the whole screen down far enough to push the hero cards
+    // off the top of it.
+    // Measured off rects rather than offsetTop: the ladder is not a positioned
+    // element, so a rung's offsetParent is the screen and offsetTop is not the
+    // offset into the box being scrolled.
+    const sel = lvlWrap.querySelector('.card.sel');
+    if (sel) {
+      lvlWrap.scrollTop += sel.getBoundingClientRect().top -
+        lvlWrap.getBoundingClientRect().top -
+        lvlWrap.clientHeight / 2 + sel.offsetHeight / 2;
+    }
+    el.delve.scrollTop = 0;
   });
   $('delveBack').addEventListener('click', () => { showScreen('start'); });
   $('beginRun').addEventListener('click', () => startRun(pick.hero, pick.level, pick.diff));
   $('toKit').addEventListener('click', () => openGear('stash'));
+  $('toVendor').addEventListener('click', openVendor);
+  $('toHall').addEventListener('click', openHall);
+  $('hallBack').addEventListener('click', () => { showScreen('start'); });
+  $('vendorBack').addEventListener('click', () => {
+    refreshKitLine(); refreshVendorLine(); refreshHallLine(); showScreen('start');
+  });
 })();
 
 // How much is waiting in the vault, shown on the menu so the kit is not a
 // door you have to open to find out whether anything is behind it.
+let vendorSel = null;
+
+let hallSel = null;
+
+function openHall() {
+  hallSel = null;
+  state = 'menu';
+  renderHall();
+  showScreen('hall');
+}
+
+function renderHall() {
+  const built = hallTotal();
+  el.hallPurse.innerHTML = '<b>' + (stash.coins || 0) + '</b> coin  \u00b7  ' +
+    built + ' of ' + (HALL.length * HALL_MAX) + ' stones laid';
+  el.hallList.innerHTML = '';
+  for (const h of HALL) {
+    const t = hallTier(h.id);
+    const done = t >= HALL_MAX;
+    const cost = hallCost(h);
+    const ok = done || (stash.coins || 0) >= cost;
+    const card = document.createElement('button');
+    card.className = 'card' + (hallSel === h.id ? ' sel' : '') + (ok ? '' : ' poor');
+    card.type = 'button';
+    card.innerHTML = '<span class="glyph">' + h.mark + '</span><span><h4>' + h.name +
+      ' <span class="pips">' + '\u25c6'.repeat(t) + '\u25c7'.repeat(HALL_MAX - t) +
+      '</span></h4><p>' + h.note +
+      ' <span class="tier">' + (done ? 'whole' : cost + ' coin') + '</span></p></span>';
+    card.addEventListener('click', () => { hallSel = h.id; renderHall(); });
+    el.hallList.appendChild(card);
+  }
+  renderHallDetail();
+}
+
+function renderHallDetail() {
+  const h = HALL_BY_ID[hallSel];
+  if (!h) {
+    el.hallDetail.innerHTML =
+      '<p class="fine">A delve pays in coin and the vendor spends it on one ' +
+      'run at a time. What is laid here is laid for good.</p>';
+    return;
+  }
+  const t = hallTier(h.id);
+  let rows = '';
+  for (let i = 0; i < HALL_MAX; i++) {
+    const have = i < t;
+    rows += '<div class="hrow' + (have ? ' have' : '') + '">' +
+            '<span>' + (have ? '\u25c6' : '\u25c7') + '</span>' +
+            '<span>' + h.tiers[i].text + '</span>' +
+            '<b>' + (have ? 'laid' : h.tiers[i].cost + ' coin') + '</b></div>';
+  }
+  const done = t >= HALL_MAX;
+  el.hallDetail.innerHTML = '<h4>' + h.name + '</h4>' + rows +
+    '<div class="gear-acts">' + (done
+      ? '<button disabled>Whole</button>'
+      : '<button class="prime" data-lay="1">Lay the next stone</button>') +
+    '</div><p class="fine" id="hnote"></p>';
+  const btn = el.hallDetail.querySelector('[data-lay]');
+  if (btn) btn.addEventListener('click', () => {
+    const err = hallBuy(h);
+    renderHall();
+    refreshHallLine();
+    refreshVendorLine();
+    const n = $('hnote');
+    if (n) n.textContent = err || 'The stone is laid.';
+  });
+}
+
+function refreshHallLine() {
+  const built = hallTotal();
+  el.hallLine.textContent = built
+    ? built + ' of ' + (HALL.length * HALL_MAX) + ' stones laid'
+    : 'four stations, all of them cold';
+}
+
+function openVendor() {
+  vendorSel = null;
+  state = 'menu';
+  renderVendor();
+  showScreen('vendor');
+}
+
+function renderVendor() {
+  el.purseLine.innerHTML = '<b>' + (stash.coins || 0) + '</b> coin' +
+    ((stash.pity || 0) ? '  \u00b7  the Regalia has refused you ' + stash.pity +
+      ' delve' + (stash.pity === 1 ? '' : 's') : '');
+  el.vendorList.innerHTML = '';
+  for (const v of VENDOR) {
+    const cost = vendorCost(v);
+    const ok = canAfford(v);
+    const card = document.createElement('button');
+    card.className = 'card' + (vendorSel === v.id ? ' sel' : '') + (ok ? '' : ' poor');
+    card.type = 'button';
+    card.innerHTML = '<span class="glyph">\u2724</span><span><h4>' + v.name +
+      '</h4><p>' + v.note + ' <span class="tier">' + cost + ' coin</span></p></span>';
+    card.addEventListener('click', () => { vendorSel = v.id; renderVendor(); });
+    el.vendorList.appendChild(card);
+  }
+  renderVendorDetail();
+}
+
+function renderVendorDetail() {
+  const v = VENDOR.find(x => x.id === vendorSel);
+  if (!v) { el.vendorDetail.innerHTML =
+    '<div class="db">Coin is the one thing in the delve that is not luck.</div>'; return; }
+  const ok = canAfford(v);
+  let body = '';
+  if (v.slot) {
+    body = '<div class="db">Which slot?</div><div class="grid vslots">' +
+      SLOTS.map(sl => '<button data-slot="' + sl.id + '">' + sl.name + '</button>').join('') +
+      '</div>';
+  } else if (v.worn) {
+    const worn = SLOTS.filter(sl => stash.gear[sl.id] && stash.gear[sl.id].set !== SET_ID);
+    body = worn.length
+      ? '<div class="db">Which piece?</div><div class="grid vslots">' +
+        worn.map(sl => '<button data-slot="' + sl.id + '">' +
+          stash.gear[sl.id].name + '</button>').join('') + '</div>'
+      : '<div class="db">Nothing you are wearing can be tempered.</div>';
+  } else {
+    body = '<div class="gear-acts"><button class="prime" data-buy="1">Open it</button></div>';
+  }
+  el.vendorDetail.innerHTML =
+    '<div class="dt">' + v.name + '</div>' +
+    '<div class="db">' + vendorCost(v) + ' coin' +
+    (ok ? '' : '  \u2014  you cannot afford this yet') + '</div>' + body;
+
+  if (!ok) return;
+  el.vendorDetail.querySelectorAll('[data-slot]').forEach(b => {
+    b.onclick = () => {
+      if (vendorBuy(v, b.dataset.slot)) { renderVendor(); refreshKitLine(); refreshVendorLine(); }
+    };
+  });
+  const buy = el.vendorDetail.querySelector('[data-buy]');
+  if (buy) buy.onclick = () => {
+    if (vendorBuy(v)) { renderVendor(); refreshKitLine(); refreshVendorLine(); }
+  };
+}
+
+function refreshVendorLine() {
+  el.vendorLine.textContent = (stash.coins || 0)
+    ? (stash.coins || 0) + ' coin to spend'
+    : 'no coin';
+}
+
 function refreshKitLine() {
   const worn = SLOTS.filter(sl => stash.gear[sl.id]).length;
   const n = stash.vault.length;
@@ -5743,6 +8032,7 @@ function refreshKitLine() {
 $('againBtn').addEventListener('click', () => startRun(run && run.hero));
 $('pauseBtn').addEventListener('click', pauseRun);
 el.bagBtn.addEventListener('click', () => openGear('run'));
+el.gateBtn.addEventListener('click', stepThrough);
 el.gearClose.addEventListener('click', closeGear);
 $('resumeBtn').addEventListener('click', resumeRun);
 $('abortBtn').addEventListener('click', () => {
@@ -5781,7 +8071,7 @@ function frame(now) {
   if (state === 'play') {
     update(dt);
     syncHud();
-  } else if (state === 'levelup' || state === 'pause' || state === 'gear') {
+  } else if (state === 'pause' || state === 'gear') {
     updateCamera(dt);
   }
   draw(t);
@@ -5793,11 +8083,13 @@ itemSeq = Math.max(itemSeq, stash.seq || 0);
 resetRun(stash.hero);
 refreshBestLine();
 refreshKitLine();
+refreshVendorLine();
+refreshHallLine();
 showScreen('start');
 requestAnimationFrame(frame);
 </script>
 <script>
-/* generated 2026-08-25T02:28:45Z by tools/build-debug.js — do not edit */
+/* generated 2026-08-25T12:25:58Z by tools/build-debug.js — do not edit */
 /* =============================================================================
    THE RIVENMARK — debug overlay
    Injected into debug.html by tools/build-debug.js. Never shipped in the
@@ -5934,7 +8226,10 @@ requestAnimationFrame(frame);
   // --- panel ----------------------------------------------------------------
   const css = document.createElement('style');
   css.textContent = `
+  /* The panel has grown as the game has. Cap it against the viewport and let
+     it scroll, or the seed box at the bottom ends up off-screen on a phone. */
   #dbg{position:fixed;left:6px;top:88px;z-index:9999;width:216px;
+    max-height:calc(100vh - 104px);overflow-y:auto;overscroll-behavior:contain;
     font:11px/1.45 ui-monospace,Menlo,Consolas,monospace;color:#d8e6c8;
     background:rgba(6,10,8,.9);border:1px solid #2f4a34;border-radius:4px;
     padding:7px 8px;pointer-events:auto;-webkit-user-select:none;user-select:none}
@@ -6012,7 +8307,10 @@ requestAnimationFrame(frame);
     ['wipe horde', () => { for (const e of enemies) if (e.kind !== 'deceiver') e.hp = 0;
                            compactEnemies(); }],
     ['+50 horde', () => { for (let i = 0; i < 50; i++) _spawn(run.time); }],
-    ['rank up', () => { run.pendingLevels++; }],
+    ['+5 levels', () => { stash.xp = xpForLevel(Math.min(HERO_MAX_LEVEL,
+        (stash.level || 1) + 5)); stash.level = levelForXp(stash.xp);
+        player.level = stash.level; recomputeStats(); saveStash(); }],
+    ['+200 coins', () => { stash.coins = (stash.coins || 0) + 200; saveStash(); }],
     ['heal', () => { player.hp = player.maxHp; }],
     ['remake map', () => resetRun(run.hero)],
     ['drop item', () => { if (player.bag.length < BAG_MAX) {
@@ -6073,7 +8371,9 @@ requestAnimationFrame(frame);
       row('fps', fps.toFixed(0), fps < 50) +
       row('draw / upd', drawMs.toFixed(1) + ' / ' + updMs.toFixed(2) + 'ms', ms > 16.7) +
       row('lowFx', lowFx, lowFx) +
-      row('level', LEVEL.id) +
+      row('delve', LEVEL.id) +
+      row('hero lv / power', (player ? player.level : 1) + ' / ' + stashPower()) +
+      row('coins', stash ? (stash.coins || 0) : 0) +
       row('region', REGION.id) +
       row('hero', (run && run.hero) || '-') +
       row('enemies', enemies.length) +
