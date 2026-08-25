@@ -38,9 +38,14 @@
   #ui > *{pointer-events:auto;}
 
   .hud{
-    position:absolute; top:calc(8px + var(--safe-t)); left:calc(56px + var(--safe-l));
-    right:calc(52px + var(--safe-r));
+    position:absolute; top:calc(12px + var(--safe-t)); left:calc(52px + var(--safe-l));
+    right:calc(50px + var(--safe-r));
     display:flex; align-items:flex-start; gap:10px; pointer-events:none;
+    padding:5px 10px 6px; border-radius:3px;
+    background:linear-gradient(180deg,rgba(46,34,22,.82),rgba(18,12,7,.86));
+    border:1px solid rgba(122,100,66,.42);
+    box-shadow:inset 0 1px 0 rgba(214,182,124,.16), 0 2px 10px rgba(0,0,0,.6);
+    z-index:7;                       /* above the frame chrome, below screens */
   }
   .hud[hidden]{display:none;}
   .hud-left{flex:1; min-width:0; max-width:340px;}
@@ -147,6 +152,33 @@
   .stats b{display:block; font-family:var(--font-display); font-size:21px;
     color:var(--ink); letter-spacing:1px; margin-top:3px; font-weight:400;}
 
+  /* ---------- The frame ----------
+     A band of dark iron and stone around the delve, with a skull set into
+     each corner. It is chrome, not UI: pointer-events off throughout, so it
+     can never take a tap meant for the game underneath. */
+  #frame{position:absolute; inset:0; pointer-events:none; z-index:6;}
+  #frame .fr{position:absolute; pointer-events:none;
+    background:linear-gradient(180deg,#2a2119 0%,#171009 45%,#0d0906 100%);
+    box-shadow:inset 0 0 0 1px rgba(120,102,72,.32),
+               inset 0 0 14px rgba(0,0,0,.9);}
+  #frame .fr-t{top:0; left:0; right:0; height:calc(10px + var(--safe-t));}
+  #frame .fr-b{bottom:0; left:0; right:0; height:calc(10px + var(--safe-b));
+    background:linear-gradient(0deg,#2a2119 0%,#171009 45%,#0d0906 100%);}
+  #frame .fr-l{top:0; bottom:0; left:0; width:calc(10px + var(--safe-l));
+    background:linear-gradient(90deg,#2a2119 0%,#171009 45%,#0d0906 100%);}
+  #frame .fr-r{top:0; bottom:0; right:0; width:calc(10px + var(--safe-r));
+    background:linear-gradient(270deg,#2a2119 0%,#171009 45%,#0d0906 100%);}
+  #frame .corner{position:absolute; width:34px; height:34px; display:flex;
+    align-items:center; justify-content:center; font-size:19px; line-height:1;
+    color:#cdbb93; text-shadow:0 1px 2px #000, 0 0 10px rgba(0,0,0,.9);
+    background:radial-gradient(circle at 38% 32%,#3a2e22,#140d07 72%);
+    border:1px solid rgba(126,106,74,.5); border-radius:3px;}
+  #frame .c-tl{top:calc(2px + var(--safe-t)); left:calc(2px + var(--safe-l));}
+  #frame .c-tr{top:calc(2px + var(--safe-t)); right:calc(2px + var(--safe-r));}
+  #frame .c-bl{bottom:calc(2px + var(--safe-b)); left:calc(2px + var(--safe-l));}
+  #frame .c-br{bottom:calc(2px + var(--safe-b)); right:calc(2px + var(--safe-r));}
+  .screen{z-index:8;}
+
   /* ---------- Menu ---------- */
   .crest{display:flex; align-items:center; gap:10px; opacity:.7;}
   .crest-rule{display:block; width:54px; height:1px;
@@ -210,7 +242,7 @@
     border:1px solid var(--line); background:#1d1710; color:#cbbf9f; border-radius:2px;
     cursor:pointer; touch-action:manipulation;}
   .gear-acts button.prime{border-color:var(--gold); color:#f0e4c6;}
-  #bagBtn{position:absolute; right:calc(8px + var(--safe-r));
+  #bagBtn{z-index:7; position:absolute; right:calc(16px + var(--safe-r));
     bottom:calc(12px + var(--safe-b)); width:46px; height:46px; border-radius:3px;
     border:1px solid var(--line); background:rgba(18,13,9,.8); color:#cbbf9f;
     font:600 10px/1 ui-monospace,monospace; cursor:pointer; touch-action:manipulation;}
@@ -323,6 +355,13 @@
     </div>
   </div>
 
+  <div id="frame" aria-hidden="true">
+    <span class="fr fr-t"></span><span class="fr fr-b"></span>
+    <span class="fr fr-l"></span><span class="fr fr-r"></span>
+    <span class="corner c-tl">☠</span><span class="corner c-tr">☠</span>
+    <span class="corner c-bl">☠</span><span class="corner c-br">☠</span>
+  </div>
+
   <button id="bagBtn" aria-label="Bag"><b>▣</b><span id="bagBadge">0</span></button>
 
   <div class="screen" id="gear">
@@ -415,7 +454,7 @@ const MAX_DT        = 0.05;  // clamp after tab-switches / long frames
 
 // Extraction terms live on the level (see LEVELS); these are the fallbacks a
 // level may leave unset.
-const HUD_H           = 58;   // canvas UI clears the HUD bar by this much
+const HUD_H           = 78;   // canvas UI clears the HUD panel by this much
 const SWING_TIME      = 0.17; // how long the blade takes to come round
 const EXTRACT_QUOTA   = 70;  // slag needed before the ley-gate powers up
 const EXTRACT_CHANNEL = 4.0; // seconds standing inside it to win
@@ -483,31 +522,31 @@ const REGIONS = [
   { id:'slag',    name:'The Slag-Moors of Drak-Hald',
     note:'Dead ash around the Weeping Keep of Tor-Varden.',
     landmark:'The Weeping Keep of Tor-Varden', build:'keep',
-    layout:{ pitch:5, braid:0.5, rooms:2, chambers:9, rough:0.24 },
+    layout:{ pitch:4, braid:0.42, chambers:7 },
     earth:[58,44,30], mottle:[[26,18,11],[84,64,41],[116,90,58]],
     flag:[56,26], stone:['#241d16','#16110b','#0b0805'], lamp:'#e5761f' },
   { id:'vaelk',   name:'The Rending Gorges of Vaelk',
     note:'Split earth below the Kael-Dorm Redoubt.',
     landmark:'The Kael-Dorm Redoubt', build:'redoubt',
-    layout:{ pitch:4, braid:0.18, rooms:1, chambers:3, rough:0.16, rifts:true },
+    layout:{ pitch:5, braid:0.20, chambers:4, rifts:true },
     earth:[38,46,58], mottle:[[16,20,28],[52,66,86],[78,102,130]],
     flag:[58,24], stone:['#1a2430','#101720','#070b0f'], lamp:'#5fd0ff' },
   { id:'kraggen', name:'Kraggen-Tor, the Iron-Teeth',
     note:'Volcanic west, holding the Shatter-Gate of Ghor.',
     landmark:'The Shatter-Gate of Ghor', build:'shattergate',
-    layout:{ pitch:3, braid:0.22, rooms:1, chambers:4, rough:0.34 },
+    layout:{ pitch:3, braid:0.26, chambers:5 },
     earth:[52,30,22], mottle:[[28,12,8],[86,42,24],[128,62,30]],
     flag:[54,22], stone:['#2a1a14','#1a0f0a','#0c0705'], lamp:'#ff5f28' },
   { id:'weald',   name:'The Rot-Weald',
     note:'Creeping mutation in the southern forest.',
     landmark:'The Heart-Rot Clearing', build:'thicket',
-    layout:{ pitch:4, braid:0.55, rooms:2, chambers:10, rough:0.42 },
+    layout:{ pitch:4, braid:0.55, chambers:9 },
     earth:[40,48,30], mottle:[[18,24,12],[58,74,38],[86,106,54]],
     flag:[52,26], stone:['#1c2418','#121810','#080b07'], lamp:'#9dbb5a' },
   { id:'firth',   name:'The Dead Firth',
     note:'A blackened ocean, drained and refilled with drifting ash.',
     landmark:'The Ash-Shoals', build:'ashflat',
-    layout:{ pitch:6, braid:0.6, rooms:3, chambers:12, rough:0.2 },
+    layout:{ pitch:6, braid:0.60, chambers:11 },
     earth:[34,32,34], mottle:[[14,13,15],[52,50,54],[78,76,82]],
     flag:[50,20], stone:['#1c1c1f','#121215','#07070a'], lamp:'#b9c4cf' }
 ];
@@ -937,6 +976,12 @@ function carveRect(x0, y0, x1, y1) {
    ends, one route between any two points) into a looping network. Dead ends
    are death in a game where a horde follows you, and loops give both sides
    room to flank. */
+/* The delve used to be solid rock with corridors cut out of it, which left the
+   stone between them two to four cells thick -- a blobby mass rather than
+   built walls. It is the other way round now: the ground is open, and single
+   cell wall runs are laid along the maze boundaries that were never linked.
+   Corridors are the space between walls, so the whole map reads as walled
+   paths instead of tunnels bored through a lump. */
 function carveMaze() {
   const LY = REGION.layout || {};
   const P = LY.pitch || 4;                        // fine cells per maze cell
@@ -944,7 +989,10 @@ function carveMaze() {
   const seen = new Uint8Array(MW * MH);
   const mi = (x, y) => y * MW + x;
   const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-  const link = [];
+  const open = new Set();                         // boundaries with a way through
+  const key = (x, y, nx, ny) => x < nx || y < ny
+    ? x + ',' + y + '>' + nx + ',' + ny
+    : nx + ',' + ny + '>' + x + ',' + y;
 
   const stack = [[(Math.random() * MW) | 0, (Math.random() * MH) | 0]];
   seen[mi(stack[0][0], stack[0][1])] = 1;
@@ -959,53 +1007,65 @@ function carveMaze() {
     if (!opts.length) { stack.pop(); continue; }
     const n = opts[(Math.random() * opts.length) | 0];
     seen[mi(n[0], n[1])] = 1;
-    link.push([x, y, n[0], n[1]]);
+    open.add(key(x, y, n[0], n[1]));
     stack.push(n);
   }
+
+  // Braiding knocks extra walls out, so the maze loops instead of being one
+  // path with dead ends everywhere.
   const braids = Math.floor(MW * MH * (LY.braid === undefined ? 0.34 : LY.braid));
   for (let i = 0; i < braids; i++) {
     const x = (Math.random() * MW) | 0, y = (Math.random() * MH) | 0;
     const d = DIRS[(Math.random() * 4) | 0];
     const nx = x + d[0], ny = y + d[1];
     if (nx < 0 || ny < 0 || nx >= MW || ny >= MH) continue;
-    link.push([x, y, nx, ny]);
+    open.add(key(x, y, nx, ny));
   }
 
-  // Rooms at every junction, corridors two cells wide along each link.
-  for (let my = 0; my < MH; my++)
+  grid.fill(OPEN);
+
+  // The rim of the world is solid, so nothing walks off the edge.
+  for (let y = 0; y < GH; y++)
+    for (let x = 0; x < GW; x++)
+      if (x < 1 || y < 1 || x >= GW - 1 || y >= GH - 1) grid[gi(x, y)] = SOLID;
+
+  const wallLine = (x0, y0, x1, y1) => {
+    for (let y = y0; y <= y1; y++)
+      for (let x = x0; x <= x1; x++)
+        if (inGrid(x, y)) grid[gi(x, y)] = SOLID;
+  };
+
+  // One cell of wall on every boundary the maze never opened.
+  for (let my = 0; my < MH; my++) {
     for (let mx = 0; mx < MW; mx++) {
       const ox = 1 + mx * P, oy = 1 + my * P;
-      const rm = LY.rooms === undefined ? 1 : LY.rooms;
-      carveRect(ox, oy, ox + rm, oy + rm);
+      const ex = ox + P - 1, ey = oy + P - 1;       // the wall columns/rows
+      if (mx + 1 < MW && !open.has(key(mx, my, mx + 1, my))) wallLine(ex, oy, ex, ey);
+      if (my + 1 < MH && !open.has(key(mx, my, mx, my + 1))) wallLine(ox, ey, ex, ey);
+      // Posts at the corners, so wall runs meet cleanly instead of stopping
+      // a cell short of each other and leaving the join looking chewed.
+      wallLine(ex, ey, ex, ey);
     }
-  for (let i = 0; i < link.length; i++) {
-    const [x, y, nx, ny] = link[i];
-    const ox = 1 + x * P, oy = 1 + y * P;
-    const nox = 1 + nx * P, noy = 1 + ny * P;
-    if (y === ny) carveRect(Math.min(ox, nox), oy, Math.max(ox, nox) + 1, oy + 1);
-    else          carveRect(ox, Math.min(oy, noy), ox + 1, Math.max(oy, noy) + 1);
   }
 
-  // A handful of the junctions open out into proper chambers.
+  // A few junctions open out: the posts around them go, leaving a hall.
   const nch = LY.chambers === undefined ? 7 : LY.chambers;
   for (let i = 0; i < nch; i++) {
-    const mx = (Math.random() * MW) | 0, my = (Math.random() * MH) | 0;
-    carveDisc(1 + mx * P, 1 + my * P, 2 + (Math.random() * 2 | 0));
+    const mx = 1 + ((Math.random() * Math.max(1, MW - 2)) | 0);
+    const my = 1 + ((Math.random() * Math.max(1, MH - 2)) | 0);
+    const ox = 1 + mx * P, oy = 1 + my * P;
+    carveRect(ox - P, oy - P, ox + P, oy + P);
   }
 
-  // Vaelk is split earth, not tunnels: long parallel rifts torn across it.
+  // Vaelk is split earth, not corridors: long unbroken runs with one crossing.
   if (LY.rifts) {
     for (let i = 0; i < 5; i++) {
       const gy = 5 + ((Math.random() * (GH - 12)) | 0);
-      const len = 12 + ((Math.random() * 22) | 0);
-      const gx = 3 + ((Math.random() * (GW - len - 6)) | 0);
-      for (let x = gx; x < gx + len; x++) {
-        for (let y = gy; y < gy + 2 + ((x % 7 === 0) ? 1 : 0); y++) {
-          if (inGrid(x, y)) grid[gi(x, y)] = SOLID;      // the rift itself
-        }
-      }
-      const bridge = gx + ((Math.random() * len) | 0);   // one crossing
-      carveRect(bridge, gy - 1, bridge + 1, gy + 3);
+      const len = 14 + ((Math.random() * 26) | 0);
+      const gx = 3 + ((Math.random() * Math.max(1, GW - len - 6)) | 0);
+      wallLine(gx, gy, gx + len, gy);
+      const bridge = gx + ((Math.random() * len) | 0);
+      carveRect(bridge, gy - 1, bridge + 1, gy + 1);
     }
   }
   return P;
@@ -1013,36 +1073,12 @@ function carveMaze() {
 
 function generateWorld(spawn, portal) {
   grid = new Uint8Array(GW * GH);
-  grid.fill(SOLID);
-
   carveMaze();
 
-  // Roughen: without this the maze reads as machined corridors. Flip a few
-  // boundary cells, then one gentle smoothing pass to knock the noise into
-  // shapes -- enough to look carved, too little to dissolve the layout.
-  for (let y = 2; y < GH - 2; y++) {
-    for (let x = 2; x < GW - 2; x++) {
-      const k = gi(x, y);
-      let openN = 0;
-      for (let dy = -1; dy <= 1; dy++)
-        for (let dx = -1; dx <= 1; dx++)
-          if (dx || dy) openN += cellAt(x + dx, y + dy) === OPEN ? 1 : 0;
-      if (openN === 0 || openN === 8) continue;         // interiors stay put
-      if (Math.random() < ((REGION.layout && REGION.layout.rough) || 0.3))
-        grid[k] = grid[k] === OPEN ? SOLID : OPEN;
-    }
-  }
-  const smoothed = new Uint8Array(grid);
-  for (let y = 2; y < GH - 2; y++) {
-    for (let x = 2; x < GW - 2; x++) {
-      let n = 0;
-      for (let dy = -1; dy <= 1; dy++)
-        for (let dx = -1; dx <= 1; dx++)
-          if (dx || dy) n += cellAt(x + dx, y + dy);
-      smoothed[gi(x, y)] = n >= 6 ? SOLID : n <= 2 ? OPEN : grid[gi(x, y)];
-    }
-  }
-  grid = smoothed;
+  // Roughening and widening both existed to break up a solid rock mass. With
+  // walls a single cell thick there is no mass to break up -- flipping
+  // boundary cells just punches holes through the walls and dissolves the
+  // layout -- so neither pass runs any more.
 
   // Spawn pocket and portal apron, cut after the roughening so they are clean.
   const sc = { x: clamp(Math.floor(spawn.x / CELL_W), 2, GW - 3),
@@ -1053,23 +1089,9 @@ function generateWorld(spawn, portal) {
   carveDisc(pc.x, pc.y, 3);
   carveCorridor(sc.x, sc.y, pc.x, pc.y, 1);   // never strand the objective
 
-  widenPassages();
 
-  // Drop fully isolated single pillars. Roughening plus widening leaves a
-  // scatter of lone 40-unit blocks that read as debris rather than cave wall;
-  // anything still touching rock stays, so cover and structure survive.
-  const lone = [];
-  for (let y = 2; y < GH - 2; y++) {
-    for (let x = 2; x < GW - 2; x++) {
-      if (grid[gi(x, y)] !== SOLID) continue;
-      let n = 0;
-      for (let dy = -1; dy <= 1; dy++)
-        for (let dx = -1; dx <= 1; dx++)
-          if ((dx || dy) && cellAt(x + dx, y + dy) === SOLID) n++;
-      if (n === 0) lone.push(gi(x, y));
-    }
-  }
-  for (let i = 0; i < lone.length; i++) grid[lone[i]] = OPEN;
+  // The lone-pillar sweep is gone with them: on a thin-wall map an isolated
+  // cell is usually a corner post or the end of a run, not debris.
 
   carveRooms(sc, pc);
   buildLandmark(pc);
@@ -3573,18 +3595,21 @@ function forgeWallTops() {
         const w = T * (0.42 + Math.random() * 0.3);
         const bx = x + 1, by = r * ch + 1, bw = w - 2, bh = ch - 2;
         // Neat block, lit from the top-left, sitting proud of the mortar.
+        // Weathered sandstone rather than cold granite: warm in the light,
+        // and the shadowed foot stays warm too, so a wall belongs to the same
+        // ground it stands on instead of reading as imported grey rock.
         const grd = g.createLinearGradient(bx, by, bx, by + bh);
-        const tone = 74 + Math.random() * 16;
-        grd.addColorStop(0, 'rgb(' + Math.round(tone * 1.32) + ',' +
-                                     Math.round(tone * 1.27) + ',' +
-                                     Math.round(tone * 1.14) + ')');
-        grd.addColorStop(1, 'rgb(' + Math.round(tone * 0.82) + ',' +
+        const tone = 86 + Math.random() * 18;
+        grd.addColorStop(0, 'rgb(' + Math.round(tone * 1.46) + ',' +
+                                     Math.round(tone * 1.34) + ',' +
+                                     Math.round(tone * 1.10) + ')');
+        grd.addColorStop(1, 'rgb(' + Math.round(tone * 0.88) + ',' +
                                      Math.round(tone * 0.79) + ',' +
-                                     Math.round(tone * 0.70) + ')');
+                                     Math.round(tone * 0.63) + ')');
         g.fillStyle = grd;
         g.fillRect(bx, by, bw, bh);
         // dressed highlight along the top arris
-        g.fillStyle = 'rgba(226,214,186,.24)';
+        g.fillStyle = 'rgba(242,228,192,.30)';
         g.fillRect(bx, by, bw, 1);
         // and the shadowed foot of the block
         g.fillStyle = 'rgba(8,7,5,.35)';
@@ -3642,14 +3667,14 @@ function forgeWallCourses() {
       while (x < 100) {
         const w = 20 + Math.random() * 16;
         const h = 15 + Math.random() * 6;
-        const tone = 62 + Math.random() * 26;
+        const tone = 70 + Math.random() * 26;
         const grd = g.createLinearGradient(0, 0, 0, h);
-        grd.addColorStop(0, 'rgb(' + Math.round(tone * 1.62) + ',' +
-                                     Math.round(tone * 1.55) + ',' +
-                                     Math.round(tone * 1.38) + ')');
-        grd.addColorStop(1, 'rgb(' + Math.round(tone * 0.55) + ',' +
-                                     Math.round(tone * 0.52) + ',' +
-                                     Math.round(tone * 0.46) + ')');
+        grd.addColorStop(0, 'rgb(' + Math.round(tone * 1.70) + ',' +
+                                     Math.round(tone * 1.56) + ',' +
+                                     Math.round(tone * 1.28) + ')');
+        grd.addColorStop(1, 'rgb(' + Math.round(tone * 0.60) + ',' +
+                                     Math.round(tone * 0.54) + ',' +
+                                     Math.round(tone * 0.43) + ')');
         g.fillStyle = grd;
         g.fillRect(x + 1, 1, w - 2, h - 1);
         // dressed top edge and mortar joint
@@ -5454,7 +5479,7 @@ showScreen('start');
 requestAnimationFrame(frame);
 </script>
 <script>
-/* generated 2026-08-25T00:57:03Z by tools/build-debug.js — do not edit */
+/* generated 2026-08-25T01:03:55Z by tools/build-debug.js — do not edit */
 /* =============================================================================
    THE RIVENMARK — debug overlay
    Injected into debug.html by tools/build-debug.js. Never shipped in the
