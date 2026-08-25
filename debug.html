@@ -305,6 +305,8 @@
     text-transform:uppercase; color:#9fc2d8; vertical-align:middle;}
   #gateBtn.held{border-color:var(--blood); box-shadow:0 0 26px rgba(194,53,42,.34);}
   #gateBtn.held i{color:#e0a08c;}
+  #gateBtn.lull{border-color:#7fb0a0; box-shadow:0 0 26px rgba(127,176,160,.28);}
+  #gateBtn.lull i{color:#a9cfc2;}
 
   /* ---------- Boon cards ---------- */
   #levelup .cards{
@@ -533,8 +535,25 @@ const MAX_DT        = 0.05;  // clamp after tab-switches / long frames
 // about where the light is -- which is most of what sells depth in a flat view.
 const LIGHT = { x: 0.62, y: 0.78, wall: 11, body: 5 };
 const HUD_H           = 78;   // canvas UI clears the HUD panel by this much
-const HOLD_TICK       = 8;    // seconds of holding the gate per payout
-const HOLD_COIN       = 45;   // and what the first tick pays, rising after
+// Holding the gate is the delve's second act, and the only part of a run that
+// can be stretched: a delve itself is bounded at roughly two minutes because a
+// player clears bodies as fast as a populated map can present them, and no
+// quota large enough to change that fits under the body cap. So the hold runs
+// in surges rather than as one smooth ramp -- each is a build, a crest and a
+// short lull, and the lull is the window where leaving is a real choice rather
+// than a scramble. Ride ten of them and the delve is a five-minute sitting.
+const HOLD_WAVE       = 30;   // seconds per surge
+const HOLD_LULL       = 6;    // the quiet tail of one, where you can get out
+const HOLD_COIN       = 35;   // paid for outlasting the first surge, rising after
+const HOLD_POW        = 1.15; // and how sharply that payout climbs per surge
+// The gate is being forced open against the delve and it will not stay that
+// way. Ten surges is five minutes -- with a two-minute delve in front of it
+// that is a session, and a ceiling the economy can be balanced against. It is
+// also the only thing that stops the hold paying for itself: an unbounded
+// hold hands you gear faster than it can threaten you, and a good player
+// simply farms it forever. Measured, one did: twenty-eight surges, no deaths,
+// a hundred and sixty times a delve's own coin.
+const HOLD_MAX        = 10;
 const CORPSE_CARRY    = 10;   // pieces a corpse can hold on to for you
 const AMBUSH_MIN      = 3;    // champions that answer a reclaimed corpse
 const AMBUSH_MAX      = 7;
@@ -2167,7 +2186,10 @@ function scatterNear(x, y, spread, pad, keepFrom) {
   return null;
 }
 
-function spawnEnemy(t) {
+// lo/hi scale the band the body arrives in, as multiples of the default ring.
+// The hold passes a tight band so its surges land just off screen instead of
+// two screens out, where they dissolve on the walk in.
+function spawnEnemy(t, lo, hi) {
   if (enemies.length >= MAX_ENEMIES) return;
 
   const { out, total } = typeWeights(t);
@@ -2181,7 +2203,8 @@ function spawnEnemy(t) {
   // walk to the player, since every open cell is connected to every other.
   if (!openCells.length) return;
   const ring = Math.max(view.w, view.h) * 0.55 + 60;
-  const near = ring * ring, far = (ring * 2.1) * (ring * 2.1);
+  const r0 = ring * (lo || 1), r1 = ring * (hi || 2.1);
+  const near = r0 * r0, far = r1 * r1;
   let x = 0, y = 0, ok = false;
   for (let tries = 0; tries < 34 && !ok; tries++) {
     const c = openCells[(Math.random() * openCells.length) | 0];
@@ -3076,26 +3099,69 @@ function updatePortal(dt) {
   // rise together, which is the whole decision.
   if (!inside) return;
   run.holdTime += dt;
-  run.holdSpawn -= dt;
-  if (run.holdSpawn <= 0) {
-    // Escalating: the interval closes as the hold runs on.
-    run.holdSpawn = Math.max(0.28, 1.5 - run.holdTime * 0.055);
-    const batch = 1 + Math.floor(run.holdTime / 12);
-    for (let i = 0; i < batch; i++) {
-      const e = spawnEnemy(run.time);
-      if (e && run.holdTime > 25 && Math.random() < 0.16) makeElite(e);
+
+  // Where in the surge we are. The old curve closed the spawn interval to its
+  // floor inside twenty-two seconds and then grew the batch every twelve, which
+  // saturated the body cap in under a minute -- an escalation with no room left
+  // to escalate into. A surge spends a fixed budget of bodies over its active
+  // window instead, so the pressure has somewhere to go for ten minutes.
+  const wave   = Math.floor(run.holdTime / HOLD_WAVE);
+  const inWave = run.holdTime - wave * HOLD_WAVE;
+  const push   = HOLD_WAVE - HOLD_LULL;
+  const lull   = inWave >= push;
+  run.holdWave = wave;
+  run.holdLull = lull;
+
+  if (!lull) {
+    run.holdSpawn -= dt;
+    if (run.holdSpawn <= 0) {
+      const budget = 12 + wave * 7;          // bodies this surge is worth
+      run.holdSpawn = push / budget;
+      // Close in, not out at the usual spawn band: a body that has to cross two
+      // screens to reach the gate is dead before it arrives, and the surge
+      // dilutes itself into nothing however many it sends.
+      const e = spawnEnemy(run.time, 0.72, 1.15);
+      if (e) {
+        // Bodies the gate calls are harder than bodies the delve was cut with,
+        // and each surge harder than the last. Without this the escalation is
+        // only ever a larger number of the same thing, which a kitted hero
+        // out-damages indefinitely.
+        const k = 1 + wave * 0.55;
+        e.hp = e.maxHp = e.maxHp * k;
+        e.dmg *= 1 + wave * 0.28;
+        if (wave >= 1 && Math.random() < Math.min(0.5, 0.08 + wave * 0.03)) makeElite(e);
+      }
     }
+  } else if (!run.holdCrest) {
+    // The crest has passed: name the lull so it reads as an offer, not a bug.
+    run.holdCrest = true;
   }
-  while (run.holdTime >= (run.holdTicks + 1) * HOLD_TICK) {
+
+  // Paid at the crest of each surge you outlast, so the reward lands with the
+  // breathing room rather than in the middle of the next build.
+  while (run.holdTime >= run.holdTicks * HOLD_WAVE + push) {
     run.holdTicks++;
-    const pay = Math.round(HOLD_COIN * run.holdTicks * (1 + (LEVEL.depth || 0)));
+    run.holdCrest = false;
+    const pay = Math.round(HOLD_COIN * Math.pow(run.holdTicks, HOLD_POW) *
+                           (1 + (LEVEL.depth || 0)));
     run.coins += pay;
-    toast('The gate pays ' + pay + ' coin', PAL.coin);
-    // and every other tick, it gives up something worth carrying
+    toast('Surge ' + run.holdTicks + ' held \u00b7 ' + pay + ' coin', PAL.coin);
+    // Every other surge, and not the best rolls until late: a piece per surge
+    // arms you against the surge that follows it, and the hold ends up paying
+    // for its own difficulty.
     if (run.holdTicks % 2 === 0) {
-      const it = rollItem(Math.min(1, 0.55 + run.holdTicks * 0.06));
+      const it = rollItem(Math.min(1, 0.42 + run.holdTicks * 0.055));
       drops.push({ x: portal.x + rand(-40, 40), y: portal.y + rand(-40, 40),
                    vx: 0, vy: 0, item: it, r: 9, life: 0, pulled: false });
+    }
+    // And the gate shuts on the last one, taking you with it. Being thrown out
+    // of a delve you survived is an extraction, not a death.
+    if (run.holdTicks >= HOLD_MAX) {
+      run.banner = 3.2;
+      run.bannerText = 'The ley-gate closes';
+      run.bannerNote = 'It has been held as long as it can be.';
+      endRun(true);
+      return;
     }
   }
 }
@@ -5733,15 +5799,23 @@ function syncGateBtn() {
   }
   el.gateBtn.hidden = false;
   const held = run.holdTime > 0.35;
-  const nextIn = Math.max(0, (run.holdTicks + 1) * HOLD_TICK - run.holdTime);
-  const pay = Math.round(HOLD_COIN * (run.holdTicks + 1) * (1 + (LEVEL.depth || 0)));
-  const key = held ? Math.ceil(nextIn) + '/' + run.holdTicks : 'idle';
+  const push = HOLD_WAVE - HOLD_LULL;
+  const nextIn = Math.max(0, run.holdTicks * HOLD_WAVE + push - run.holdTime);
+  const pay = Math.round(HOLD_COIN * Math.pow(run.holdTicks + 1, HOLD_POW) *
+                         (1 + (LEVEL.depth || 0)));
+  const key = held ? Math.ceil(nextIn) + '/' + run.holdTicks + (run.holdLull ? 'L' : '') : 'idle';
   if (key === hudCache.gate) return;
   hudCache.gate = key;
-  el.gateBtn.classList.toggle('held', held);
-  el.gateNote.textContent = held
-    ? fmtTime(run.holdTime) + ' held  ·  ' + pay + ' coin in ' + Math.ceil(nextIn) + 's'
-    : 'or stand here and hold it open';
+  el.gateBtn.classList.toggle('held', held && !run.holdLull);
+  el.gateBtn.classList.toggle('lull', held && run.holdLull);
+  // In the lull the button stops counting down and starts asking the question:
+  // that pause is the whole point of running the hold in surges.
+  el.gateNote.textContent = !held
+    ? 'or stand here and hold it open'
+    : run.holdLull
+      ? run.holdTicks + ' held  ·  quiet  ·  take surge ' + (run.holdTicks + 1) + '?'
+      : 'surge ' + (run.holdTicks + 1) + '  ·  ' + pay + ' coin in ' +
+        Math.ceil(nextIn) + 's';
 }
 
 let flashTimer = 0;
@@ -5789,7 +5863,8 @@ function resetRun(heroId, levelId, diffId) {
           bossCalled: false, bossDown: false, boss: null,
           spawnX: spawn.x, spawnY: spawn.y, found: 0, toast: null, bagWarned: 0,
           coins: 0, gateOpen: false, holdTime: 0, holdTicks: 0, holdSpawn: 1.5,
-          forcedOpen: false, corpse: null };
+          forcedOpen: false, corpse: null,
+          holdWave: 0, holdLull: false, holdCrest: false };
   // If you died in this level and never came back for it, it is still here.
   run.corpse = placeCorpse();
 
@@ -6643,7 +6718,7 @@ showScreen('start');
 requestAnimationFrame(frame);
 </script>
 <script>
-/* generated 2026-08-25T06:29:17Z by tools/build-debug.js — do not edit */
+/* generated 2026-08-25T11:04:42Z by tools/build-debug.js — do not edit */
 /* =============================================================================
    THE RIVENMARK — debug overlay
    Injected into debug.html by tools/build-debug.js. Never shipped in the
