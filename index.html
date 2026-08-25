@@ -1075,6 +1075,13 @@ function generateWorld(spawn, portal) {
   buildLandmark(pc);
   connectPortal(sc, pc);
 
+  // The apron was cut before the landmark was built, and a landmark is built
+  // at the same centre -- a curtain wall or a redoubt puts solid cells straight
+  // back over the gate. Cut it again, last, wide enough for the whole gate
+  // circle plus a body, so the extraction point can never load inside rock.
+  const apron = Math.ceil((PORTAL_R + 22) / CELL_W) + 1;
+  carveDisc(pc.x, pc.y, apron);
+
   // Keep only what is reachable from spawn; everything else becomes rock.
   const seen = new Uint8Array(GW * GH);
   const stack = [gi(sc.x, sc.y)];
@@ -3453,28 +3460,48 @@ function forgeGround() {
       g.fill();
     }
 
-    // A worn flagstone path across most tiles: irregular slabs, gritty mortar
+    // Laid flagstone. Slabs used to be cut 5-11 units smaller than their cell,
+    // which left every stone floating in a moat of bare dirt -- so paving read
+    // as a scatter of loose slabs lying about rather than as a floor. Joints
+    // are tight now and the courses line up: neat work, aged by wear and the
+    // occasional missing stone rather than by being strewn around.
     if (v % 4 > 1) {
       const rows = 4, cols = 4, cell = T / cols;
       const off = (v % 4 === 3) ? cell * 0.5 : 0;
       for (let ry = 0; ry < rows; ry++) {
         for (let cx2 = -1; cx2 < cols + 1; cx2++) {
           if (v % 4 === 2 && ry !== 1 && ry !== 2) continue;  // a path, two slabs wide
-          if (v % 4 === 3 && (ry + cx2) % 3 === 0) continue;  // broken paving
-          const x = cx2 * cell + (ry % 2 ? off : 0) + rand(-3, 3);
-          const y = ry * cell + rand(-3, 3);
-          const w = cell - rand(5, 11), h = cell - rand(5, 11);
+          if (v % 4 === 3 && (ry * 5 + cx2 * 3) % 8 === 0) continue;  // a stone lost
+          const x = cx2 * cell + (ry % 2 ? off : 0) + rand(-1, 1);
+          const y = ry * cell + rand(-1, 1);
+          const w = cell - rand(1.5, 3), h = cell - rand(1.5, 3);
           const tone = REGION.flag[0] + Math.random() * REGION.flag[1];
           g.fillStyle = 'rgb(' + Math.round(tone * 1.05) + ',' +
                                  Math.round(tone * 0.96) + ',' +
                                  Math.round(tone * 0.84) + ')';
           g.beginPath();
-          g.moveTo(x + rand(0, 3), y + rand(0, 3));
-          g.lineTo(x + w - rand(0, 3), y + rand(0, 3));
-          g.lineTo(x + w - rand(0, 3), y + h - rand(0, 3));
-          g.lineTo(x + rand(0, 3), y + h - rand(0, 3));
+          g.moveTo(x + rand(0, 1.2), y + rand(0, 1.2));
+          g.lineTo(x + w - rand(0, 1.2), y + rand(0, 1.2));
+          g.lineTo(x + w - rand(0, 1.2), y + h - rand(0, 1.2));
+          g.lineTo(x + rand(0, 1.2), y + h - rand(0, 1.2));
           g.closePath();
           g.fill();
+          // age: a chipped corner or a crack across the face now and then
+          if (Math.random() < 0.30) {
+            g.fillStyle = 'rgba(12,9,6,.30)';
+            const cw = 3 + Math.random() * 5;
+            g.beginPath();
+            g.moveTo(x, y); g.lineTo(x + cw, y); g.lineTo(x, y + cw);
+            g.closePath(); g.fill();
+          }
+          if (Math.random() < 0.22) {
+            g.strokeStyle = 'rgba(10,8,5,.34)';
+            g.lineWidth = 0.9;
+            g.beginPath();
+            g.moveTo(x + rand(2, w * 0.4), y + 2);
+            g.lineTo(x + rand(w * 0.5, w - 2), y + h - 2);
+            g.stroke();
+          }
           // worn lip catching the light, dark seam below
           g.strokeStyle = 'rgba(150,136,110,.18)';
           g.lineWidth = 1.1;
@@ -3510,6 +3537,99 @@ function forgeGround() {
 // the dressed, lit face toward -y, which is rotated to the wall's normal.
 let wallCourses = [];
 let wallRubble = [];
+/* --- wall tops -----------------------------------------------------------
+   A wall used to be a near-black void with dressed stone only along its rim.
+   On a one-cell wall the two rims meet in the middle -- 7 units of inset plus
+   a 15-unit band, from both sides, across a 40-unit cell -- so no core was
+   left and the wall flattened into paving lying on the floor.
+
+   Walls now carry a real top surface: neat ashlar laid in regular courses,
+   aged rather than broken, tiled per cell so no two are identical. With a cast
+   shadow underneath, the mass reads as standing above the ground instead of
+   painted onto it.
+   ---------------------------------------------------------------------- */
+const WALL_TOPS = 6;
+let wallTops = [];
+
+function forgeWallTops() {
+  wallTops = [];
+  const T = CELL_W;
+  for (let v = 0; v < WALL_TOPS; v++) {
+    const px = Math.ceil(T * SS);
+    const c = newCanvas(px, px);
+    const g = c.getContext('2d');
+    g.scale(SS, SS);
+
+    // Mortar bed, dark, so every joint reads without drawing one.
+    g.fillStyle = PAL.stoneLow;
+    g.fillRect(0, 0, T, T);
+
+    // Two courses of ashlar per cell, offset like real coursed stone.
+    const rows = 2, ch = T / rows;
+    for (let r = 0; r < rows; r++) {
+      const off = ((v + r) % 2) * (T * 0.28);
+      let x = -T * 0.3 + off;
+      while (x < T) {
+        const w = T * (0.42 + Math.random() * 0.3);
+        const bx = x + 1, by = r * ch + 1, bw = w - 2, bh = ch - 2;
+        // Neat block, lit from the top-left, sitting proud of the mortar.
+        const grd = g.createLinearGradient(bx, by, bx, by + bh);
+        const tone = 74 + Math.random() * 16;
+        grd.addColorStop(0, 'rgb(' + Math.round(tone * 1.32) + ',' +
+                                     Math.round(tone * 1.27) + ',' +
+                                     Math.round(tone * 1.14) + ')');
+        grd.addColorStop(1, 'rgb(' + Math.round(tone * 0.82) + ',' +
+                                     Math.round(tone * 0.79) + ',' +
+                                     Math.round(tone * 0.70) + ')');
+        g.fillStyle = grd;
+        g.fillRect(bx, by, bw, bh);
+        // dressed highlight along the top arris
+        g.fillStyle = 'rgba(226,214,186,.24)';
+        g.fillRect(bx, by, bw, 1);
+        // and the shadowed foot of the block
+        g.fillStyle = 'rgba(8,7,5,.35)';
+        g.fillRect(bx, by + bh - 1.2, bw, 1.2);
+
+        // --- age, on top of neat work -------------------------------------
+        // chipped corners
+        if (Math.random() < 0.5) {
+          g.fillStyle = 'rgba(10,9,7,.5)';
+          const cw = 2 + Math.random() * 3;
+          const cx2 = Math.random() < 0.5 ? bx : bx + bw - cw;
+          g.beginPath();
+          g.moveTo(cx2, by); g.lineTo(cx2 + cw, by); g.lineTo(cx2, by + cw);
+          g.closePath(); g.fill();
+        }
+        // pitting and weather stain
+        for (let i = 0; i < 3; i++) {
+          g.fillStyle = 'rgba(12,10,7,.16)';
+          g.beginPath();
+          g.ellipse(bx + Math.random() * bw, by + Math.random() * bh,
+                    0.8 + Math.random() * 1.6, 0.6 + Math.random(), 0, 0, TAU);
+          g.fill();
+        }
+        if (Math.random() < 0.35) {
+          g.fillStyle = 'rgba(20,16,10,.14)';
+          g.fillRect(bx + Math.random() * bw * 0.6, by, 2 + Math.random() * 4, bh);
+        }
+        x += w;
+      }
+    }
+
+    // A little damp or moss gathering in the joints, region-tinted.
+    const wet = REGION.mottle[0];
+    for (let i = 0; i < 4; i++) {
+      if (Math.random() > 0.5) continue;
+      g.fillStyle = 'rgba(' + wet.join(',') + ',.20)';
+      g.beginPath();
+      g.ellipse(Math.random() * T, Math.random() * T,
+                2 + Math.random() * 5, 1.5 + Math.random() * 3, 0, 0, TAU);
+      g.fill();
+    }
+    wallTops.push(c);
+  }
+}
+
 function forgeWallCourses() {
   wallCourses = [];
   for (let v = 0; v < 3; v++) {
@@ -3555,6 +3675,7 @@ function forgeWallCourses() {
     wallCourses.push([0, 1, 2, 3].map(q => rotateSprite(base, q)));
   }
   forgeWallRubble();
+  forgeWallTops();
 }
 
 /* Rubble spilling off the foot of a wall. Merged wall rects are all
@@ -3631,15 +3752,35 @@ function drawGround(x0, y0, x1, y1) {
 }
 
 function drawWalls(x0, y0, x1, y1) {
-  // Rock mass: unlit stone, darker than anything on the ground.
+  // 1. The shadow the mass throws onto the floor. Drawn for every wall first,
+  //    so a neighbouring wall's shadow never lands on top of finished stone.
+  ctx.fillStyle = 'rgba(6,5,4,.55)';
   for (let i = 0; i < walls.length; i++) {
     const w = walls[i];
     if (w.x > x1 || w.y > y1 || w.x + w.w < x0 || w.y + w.h < y0) continue;
-    ctx.save();
-    ctx.translate(w.x, w.y);
-    ctx.fillStyle = wallGradient(w.h);
-    ctx.fillRect(0, 0, w.w, w.h);
-    ctx.restore();
+    ctx.fillRect(w.x + 5, w.y + 7, w.w, w.h);
+  }
+
+  // 2. The mass itself. A flat dark fill first so nothing shows between tiles,
+  //    then coursed stone tiled per cell -- a wall has a top surface, which is
+  //    what stops it reading as paving lying on the floor.
+  ctx.fillStyle = PAL.stoneLow;
+  for (let i = 0; i < walls.length; i++) {
+    const w = walls[i];
+    if (w.x > x1 || w.y > y1 || w.x + w.w < x0 || w.y + w.h < y0) continue;
+    ctx.fillRect(w.x, w.y, w.w, w.h);
+  }
+  if (wallTops.length && !lowFx) {
+    const T = CELL_W;
+    const cx0 = Math.max(0, Math.floor(x0 / T)), cx1 = Math.min(GW - 1, Math.ceil(x1 / T));
+    const cy0 = Math.max(0, Math.floor(y0 / T)), cy1 = Math.min(GH - 1, Math.ceil(y1 / T));
+    for (let cy = cy0; cy <= cy1; cy++) {
+      for (let cx = cx0; cx <= cx1; cx++) {
+        if (cellAt(cx, cy) !== SOLID) continue;
+        const h = ((cx * 73856093) ^ (cy * 19349663)) >>> 0;
+        ctx.drawImage(wallTops[h % WALL_TOPS], cx * T, cy * T, T, T);
+      }
+    }
   }
 
   // Under reduced effects the courses go and a plain dressed edge stands in:
