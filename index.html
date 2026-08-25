@@ -210,6 +210,11 @@
   #delve .menu{position:sticky; bottom:0; padding-top:8px; margin-top:2px;
     background:linear-gradient(0deg,rgba(9,7,5,.97) 68%,rgba(9,7,5,0));}
   .card.rung{position:relative; padding-right:96px;}
+  .card.poor{opacity:.5;}
+  .vslots{grid-template-columns:repeat(2,1fr);}
+  .vslots button{font:600 10px/1.2 ui-monospace,monospace; color:#cbbf9f;
+    background:#1d1710; border:1px solid var(--line); border-radius:2px;
+    padding:8px 6px; cursor:pointer; touch-action:manipulation;}
   .card.rung .standing{position:absolute; right:12px; top:50%; transform:translateY(-50%);
     font:600 9px/1.3 ui-monospace,monospace; letter-spacing:.6px; text-align:right;
     width:76px;}
@@ -353,8 +358,18 @@
         <b>Descend</b><i>choose a delve and how hard it bites</i></button>
       <button class="mbtn" id="toKit">
         <b>The Kit</b><i><span id="kitLine">nothing recovered</span></i></button>
+      <button class="mbtn" id="toVendor">
+        <b>The Vendor</b><i><span id="vendorLine">no coin</span></i></button>
     </div>
     <p class="fine" id="bestLine"></p>
+  </div>
+
+  <div class="screen" id="vendor">
+    <p class="sub">The Gate-house Vendor</p>
+    <p class="fine" id="purseLine"></p>
+    <div class="cards" id="vendorList"></div>
+    <div class="gear-detail" id="vendorDetail"></div>
+    <button class="btn" id="vendorBack">Back to the gate-house</button>
   </div>
 
   <div class="screen" id="delve">
@@ -2175,6 +2190,15 @@ function maybeDropItem(e) {
 
   // Regalia pieces come off champions and the avatar only.
   const setOdds = e.kind === 'deceiver' ? 0.55 : e.elite ? 0.14 : 0;
+  // Coin falls with the gear. It is the only thing in the delve that is not
+  // luck: whatever the drops do, coin accumulates, which is what makes it the
+  // right currency for buying your way past a bad streak.
+  const purse = e.kind === 'deceiver' ? 90 : e.elite ? 26 : e.kind === 'breaker' ? 9 : 2;
+  if (purse) {
+    run.coins += Math.round(purse * (0.7 + Math.random() * 0.7) *
+                            (1 + (LEVEL.depth || 0) * 1.4) * DIFF.lootRate);
+  }
+
   const push = it => drops.push({
     x: e.x + rand(-14, 14), y: e.y + rand(-14, 14),
     vx: rand(-46, 46), vy: rand(-46, 46),
@@ -5145,6 +5169,8 @@ const el = {
   bestLine: $('bestLine'),
   overTitle: $('overTitle'), overSub: $('overSub'), overStats: $('overStats'),
   delve: $('delve'), kitLine: $('kitLine'), gearSub: $('gearSub'), setLine: $('setLine'),
+  vendor: $('vendor'), vendorList: $('vendorList'), vendorDetail: $('vendorDetail'),
+  purseLine: $('purseLine'), vendorLine: $('vendorLine'),
   gear: $('gear'), gearSlots: $('gearSlots'), gearStats: $('gearStats'),
   bagGrid: $('bagGrid'), bagCount: $('bagCount'), gearDetail: $('gearDetail'),
   gearClose: $('gearClose'), bagBtn: $('bagBtn'), bagBadge: $('bagBadge')
@@ -5153,7 +5179,7 @@ const el = {
 let state = 'menu';   // menu | play | levelup | pause | over
 
 function showScreen(name) {
-  for (const s of ['start', 'delve', 'paused', 'over', 'gear']) {
+  for (const s of ['start', 'delve', 'vendor', 'paused', 'over', 'gear']) {
     el[s].classList.toggle('on', s === name);
   }
   el.hud.hidden = (name === 'start' || name === 'delve');
@@ -5184,7 +5210,8 @@ const VAULT_MAX = 60;
 function blankStash() {
   const g = {};
   for (const sl of SLOTS) g[sl.id] = null;
-  return { gear: g, vault: [], hero: 'isaac', seq: 0, xp: 0, level: 1, coins: 0 };
+  return { gear: g, vault: [], hero: 'isaac', seq: 0, xp: 0, level: 1,
+           coins: 0, pity: 0 };
 }
 
 function loadStash() {
@@ -5205,6 +5232,7 @@ function loadStash() {
   out.xp = Math.max(0, +st.xp || 0);
   out.level = levelForXp(out.xp);            // derived, never trusted from disk
   out.coins = Math.max(0, +st.coins || 0);
+  out.pity = clamp(+st.pity || 0, 0, 20);
   return out;
 }
 
@@ -5233,6 +5261,7 @@ function bankRun(extracted) {
   if (extracted) {
     stash.xp = (stash.xp || 0) + run.tech;
     stash.level = levelForXp(stash.xp);
+    stash.coins = (stash.coins || 0) + run.coins;
   }
   for (const sl of SLOTS) stash.gear[sl.id] = player.gear[sl.id] || null;
   if (extracted) {
@@ -5329,7 +5358,8 @@ function resetRun(heroId, levelId, diffId) {
           banner: 4.2,
           bannerText: null, bannerNote: null,
           bossCalled: false, bossDown: false, boss: null,
-          spawnX: spawn.x, spawnY: spawn.y, found: 0, toast: null, bagWarned: 0 };
+          spawnX: spawn.x, spawnY: spawn.y, found: 0, toast: null, bagWarned: 0,
+          coins: 0 };
 
   cam.x = clamp(player.x - view.w / 2, 0, Math.max(0, WORLD.w - view.w));
   cam.y = clamp(player.y - view.h / 2, 0, Math.max(0, WORLD.h - view.h));
@@ -5365,6 +5395,8 @@ function endRun(won) {
   saveBest(b);
 
   const carried = player.bag.length;
+  // Only a piece you actually carried out counts against the pity counter.
+  notePity(won && player.bag.some(it => it.set === SET_ID));
   bankRun(won);
 
   el.overTitle.innerHTML = won ? '<em>Escaped</em>' : '<span>Slain</span>';
@@ -5390,6 +5422,81 @@ function endRun(won) {
    experience now, banked on the hero when the delve ends, so nothing
    interrupts a run to offer a card. UPGRADES itself is kept only as the
    vendor's crafting table -- see the hub. */
+
+/* --- the vendor ----------------------------------------------------------
+   Coin exists to take the sting out of luck. Everything here is a way of
+   spending it to make a specific thing happen rather than hoping it does:
+   buy a piece for a slot you have never filled, reroll a piece you nearly
+   like, or push the Regalia pity counter along.
+   ---------------------------------------------------------------------- */
+const VENDOR = [
+  { id: 'commission', name: 'Commission a piece',
+    note: 'A Spirit-wrought piece for a slot of your choosing.',
+    cost: p => 180 + p * 6, slot: true },
+  { id: 'temper', name: 'Temper a piece',
+    note: 'Reroll every affix on something you are wearing, keeping its rarity.',
+    cost: p => 120 + p * 4, worn: true },
+  { id: 'reliquary', name: 'Open a reliquary',
+    note: 'A piece of the Sundered Regalia. Costs less the longer one has ' +
+          'refused to drop.', cost: p => Math.max(300, 1400 - (stash.pity || 0) * 55) }
+];
+
+function vendorCost(v) { return Math.round(v.cost(stashPower())); }
+
+function canAfford(v) { return (stash.coins || 0) >= vendorCost(v); }
+
+// Bad-luck protection: every delve that ends without a Regalia piece pushes
+// the counter along, and the reliquary gets cheaper. Finding one resets it.
+function notePity(foundSet) {
+  if (foundSet) stash.pity = 0;
+  else stash.pity = Math.min(20, (stash.pity || 0) + 1);
+}
+
+function vendorBuy(v, arg) {
+  if (!canAfford(v)) return false;
+  const cost = vendorCost(v);
+  if (v.id === 'commission') {
+    if (!arg || !SLOT_BY_ID[arg]) return false;
+    if (stash.vault.length >= VAULT_MAX) return false;
+    const it = rollItem(0.75, arg);
+    it.rarity = 'wrought';
+    // A commission is worth the price: three affixes, rolled at depth.
+    const pool = SLOT_AFFIXES[arg].slice();
+    it.affixes = [];
+    for (let i = 0; i < 3 && pool.length; i++) {
+      const id = pool.splice((Math.random() * pool.length) | 0, 1)[0];
+      const a = AFFIX_BY_ID[id];
+      let val = (a.lo + Math.random() * (a.hi - a.lo)) * 1.15;
+      val = a.dp ? +val.toFixed(a.dp)
+                 : (Math.abs(a.lo) >= 1 ? Math.max(1, Math.round(val)) : val);
+      it.affixes.push({ id, v: val });
+    }
+    it.name = AFFIX_BY_ID[it.affixes[0].id].name + ' ' + it.base;
+    stash.vault.push(it);
+  } else if (v.id === 'temper') {
+    const it = arg && stash.gear[arg];
+    if (!it || it.set === SET_ID) return false;      // the Regalia is fixed
+    const pool = SLOT_AFFIXES[it.slot].slice();
+    const n = it.affixes.length;
+    it.affixes = [];
+    for (let i = 0; i < n && pool.length; i++) {
+      const id = pool.splice((Math.random() * pool.length) | 0, 1)[0];
+      const a = AFFIX_BY_ID[id];
+      let val = (a.lo + Math.random() * (a.hi - a.lo)) * (0.8 + Math.random() * 0.6);
+      val = a.dp ? +val.toFixed(a.dp)
+                 : (Math.abs(a.lo) >= 1 ? Math.max(1, Math.round(val)) : val);
+      it.affixes.push({ id, v: val });
+    }
+    it.name = AFFIX_BY_ID[it.affixes[0].id].name + ' ' + it.base;
+  } else if (v.id === 'reliquary') {
+    if (stash.vault.length >= VAULT_MAX) return false;
+    stash.vault.push(rollSetPiece());
+    stash.pity = 0;
+  }
+  stash.coins -= cost;
+  saveStash();
+  return true;
+}
 
 /* --- the bag ------------------------------------------------------------
    Opening it pauses the delve. There is no drag-and-drop: on a phone that is
@@ -5822,10 +5929,85 @@ window.addEventListener('orientationchange', () => setTimeout(resize, 120));
   $('delveBack').addEventListener('click', () => { showScreen('start'); });
   $('beginRun').addEventListener('click', () => startRun(pick.hero, pick.level, pick.diff));
   $('toKit').addEventListener('click', () => openGear('stash'));
+  $('toVendor').addEventListener('click', openVendor);
+  $('vendorBack').addEventListener('click', () => {
+    refreshKitLine(); refreshVendorLine(); showScreen('start');
+  });
 })();
 
 // How much is waiting in the vault, shown on the menu so the kit is not a
 // door you have to open to find out whether anything is behind it.
+let vendorSel = null;
+
+function openVendor() {
+  vendorSel = null;
+  state = 'menu';
+  renderVendor();
+  showScreen('vendor');
+}
+
+function renderVendor() {
+  el.purseLine.innerHTML = '<b>' + (stash.coins || 0) + '</b> coin' +
+    ((stash.pity || 0) ? '  \u00b7  the Regalia has refused you ' + stash.pity +
+      ' delve' + (stash.pity === 1 ? '' : 's') : '');
+  el.vendorList.innerHTML = '';
+  for (const v of VENDOR) {
+    const cost = vendorCost(v);
+    const ok = canAfford(v);
+    const card = document.createElement('button');
+    card.className = 'card' + (vendorSel === v.id ? ' sel' : '') + (ok ? '' : ' poor');
+    card.type = 'button';
+    card.innerHTML = '<span class="glyph">\u2724</span><span><h4>' + v.name +
+      '</h4><p>' + v.note + ' <span class="tier">' + cost + ' coin</span></p></span>';
+    card.addEventListener('click', () => { vendorSel = v.id; renderVendor(); });
+    el.vendorList.appendChild(card);
+  }
+  renderVendorDetail();
+}
+
+function renderVendorDetail() {
+  const v = VENDOR.find(x => x.id === vendorSel);
+  if (!v) { el.vendorDetail.innerHTML =
+    '<div class="db">Coin is the one thing in the delve that is not luck.</div>'; return; }
+  const ok = canAfford(v);
+  let body = '';
+  if (v.slot) {
+    body = '<div class="db">Which slot?</div><div class="grid vslots">' +
+      SLOTS.map(sl => '<button data-slot="' + sl.id + '">' + sl.name + '</button>').join('') +
+      '</div>';
+  } else if (v.worn) {
+    const worn = SLOTS.filter(sl => stash.gear[sl.id] && stash.gear[sl.id].set !== SET_ID);
+    body = worn.length
+      ? '<div class="db">Which piece?</div><div class="grid vslots">' +
+        worn.map(sl => '<button data-slot="' + sl.id + '">' +
+          stash.gear[sl.id].name + '</button>').join('') + '</div>'
+      : '<div class="db">Nothing you are wearing can be tempered.</div>';
+  } else {
+    body = '<div class="gear-acts"><button class="prime" data-buy="1">Open it</button></div>';
+  }
+  el.vendorDetail.innerHTML =
+    '<div class="dt">' + v.name + '</div>' +
+    '<div class="db">' + vendorCost(v) + ' coin' +
+    (ok ? '' : '  \u2014  you cannot afford this yet') + '</div>' + body;
+
+  if (!ok) return;
+  el.vendorDetail.querySelectorAll('[data-slot]').forEach(b => {
+    b.onclick = () => {
+      if (vendorBuy(v, b.dataset.slot)) { renderVendor(); refreshKitLine(); refreshVendorLine(); }
+    };
+  });
+  const buy = el.vendorDetail.querySelector('[data-buy]');
+  if (buy) buy.onclick = () => {
+    if (vendorBuy(v)) { renderVendor(); refreshKitLine(); refreshVendorLine(); }
+  };
+}
+
+function refreshVendorLine() {
+  el.vendorLine.textContent = (stash.coins || 0)
+    ? (stash.coins || 0) + ' coin to spend'
+    : 'no coin';
+}
+
 function refreshKitLine() {
   const worn = SLOTS.filter(sl => stash.gear[sl.id]).length;
   const n = stash.vault.length;
@@ -5889,6 +6071,7 @@ itemSeq = Math.max(itemSeq, stash.seq || 0);
 resetRun(stash.hero);
 refreshBestLine();
 refreshKitLine();
+refreshVendorLine();
 showScreen('start');
 requestAnimationFrame(frame);
 </script>
