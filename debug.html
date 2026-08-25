@@ -601,8 +601,23 @@ const ENEMY_TYPES = {
               color: '#e8c060', halo: 'rgba(232,192,96,.18)', weight: 0, from: 1e9 },
   breaker: { r: 23, speed: 62,  hp: 135, dmg: 21, tech: 4, cd: 1.30, mass: 2.8,
               role: 'anchor',
-              color: '#e0552a', halo: 'rgba(224,85,42,.22)', weight: 4,  from: 55 }
+              color: '#e0552a', halo: 'rgba(224,85,42,.22)', weight: 4,  from: 55 },
+  // The Deceiver's own. They never appear in the horde roster -- they arrive
+  // with him and they are the reason he is hard to reach.
+  lieutenant: { r: 21, speed: 80, hp: 300, dmg: 26, tech: 12, cd: 1.15, mass: 4.4,
+              role: 'press', slam: true,
+              color: '#c2352a', halo: 'rgba(232,192,96,.30)', weight: 0, from: 1e9 }
 };
+
+// --- the slam -------------------------------------------------------------
+// A blow with a wind-up you can see and outrun. The ring is drawn at its full
+// reach the whole time it is winding, so the ground it will take is known from
+// the first frame -- a telegraph that grows with the timer tells you when but
+// not where, which is the half that matters.
+const SLAM_R     = 104;   // reach
+const SLAM_WIND  = 0.9;   // seconds of warning
+const SLAM_CD    = 4.6;   // and how often one may be thrown
+let slams = [];
 
 // --- role tuning ----------------------------------------------------------
 const FLANK_OPEN   = 190;  // inside this it stops manoeuvring and commits
@@ -2272,6 +2287,7 @@ function newBody(kind, x, y, t) {
     awake: true, alert: 0, drowse: Math.random() * TAU, aggro: AGGRO_NEAR,
     role: d.role || 'press', spin: Math.random() < 0.5 ? -1 : 1,
     markX: 0, markY: 0, markT: 0, markCd: 0,
+    slam: !!d.slam, slamCd: rand(1.2, SLAM_CD),
     postX: 0, postY: 0, posted: false, guard: rand(0, BRACE_UP), braced: false
   };
 }
@@ -2486,6 +2502,56 @@ function maybeDropItem(e) {
     // Quality floor by what it came off, so a champion never hands you rags.
     const floor = e.kind === 'deceiver' ? 0.85 : e.elite ? 0.7 : 0;
     push(rollItem(Math.max(depth, floor)));
+  }
+}
+
+// Slams land on their own clock rather than on the thrower's, so a lieutenant
+// killed mid-wind still lands the blow it had already committed to.
+function updateSlams(dt) {
+  for (let i = slams.length - 1; i >= 0; i--) {
+    const s = slams[i];
+    s.t += dt;
+    if (!s.struck && s.t >= s.wind) {
+      s.struck = true;
+      shake(7);
+      burst(s.x, s.y, '#ffce70', 20, 260);
+      ring(s.x, s.y, '#ffce70', s.r * 0.5, s.r, 0.32);
+      if (dist2(player.x, player.y, s.x, s.y) < s.r * s.r) {
+        hurtPlayerBy(s.dmg, s.x, s.y);
+      }
+    }
+    if (s.t >= s.wind + 0.34) slams.splice(i, 1);
+  }
+}
+
+function drawSlams(t) {
+  for (let i = 0; i < slams.length; i++) {
+    const s = slams[i];
+    if (s.struck) continue;
+    const f = clamp(s.t / s.wind, 0, 1);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    // The floor it will take, held at full size, filling as the timer runs.
+    // This was a tenth of its current strength and simply did not register
+    // against a lit floor -- for a blow that takes half a hero's life the
+    // warning has to be the brightest thing on the ground.
+    const fill = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.r);
+    fill.addColorStop(0, 'rgba(226,120,44,' + (0.06 + 0.16 * f).toFixed(3) + ')');
+    fill.addColorStop(0.72, 'rgba(226,150,60,' + (0.04 + 0.12 * f).toFixed(3) + ')');
+    fill.addColorStop(1, 'rgba(255,206,112,' + (0.10 + 0.22 * f).toFixed(3) + ')');
+    ctx.fillStyle = fill;
+    ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,214,130,' + (0.55 + 0.45 * f).toFixed(3) + ')';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(s.x, s.y, s.r - 1.5, 0, TAU); ctx.stroke();
+    // and a closing sweep, so the wind-up reads as a countdown and not a stain
+    ctx.strokeStyle = 'rgba(255,244,214,.95)';
+    ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(s.x, s.y, s.r - 5, -Math.PI / 2, -Math.PI / 2 + TAU * f);
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+    ctx.restore();
   }
 }
 
@@ -2713,16 +2779,22 @@ function updateCamera(dt) {
   if (cam.shake < 0.05) cam.shake = 0;
 }
 
-function hurtPlayer(e) {
+function hurtPlayer(e) { hurtPlayerBy(e.dmg, e.x, e.y); }
+
+// Damage from something that is not a body -- a slam, a hazard -- comes
+// through here. fx/fy is only where the spray comes from.
+function hurtPlayerBy(dmg, fx, fy) {
   if (player.invuln > 0) return;
   // Ward is flat damage reduction off gear, capped well short of immunity.
-  const taken = e.dmg * (1 - (player.ward || 0));
+  const taken = dmg * (1 - (player.ward || 0));
   player.hp -= taken;
   player.invuln = player.iframe;
   player.hitFlash = 0.3;
   shake(6 + taken * 0.25);
   hitFlashUI();
-  burst(player.x + (e.x - player.x) * 0.5, player.y + (e.y - player.y) * 0.5,
+  const ox = fx === undefined ? player.x : fx;
+  const oy = fy === undefined ? player.y : fy;
+  burst(player.x + (ox - player.x) * 0.5, player.y + (oy - player.y) * 0.5,
         PAL.blood, 10, 180);
   if (player.hp <= 0) { player.hp = 0; endRun(false); }
 }
@@ -2730,6 +2802,13 @@ function hurtPlayer(e) {
 function damageEnemy(e, dmg) {
   if (e.hp <= 0) return;
   if (!e.awake) wakeEnemy(e);          // struck from the dark: everyone hears
+  // He is held up by his escort. Hitting him through it is not forbidden, just
+  // close to pointless -- so the read is "kill the crimson ones" rather than a
+  // rule the game refuses to let you break.
+  if (e.kind === 'deceiver' && escortAlive()) {
+    dmg *= 0.14;
+    burst(e.x, e.y, '#e8c060', 2, 120);
+  }
   // A braced anchor eats most of it. It cannot move or swing while it does,
   // and it has to drop the guard on a rhythm, so the answer is to back off and
   // come back rather than to keep hitting the shield.
@@ -2947,6 +3026,32 @@ function updateEnemies(dt) {
 
     e.angle = Math.atan2(dy, dx);
     if (Math.abs(dx) > 3) e.face = dx < 0 ? -1 : 1;
+
+    // A slam is thrown at where you are now, and lands where it was thrown --
+    // the whole attack is the distance between those two, so it is aimed at
+    // range rather than in contact, where there would be nowhere to go.
+    if (e.slam) {
+      e.slamCd -= dt;
+      if (e.slamCd <= 0 && d < SLAM_R * 2.2 && d > e.r + player.r + 10) {
+        // Three Lieutenants throwing on their own clocks carpet the floor and
+        // the telegraph stops meaning anything. One marked circle at a time in
+        // any given place: the others wait a beat and aim somewhere you have
+        // moved to.
+        let clash = false;
+        for (let k = 0; k < slams.length; k++) {
+          const o = slams[k];
+          if (o.struck) continue;
+          if (dist2(o.x, o.y, player.x, player.y) < o.r * o.r) { clash = true; break; }
+        }
+        if (!clash) {
+          e.slamCd = SLAM_CD * rand(0.85, 1.2);
+          slams.push({ x: player.x, y: player.y, r: SLAM_R, wind: SLAM_WIND,
+                       t: 0, dmg: e.dmg * 1.3, struck: false });
+        } else {
+          e.slamCd = 0.5;
+        }
+      }
+    }
 
     // --- separation (flocking): repulsion from crowded neighbours ---------
     let rx = 0, ry = 0;
@@ -3199,10 +3304,45 @@ function spawnDeceiver() {
   };
   enemies.push(e);
   run.boss = e;
+  // He does not arrive alone. The Lieutenants are the reason he is hard to
+  // reach: while one of them stands he takes almost nothing, so the fight has
+  // an order to it rather than being a single large health bar with a swarm
+  // in front of it.
+  // The escort ramps with the ladder like everything else. A flat pair of
+  // three-hundred-hit-point guards halved the extraction rate on the first
+  // delve, where the horde is thirty-four-hit-point thralls and the hero has
+  // power four: the fight has to be learnable before it is hard.
+  const dep = LEVEL.depth || 0;
+  const guard = 1 + Math.round(dep * 2);
+  for (let i = 0; i < guard; i++) {
+    let ok = false, x = 0, y = 0;
+    for (let k = 0; k < 20 && !ok; k++) {
+      const a = (i / guard) * TAU + k * 0.6 + Math.random() * 0.5;
+      const dd = 96 + k * 9;
+      x = clamp(e.x + Math.cos(a) * dd, 50, WORLD.w - 50);
+      y = clamp(e.y + Math.sin(a) * dd, 50, WORLD.h - 50);
+      ok = !pointInWalls(x, y, ENEMY_TYPES.lieutenant.r + 3);
+    }
+    if (!ok) continue;
+    const L = newBody('lieutenant', x, y, run.time);
+    L.hp = L.maxHp = L.maxHp * (0.5 + dep * 1.3);
+    enemies.push(L);
+  }
   run.banner = 3.6;
   run.bannerText = 'The Gilded Deceiver';
-  run.bannerNote = 'He offers you the gate. Look for the shattered eye.';
+  run.bannerNote = guard
+    ? 'His Lieutenants hold him. Break them first.'
+    : 'He offers you the gate. Look for the shattered eye.';
   shake(10);
+}
+
+// Is anything still standing between him and you?
+function escortAlive() {
+  for (let i = 0; i < enemies.length; i++) {
+    const e = enemies[i];
+    if (e.kind === 'lieutenant' && e.hp > 0) return true;
+  }
+  return false;
 }
 
 function spawnMirages(src, n) {
@@ -3368,6 +3508,7 @@ function update(dt) {
   updateEnemies(dt);
   compactEnemies();
   updateLoot(dt);
+  updateSlams(dt);
   updateDrops(dt);
   updateCorpse(dt);
   updateParticles(dt);
@@ -3641,12 +3782,35 @@ function forgeEnemy(kind, r, color, flash) {
       g.fillRect(-u * 0.17, -u * 0.72, u * 0.12, u * 0.09);
       g.fillRect(u * 0.05, -u * 0.72, u * 0.12, u * 0.09);
       g.shadowBlur = 0;
+
+      // A Lieutenant wears his master's gold over the same plate, so the two
+      // read as one household without needing a second silhouette.
+      if (kind === 'lieutenant') {
+        g.strokeStyle = 'rgba(232,192,96,.92)';
+        g.lineWidth = u * 0.07;
+        g.beginPath();                                    // circlet
+        g.moveTo(-u * 0.28, -u * 0.86); g.lineTo(u * 0.28, -u * 0.86);
+        g.stroke();
+        g.beginPath();                                    // and its points
+        g.moveTo(-u * 0.2, -u * 0.86); g.lineTo(-u * 0.14, -u * 1.0);
+        g.lineTo(-u * 0.08, -u * 0.86);
+        g.moveTo(u * 0.08, -u * 0.86); g.lineTo(u * 0.14, -u * 1.0);
+        g.lineTo(u * 0.2, -u * 0.86);
+        g.stroke();
+        g.lineWidth = u * 0.045;                          // pauldron trim
+        [-1, 1].forEach(sx => {
+          g.beginPath();
+          g.ellipse(sx * u * 0.62, -u * 0.3, u * 0.3, u * 0.25, sx * 0.34, 0, TAU);
+          g.stroke();
+        });
+      }
     }
 
     // The void-brand: asymmetrical by doctrine, and the tell that these were
     // people who gave up their will rather than monsters.
     const bx = kind === 'eclipse' ? -u * 0.09 : u * 0.1;
-    const by = kind === 'eclipse' ? -u * 0.78 : kind === 'breaker' ? -u * 0.84 : -u * 0.8;
+    const by = kind === 'eclipse' ? -u * 0.78 :
+               (kind === 'breaker' || kind === 'lieutenant') ? -u * 0.84 : -u * 0.8;
     g.shadowColor = PAL.brand; g.shadowBlur = u * 0.3;
     g.strokeStyle = PAL.brand; g.lineWidth = u * 0.05;
     g.beginPath();
@@ -5351,6 +5515,38 @@ function drawEnemy(e) {
     }
     return;
   }
+  // Gold, additive, and cheap: a filled radial rather than a shadowBlur, which
+  // measured at seven milliseconds a body when the crescents used one.
+  if (e.kind === 'lieutenant') {
+    const p = 0.62 + 0.38 * Math.sin(e.wob * 0.9);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const au = ctx.createRadialGradient(e.x, e.y, e.r * 0.3, e.x, e.y, e.r * 2.1);
+    au.addColorStop(0, 'rgba(255,206,112,' + (0.40 * p).toFixed(3) + ')');
+    au.addColorStop(0.5, 'rgba(226,150,60,' + (0.20 * p).toFixed(3) + ')');
+    au.addColorStop(1, 'rgba(232,192,96,0)');
+    ctx.fillStyle = au;
+    ctx.beginPath(); ctx.arc(e.x, e.y, e.r * 2.1, 0, TAU); ctx.fill();
+    // and a hard ring at the body, so the gold survives a bright floor
+    ctx.strokeStyle = 'rgba(255,214,130,' + (0.55 * p).toFixed(3) + ')';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(e.x, e.y + e.r * 0.5, e.r * 1.05, 0, TAU); ctx.stroke();
+    // The line back to the man he is holding up. Without it the Deceiver just
+    // looks invulnerable for no stated reason.
+    const b = run && run.boss;
+    if (b && b.hp > 0) {
+      const g2 = ctx.createLinearGradient(e.x, e.y, b.x, b.y);
+      g2.addColorStop(0, 'rgba(232,192,96,.34)');
+      g2.addColorStop(1, 'rgba(232,192,96,.07)');
+      ctx.strokeStyle = g2;
+      ctx.lineWidth = 1.6;
+      ctx.setLineDash([7, 9]);
+      ctx.lineDashOffset = -e.wob * 9;
+      ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    ctx.restore();
+  }
   if (e.elite) {
     // A brand around the feet: the same void-mark the thralls carry, but lit.
     const p = 0.6 + 0.4 * Math.sin(e.wob * 0.7);
@@ -5392,7 +5588,8 @@ function drawEnemy(e) {
     ctx.stroke();
     ctx.restore();
   }
-  if ((e.kind === 'breaker' || e.elite) && e.hp < e.maxHp * 0.92) {
+  if ((e.kind === 'breaker' || e.kind === 'lieutenant' || e.elite) &&
+      e.hp < e.maxHp * 0.92) {
     const w = e.r * 1.5, f = clamp(e.hp / e.maxHp, 0, 1);
     const bx = e.x - w / 2, by = e.y - e.r - 6;
     ctx.fillStyle = 'rgba(0,0,0,.55)';
@@ -5691,6 +5888,7 @@ function draw(t) {
   drawWalls(x0, y0, x1, y1);
   drawProps(x0, y0, x1, y1);
   drawLoot(t);
+  drawSlams(t);
   drawCorpse(t);
   drawDrops(t);
   drawStanding(t, x0, y0, x1, y1);
@@ -6033,6 +6231,7 @@ function resetRun(heroId, levelId, diffId) {
   portal  = { x: pt.x, y: pt.y, pulse: 0, channel: 0, active: false, inside: false };
   player  = makePlayer(spawn.x, spawn.y, hero);
   enemies = []; arcs = []; loot = []; drops = []; particles = []; rings = [];
+  slams = [];
   enemyGrid = new SpatialHash(ENEMY_CELL);
 
   run = { time: 0, tech: 0, kills: 0,
@@ -6898,7 +7097,7 @@ showScreen('start');
 requestAnimationFrame(frame);
 </script>
 <script>
-/* generated 2026-08-25T11:17:01Z by tools/build-debug.js — do not edit */
+/* generated 2026-08-25T11:31:28Z by tools/build-debug.js — do not edit */
 /* =============================================================================
    THE RIVENMARK — debug overlay
    Injected into debug.html by tools/build-debug.js. Never shipped in the
