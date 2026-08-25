@@ -53,7 +53,6 @@
   /* Everything in the HUD is DOM over a canvas; a drop shadow is what stops it
      reading as part of the picture. */
   .hud, #bagBtn, .iconbtn{text-shadow:0 1px 2px rgba(0,0,0,.95);}
-  #bagBtn{box-shadow:0 4px 16px rgba(0,0,0,.8);}
 
   .bar{
     position:relative; height:14px; border:1px solid var(--line);
@@ -93,15 +92,49 @@
     color:var(--gold); text-transform:uppercase;
   }
 
-  .iconbtn{
-    pointer-events:auto; width:40px; height:40px; flex:0 0 40px;
-    border:1px solid var(--line); background:linear-gradient(#241d15,#171209);
-    color:var(--ink); border-radius:2px; font-size:14px; line-height:1;
-    display:grid; place-items:center; cursor:pointer; font-family:var(--font-display);
-    touch-action:manipulation;
-    box-shadow:inset 0 1px 0 rgba(255,220,160,.1);
+  /* The in-delve controls are struck bronze discs rather than panels: a
+     raised rim catching the light from above, a sunk field, and the death's
+     head of the Vanguard embossed in it. Everything here is gradients and
+     inset shadows -- there are no image assets in this build, so the relief
+     has to be lit rather than drawn. */
+  .disc{
+    pointer-events:auto; position:relative; border-radius:50%;
+    border:1px solid #6b5a3c;
+    background:
+      radial-gradient(circle at 50% 34%, #4a3d28 0%, #2b2317 58%, #191308 100%);
+    box-shadow:
+      inset 0 2px 2px rgba(255,226,170,.22),
+      inset 0 -3px 5px rgba(0,0,0,.75),
+      inset 0 0 0 3px rgba(0,0,0,.28),
+      0 3px 10px rgba(0,0,0,.75);
+    color:#cbbf9f; cursor:pointer; touch-action:manipulation;
+    display:grid; place-items:center; padding:0;
+    font-family:var(--font-display); line-height:1;
   }
-  .iconbtn:active{background:#3a2d1d; border-color:var(--gold);}
+  /* the sunk field the skull sits in */
+  .disc::before{
+    content:''; position:absolute; inset:5px; border-radius:50%;
+    background:radial-gradient(circle at 50% 62%, #1d1710 0%, #120d07 100%);
+    box-shadow:inset 0 2px 3px rgba(0,0,0,.8),
+               inset 0 -1px 0 rgba(255,220,160,.09);
+    pointer-events:none;
+  }
+  .disc > *{position:relative;}
+  .disc:active{border-color:var(--gold);}
+  .disc:active::before{background:radial-gradient(circle at 50% 62%,#33271a,#1d1610);}
+  /* the emboss itself: one glyph lit from above, one shadow beneath it */
+  .skull{
+    position:absolute; inset:0; display:grid; place-items:center;
+    font-size:26px; pointer-events:none;
+    color:rgba(214,196,158,.16);
+    text-shadow:0 1px 0 rgba(255,236,200,.13), 0 -1px 1px rgba(0,0,0,.9);
+  }
+
+  .iconbtn{
+    width:42px; height:42px; flex:0 0 42px; font-size:13px;
+    letter-spacing:1px;
+  }
+  .iconbtn:active{color:#f0e4c6;}
 
   /* ---------- Screens ---------- */
   .screen{
@@ -272,9 +305,19 @@
   .cellbtn{aspect-ratio:1; border:1px solid var(--line); background:#171209;
     border-radius:2px; display:flex; align-items:center; justify-content:center;
     cursor:pointer; touch-action:manipulation; padding:0;}
-  .cellbtn.sel{border-color:var(--gold); background:#2a2115;}
+  .cellbtn.sel{border-color:var(--gold) !important; background:#2a2115;}
+  .cellbtn.mythic{box-shadow:inset 0 0 0 1px rgba(224,86,63,.55);}
   .cellbtn i{display:block; width:11px; height:11px; transform:rotate(45deg);
     border-radius:1px;}
+  .cellbtn{position:relative;}
+  .cmk{font-size:15px; line-height:1;}
+  .cup{position:absolute; right:2px; top:1px; font-size:7px; color:#8fd08a;}
+  .bagbar{display:flex; flex-wrap:wrap; gap:3px; margin:0 0 5px;}
+  .chip{border:1px solid var(--line); background:#171209; color:#9d917a;
+    border-radius:2px; padding:3px 6px; cursor:pointer; touch-action:manipulation;
+    font:600 9.5px/1.15 ui-monospace,monospace;}
+  .chip.on{border-color:var(--gold); color:#f0e4c6; background:#2a2115;}
+  .bag p.fine{grid-column:1/-1; margin:6px 0 0; text-align:left;}
   .gear-stats{margin-top:8px; font:11px/1.5 ui-monospace,monospace; color:#9d917a;}
   .gear-stats div{display:flex; justify-content:space-between; gap:8px;}
   .gear-stats b{color:#e6dcc4; font-weight:600;}
@@ -291,11 +334,11 @@
     cursor:pointer; touch-action:manipulation;}
   .gear-acts button.prime{border-color:var(--gold); color:#f0e4c6;}
   #bagBtn{z-index:7; position:absolute; right:calc(16px + var(--safe-r));
-    bottom:calc(12px + var(--safe-b)); width:46px; height:46px; border-radius:3px;
-    border:1px solid var(--line); background:rgba(18,13,9,.8); color:#cbbf9f;
-    font:600 10px/1 ui-monospace,monospace; cursor:pointer; touch-action:manipulation;}
-  #bagBtn b{display:block; font-size:15px; margin-bottom:2px;}
+    bottom:calc(12px + var(--safe-b)); width:52px; height:52px;
+    font:600 10px/1 ui-monospace,monospace;}
+  #bagBtn b{display:block; font-size:15px; margin-bottom:1px;}
   #bagBtn.hot{border-color:var(--gold); color:#f0e4c6;}
+  #bagBtn.hot .skull{color:rgba(255,206,112,.26);}
 
   /* The open ley-gate. Top-centre, not bottom: the movement stick floats
      wherever a thumb lands, so a button down there would eat a walk. */
@@ -399,7 +442,8 @@
       <div class="clock" id="clock">0:00</div>
       <div class="lvl" id="lvlText">LV 1</div>
     </div>
-    <button class="iconbtn" id="pauseBtn" aria-label="Pause">II</button>
+    <button class="disc iconbtn" id="pauseBtn" aria-label="Pause"><span
+      class="skull" aria-hidden="true">☠</span><span>II</span></button>
   </div>
 
   <div class="screen on" id="start">
@@ -465,7 +509,9 @@
   </div>
 
   <button id="gateBtn" hidden><b>Step through</b><i></i></button>
-  <button id="bagBtn" aria-label="Bag"><b>▣</b><span id="bagBadge">0</span></button>
+  <button class="disc" id="bagBtn" aria-label="Bag"><span class="skull"
+    aria-hidden="true">☠</span><span><b>▣</b><span
+    id="bagBadge">0</span></span></button>
 
   <div class="screen" id="gear">
     <p class="sub" id="gearSub">The Vanguard's kit</p>
@@ -477,6 +523,7 @@
       </div>
       <div class="gear-col">
         <h5 class="gear-h">Bag <span id="bagCount"></span></h5>
+        <div class="bagbar" id="bagBar"></div>
         <div class="bag" id="bagGrid"></div>
       </div>
     </div>
@@ -716,30 +763,35 @@ const REGIONS = [
     landmark:'The Weeping Keep of Tor-Varden', build:'keep',
     layout:{ pitch:4, braid:0.42, chambers:7 },
     earth:[58,44,30], mottle:[[26,18,11],[84,64,41],[116,90,58]],
+    moss:[84,96,50],
     flag:[56,26], stone:['#241d16','#16110b','#0b0805'], lamp:'#e5761f' },
   { id:'vaelk',   name:'The Rending Gorges of Vaelk',
     note:'Split earth below the Kael-Dorm Redoubt.',
     landmark:'The Kael-Dorm Redoubt', build:'redoubt',
     layout:{ pitch:5, braid:0.20, chambers:4, rifts:true },
     earth:[38,46,58], mottle:[[16,20,28],[52,66,86],[78,102,130]],
+    moss:[66,92,80],
     flag:[58,24], stone:['#1a2430','#101720','#070b0f'], lamp:'#5fd0ff' },
   { id:'kraggen', name:'Kraggen-Tor, the Iron-Teeth',
     note:'Volcanic west, holding the Shatter-Gate of Ghor.',
     landmark:'The Shatter-Gate of Ghor', build:'shattergate',
     layout:{ pitch:3, braid:0.26, chambers:5 },
     earth:[52,30,22], mottle:[[28,12,8],[86,42,24],[128,62,30]],
+    moss:[94,94,44],
     flag:[54,22], stone:['#2a1a14','#1a0f0a','#0c0705'], lamp:'#ff5f28' },
   { id:'weald',   name:'The Rot-Weald',
     note:'Creeping mutation in the southern forest.',
     landmark:'The Heart-Rot Clearing', build:'thicket',
     layout:{ pitch:4, braid:0.55, chambers:9 },
     earth:[40,48,30], mottle:[[18,24,12],[58,74,38],[86,106,54]],
+    moss:[100,128,52],
     flag:[52,26], stone:['#1c2418','#121810','#080b07'], lamp:'#9dbb5a' },
   { id:'firth',   name:'The Dead Firth',
     note:'A blackened ocean, drained and refilled with drifting ash.',
     landmark:'The Ash-Shoals', build:'ashflat',
     layout:{ pitch:6, braid:0.60, chambers:11 },
     earth:[34,32,34], mottle:[[14,13,15],[52,50,54],[78,76,82]],
+    moss:[74,88,70],
     flag:[50,20], stone:['#1c1c1f','#121215','#07070a'], lamp:'#b9c4cf' }
 ];
 
@@ -1041,15 +1093,20 @@ const UPGRADES = [
 
 // Both heroes fight unhelmeted, which the compendium is explicit about, so
 // there is no head slot to put a helm in.
+// The mark is what a cell shows instead of a bare colour. A vault of a
+// hundred and twenty identical squares sorted by pickup order is a pile, not
+// an inventory -- you cannot find a blade in it without opening every one.
 const SLOTS = [
-  { id:'blade',   name:'Blade' },
-  { id:'offhand', name:'Off-hand' },
-  { id:'mail',    name:'Mail' },
-  { id:'girdle',  name:'Girdle' },
-  { id:'boots',   name:'Boots' },
-  { id:'amulet',  name:'Amulet' },
-  { id:'ring1',   name:'Ring' },
-  { id:'ring2',   name:'Ring' }
+  // A dagger, not crossed swords: U+2694 falls back to a thin cross in most
+  // system fonts, and in a grid of buttons a cross reads as "discard".
+  { id:'blade',   name:'Blade',    mark:'\u2020' },
+  { id:'offhand', name:'Off-hand', mark:'\u25d6' },
+  { id:'mail',    name:'Mail',     mark:'\u2593' },
+  { id:'girdle',  name:'Girdle',   mark:'\u2550' },
+  { id:'boots',   name:'Boots',    mark:'\u25e2' },
+  { id:'amulet',  name:'Amulet',   mark:'\u2727' },
+  { id:'ring1',   name:'Ring',     mark:'\u25cb' },
+  { id:'ring2',   name:'Ring',     mark:'\u25cb' }
 ];
 const SLOT_BY_ID = {};
 for (const s of SLOTS) SLOT_BY_ID[s.id] = s;
@@ -5088,14 +5145,32 @@ function forgeWallTops() {
       }
     }
 
-    // A little damp or moss gathering in the joints, region-tinted.
-    const wet = REGION.mottle[0];
-    for (let i = 0; i < 4; i++) {
+    // Damp and moss gathering in the joints, region-tinted. Four faint
+    // patches read as a clean surface with a mark on it; this is a top that
+    // has had things growing on it.
+    const wet = REGION.moss || [90, 110, 60];
+    for (let i = 0; i < 11; i++) {
+      if (Math.random() > 0.72) continue;
+      const mx = Math.random() * T, my = Math.random() * T;
+      const mr = 3 + Math.random() * 8;
+      const mg = g.createRadialGradient(mx, my, 0, mx, my, mr);
+      mg.addColorStop(0, 'rgba(' + wet.join(',') + ',' + (0.22 + Math.random() * 0.20).toFixed(2) + ')');
+      mg.addColorStop(0.6, 'rgba(' + wet.join(',') + ',' + (0.10 + Math.random() * 0.10).toFixed(2) + ')');
+      mg.addColorStop(1, 'rgba(' + wet.join(',') + ',0)');
+      g.fillStyle = mg;
+      g.beginPath();
+      g.ellipse(mx, my, mr, mr * (0.5 + Math.random() * 0.4),
+                Math.random() * TAU, 0, TAU);
+      g.fill();
+    }
+    // and a few dark spots of standing wet in the low corners
+    for (let i = 0; i < 3; i++) {
       if (Math.random() > 0.5) continue;
-      g.fillStyle = 'rgba(' + wet.join(',') + ',.20)';
+      g.fillStyle = 'rgba(10,14,12,.26)';
       g.beginPath();
       g.ellipse(Math.random() * T, Math.random() * T,
-                2 + Math.random() * 5, 1.5 + Math.random() * 3, 0, 0, TAU);
+                2 + Math.random() * 4, 1.4 + Math.random() * 2.4,
+                Math.random() * TAU, 0, TAU);
       g.fill();
     }
     wallTops.push(c);
@@ -5132,14 +5207,50 @@ function forgeWallCourses() {
         g.lineWidth = 1.6;
         g.beginPath(); g.moveTo(x + w - 1, 0); g.lineTo(x + w - 1, h); g.stroke();
         // pitting
-        for (let i = 0; i < 4; i++) {
-          g.fillStyle = 'rgba(10,8,5,.22)';
+        for (let i = 0; i < 7; i++) {
+          g.fillStyle = 'rgba(10,8,5,.24)';
           g.beginPath();
           g.ellipse(x + 4 + Math.random() * (w - 8), 3 + Math.random() * (h - 6),
-                    1 + Math.random() * 1.6, 1 + Math.random(), 0, 0, TAU);
+                    1 + Math.random() * 1.9, 1 + Math.random() * 1.2, 0, 0, TAU);
           g.fill();
         }
+        // Water has been running down this face for a very long time: dark
+        // streaks from the top edge, tapering as they go.
+        for (let i = 0; i < 2; i++) {
+          if (Math.random() > 0.62) continue;
+          const sx = x + 3 + Math.random() * (w - 6);
+          const sw = 1.4 + Math.random() * 2.6;
+          const st = g.createLinearGradient(0, 1, 0, h);
+          st.addColorStop(0, 'rgba(12,11,8,.42)');
+          st.addColorStop(0.7, 'rgba(12,11,8,.20)');
+          st.addColorStop(1, 'rgba(12,11,8,0)');
+          g.fillStyle = st;
+          g.beginPath();
+          g.moveTo(sx, 1);
+          g.lineTo(sx + sw, 1);
+          g.lineTo(sx + sw * 0.4, h);
+          g.lineTo(sx - sw * 0.2, h);
+          g.closePath(); g.fill();
+        }
         x += w;
+      }
+      // Moss banked along the foot of the course, where the damp sits. The
+      // stone was clean to the ground before this, which is what made it read
+      // as new-cut masonry rather than something that has been standing in a
+      // wet hole for an age.
+      // The region's own moss, not its darkest damp tone -- mottle[0] is
+      // near-black, so growing things out of it just dirtied the stone.
+      const mo = REGION.moss || [90, 110, 60];
+      for (let i = 0; i < 16; i++) {
+        const mx = Math.random() * 100;
+        const mr = 3 + Math.random() * 9;
+        const mg = g.createRadialGradient(mx, 15, 0, mx, 15, mr);
+        mg.addColorStop(0, 'rgba(' + mo.join(',') + ',' + (0.30 + Math.random() * 0.22).toFixed(2) + ')');
+        mg.addColorStop(1, 'rgba(' + mo.join(',') + ',0)');
+        g.fillStyle = mg;
+        g.beginPath();
+        g.ellipse(mx, 14 - Math.random() * 3, mr, mr * 0.62, 0, 0, TAU);
+        g.fill();
       }
       g.fillStyle = 'rgba(4,5,6,.7)';
       g.fillRect(0, 15.5, 100, 14.5);
@@ -6814,7 +6925,8 @@ const el = {
   vendor: $('vendor'), vendorList: $('vendorList'), vendorDetail: $('vendorDetail'),
   purseLine: $('purseLine'), vendorLine: $('vendorLine'),
   gear: $('gear'), gearSlots: $('gearSlots'), gearStats: $('gearStats'),
-  bagGrid: $('bagGrid'), bagCount: $('bagCount'), gearDetail: $('gearDetail'),
+  bagGrid: $('bagGrid'), bagCount: $('bagCount'), bagBar: $('bagBar'),
+  gearDetail: $('gearDetail'),
   gearClose: $('gearClose'), bagBtn: $('bagBtn'), bagBadge: $('bagBadge'),
   gateBtn: $('gateBtn'), gateNote: $('gateBtn').querySelector('i'),
   hall: $('hall'), hallList: $('hallList'), hallDetail: $('hallDetail'),
@@ -7378,7 +7490,11 @@ function vendorBuy(v, arg) {
    measured against whatever is in its slot already, because "is this better"
    is the only question the screen exists to answer.
    --------------------------------------------------------------------- */
-let gearSel = null;   // {from:'bag'|'worn', index|slot}
+// {from:'bag', index, uid} | {from:'worn', slot}. The uid is what the
+// selection really is: sorting reorders the array under it, so an index alone
+// would silently start pointing at a different item the moment the order
+// changed -- and the buttons beside it equip and sell by that index.
+let gearSel = null;
 
 /* The same screen serves the bag you are carrying mid-delve and the kit you
    keep between them. `gearCtx` says which, so none of the rendering or the
@@ -7388,6 +7504,59 @@ let gearCtx = null;
 // Mid-delve the bag is a record of what you have found, not a workbench:
 // sorting and equipping happen in the hub between delves, so a fight is never
 // paused to compare two rings.
+/* --- making a vault readable ---------------------------------------------
+   Sorting reorders the array itself rather than keeping a display mapping.
+   Nothing in the game depends on the order of the vault -- loadouts name
+   items by id, banking appends, and the cap is a length -- so the simple
+   thing is also the correct one, and a selection is carried across a re-sort
+   by the item's id rather than by where it used to sit.
+   -------------------------------------------------------------------- */
+const BAG_SORTS = [
+  { id: 'power',  name: 'Power',
+    cmp: (a, b) => itemPower(b) - itemPower(a) },
+  { id: 'slot',   name: 'Slot',
+    cmp: (a, b) => (SLOT_INDEX[a.slot] - SLOT_INDEX[b.slot]) ||
+                   (itemPower(b) - itemPower(a)) },
+  { id: 'rarity', name: 'Rarity',
+    cmp: (a, b) => (RARITY_INDEX[b.rarity] - RARITY_INDEX[a.rarity]) ||
+                   (itemPower(b) - itemPower(a)) },
+  { id: 'found',  name: 'Found',
+    cmp: (a, b) => b.uid - a.uid }
+];
+const SLOT_INDEX = {};
+SLOTS.forEach((sl, i) => { SLOT_INDEX[sl.id] = i; });
+const RARITY_INDEX = {};
+RARITY.forEach((r, i) => { RARITY_INDEX[r.id] = i; });
+
+let bagSort = 'power';
+let bagFilter = 'all';     // 'all' | 'up' | a slot id
+
+// Would wearing this beat what is in its slot now? A ring is compared against
+// the weaker of the two you have on, since that is the one it would replace.
+function isUpgrade(it, gear) {
+  if (!it) return false;
+  if (it.slot === 'ring1' || it.slot === 'ring2') {
+    const a = itemPower(gear.ring1), b = itemPower(gear.ring2);
+    return itemPower(it) > Math.min(a, b);
+  }
+  return itemPower(it) > itemPower(gear[it.slot]);
+}
+
+function sortBag(C) {
+  const s = BAG_SORTS.find(x => x.id === bagSort) || BAG_SORTS[0];
+  C.bag.sort(s.cmp);
+}
+
+function bagShown(C) {
+  if (bagFilter === 'all') return C.bag.map((it, i) => ({ it, i }));
+  if (bagFilter === 'up') {
+    return C.bag.map((it, i) => ({ it, i })).filter(o => isUpgrade(o.it, C.gear));
+  }
+  const want = bagFilter === 'ring1' || bagFilter === 'ring2' ? 'ring' : bagFilter;
+  return C.bag.map((it, i) => ({ it, i })).filter(o =>
+    (o.it.slot === 'ring1' || o.it.slot === 'ring2' ? 'ring' : o.it.slot) === want);
+}
+
 function runCtx() {
   return { gear: player.gear, bag: player.bag, cap: bagCap(), live: true,
            readOnly: true,
@@ -7490,17 +7659,78 @@ function renderGear() {
     .map(r => '<div><span>' + r[0] + '</span><b>' + r[1] + '</b></div>').join('');
 
   // bag or vault
-  el.bagCount.textContent = C.bag.length + '/' + C.cap;
+  sortBag(C);
+  // Re-find what was selected: the sort just moved everything.
+  if (gearSel && gearSel.from === 'bag') {
+    const at = C.bag.findIndex(x => x.uid === gearSel.uid);
+    if (at < 0) gearSel = null; else gearSel.index = at;
+  }
+  const shown = bagShown(C);
+  const ups = C.bag.reduce((n, it) => n + (isUpgrade(it, C.gear) ? 1 : 0), 0);
+  el.bagCount.textContent = C.bag.length + '/' + C.cap +
+    (bagFilter === 'all' ? '' : '  \u00b7  ' + shown.length + ' shown');
+
+  // the bar: how it is ordered, and what is being left out
+  el.bagBar.innerHTML = '';
+  const chip = (label, on, title, fn) => {
+    const b = document.createElement('button');
+    b.className = 'chip' + (on ? ' on' : '');
+    b.type = 'button';
+    b.textContent = label;
+    if (title) b.title = title;
+    b.onclick = fn;
+    el.bagBar.appendChild(b);
+    return b;
+  };
+  const sorter = BAG_SORTS.find(x => x.id === bagSort) || BAG_SORTS[0];
+  chip('\u21c5 ' + sorter.name, false, 'Order', () => {
+    const i = BAG_SORTS.indexOf(sorter);
+    bagSort = BAG_SORTS[(i + 1) % BAG_SORTS.length].id;
+    renderGear();
+  });
+  chip('All', bagFilter === 'all', 'Everything', () => { bagFilter = 'all'; renderGear(); });
+  chip('\u25b2 ' + ups, bagFilter === 'up', 'Only what beats what you are wearing',
+       () => { bagFilter = bagFilter === 'up' ? 'all' : 'up'; renderGear(); });
+  const seen = {};
+  for (const sl of SLOTS) {
+    const key = sl.id === 'ring2' ? 'ring1' : sl.id;
+    if (seen[key]) continue;
+    seen[key] = 1;
+    chip(sl.mark, bagFilter === key, sl.name,
+         () => { bagFilter = bagFilter === key ? 'all' : key; renderGear(); });
+  }
+
   el.bagGrid.innerHTML = '';
-  const cells = Math.min(C.cap, Math.max(20, C.bag.length + 4));
-  for (let i = 0; i < cells; i++) {
-    const it = C.bag[i];
+  const pad = bagFilter === 'all' ? 4 : 0;
+  const cells = Math.min(C.cap, Math.max(bagFilter === 'all' ? 20 : shown.length,
+                                         shown.length + pad));
+  for (let n = 0; n < cells; n++) {
+    const o = shown[n];
+    const it = o && o.it;
     const b = document.createElement('button');
     b.className = 'cellbtn' +
-      (gearSel && gearSel.from === 'bag' && gearSel.index === i ? ' sel' : '');
-    if (it) b.innerHTML = '<i style="background:' + rarityOf(it).colour + '"></i>';
-    b.onclick = () => { gearSel = it ? { from: 'bag', index: i } : null; renderGear(); };
+      (it && gearSel && gearSel.from === 'bag' && gearSel.index === o.i ? ' sel' : '') +
+      (it && it.set === SET_ID ? ' mythic' : '');
+    if (it) {
+      const col = rarityOf(it).colour;
+      b.innerHTML = '<span class="cmk" style="color:' + col + '">' +
+                    (SLOT_BY_ID[it.slot].mark) + '</span>' +
+                    (isUpgrade(it, C.gear) ? '<span class="cup">\u25b2</span>' : '');
+      b.style.borderColor = col + '55';
+    }
+    b.onclick = () => {
+      gearSel = it ? { from: 'bag', index: o.i, uid: it.uid } : null;
+      renderGear();
+    };
     el.bagGrid.appendChild(b);
+  }
+  if (!shown.length) {
+    const p = document.createElement('p');
+    p.className = 'fine';
+    p.textContent = bagFilter === 'up'
+      ? 'Nothing here beats what you have on.'
+      : 'Nothing of that kind.';
+    el.bagGrid.appendChild(p);
   }
 
   renderSetLine();
