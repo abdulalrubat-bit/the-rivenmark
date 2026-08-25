@@ -203,7 +203,15 @@
     background:linear-gradient(100deg,#2a2015,#181109);}
   .mbtn:active{background:linear-gradient(100deg,#3a2d1d,#241a10);}
   .card.sel{border-color:var(--gold); background:linear-gradient(100deg,#33271a,#1d150d);}
-  .ladder{max-height:min(34vh,260px); overflow-y:auto; padding-right:3px;}
+  /* The ladder is its own scroll box, so its min-content height is zero. As a
+     flex child of a screen whose content overflows the phone it was therefore
+     the one item that could shrink, and it collapsed to nothing -- fifty-two
+     rungs in the DOM and no way to see or pick any of them. Pin the height. */
+  .ladder{flex:0 0 auto; height:min(34vh,260px); overflow-y:auto; padding-right:3px;}
+  /* And a screen taller than the viewport has to start at the top: centred
+     flex content that overflows puts its first rows above the scroll origin,
+     where nothing can reach them. */
+  #delve, #gear, #vendor{justify-content:flex-start;}
   /* Fifty-two rungs plus heroes plus difficulties overflows a short phone, and
      the one control you always need is at the bottom -- so it stays put rather
      than being something you have to go looking for. */
@@ -277,6 +285,26 @@
     font:600 10px/1 ui-monospace,monospace; cursor:pointer; touch-action:manipulation;}
   #bagBtn b{display:block; font-size:15px; margin-bottom:2px;}
   #bagBtn.hot{border-color:var(--gold); color:#f0e4c6;}
+
+  /* The open ley-gate. Top-centre, not bottom: the movement stick floats
+     wherever a thumb lands, so a button down there would eat a walk. */
+  /* Left-aligned, not centred: the minimap holds the top-right corner, and a
+     centred button of this width runs under it on a narrow phone. */
+  #gateBtn{z-index:7; position:absolute; left:calc(14px + var(--safe-l));
+    top:calc(74px + var(--safe-t)); padding:9px 16px 8px;
+    border:1px solid var(--gold); border-radius:2px; text-align:left;
+    background:linear-gradient(180deg,rgba(56,40,17,.94),rgba(22,16,10,.95));
+    color:#f4e7c4; font-family:var(--font-ui); cursor:pointer;
+    touch-action:manipulation; box-shadow:0 0 24px rgba(255,194,77,.20);}
+  #gateBtn b{display:block; font:600 13px/1 var(--font-ui);
+    letter-spacing:.12em; text-transform:uppercase;}
+  #gateBtn i{display:block; margin-top:4px; font-style:normal; white-space:nowrap;
+    font:400 10px/1.3 ui-monospace,monospace; color:#c6ae7c;}
+  #gateBtn:active{background:#4a361a;}
+  .owed{font:600 9px/1 ui-monospace,monospace; letter-spacing:.08em;
+    text-transform:uppercase; color:#9fc2d8; vertical-align:middle;}
+  #gateBtn.held{border-color:var(--blood); box-shadow:0 0 26px rgba(194,53,42,.34);}
+  #gateBtn.held i{color:#e0a08c;}
 
   /* ---------- Boon cards ---------- */
   #levelup .cards{
@@ -401,6 +429,7 @@
     <span class="corner c-bl">☠</span><span class="corner c-br">☠</span>
   </div>
 
+  <button id="gateBtn" hidden><b>Step through</b><i></i></button>
   <button id="bagBtn" aria-label="Bag"><b>▣</b><span id="bagBadge">0</span></button>
 
   <div class="screen" id="gear">
@@ -463,7 +492,11 @@ const WORLD = { w: 2000, h: 2000 };
 const WALL_CELL  = 100;
 const ENEMY_CELL = 48;
 
-const MAX_ENEMIES   = 220;   // was 40 before spatial partitioning
+let MAX_ENEMIES     = 340;   // measured: population is ~0.4ms of update at any
+                             // size the spatial hash sees, and draw cost tracks
+                             // bodies on screen rather than bodies placed. 220
+                             // was clipping the deep rungs below their own slag
+                             // budget, which is the one thing it must not do.
 
 // --- packs and waking -----------------------------------------------------
 // The delve is populated at generation time and cleared by walking into it,
@@ -471,7 +504,13 @@ const MAX_ENEMIES   = 220;   // was 40 before spatial partitioning
 // until something wakes them, so pressure comes from what you walk into.
 const PACK_SAFE     = 430;   // no pack closer than this to the spawn pocket
 const PACK_APART    = 250;   // minimum spacing between pack sites
-let PACK_SLAG       = 175;  // slag placed on the map, against the level quota
+// Slag placed on the map, as a multiple of the level's own quota. A fixed
+// budget was the old shape and it made the deep ladder unwinnable: the quota
+// climbs 125 -> 270 across the fifty-two rungs, so past the middle the delve
+// simply did not contain enough slag to open its own gate and the run could
+// only time out. The population is tied to the quota now, with headroom so
+// some packs can still be left alone.
+let SLAG_HEAD       = 1.42;
 const AGGRO_NEAR    = 250;   // a body notices you inside this
 const AGGRO_FAR     = 340;   // ...and the bigger, slower ones a little sooner
 const ALERT_R       = 155;   // a woken body pulls its neighbours up with it
@@ -494,6 +533,13 @@ const MAX_DT        = 0.05;  // clamp after tab-switches / long frames
 // about where the light is -- which is most of what sells depth in a flat view.
 const LIGHT = { x: 0.62, y: 0.78, wall: 11, body: 5 };
 const HUD_H           = 78;   // canvas UI clears the HUD panel by this much
+const HOLD_TICK       = 8;    // seconds of holding the gate per payout
+const HOLD_COIN       = 45;   // and what the first tick pays, rising after
+const CORPSE_CARRY    = 10;   // pieces a corpse can hold on to for you
+const AMBUSH_MIN      = 3;    // champions that answer a reclaimed corpse
+const AMBUSH_MAX      = 7;
+const AMBUSH_R        = 175;  // and how far out the ring of them forms
+const CORPSE_HUE      = '#9fc2d8';
 const SWING_TIME      = 0.17; // how long the blade takes to come round
 const EXTRACT_QUOTA   = 70;  // slag needed before the ley-gate powers up
 const EXTRACT_CHANNEL = 4.0; // seconds standing inside it to win
@@ -2031,8 +2077,13 @@ function placePacks(spawn) {
   const sites = [];
   const roster = LEVEL.horde;
 
+  const budget = Math.round((LEVEL.quota || 125) * SLAG_HEAD);
   // Reservoir of candidate sites, kept apart so packs read as separate groups.
-  for (let tries = 0; tries < 4000 && sites.length < 26; tries++) {
+  // A deep delve needs more of them to carry its larger budget, but they still
+  // have to fit: the cap is a ceiling, and the loop stops early if the floor
+  // cannot hold that many at PACK_APART.
+  const wantSites = clamp(Math.round(14 + budget / 11), 20, 44);
+  for (let tries = 0; tries < 7000 && sites.length < wantSites; tries++) {
     const c = openCells[(Math.random() * openCells.length) | 0];
     const ds = Math.hypot(c.x - spawn.x, c.y - spawn.y);
     if (ds < PACK_SAFE) continue;
@@ -2048,9 +2099,10 @@ function placePacks(spawn) {
   sites.sort((a, b) => a.depth - b.depth);
 
   let slag = 0;
-  for (let i = 0; i < sites.length && slag < PACK_SLAG; i++) {
+  for (let i = 0; i < sites.length && slag < budget; i++) {
     const st = sites[i];
-    const n = 3 + ((Math.random() * 3) | 0) + (st.depth > 0.55 ? 1 : 0);
+    const n = 3 + ((Math.random() * 3) | 0) + (st.depth > 0.55 ? 1 : 0) +
+              Math.round((LEVEL.depth || 0) * 2);
     for (let k = 0; k < n; k++) {
       // Deeper packs lean on the heavier archetypes; near ones are thralls.
       let kind = roster[0];
@@ -2070,6 +2122,24 @@ function placePacks(spawn) {
             (ELITE_CHANCE + st.depth * 0.14) * DIFF.setRate) makeElite(e);
         slag += e.tech;
       }
+    }
+  }
+
+  // If the ground would not hold enough separate sites for the budget, the
+  // shortfall goes back into the sites that did fit rather than leaving the
+  // delve short of its own quota. Packs get denser at depth; they never get
+  // fewer than the quota needs.
+  for (let pass = 0; pass < 4 && slag < budget; pass++) {
+    for (let i = 0; i < sites.length && slag < budget; i++) {
+      const st = sites[i];
+      let kind = roster[0];
+      const r = Math.random();
+      if (st.depth > 0.62 && r < 0.28 && roster.indexOf('breaker') >= 0) kind = 'breaker';
+      else if (st.depth > 0.3 && r < 0.55 && roster.indexOf('eclipse') >= 0) kind = 'eclipse';
+      const pos = scatterNear(st.x, st.y, 110, ENEMY_TYPES[kind].r + 4, spawn);
+      if (!pos) continue;
+      const e = placeEnemy(kind, pos.x, pos.y, st.depth);
+      if (e) slag += e.tech;
     }
   }
 
@@ -2122,16 +2192,61 @@ function spawnEnemy(t) {
   }
   if (!ok) return;
 
-  // Health creeps up with run time so late waves stay meaningful.
-  const scale = (1 + t / 200) * DIFF.threat;
-  enemies.push({
+  enemies.push(newBody(kind, x, y, t));
+  return enemies[enemies.length - 1];
+}
+
+// One body of the given kind, standing where it was put and already awake --
+// anything raised through here was called to the player rather than stumbled
+// on, so it never needs rousing. Health creeps up with run time so late
+// arrivals stay meaningful.
+function newBody(kind, x, y, t) {
+  const d = ENEMY_TYPES[kind];
+  const scale = (1 + (t || 0) / 200) * DIFF.threat;
+  return {
     kind, x, y, r: d.r, speed: d.speed * rand(0.92, 1.08),
     hp: d.hp * scale, maxHp: d.hp * scale, dmg: d.dmg * DIFF.threat, tech: d.tech,
     cd: d.cd, mass: d.mass, color: d.color, halo: d.halo,
     atk: rand(0, d.cd), hitFlash: 0, wob: Math.random() * TAU, angle: 0, face: 1,
-    // Summoned bodies arrive awake: they were called to you, not stumbled on.
     awake: true, alert: 0, drowse: Math.random() * TAU, aggro: AGGRO_NEAR
-  });
+  };
+}
+
+// A ring of champions closing on a point. Used by the corpse ambush: the
+// bodies form up *around* you at a distance you can still see across, so the
+// beat reads as being surrounded rather than as a swarm materialising on top
+// of you. Spots are taken from open ground the flow field says is actually
+// walkable, so nothing spawns sealed behind rock.
+function spawnAmbush(cx, cy, n) {
+  const kinds = ['breaker', 'thrall', 'thrall', 'eclipse'];
+  let born = 0;
+  for (let i = 0; i < n; i++) {
+    if (enemies.length >= MAX_ENEMIES) break;
+    const kind = kinds[(Math.random() * kinds.length) | 0];
+    const rr0 = ENEMY_TYPES[kind].r + 6;
+    const base = (i / n) * TAU;
+    let x = 0, y = 0, ok = false;
+    for (let tries = 0; tries < 26 && !ok; tries++) {
+      const a = base + rand(-0.36, 0.36);
+      const rad = AMBUSH_R * rand(0.72, 1.3);
+      x = clamp(cx + Math.cos(a) * rad, 60, WORLD.w - 60);
+      y = clamp(cy + Math.sin(a) * rad, 60, WORLD.h - 60);
+      if (pointInWalls(x, y, rr0)) continue;
+      if (flowDist) {
+        const gx = clamp(Math.floor(x / CELL_W), 0, GW - 1);
+        const gy = clamp(Math.floor(y / CELL_W), 0, GH - 1);
+        if (flowDist[gi(gx, gy)] < 0) continue;   // no path: it would just stand there
+      }
+      ok = true;
+    }
+    if (!ok) continue;
+    const e = newBody(kind, x, y, run.time);
+    enemies.push(e);
+    makeElite(e);
+    ring(e.x, e.y, CORPSE_HUE, 6, 46, 0.5);
+    born++;
+  }
+  return born;
 }
 
 function fire() {
@@ -2306,6 +2421,89 @@ function updateDrops(dt) {
     drops[w++] = d0;
   }
   drops.length = w;
+}
+
+/* --- the corpse run -------------------------------------------------------
+   Dying is not a reset. Everything unbanked -- the bag and the run's coin --
+   stays in the delve, and the delve keeps it: descend into the same level
+   again and it is lying where you fell. Only one corpse exists at a time, so
+   dying on the way back to a corpse costs you the first one. That is the
+   whole tension, and it is why the walk back is worth anything.
+   -------------------------------------------------------------------- */
+
+// Where you fell, snapped onto ground that exists *this* descent. The delve is
+// cut fresh every time, so the recorded point is a hint rather than an
+// address.
+function placeCorpse() {
+  const c = stash.corpse;
+  if (!c || c.level_id !== LEVEL.id || !openCells.length) return null;
+  if (!(c.items && c.items.length) && !c.coins) return null;
+  let best = null, bestD = Infinity;
+  for (let i = 0; i < openCells.length; i++) {
+    const o = openCells[i];
+    if (pointInWalls(o.x, o.y, 16)) continue;
+    const d = dist2(o.x, o.y, c.x, c.y);
+    if (d < bestD) { bestD = d; best = o; }
+  }
+  if (!best) return null;
+  return { x: best.x, y: best.y, items: c.items || [], coins: c.coins || 0,
+           pulse: Math.random() * TAU, taken: 0 };
+}
+
+// Reclaiming it is the ambush: the delve raises a ring of champions and forces
+// the ley-gate open. You get your things back and a way out at the same
+// moment, and no time at all to spend deciding which.
+function claimCorpse() {
+  const c = run.corpse;
+  if (!c || c.taken) return;
+  c.taken = 1;
+
+  let took = 0;
+  for (const it of c.items) {
+    if (player.bag.length >= BAG_MAX) break;
+    player.bag.push(it);
+    took++;
+  }
+  const left = c.items.length - took;
+  run.found += took;
+  run.coins += c.coins;
+  syncBagBadge();
+
+  // Anything the bag could not hold stays on the floor as ordinary drops
+  // rather than evaporating.
+  for (let i = took; i < c.items.length; i++) {
+    drops.push({ x: c.x + rand(-26, 26), y: c.y + rand(-26, 26),
+                 vx: rand(-40, 40), vy: rand(-40, 40),
+                 item: c.items[i], r: 9, life: 0, pulled: false });
+  }
+
+  stash.corpse = null;
+  saveStash();
+
+  burst(c.x, c.y, CORPSE_HUE, 30, 240);
+  ring(c.x, c.y, CORPSE_HUE, 10, 150, 0.7);
+  cam.shake = Math.max(cam.shake, 9);
+
+  run.forcedOpen = true;
+  portal.channel = 0;
+  const n = clamp(Math.round(AMBUSH_MIN + (LEVEL.depth || 0) * 4.5),
+                  AMBUSH_MIN, AMBUSH_MAX);
+  const raised = spawnAmbush(c.x, c.y, n);
+
+  run.banner = 3.4;
+  run.bannerText = 'The delve gives up your dead';
+  run.bannerNote = raised
+    ? 'It wants them back. The ley-gate is open -- go.'
+    : 'The ley-gate is open -- go.';
+  toast(left ? 'Reclaimed ' + took + ' of ' + c.items.length : 'Corpse reclaimed',
+        CORPSE_HUE);
+}
+
+function updateCorpse(dt) {
+  const c = run.corpse;
+  if (!c || c.taken) return;
+  c.pulse += dt;
+  if (dist2(player.x, player.y, c.x, c.y) < 34 * 34) claimCorpse();
 }
 
 // A short line above the HUD: what you just picked up, in its rarity colour.
@@ -2851,15 +3049,62 @@ function updatePortal(dt) {
     run.bossCalled = true;
     spawnBoss();
   }
-  portal.active = run.tech >= LEVEL.quota && run.bossDown;
-  if (!portal.active) { portal.channel = 0; return; }
+  portal.active = (run.tech >= LEVEL.quota && run.bossDown) || run.forcedOpen;
+  if (!portal.active) { portal.channel = 0; portal.inside = false; return; }
   const inside = dist2(player.x, player.y, portal.x, portal.y) < PORTAL_R * PORTAL_R;
-  if (inside) {
-    portal.channel = Math.min(LEVEL.channel, portal.channel + dt);
-    if (portal.channel >= LEVEL.channel) endRun(true);
-  } else {
-    portal.channel = Math.max(0, portal.channel - dt * 0.7);
+  portal.inside = inside;
+
+  if (!run.gateOpen) {
+    // Winding it open. Nothing is escalating yet.
+    if (inside) {
+      portal.channel = Math.min(LEVEL.channel, portal.channel + dt);
+      if (portal.channel >= LEVEL.channel) {
+        run.gateOpen = true;
+        run.holdTime = 0;
+        run.holdTicks = 0;
+        run.banner = 3.0;
+        run.bannerText = 'The ley-gate stands open';
+        run.bannerNote = 'Step through, or hold it and let them come.';
+      }
+    } else {
+      portal.channel = Math.max(0, portal.channel - dt * 0.7);
+    }
+    return;
   }
+
+  // Open. Standing in it pays, and calls the delve down on you -- the two
+  // rise together, which is the whole decision.
+  if (!inside) return;
+  run.holdTime += dt;
+  run.holdSpawn -= dt;
+  if (run.holdSpawn <= 0) {
+    // Escalating: the interval closes as the hold runs on.
+    run.holdSpawn = Math.max(0.28, 1.5 - run.holdTime * 0.055);
+    const batch = 1 + Math.floor(run.holdTime / 12);
+    for (let i = 0; i < batch; i++) {
+      const e = spawnEnemy(run.time);
+      if (e && run.holdTime > 25 && Math.random() < 0.16) makeElite(e);
+    }
+  }
+  while (run.holdTime >= (run.holdTicks + 1) * HOLD_TICK) {
+    run.holdTicks++;
+    const pay = Math.round(HOLD_COIN * run.holdTicks * (1 + (LEVEL.depth || 0)));
+    run.coins += pay;
+    toast('The gate pays ' + pay + ' coin', PAL.coin);
+    // and every other tick, it gives up something worth carrying
+    if (run.holdTicks % 2 === 0) {
+      const it = rollItem(Math.min(1, 0.55 + run.holdTicks * 0.06));
+      drops.push({ x: portal.x + rand(-40, 40), y: portal.y + rand(-40, 40),
+                   vx: 0, vy: 0, item: it, r: 9, life: 0, pulled: false });
+    }
+  }
+}
+
+// Step through: the run ends and everything banks. Only offered once the gate
+// actually stands open.
+function stepThrough() {
+  if (state !== 'play' || !run.gateOpen || !portal.inside) return;
+  endRun(true);
 }
 
 function compactEnemies() {
@@ -2897,6 +3142,7 @@ function update(dt) {
   compactEnemies();
   updateLoot(dt);
   updateDrops(dt);
+  updateCorpse(dt);
   updateParticles(dt);
   updateRings(dt);
   updatePortal(dt);
@@ -4713,6 +4959,67 @@ function drawLoot(t) {
 // over to it. Rarer drops throw a taller, brighter beam.
 const BEACON_H = { worn: 54, tempered: 74, wrought: 98, hallowed: 124, riven: 150, mythic: 190 };
 
+// The corpse reads as a colder light than any drop: a pale shaft with a
+// cairn under it, so it never gets mistaken for gear at a glance across a
+// room.
+function drawCorpse(t) {
+  const c = run && run.corpse;
+  if (!c || c.taken) return;
+  const pulse = 0.66 + 0.34 * Math.sin(t * 1.7);
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  if (!lowFx) {
+    const h = 108;
+    const beam = ctx.createLinearGradient(0, c.y - h, 0, c.y + 6);
+    beam.addColorStop(0, tint(CORPSE_HUE, 1, 0));
+    beam.addColorStop(0.45, tint(CORPSE_HUE, 1, 0.20 * pulse));
+    beam.addColorStop(1, tint(CORPSE_HUE, 1.3, 0.58 * pulse));
+    ctx.fillStyle = beam;
+    ctx.beginPath();
+    ctx.moveTo(c.x - 20, c.y - h); ctx.lineTo(c.x + 20, c.y - h);
+    ctx.lineTo(c.x + 9, c.y + 6);  ctx.lineTo(c.x - 9, c.y + 6);
+    ctx.closePath(); ctx.fill();
+  }
+  const pool = ctx.createRadialGradient(c.x, c.y + 5, 0, c.x, c.y + 5, 40);
+  pool.addColorStop(0, tint(CORPSE_HUE, 1.2, 0.52 * pulse));
+  pool.addColorStop(1, tint(CORPSE_HUE, 1, 0));
+  ctx.fillStyle = pool;
+  ctx.beginPath(); ctx.ellipse(c.x, c.y + 5, 40, 18, 0, 0, TAU); ctx.fill();
+  ctx.restore();
+
+  // The cairn: stacked stones with your own blade driven into them, canted off
+  // vertical and broken short. Upright and symmetrical it read as a crucifix,
+  // which is the one thing this marker must not look like.
+  ctx.fillStyle = 'rgba(6,5,4,.62)';
+  ctx.beginPath(); ctx.ellipse(c.x, c.y + 10, 19, 7, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#494540';
+  ctx.beginPath(); ctx.ellipse(c.x, c.y + 5, 16, 6.5, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#5c574e';
+  ctx.beginPath(); ctx.ellipse(c.x - 2, c.y - 2, 11, 4.6, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#6a6459';
+  ctx.beginPath(); ctx.ellipse(c.x + 3, c.y - 7, 6.5, 3, 0, 0, TAU); ctx.fill();
+
+  ctx.save();
+  ctx.translate(c.x + 2, c.y - 8);
+  ctx.rotate(-0.22);
+  // blade, snapped off square at the top rather than tapering to a point
+  ctx.fillStyle = tint(CORPSE_HUE, 1.15, 0.92);
+  ctx.beginPath();
+  ctx.moveTo(-2.6, 2); ctx.lineTo(-2.0, -26); ctx.lineTo(2.0, -26); ctx.lineTo(2.6, 2);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = tint(CORPSE_HUE, 0.7, 0.85);
+  ctx.fillRect(-0.5, -26, 1.4, 28);
+  // guard, low and swept, and a pommel bead above it
+  ctx.fillStyle = '#8d8577';
+  ctx.beginPath();
+  ctx.moveTo(-9, -1); ctx.lineTo(9, -3); ctx.lineTo(9, 0.4); ctx.lineTo(-9, 2.4);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#a49a86';
+  ctx.beginPath(); ctx.arc(0, 5.5, 2.6, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+
 function drawDrops(t) {
   for (let i = 0; i < drops.length; i++) {
     const d = drops[i];
@@ -5082,6 +5389,16 @@ function drawMinimap() {
   }
   ctx.fillStyle = portal.active ? PAL.arcane : '#7a6e58';
   ctx.beginPath(); ctx.arc(x + portal.x * k, y + portal.y * k, 4 * mk, 0, TAU); ctx.fill();
+  // Your own corpse is always plotted. Finding it is not meant to be the
+  // challenge -- getting to it and back out is.
+  if (run.corpse && !run.corpse.taken) {
+    const c = run.corpse, cx = x + c.x * k, cy = y + c.y * k, r = 4 * mk;
+    ctx.strokeStyle = CORPSE_HUE; ctx.lineWidth = 1.6 * mk;
+    ctx.beginPath();
+    ctx.moveTo(cx - r, cy - r); ctx.lineTo(cx + r, cy + r);
+    ctx.moveTo(cx + r, cy - r); ctx.lineTo(cx - r, cy + r);
+    ctx.stroke();
+  }
   // The player pip carries a dark ring so it stays readable over pale rock.
   ctx.strokeStyle = 'rgba(0,0,0,.75)'; ctx.lineWidth = 1.6 * mk;
   ctx.beginPath(); ctx.arc(x + player.x * k, y + player.y * k, 3.2 * mk, 0, TAU); ctx.stroke();
@@ -5128,6 +5445,7 @@ function draw(t) {
   drawWalls(x0, y0, x1, y1);
   drawProps(x0, y0, x1, y1);
   drawLoot(t);
+  drawCorpse(t);
   drawDrops(t);
   drawStanding(t, x0, y0, x1, y1);
   drawArcs();
@@ -5228,7 +5546,8 @@ const el = {
   purseLine: $('purseLine'), vendorLine: $('vendorLine'),
   gear: $('gear'), gearSlots: $('gearSlots'), gearStats: $('gearStats'),
   bagGrid: $('bagGrid'), bagCount: $('bagCount'), gearDetail: $('gearDetail'),
-  gearClose: $('gearClose'), bagBtn: $('bagBtn'), bagBadge: $('bagBadge')
+  gearClose: $('gearClose'), bagBtn: $('bagBtn'), bagBadge: $('bagBadge'),
+  gateBtn: $('gateBtn'), gateNote: $('gateBtn').querySelector('i')
 };
 
 let state = 'menu';   // menu | play | levelup | pause | over
@@ -5240,6 +5559,7 @@ function showScreen(name) {
   el.hud.hidden = (name === 'start' || name === 'delve');
   // The bag button belongs to the delve, not to any screen over it.
   el.bagBtn.hidden = (name !== null);
+  if (name !== null) el.gateBtn.hidden = true;
 }
 
 const fmtTime = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
@@ -5266,7 +5586,7 @@ function blankStash() {
   const g = {};
   for (const sl of SLOTS) g[sl.id] = null;
   return { gear: g, vault: [], hero: 'isaac', seq: 0, xp: 0, level: 1,
-           coins: 0, pity: 0, loadouts: [] };
+           coins: 0, pity: 0, loadouts: [], corpse: null };
 }
 
 function loadStash() {
@@ -5303,6 +5623,19 @@ function loadStash() {
         return o;
       })()
     }));
+  }
+  // The corpse is filtered like everything else: a level id that no longer
+  // exists, or items that no longer validate, simply stop being owed to you.
+  const cp = st.corpse;
+  if (cp && typeof cp === 'object' && LEVEL_BY_ID[cp.level_id]) {
+    const items = Array.isArray(cp.items)
+      ? cp.items.filter(it => validItem(it)).slice(0, CORPSE_CARRY) : [];
+    const coins = Math.max(0, +cp.coins || 0);
+    if (items.length || coins) {
+      out.corpse = { level_id: cp.level_id,
+                     hero: HEROES[cp.hero] ? cp.hero : 'isaac',
+                     x: +cp.x || 0, y: +cp.y || 0, items, coins };
+    }
   }
   return out;
 }
@@ -5354,7 +5687,7 @@ function refreshBestLine() {
 }
 
 /* --- HUD (written only when a value actually changes) ------------------- */
-const hudCache = { hp: -1, tech: -1, time: -1, lvl: -1 };
+const hudCache = { hp: -1, tech: -1, time: -1, lvl: -1, gate: '' };
 
 function syncHud() {
   const hpF = clamp(player.hp / player.maxHp, 0, 1);
@@ -5384,6 +5717,31 @@ function syncHud() {
     hudCache.lvl = player.level;
     el.lvlText.textContent = 'Lv ' + player.level;
   }
+  syncGateBtn();
+}
+
+/* The way out. It only exists once the gate actually stands open and you are
+   standing in it, because the offer it makes -- leave now, or hold and take
+   what the hold pays -- is only a real decision from inside the circle. The
+   sub-line is the price of staying, so the button itself carries the whole
+   risk/reward read without a second panel. */
+function syncGateBtn() {
+  const on = state === 'play' && run.gateOpen && portal.inside;
+  if (!on) {
+    if (!el.gateBtn.hidden) { el.gateBtn.hidden = true; hudCache.gate = ''; }
+    return;
+  }
+  el.gateBtn.hidden = false;
+  const held = run.holdTime > 0.35;
+  const nextIn = Math.max(0, (run.holdTicks + 1) * HOLD_TICK - run.holdTime);
+  const pay = Math.round(HOLD_COIN * (run.holdTicks + 1) * (1 + (LEVEL.depth || 0)));
+  const key = held ? Math.ceil(nextIn) + '/' + run.holdTicks : 'idle';
+  if (key === hudCache.gate) return;
+  hudCache.gate = key;
+  el.gateBtn.classList.toggle('held', held);
+  el.gateNote.textContent = held
+    ? fmtTime(run.holdTime) + ' held  ·  ' + pay + ' coin in ' + Math.ceil(nextIn) + 's'
+    : 'or stand here and hold it open';
 }
 
 let flashTimer = 0;
@@ -5418,7 +5776,7 @@ function resetRun(heroId, levelId, diffId) {
   };
 
   generateWorld(spawn, pt);
-  portal  = { x: pt.x, y: pt.y, pulse: 0, channel: 0, active: false };
+  portal  = { x: pt.x, y: pt.y, pulse: 0, channel: 0, active: false, inside: false };
   player  = makePlayer(spawn.x, spawn.y, hero);
   enemies = []; arcs = []; loot = []; drops = []; particles = []; rings = [];
   enemyGrid = new SpatialHash(ENEMY_CELL);
@@ -5430,7 +5788,10 @@ function resetRun(heroId, levelId, diffId) {
           bannerText: null, bannerNote: null,
           bossCalled: false, bossDown: false, boss: null,
           spawnX: spawn.x, spawnY: spawn.y, found: 0, toast: null, bagWarned: 0,
-          coins: 0 };
+          coins: 0, gateOpen: false, holdTime: 0, holdTicks: 0, holdSpawn: 1.5,
+          forcedOpen: false, corpse: null };
+  // If you died in this level and never came back for it, it is still here.
+  run.corpse = placeCorpse();
 
   cam.x = clamp(player.x - view.w / 2, 0, Math.max(0, WORLD.w - view.w));
   cam.y = clamp(player.y - view.h / 2, 0, Math.max(0, WORLD.h - view.h));
@@ -5468,6 +5829,18 @@ function endRun(won) {
   const carried = player.bag.length;
   // Only a piece you actually carried out counts against the pity counter.
   notePity(won && player.bag.some(it => it.set === SET_ID));
+  // Dying leaves everything unbanked on the floor, and the delve keeps it
+  // until you come back for it. Only one corpse exists at a time -- dying on
+  // the walk back is what makes the walk back cost something.
+  let lost = 0;
+  if (!won) {
+    const items = player.bag.slice(0, CORPSE_CARRY);
+    lost = (stash.corpse && (stash.corpse.items.length || stash.corpse.coins)) ? 1 : 0;
+    stash.corpse = (items.length || run.coins)
+      ? { level_id: LEVEL.id, hero: run.hero, x: player.x, y: player.y,
+          items, coins: run.coins }
+      : null;
+  }
   bankRun(won);
 
   el.overTitle.innerHTML = won ? '<em>Escaped</em>' : '<span>Slain</span>';
@@ -5475,14 +5848,18 @@ function endRun(won) {
     ? (carried ? 'The ley-gate held. You carried ' + carried +
                  (carried === 1 ? ' find' : ' finds') + ' out with the slag.'
                : 'The ley-gate held. You carried the slag out.')
-    : (carried ? 'The hive-mind claimed another of the Clear-Sighted. ' + carried +
-                 (carried === 1 ? ' find stays' : ' finds stay') + ' where you fell.'
-               : 'The hive-mind claimed another of the Clear-Sighted.');
+    : (stash.corpse
+        ? 'The hive-mind claimed another of the Clear-Sighted. ' +
+          (carried ? carried + (carried === 1 ? ' find' : ' finds') + ' and ' : '') +
+          run.coins + ' coin lie in ' + LEVEL.name + '. Descend again and take them back.' +
+          (lost ? ' Your older corpse is gone.' : '')
+        : 'The hive-mind claimed another of the Clear-Sighted.');
   el.overStats.innerHTML =
     '<div>Endured<b>' + fmtTime(run.time) + '</b></div>' +
     '<div>Slain<b>' + run.kills + '</b></div>' +
     '<div>Slag<b>' + run.tech + '</b></div>' +
-    '<div>' + (won ? 'Carried out' : 'Left behind') + '<b>' + carried + '</b></div>';
+    '<div>' + (won ? 'Carried out' : 'Left behind') + '<b>' + carried + '</b></div>' +
+    '<div>' + (won ? 'Coin banked' : 'Coin left') + '<b>' + run.coins + '</b></div>';
   showScreen('over');
   refreshBestLine();
 }
@@ -6026,16 +6403,23 @@ window.addEventListener('orientationchange', () => setTimeout(resize, 120));
   const lvlWrap = $('levelPick');
   function buildLadder() {
     const pw = stashPower();
+    const owed = stash.corpse;
     lvlWrap.innerHTML = '';
     for (const L of LEVELS) {
       const st = delveStanding(L, pw);
+      const hasCorpse = owed && owed.level_id === L.id;
       const card = document.createElement('button');
       card.className = 'card rung';
       card.type = 'button';
       card.dataset.level = L.id;
       card.innerHTML =
         '<span class="glyph">\u25C8</span>' +
-        '<span><h4>' + L.name + '</h4><p>' + L.note +
+        '<span><h4>' + L.name +
+        (hasCorpse ? ' <span class="owed">\u2020 your dead</span>' : '') +
+        '</h4><p>' + (hasCorpse
+          ? owed.items.length + (owed.items.length === 1 ? ' find' : ' finds') +
+            ' and ' + owed.coins + ' coin still lie here.'
+          : L.note) +
         ' <span class="tier">' + L.tag + ' \u00b7 power ' + L.power +
         ' \u00b7 slag ' + L.quota + '</span></p></span>' +
         '<span class="standing" style="color:' + st.colour + '">' + st.text + '</span>';
@@ -6093,9 +6477,20 @@ window.addEventListener('orientationchange', () => setTimeout(resize, 120));
     state = 'menu';
     showScreen('delve');
     // Scroll the chosen rung into view, or the ladder always opens at the top
-    // however deep you have got.
+    // however deep you have got. Set the ladder's own scrollTop rather than
+    // calling scrollIntoView: that scrolls every ancestor too, and on a short
+    // phone it dragged the whole screen down far enough to push the hero cards
+    // off the top of it.
+    // Measured off rects rather than offsetTop: the ladder is not a positioned
+    // element, so a rung's offsetParent is the screen and offsetTop is not the
+    // offset into the box being scrolled.
     const sel = lvlWrap.querySelector('.card.sel');
-    if (sel) sel.scrollIntoView({ block: 'center' });
+    if (sel) {
+      lvlWrap.scrollTop += sel.getBoundingClientRect().top -
+        lvlWrap.getBoundingClientRect().top -
+        lvlWrap.clientHeight / 2 + sel.offsetHeight / 2;
+    }
+    el.delve.scrollTop = 0;
   });
   $('delveBack').addEventListener('click', () => { showScreen('start'); });
   $('beginRun').addEventListener('click', () => startRun(pick.hero, pick.level, pick.diff));
@@ -6192,6 +6587,7 @@ function refreshKitLine() {
 $('againBtn').addEventListener('click', () => startRun(run && run.hero));
 $('pauseBtn').addEventListener('click', pauseRun);
 el.bagBtn.addEventListener('click', () => openGear('run'));
+el.gateBtn.addEventListener('click', stepThrough);
 el.gearClose.addEventListener('click', closeGear);
 $('resumeBtn').addEventListener('click', resumeRun);
 $('abortBtn').addEventListener('click', () => {
@@ -6247,7 +6643,7 @@ showScreen('start');
 requestAnimationFrame(frame);
 </script>
 <script>
-/* generated 2026-08-25T05:46:44Z by tools/build-debug.js — do not edit */
+/* generated 2026-08-25T06:29:17Z by tools/build-debug.js — do not edit */
 /* =============================================================================
    THE RIVENMARK — debug overlay
    Injected into debug.html by tools/build-debug.js. Never shipped in the
