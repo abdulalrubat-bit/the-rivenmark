@@ -303,6 +303,8 @@
   #gateBtn:active{background:#4a361a;}
   .owed{font:600 9px/1 ui-monospace,monospace; letter-spacing:.08em;
     text-transform:uppercase; color:#9fc2d8; vertical-align:middle;}
+  .ward{display:block; margin-top:3px; font:400 10.5px/1.3 Georgia,serif;
+    font-style:italic; color:#b09a6e;}
   #gateBtn.held{border-color:var(--blood); box-shadow:0 0 26px rgba(194,53,42,.34);}
   #gateBtn.held i{color:#e0a08c;}
   #gateBtn.lull{border-color:#7fb0a0; box-shadow:0 0 26px rgba(127,176,160,.28);}
@@ -723,6 +725,92 @@ const DELVE_NAMES = [
   'The Deceiver\u2019s Antechamber'
 ];
 
+/* --- procedural bosses ----------------------------------------------------
+   Fifty-two rungs cannot each have a hand-built boss, and fifty-two copies of
+   one boss is worse than having none. The avatar at the end of a delve is the
+   Deceiver either way -- he is the fiction -- but what he is capable of is
+   rolled per rung and stays rolled: the same rung always answers with the same
+   thing, so a delve is learnable, and two rungs apart are not the same fight.
+
+   Every mutator has to be visible in play. A boss that quietly has more hit
+   points is not a different boss, it is the same boss taking longer, so each
+   of these changes something you can see and respond to.
+   -------------------------------------------------------------------- */
+const MUTATORS = [
+  { id: 'sundering', name: 'the Sundering',
+    note: 'His hand comes down where you stand.',
+    apply: b => { b.slam = true; b.slamCd = 2.2; b.slamR = 1.5; } },
+  { id: 'legion', name: 'the Legion',
+    note: 'He does not come with two. He comes with five.',
+    apply: b => { b.extraGuard = 2; } },
+  { id: 'wreathed', name: 'the Wreathed',
+    note: 'More of him is a lie than usual.',
+    apply: b => { b.split = 4.5; b.mirages = 5; } },
+  { id: 'unblinking', name: 'the Unblinking',
+    note: 'This one does not step away. It walks.',
+    apply: b => { b.blink = 1e9; b.speed *= 1.5; b.hp = b.maxHp = b.maxHp * 1.35; } },
+  { id: 'ravenous', name: 'the Ravenous',
+    note: 'He eats what dies near him.',
+    apply: b => { b.ravenous = true; } },
+  { id: 'riftborn', name: 'the Riftborn',
+    note: 'The ground does not close behind him.',
+    apply: b => { b.riftborn = true; } },
+  { id: 'unbroken', name: 'the Unbroken',
+    note: 'He gathers himself, and for a moment almost nothing touches him.',
+    apply: b => { b.guardCd = 7.5; } }
+];
+const MUTATOR_BY_ID = {};
+for (const m of MUTATORS) MUTATOR_BY_ID[m.id] = m;
+
+// A cheap integer hash, so a rung's boss is a property of the rung rather than
+// of the run. Rolling it per delve would make the ladder unlearnable.
+function hash32(n) {
+  n = (n ^ 61) ^ (n >>> 16);
+  n = (n + (n << 3)) | 0;
+  n = n ^ (n >>> 4);
+  n = Math.imul(n, 0x27d4eb2d);
+  return (n ^ (n >>> 15)) >>> 0;
+}
+
+// The name a rung's boss will carry, built from the same roll the fight uses.
+function bossTitle(L) {
+  return deceiverName((L.mutators || []).map(id => MUTATOR_BY_ID[id]).filter(Boolean));
+}
+
+// The first thing that is unusual about a rung's boss, said plainly. This is
+// where the mutator flavour lives -- read before you descend, not shouted at
+// you while he arrives.
+function bossNote(L) {
+  const m = MUTATOR_BY_ID[(L.mutators || [])[0]];
+  return m ? ' \u2014 ' + m.note : '';
+}
+
+function deceiverName(ms) {
+  if (!ms.length) return 'The Gilded Deceiver';
+  const n = ms.map(m => m.name);
+  const last = n.pop();
+  return 'The Deceiver, ' + (n.length ? n.join(', ') + ' and ' + last : last);
+}
+
+function rollMutators(index, depth) {
+  // Math.min/max rather than clamp: this runs while LEVELS is being built,
+  // which is before clamp's own const is initialised. The same shape of bug
+  // took the whole page down once before.
+  const want = Math.max(1, Math.min(3, 1 + Math.round(depth * 2)));
+  const out = [];
+  let h = hash32(index * 2654435761 + 17);
+  for (let i = 0; i < want; i++) {
+    for (let k = 0; k < MUTATORS.length; k++) {
+      const pick = MUTATORS[(h + k * 7) % MUTATORS.length];
+      if (out.indexOf(pick.id) >= 0) continue;
+      out.push(pick.id);
+      break;
+    }
+    h = hash32(h + i + 1);
+  }
+  return out;
+}
+
 function buildLevels() {
   const out = [];
   const regions = ['slag', 'vaelk', 'kraggen', 'weald', 'firth'];
@@ -750,6 +838,7 @@ function buildLevels() {
       regions: pool,
       horde: horde,
       boss: 'deceiver',
+      mutators: rollMutators(i, d),
       // Expected power, and the terms that follow from it.
       power: Math.round(4 + d * 96),
       depth: d,
@@ -2505,6 +2594,63 @@ function maybeDropItem(e) {
   }
 }
 
+/* --- hazards --------------------------------------------------------------
+   Ground you cannot stand on. A slam is a moment; a hazard is a place, and
+   the difference is what turns a room into terrain. The Riftborn leaves them
+   where he steps out of the world.
+   -------------------------------------------------------------------- */
+const HAZARD_TICK = 0.4;   // how often standing in one costs you
+let hazards = [];
+
+function addHazard(x, y, r, dps, life, hue) {
+  if (hazards.length > 40) hazards.shift();
+  hazards.push({ x, y, r, dps, life, max: life, tick: 0,
+                 hue: hue || '#b07cff', wob: Math.random() * TAU });
+}
+
+function updateHazards(dt) {
+  for (let i = hazards.length - 1; i >= 0; i--) {
+    const h = hazards[i];
+    h.life -= dt;
+    h.wob += dt;
+    if (h.life <= 0) { hazards.splice(i, 1); continue; }
+    h.tick -= dt;
+    if (h.tick <= 0 && dist2(player.x, player.y, h.x, h.y) < h.r * h.r) {
+      h.tick = HAZARD_TICK;
+      // A hazard is not a hit: it ignores the invulnerability a hit grants,
+      // or standing in one would be free for as long as something else was
+      // also touching you.
+      const was = player.invuln;
+      player.invuln = 0;
+      hurtPlayerBy(h.dps * HAZARD_TICK, h.x, h.y);
+      player.invuln = Math.max(player.invuln, was);
+    }
+  }
+}
+
+function drawHazards(t) {
+  for (let i = 0; i < hazards.length; i++) {
+    const h = hazards[i];
+    const fade = clamp(h.life / Math.min(1.4, h.max), 0, 1);
+    const p = 0.7 + 0.3 * Math.sin(h.wob * 2.4);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const g = ctx.createRadialGradient(h.x, h.y, 0, h.x, h.y, h.r);
+    g.addColorStop(0, tint(h.hue, 1.1, 0.26 * fade * p));
+    g.addColorStop(0.7, tint(h.hue, 1, 0.15 * fade));
+    g.addColorStop(1, tint(h.hue, 1, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.ellipse(h.x, h.y, h.r, h.r * 0.72, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = tint(h.hue, 1.2, 0.42 * fade);
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 7]);
+    ctx.lineDashOffset = h.wob * 12;
+    ctx.beginPath(); ctx.ellipse(h.x, h.y, h.r * 0.86, h.r * 0.62, 0, 0, TAU); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+}
+
 // Slams land on their own clock rather than on the thrower's, so a lieutenant
 // killed mid-wind still lands the blow it had already committed to.
 function updateSlams(dt) {
@@ -2835,6 +2981,17 @@ function damageEnemy(e, dmg) {
       }
     }
     run.kills++;
+    // Ravenous: whatever dies near him goes into him. Fighting through the
+    // horde at his feet is actively worse than pulling him off it.
+    const bs = run && run.boss;
+    if (bs && bs.hp > 0 && bs.ravenous && e !== bs &&
+        dist2(e.x, e.y, bs.x, bs.y) < 260 * 260) {
+      const fed = Math.min(bs.maxHp * 0.03, bs.maxHp - bs.hp);
+      if (fed > 0) {
+        bs.hp += fed;
+        ring(bs.x, bs.y, '#c2352a', 6, 34, 0.35);
+      }
+    }
     dropLoot(e);
     burst(e.x, e.y, e.color, e.r > 18 ? 14 : 7, 190);
     if (e.r > 18) shake(3);
@@ -2974,6 +3131,7 @@ function updateEnemies(dt) {
       // He does not walk the corridors -- he is an avatar, and a body this
       // wide wedges on corners anyway. He steps out of one place and into
       // another near you, which is both the fix and the character.
+      // Unblinking sets this to effectively never, and walks instead.
       e.blink -= dt;
       if (e.blink <= 0) {
         e.blink = 4.4;
@@ -2983,9 +3141,22 @@ function updateEnemies(dt) {
           const ny = clamp(player.y + Math.sin(a) * dd, 50, WORLD.h - 50);
           if (pointInWalls(nx, ny, e.r + 6)) continue;
           burst(e.x, e.y, '#e8c060', 16, 210);
+          // Riftborn: the hole he stepped through does not close.
+          if (e.riftborn) addHazard(e.x, e.y, 74, e.dmg * 0.85, 7.5, '#b07cff');
           e.x = nx; e.y = ny;
           burst(e.x, e.y, '#e8c060', 16, 210);
           break;
+        }
+      }
+      // Unbroken: he gathers, and for two seconds nothing touches him. The
+      // guard is drawn, so this is a window to reposition rather than a
+      // stretch of wasted swings.
+      if (e.guardCd) {
+        e.guardT -= dt;
+        if (e.guardT <= 0) {
+          e.braced = !e.braced;
+          e.guardT = e.braced ? 2.0 : e.guardCd;
+          if (e.braced) ring(e.x, e.y, '#e8c060', 10, 90, 0.5);
         }
       }
       e.summon -= dt;
@@ -2996,10 +3167,11 @@ function updateEnemies(dt) {
       }
       e.split -= dt;
       if (e.split <= 0) {
-        e.split = 9.5;
+        e.split = e.mutators && e.mutators.indexOf('wreathed') >= 0 ? 4.5 : 9.5;
+        const want = e.mirages || 3;
         let live = 0;
         for (let i = 0; i < enemies.length; i++) if (enemies[i].kind === 'mirage') live++;
-        if (live < 3) spawnMirages(e, 3 - live);
+        if (live < want) spawnMirages(e, want - live);
       }
     }
 
@@ -3032,7 +3204,8 @@ function updateEnemies(dt) {
     // range rather than in contact, where there would be nowhere to go.
     if (e.slam) {
       e.slamCd -= dt;
-      if (e.slamCd <= 0 && d < SLAM_R * 2.2 && d > e.r + player.r + 10) {
+      const reach = SLAM_R * (e.slamR || 1);
+      if (e.slamCd <= 0 && d < reach * 2.2 && d > e.r + player.r + 10) {
         // Three Lieutenants throwing on their own clocks carpet the floor and
         // the telegraph stops meaning anything. One marked circle at a time in
         // any given place: the others wait a beat and aim somewhere you have
@@ -3045,8 +3218,8 @@ function updateEnemies(dt) {
         }
         if (!clash) {
           e.slamCd = SLAM_CD * rand(0.85, 1.2);
-          slams.push({ x: player.x, y: player.y, r: SLAM_R, wind: SLAM_WIND,
-                       t: 0, dmg: e.dmg * 1.3, struck: false });
+          slams.push({ x: player.x, y: player.y, r: SLAM_R * (e.slamR || 1),
+                       wind: SLAM_WIND, t: 0, dmg: e.dmg * 1.3, struck: false });
         } else {
           e.slamCd = 0.5;
         }
@@ -3296,12 +3469,25 @@ function spawnBoss() {
 function spawnDeceiver() {
   const d = ENEMY_TYPES.deceiver;
   const scale = 1 + run.time / 220;
-  const e = {
-    kind: 'deceiver', x: portal.x, y: portal.y - 4, r: d.r, speed: d.speed,
-    hp: d.hp * scale, maxHp: d.hp * scale, dmg: d.dmg, tech: d.tech, cd: d.cd,
-    mass: d.mass, color: d.color, halo: d.halo, atk: 1.4, hitFlash: 0,
-    wob: 0, angle: 0, face: 1, summon: 4.5, split: 7, blink: 3.2
-  };
+  const e = newBody('deceiver', portal.x, portal.y - 4, 0);
+  e.hp = e.maxHp = d.hp * scale;
+  e.dmg = d.dmg; e.speed = d.speed; e.atk = 1.4; e.wob = 0;
+  e.summon = 4.5; e.split = 7; e.blink = 3.2;
+  // Mutator defaults. Each one that is off has to be off explicitly, or a
+  // mutator that only ever raises a value cannot be told from one that is
+  // absent.
+  e.slamR = 1; e.mirages = 3; e.extraGuard = 0;
+  e.ravenous = false; e.riftborn = false;
+  e.guardCd = 0; e.guardT = 0;
+  const rolled = LEVEL.mutators || [];
+  const epithets = [];
+  for (const id of rolled) {
+    const m = MUTATOR_BY_ID[id];
+    if (!m) continue;
+    m.apply(e);
+    epithets.push(m);
+  }
+  e.mutators = rolled.slice();
   enemies.push(e);
   run.boss = e;
   // He does not arrive alone. The Lieutenants are the reason he is hard to
@@ -3313,7 +3499,7 @@ function spawnDeceiver() {
   // delve, where the horde is thirty-four-hit-point thralls and the hero has
   // power four: the fight has to be learnable before it is hard.
   const dep = LEVEL.depth || 0;
-  const guard = 1 + Math.round(dep * 2);
+  const guard = 1 + Math.round(dep * 2) + e.extraGuard;
   for (let i = 0; i < guard; i++) {
     let ok = false, x = 0, y = 0;
     for (let k = 0; k < 20 && !ok; k++) {
@@ -3328,8 +3514,16 @@ function spawnDeceiver() {
     L.hp = L.maxHp = L.maxHp * (0.5 + dep * 1.3);
     enemies.push(L);
   }
-  run.banner = 3.6;
-  run.bannerText = 'The Gilded Deceiver';
+  // The name states what he is capable of, so the fight is legible before it
+  // starts rather than after it has killed you once.
+  e.title = deceiverName(epithets);
+  run.bossTitle = e.title;
+  run.banner = 3.8;
+  run.bannerText = e.title;
+  // The title already names what he is; the note is for the thing you have to
+  // do about it. Letting a mutator's line take this slot buried the escort
+  // instruction, and since every rung rolls at least one mutator it buried it
+  // permanently. The flavour lives on the rung card instead.
   run.bannerNote = guard
     ? 'His Lieutenants hold him. Break them first.'
     : 'He offers you the gate. Look for the shattered eye.';
@@ -3509,6 +3703,7 @@ function update(dt) {
   compactEnemies();
   updateLoot(dt);
   updateSlams(dt);
+  updateHazards(dt);
   updateDrops(dt);
   updateCorpse(dt);
   updateParticles(dt);
@@ -5888,6 +6083,7 @@ function draw(t) {
   drawWalls(x0, y0, x1, y1);
   drawProps(x0, y0, x1, y1);
   drawLoot(t);
+  drawHazards(t);
   drawSlams(t);
   drawCorpse(t);
   drawDrops(t);
@@ -5963,7 +6159,7 @@ function draw(t) {
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(238,224,192,.9)';
     ctx.font = '400 12px Georgia, "Times New Roman", serif';
-    ctx.fillText('The Gilded Deceiver', view.w / 2, y0 - 7);
+    ctx.fillText(bs.title || 'The Gilded Deceiver', view.w / 2, y0 - 7);
     ctx.restore();
   }
   drawPortalArrow(t);
@@ -6231,7 +6427,7 @@ function resetRun(heroId, levelId, diffId) {
   portal  = { x: pt.x, y: pt.y, pulse: 0, channel: 0, active: false, inside: false };
   player  = makePlayer(spawn.x, spawn.y, hero);
   enemies = []; arcs = []; loot = []; drops = []; particles = []; rings = [];
-  slams = [];
+  slams = []; hazards = [];
   enemyGrid = new SpatialHash(ENEMY_CELL);
 
   run = { time: 0, tech: 0, kills: 0,
@@ -6875,7 +7071,10 @@ window.addEventListener('orientationchange', () => setTimeout(resize, 120));
             ' and ' + owed.coins + ' coin still lie here.'
           : L.note) +
         ' <span class="tier">' + L.tag + ' \u00b7 power ' + L.power +
-        ' \u00b7 slag ' + L.quota + '</span></p></span>' +
+        ' \u00b7 slag ' + L.quota + '</span>' +
+        // What waits at the gate. A rung's boss never changes, so naming it
+        // here is the difference between choosing a delve and drawing one.
+        '<span class="ward">' + bossTitle(L) + bossNote(L) + '</span></p></span>' +
         '<span class="standing" style="color:' + st.colour + '">' + st.text + '</span>';
       card.addEventListener('click', () => { pick.level = L.id; syncPick(); });
       lvlWrap.appendChild(card);
@@ -7097,7 +7296,7 @@ showScreen('start');
 requestAnimationFrame(frame);
 </script>
 <script>
-/* generated 2026-08-25T11:31:28Z by tools/build-debug.js — do not edit */
+/* generated 2026-08-25T11:42:07Z by tools/build-debug.js — do not edit */
 /* =============================================================================
    THE RIVENMARK — debug overlay
    Injected into debug.html by tools/build-debug.js. Never shipped in the
