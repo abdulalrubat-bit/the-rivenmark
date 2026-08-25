@@ -616,6 +616,17 @@ const ENEMY_TYPES = {
 // reach the whole time it is winding, so the ground it will take is known from
 // the first frame -- a telegraph that grows with the timer tells you when but
 // not where, which is the half that matters.
+/* --- the invader ----------------------------------------------------------
+   The avatar at the gate is scheduled: you know he is coming because you can
+   see the slag counter fill. This one is not. Somewhere in a delve he simply
+   arrives, hunts you, and is worth a piece of the Regalia if you put him
+   down -- and running is a real answer, because he gives up if you keep away
+   from him long enough.
+   -------------------------------------------------------------------- */
+const INVADE_EARLY = 34;   // never before this, so a run has started properly
+const INVADE_HUNT  = 78;   // and he leaves after this long without reaching you
+const INVADE_GIVEUP = 380; // "without reaching you" means staying this far off
+
 const SLAM_R     = 104;   // reach
 const SLAM_WIND  = 0.9;   // seconds of warning
 const SLAM_CD    = 4.6;   // and how often one may be thrown
@@ -2566,8 +2577,10 @@ function maybeDropItem(e) {
   chance *= (1 + depth * 0.8) * DIFF.lootRate;
   const n = e.kind === 'deceiver' ? 3 : e.elite ? 2 : 1;
 
-  // Regalia pieces come off champions and the avatar only.
-  const setOdds = e.kind === 'deceiver' ? 0.55 : e.elite ? 0.14 : 0;
+  // Regalia pieces come off champions and the avatar only -- and an invader
+  // always. Being hunted through a delve you did not plan to fight in is the
+  // price, and it should be paid.
+  const setOdds = e.invader ? 1 : e.kind === 'deceiver' ? 0.55 : e.elite ? 0.14 : 0;
   // Coin falls with the gear. It is the only thing in the delve that is not
   // luck: whatever the drops do, coin accumulates, which is what makes it the
   // right currency for buying your way past a bad streak.
@@ -2970,12 +2983,24 @@ function damageEnemy(e, dmg) {
       return;                                   // a lie, not a body
     }
     if (e.kind === 'deceiver') {
-      run.bossDown = true;
-      run.boss = null;
-      run.banner = 3.4;
-      run.bannerText = 'The ley-gate answers';
-      run.bannerNote = 'The false salvation is broken. Hold the circle.';
-      shake(14);
+      // An invader is not the avatar the delve is waiting on. Killing him must
+      // not open the ley-gate, or the quota stops meaning anything the moment
+      // one turns up.
+      if (e.invader) {
+        run.invader = null;
+        run.invadeKills = (run.invadeKills || 0) + 1;
+        run.banner = 3.2;
+        run.bannerText = 'The uninvited is broken';
+        run.bannerNote = 'He was carrying something that was never his.';
+        shake(12);
+      } else {
+        run.bossDown = true;
+        run.boss = null;
+        run.banner = 3.4;
+        run.bannerText = 'The ley-gate answers';
+        run.bannerNote = 'The false salvation is broken. Hold the circle.';
+        shake(14);
+      }
       for (let i = 0; i < enemies.length; i++) {
         if (enemies[i].kind === 'mirage') enemies[i].hp = 0;
       }
@@ -3461,6 +3486,78 @@ function updateRings(dt) {
 
 // The level names its boss; the Deceiver is the only one built so far, so a
 // level with no boss simply opens the gate on quota.
+// Odds a delve is invaded at all, and when. Rolled per run rather than per
+// rung: a scheduled ambush is not an ambush.
+function rollInvasion() {
+  const dep = LEVEL.depth || 0;
+  const odds = (0.16 + dep * 0.24) * (DIFF.setRate || 1);
+  if (Math.random() >= odds) return 0;
+  return INVADE_EARLY + Math.random() * 70;
+}
+
+function spawnInvader() {
+  const d = ENEMY_TYPES.deceiver;
+  const dep = LEVEL.depth || 0;
+  // Far enough that the arrival is a warning rather than a hit.
+  let x = 0, y = 0, ok = false;
+  for (let k = 0; k < 40 && !ok; k++) {
+    const a = Math.random() * TAU, dd = 420 + Math.random() * 260;
+    x = clamp(player.x + Math.cos(a) * dd, 60, WORLD.w - 60);
+    y = clamp(player.y + Math.sin(a) * dd, 60, WORLD.h - 60);
+    ok = !pointInWalls(x, y, d.r + 6);
+  }
+  if (!ok) return null;
+
+  const e = newBody('deceiver', x, y, 0);
+  // Lighter than the one at the gate -- he is a fight you did not plan for and
+  // may not be equipped for, and the answer to him is allowed to be running.
+  e.hp = e.maxHp = d.hp * (0.55 + dep * 0.7) * DIFF.threat;
+  e.dmg = d.dmg * DIFF.threat;
+  e.speed = d.speed * 1.15;
+  e.atk = 1.2; e.wob = 0;
+  e.summon = 1e9;                 // he hunts alone
+  e.split = 6.5; e.blink = 2.6;
+  e.slamR = 1; e.mirages = 2; e.extraGuard = 0;
+  e.ravenous = false; e.riftborn = true;
+  e.guardCd = 0; e.guardT = 0;
+  e.invader = true;
+  e.title = 'The Gilded Deceiver, Uninvited';
+  e.mutators = [];
+  enemies.push(e);
+  run.invader = e;
+  run.invadeSince = run.time;
+  run.banner = 3.4;
+  run.bannerText = 'Something has come for you';
+  run.bannerNote = 'He was not called. Kill him, or lose him in the dark.';
+  shake(9);
+  return e;
+}
+
+function updateInvasion(dt) {
+  const e = run.invader;
+  if (!e) {
+    if (run.invadeAt && run.time >= run.invadeAt && !run.gateOpen) {
+      run.invadeAt = 0;
+      spawnInvader();
+    }
+    return;
+  }
+  if (e.hp <= 0) { run.invader = null; return; }
+  // Losing him is a win of a kind: keep clear and he stops looking.
+  const far = dist2(player.x, player.y, e.x, e.y) > INVADE_GIVEUP * INVADE_GIVEUP;
+  e.lost = (e.lost || 0) + (far ? dt : -dt * 2);
+  if (e.lost < 0) e.lost = 0;
+  if (e.lost >= INVADE_HUNT) {
+    burst(e.x, e.y, '#e8c060', 22, 240);
+    e.hp = 0;                       // gone, not killed: no loot, no kill count
+    e.gaveUp = true;
+    run.invader = null;
+    run.banner = 2.6;
+    run.bannerText = 'He has lost you';
+    run.bannerNote = 'For now.';
+  }
+}
+
 function spawnBoss() {
   if (!LEVEL.boss) { run.bossDown = true; return; }
   if (LEVEL.boss === 'deceiver') spawnDeceiver();
@@ -3702,6 +3799,7 @@ function update(dt) {
   updateEnemies(dt);
   compactEnemies();
   updateLoot(dt);
+  updateInvasion(dt);
   updateSlams(dt);
   updateHazards(dt);
   updateDrops(dt);
@@ -6027,6 +6125,16 @@ function drawMinimap() {
   }
   ctx.fillStyle = portal.active ? PAL.arcane : '#7a6e58';
   ctx.beginPath(); ctx.arc(x + portal.x * k, y + portal.y * k, 4 * mk, 0, TAU); ctx.fill();
+  // The invader is plotted whatever else is hidden: losing him is a decision
+  // you make, not a thing that happens because you could not find him.
+  const inv = run.invader;
+  if (inv && inv.hp > 0) {
+    const ix = x + inv.x * k, iy = y + inv.y * k;
+    ctx.fillStyle = 'rgba(232,192,96,.95)';
+    ctx.beginPath(); ctx.arc(ix, iy, 3.4 * mk, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(226,120,44,.8)'; ctx.lineWidth = 1.4 * mk;
+    ctx.beginPath(); ctx.arc(ix, iy, 6.4 * mk, 0, TAU); ctx.stroke();
+  }
   // Your own corpse is always plotted. Finding it is not meant to be the
   // challenge -- getting to it and back out is.
   if (run.corpse && !run.corpse.taken) {
@@ -6146,12 +6254,16 @@ function draw(t) {
     ctx.restore();
     ctx.textAlign = 'left';
   }
-  if (run && run.boss && run.boss.hp > 0) {
-    const bs = run.boss, f = clamp(bs.hp / bs.maxHp, 0, 1);
+  // An invader is the nearer problem: while one is standing he owns the bar,
+  // because he is the thing about to kill you.
+  const shown = run && ((run.invader && run.invader.hp > 0) ? run.invader :
+                        (run.boss && run.boss.hp > 0) ? run.boss : null);
+  if (shown) {
+    const bs = shown, f = clamp(bs.hp / bs.maxHp, 0, 1);
     const w = Math.min(320, view.w - 96), x0 = (view.w - w) / 2, y0 = 84;
     ctx.fillStyle = 'rgba(10,7,4,.8)';
     ctx.fillRect(x0 - 2, y0 - 2, w + 4, 12);
-    ctx.fillStyle = 'rgba(232,192,96,.9)';
+    ctx.fillStyle = bs.invader ? 'rgba(226,120,44,.95)' : 'rgba(232,192,96,.9)';
     ctx.fillRect(x0, y0, w * f, 8);
     ctx.strokeStyle = 'rgba(206,180,140,.6)'; ctx.lineWidth = 1;
     ctx.strokeRect(x0 - 2.5, y0 - 2.5, w + 5, 13);
@@ -6439,7 +6551,9 @@ function resetRun(heroId, levelId, diffId) {
           spawnX: spawn.x, spawnY: spawn.y, found: 0, toast: null, bagWarned: 0,
           coins: 0, gateOpen: false, holdTime: 0, holdTicks: 0, holdSpawn: 1.5,
           forcedOpen: false, corpse: null,
-          holdWave: 0, holdLull: false, holdCrest: false };
+          holdWave: 0, holdLull: false, holdCrest: false,
+          invader: null, invadeAt: 0, invadeKills: 0 };
+  run.invadeAt = rollInvasion();
   // If you died in this level and never came back for it, it is still here.
   run.corpse = placeCorpse();
 
