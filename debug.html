@@ -111,9 +111,20 @@
     background:
       radial-gradient(ellipse at 50% 38%,rgba(60,40,20,.30),transparent 62%),
       radial-gradient(ellipse at center,rgba(9,7,6,.88),rgba(7,5,4,.97));
+    /* The hall is drawn on the canvas underneath. The start screen is the one
+       place the player is meant to see it, so it sits behind a veil rather
+       than behind a wall. */
     text-align:center; overflow-y:auto;
   }
   .screen.on{display:flex;}
+  /* The one screen that shows the room it is about. The cards sit in the lower
+     two thirds and the gate-house itself is visible above them, so a stone
+     laid is a thing you can see rather than a number that went up. */
+  #hall{padding-top:calc(30vh + var(--safe-t));
+    background:linear-gradient(180deg,
+      rgba(6,5,4,.10) 0%, rgba(6,5,4,.10) 22%,
+      rgba(7,5,4,.74) 34%, rgba(7,5,4,.95) 46%, rgba(7,5,4,.97) 100%);}
+  #hall .sub{text-shadow:0 2px 10px rgba(0,0,0,.95);}
 
   .title{
     font-family:var(--font-display); font-size:clamp(30px,10vw,58px);
@@ -211,7 +222,7 @@
   /* And a screen taller than the viewport has to start at the top: centred
      flex content that overflows puts its first rows above the scroll origin,
      where nothing can reach them. */
-  #delve, #gear, #vendor{justify-content:flex-start;}
+  #delve, #gear, #vendor, #hall{justify-content:flex-start;}
   /* Fifty-two rungs plus heroes plus difficulties overflows a short phone, and
      the one control you always need is at the bottom -- so it stays put rather
      than being something you have to go looking for. */
@@ -307,6 +318,14 @@
     font-style:italic; color:#b09a6e;}
   .teach{display:block; margin-top:3px; font:600 9.5px/1.35 ui-monospace,monospace;
     letter-spacing:.04em; color:#7fa8b8;}
+  .pips{font-size:11px; letter-spacing:2px; color:var(--gold);}
+  .hrow{display:flex; gap:9px; align-items:baseline; padding:5px 0;
+    border-bottom:1px solid rgba(120,104,78,.22);
+    font:400 11.5px/1.35 Georgia,serif; color:#9d8f74;}
+  .hrow.have{color:#e2d3ad;}
+  .hrow span:first-child{color:var(--gold); font-size:10px;}
+  .hrow span:nth-child(2){flex:1;}
+  .hrow b{font:600 10px/1 ui-monospace,monospace; color:#c6ae7c; white-space:nowrap;}
   #gateBtn.held{border-color:var(--blood); box-shadow:0 0 26px rgba(194,53,42,.34);}
   #gateBtn.held i{color:#e0a08c;}
   #gateBtn.lull{border-color:#7fb0a0; box-shadow:0 0 26px rgba(127,176,160,.28);}
@@ -402,8 +421,18 @@
         <b>The Kit</b><i><span id="kitLine">nothing recovered</span></i></button>
       <button class="mbtn" id="toVendor">
         <b>The Vendor</b><i><span id="vendorLine">no coin</span></i></button>
+      <button class="mbtn" id="toHall">
+        <b>The Hall</b><i><span id="hallLine">four stations, all of them cold</span></i></button>
     </div>
     <p class="fine" id="bestLine"></p>
+  </div>
+
+  <div class="screen" id="hall">
+    <p class="sub">The Hall</p>
+    <p class="fine" id="hallPurse"></p>
+    <div class="cards" id="hallList"></div>
+    <div class="gear-detail" id="hallDetail"></div>
+    <button class="btn" id="hallBack">Back to the gate-house</button>
   </div>
 
   <div class="screen" id="vendor">
@@ -1232,6 +1261,12 @@ function recomputeStats() {
   base.maxHp += hb.maxHp;
   base.damage += hb.damage;
   base.ward += hb.ward;
+
+  // The hall's own. Additive with the hero's level for the same reason: gear
+  // should multiply everything you brought, not everything except this.
+  const ws = wardStone();
+  base.maxHp += ws.maxHp;
+  base.ward += ws.ward;
 
   // Gear on top: additive terms first, then the multiplicative ones, so the
   // order two items were equipped in cannot change the result.
@@ -2666,7 +2701,7 @@ function maybeDropItem(e) {
     vx: rand(-46, 46), vy: rand(-46, 46),
     item: it, r: 9, life: 0, pulled: false });
 
-  if (setOdds && Math.random() < setOdds * DIFF.setRate) {
+  if (setOdds && Math.random() < setOdds * DIFF.setRate * setBoost()) {
     push(rollSetPiece());
     if (e.kind !== 'deceiver') return;      // one piece is the whole prize
   }
@@ -2910,7 +2945,7 @@ function updateDrops(dt) {
     d0.x += d0.vx * dt; d0.y += d0.vy * dt;
 
     if (d < player.r + 12) {
-      if (player.bag.length < BAG_MAX) {
+      if (player.bag.length < bagCap()) {
         player.bag.push(d0.item);
         run.found++;
         syncBagBadge();
@@ -2966,7 +3001,7 @@ function claimCorpse() {
 
   let took = 0;
   for (const it of c.items) {
-    if (player.bag.length >= BAG_MAX) break;
+    if (player.bag.length >= bagCap()) break;
     player.bag.push(it);
     took++;
   }
@@ -6379,7 +6414,274 @@ function drawMinimap() {
   ctx.restore();
 }
 
+/* --- the hall, drawn ------------------------------------------------------
+   The place itself, behind the menu. A gate-house with four alcoves in it,
+   and every alcove is as built as the coin spent on it: cold and bare at
+   nothing, lit and full at three. This is the whole point of a hub you can
+   upgrade -- if the only evidence is a number on a card, the coin bought a
+   spreadsheet row rather than a room.
+   -------------------------------------------------------------------- */
+function drawHall(t) {
+  const W = view.w, H = view.h;
+  // The Hall screen leaves the top three tenths of the frame uncovered, so the
+  // whole room has to live there. With the horizon at four tenths the wall
+  // filled the visible band and every station sat below the veil.
+  const horizon = H * 0.19;
+  const K = Math.min(1.5, Math.max(1, W / 330));
+
+  // Back wall, and the flagstone running away from it.
+  const wall = ctx.createLinearGradient(0, 0, 0, horizon);
+  wall.addColorStop(0, '#0a0d0e');
+  wall.addColorStop(1, '#1b2022');
+  ctx.fillStyle = wall;
+  ctx.fillRect(0, 0, W, horizon);
+  const fl = ctx.createLinearGradient(0, horizon, 0, H);
+  fl.addColorStop(0, '#2b2118');
+  fl.addColorStop(0.55, '#1d160f');
+  fl.addColorStop(1, '#0c0906');
+  ctx.fillStyle = fl;
+  ctx.fillRect(0, horizon, W, H - horizon);
+
+  // Courses on the wall, and flags on the floor, both in perspective enough
+  // to say which way is away.
+  ctx.strokeStyle = 'rgba(150,132,98,.10)';
+  ctx.lineWidth = 1;
+  for (let y = 14; y < horizon; y += 22) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    const off = (y / 22) % 2 ? 0 : 46;
+    for (let x = off; x < W; x += 92) {
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + 22); ctx.stroke();
+    }
+  }
+  ctx.strokeStyle = 'rgba(150,132,98,.09)';
+  let step = 13;
+  for (let y = horizon + step; y < H; y += step) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    step *= 1.16;
+  }
+  for (let i = -3; i <= 3; i++) {
+    ctx.beginPath();
+    ctx.moveTo(W / 2 + i * (W * 0.11), horizon);
+    ctx.lineTo(W / 2 + i * (W * 0.36), H);
+    ctx.stroke();
+  }
+
+  // The ley-gate the whole house is built around.
+  const gx = W / 2, gy = horizon * 0.99, gr = Math.min(W * 0.13, 60);
+  const pulse = 0.72 + 0.28 * Math.sin(t * 0.9);
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const glow = ctx.createRadialGradient(gx, gy, 0, gx, gy, gr * 2.4);
+  glow.addColorStop(0, tint(PAL.arcane, 1.1, 0.30 * pulse));
+  glow.addColorStop(0.5, tint(PAL.arcane, 1, 0.10 * pulse));
+  glow.addColorStop(1, tint(PAL.arcane, 1, 0));
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.arc(gx, gy, gr * 2.4, 0, TAU); ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = '#05070a';
+  ctx.beginPath();
+  ctx.moveTo(gx - gr, gy);
+  ctx.lineTo(gx - gr, gy - gr * 0.5);
+  ctx.quadraticCurveTo(gx, gy - gr * 2.05, gx + gr, gy - gr * 0.5);
+  ctx.lineTo(gx + gr, gy);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = tint(PAL.arcane, 1, 0.5); ctx.lineWidth = 2; ctx.stroke();
+
+  // Four alcoves. Order matches the cards so the room and the list agree.
+  // All four sit in the upper third, where the Hall screen leaves the room
+  // uncovered. Spread down the frame they were simply behind the cards.
+  const spots = [
+    { x: W * 0.15, y: horizon + (H - horizon) * 0.045 },
+    { x: W * 0.85, y: horizon + (H - horizon) * 0.045 },
+    { x: W * 0.30, y: horizon + (H - horizon) * 0.125 },
+    { x: W * 0.70, y: horizon + (H - horizon) * 0.125 }
+  ];
+  for (let i = 0; i < HALL.length; i++) {
+    ctx.save();
+    ctx.translate(spots[i].x, spots[i].y);
+    ctx.scale(K, K);
+    drawStation(HALL[i].id, hallTier(HALL[i].id), 0, 0, t);
+    ctx.restore();
+  }
+
+  // Braziers, and one more of them for every stone laid.
+  const lit = hallTotal();
+  for (let i = 0; i < 2 + Math.floor(lit / 4); i++) {
+    const bx = W * (0.42 + 0.16 * (i % 2)) + (i > 1 ? (i % 2 ? 74 : -74) : 0);
+    const by = horizon + (H - horizon) * (0.03 + 0.10 * Math.floor(i / 2));
+    drawBrazier(bx, by, t + i * 1.7);
+  }
+
+  // Dark at the edges, so the eye goes to the gate.
+  const vg = ctx.createRadialGradient(W / 2, H * 0.22, Math.min(W, H) * 0.26,
+                                      W / 2, H * 0.22, Math.max(W, H) * 0.72);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(0,0,0,.72)');
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, W, H);
+}
+
+// A flame painted in opaque warm colours with only a small additive halo
+// around it. Built from stacked additive gradients it went white: three of
+// these and a lit station in the same corner of the frame add up past 1 in
+// every channel, and the room reads as fog rather than firelight.
+function drawFlame(x, y, h, t) {
+  const f = 0.82 + 0.18 * Math.sin(t * 4.6);
+  const H = h * f;
+  const body = (w, hh, col) => {
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.moveTo(x, y - hh);
+    ctx.quadraticCurveTo(x + w, y - hh * 0.42, x + w * 0.72, y);
+    ctx.quadraticCurveTo(x, y + hh * 0.16, x - w * 0.72, y);
+    ctx.quadraticCurveTo(x - w, y - hh * 0.42, x, y - hh);
+    ctx.fill();
+  };
+  body(H * 0.44, H, '#8a3410');
+  body(H * 0.32, H * 0.78, '#d9601b');
+  body(H * 0.19, H * 0.52, '#f6b040');
+  body(H * 0.09, H * 0.26, '#ffe6ae');
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const g = ctx.createRadialGradient(x, y - H * 0.4, 0, x, y - H * 0.4, H * 2.6);
+  g.addColorStop(0, tint(PAL.ember, 1.15, 0.20));
+  g.addColorStop(0.4, tint(PAL.ember, 1, 0.07));
+  g.addColorStop(1, tint(PAL.ember, 1, 0));
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(x, y - H * 0.4, H * 2.6, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+
+function drawBrazier(x, y, t) {
+  ctx.fillStyle = 'rgba(4,3,2,.55)';
+  ctx.beginPath(); ctx.ellipse(x, y + 12, 15, 5, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#2e2a25';
+  ctx.beginPath();
+  ctx.moveTo(x - 4, y + 10); ctx.lineTo(x + 4, y + 10);
+  ctx.lineTo(x + 8, y - 6); ctx.lineTo(x - 8, y - 6);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#3d3830';
+  ctx.beginPath(); ctx.ellipse(x, y - 6, 11, 4, 0, 0, TAU); ctx.fill();
+  drawFlame(x, y - 7, 17, t);
+}
+
+// Each station is a silhouette that gains parts, and light, per stone laid.
+function drawStation(id, tier, x, y, t) {
+  const lit = tier > 0;
+  // Halved from where this started: four lit stations and three braziers in
+  // one band of the frame were adding past white.
+  const glow = (hue, r, a) => {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const g = ctx.createRadialGradient(x, y - 8, 0, x, y - 8, r);
+    g.addColorStop(0, tint(hue, 1.1, a * 0.5));
+    g.addColorStop(0.45, tint(hue, 1, a * 0.18));
+    g.addColorStop(1, tint(hue, 1, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y - 8, r, 0, TAU); ctx.fill();
+    ctx.restore();
+  };
+  ctx.fillStyle = 'rgba(4,3,2,.5)';
+  ctx.beginPath(); ctx.ellipse(x, y + 14, 26, 8, 0, 0, TAU); ctx.fill();
+
+  if (id === 'vault') {
+    // Shelves, filling up.
+    ctx.fillStyle = lit ? '#4a4038' : '#2a2622';
+    ctx.fillRect(x - 24, y - 34, 48, 48);
+    ctx.strokeStyle = 'rgba(10,8,6,.8)'; ctx.lineWidth = 2;
+    ctx.strokeRect(x - 24, y - 34, 48, 48);
+    ctx.strokeStyle = 'rgba(150,132,98,.35)'; ctx.lineWidth = 1;
+    for (let r = 1; r < 3; r++) {
+      ctx.beginPath();
+      ctx.moveTo(x - 24, y - 34 + r * 16); ctx.lineTo(x + 24, y - 34 + r * 16);
+      ctx.stroke();
+    }
+    for (let i = 0; i < tier * 3; i++) {
+      ctx.fillStyle = i % 2 ? PAL.coin : '#8a7b5e';
+      const rr = Math.floor(i / 3), cc = i % 3;
+      ctx.fillRect(x - 20 + cc * 14, y - 30 + rr * 16, 10, 11);
+    }
+    if (lit) glow(PAL.coin, 46, 0.10 * tier);
+
+  } else if (id === 'forge') {
+    // Anvil, and a fire that grows.
+    // A hearth with an anvil in front of it, so the fire has somewhere to be.
+    ctx.fillStyle = '#241f1a';
+    ctx.beginPath();
+    ctx.moveTo(x - 22, y - 6);
+    ctx.lineTo(x - 22, y - 30);
+    ctx.quadraticCurveTo(x, y - 44, x + 22, y - 30);
+    ctx.lineTo(x + 22, y - 6);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#443c33'; ctx.lineWidth = 2.5; ctx.stroke();
+    if (lit) drawFlame(x, y - 9, 11 + tier * 5, t);
+    ctx.fillStyle = '#332c25';
+    ctx.fillRect(x - 12, y + 2, 24, 12);
+    ctx.fillStyle = '#443c33';
+    ctx.beginPath();
+    ctx.moveTo(x - 17, y - 4); ctx.lineTo(x + 17, y - 4);
+    ctx.lineTo(x + 10, y + 2); ctx.lineTo(x - 10, y + 2);
+    ctx.closePath(); ctx.fill();
+    if (lit) glow(PAL.ember, 40 + tier * 14, 0.16 + 0.06 * tier);
+
+  } else if (id === 'reliquary') {
+    // A plinth, then a case, then candles round it.
+    ctx.fillStyle = lit ? '#463f36' : '#292522';
+    ctx.fillRect(x - 16, y - 20, 32, 34);
+    ctx.fillStyle = lit ? '#585045' : '#33302b';
+    ctx.fillRect(x - 20, y - 24, 40, 6);
+    if (tier >= 1) {
+      ctx.strokeStyle = tint(PAL.gold, 1, 0.75); ctx.lineWidth = 1.6;
+      ctx.strokeRect(x - 11, y - 42, 22, 20);
+      ctx.fillStyle = tint(PAL.arcane, 1, 0.32 + 0.16 * tier);
+      ctx.fillRect(x - 9, y - 40, 18, 16);
+    }
+    for (let i = 0; i < (tier >= 2 ? 2 : 0) + (tier >= 3 ? 2 : 0); i++) {
+      const cx = x - 18 + (i % 2) * 36, cy = y - 26 - Math.floor(i / 2) * 12;
+      ctx.fillStyle = '#d8cba6';
+      ctx.fillRect(cx - 1.5, cy - 8, 3, 8);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = tint(PAL.ember, 1.4, 0.7);
+      ctx.beginPath(); ctx.arc(cx, cy - 10, 2.2, 0, TAU); ctx.fill();
+      ctx.restore();
+    }
+    if (lit) glow(PAL.arcane, 44 + tier * 10, 0.10 + 0.06 * tier);
+
+  } else {
+    // The wardstone: a cracked menhir whose seams take light.
+    ctx.fillStyle = lit ? '#3f4448' : '#24272a';
+    ctx.beginPath();
+    ctx.moveTo(x - 15, y + 14); ctx.lineTo(x - 11, y - 40);
+    ctx.lineTo(x + 10, y - 44); ctx.lineTo(x + 16, y + 14);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(8,10,11,.85)'; ctx.lineWidth = 2; ctx.stroke();
+    if (lit) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = tint(PAL.arcane, 1, 0.42 + 0.12 * tier);
+      ctx.lineWidth = 2.2;
+      for (let i = 0; i < tier; i++) {
+        const yy = y - 34 + i * 14;
+        ctx.beginPath();
+        ctx.moveTo(x - 8, yy); ctx.lineTo(x + 3, yy + 5);
+        ctx.lineTo(x - 2, yy + 9); ctx.lineTo(x + 9, yy + 6);
+        ctx.stroke();
+      }
+      ctx.restore();
+      glow(PAL.arcane, 44 + tier * 14, 0.12 + 0.07 * tier);
+    }
+  }
+}
+
 function draw(t) {
+  // In the gate-house there is no delve to look at, and the last one is not
+  // where the player is standing.
+  if (state === 'menu') {
+    ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+    drawHall(t);
+    return;
+  }
   ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
   ctx.fillStyle = PAL.floor;
   ctx.fillRect(0, 0, view.w, view.h);
@@ -6514,16 +6816,21 @@ const el = {
   gear: $('gear'), gearSlots: $('gearSlots'), gearStats: $('gearStats'),
   bagGrid: $('bagGrid'), bagCount: $('bagCount'), gearDetail: $('gearDetail'),
   gearClose: $('gearClose'), bagBtn: $('bagBtn'), bagBadge: $('bagBadge'),
-  gateBtn: $('gateBtn'), gateNote: $('gateBtn').querySelector('i')
+  gateBtn: $('gateBtn'), gateNote: $('gateBtn').querySelector('i'),
+  hall: $('hall'), hallList: $('hallList'), hallDetail: $('hallDetail'),
+  hallPurse: $('hallPurse'), hallLine: $('hallLine')
 };
 
 let state = 'menu';   // menu | play | levelup | pause | over
 
 function showScreen(name) {
-  for (const s of ['start', 'delve', 'vendor', 'paused', 'over', 'gear']) {
+  for (const s of ['start', 'delve', 'vendor', 'hall', 'paused', 'over', 'gear']) {
     el[s].classList.toggle('on', s === name);
   }
-  el.hud.hidden = (name === 'start' || name === 'delve');
+  // The HUD belongs to a delve. It was hidden only on two of the hub screens,
+  // so the vendor, the kit and the hall all showed a life bar and a slag
+  // counter for a run nobody was in.
+  el.hud.hidden = (name !== null && name !== 'paused' && name !== 'over');
   // The bag button belongs to the delve, not to any screen over it.
   el.bagBtn.hidden = (name !== null);
   if (name !== null) el.gateBtn.hidden = true;
@@ -6549,11 +6856,84 @@ function saveBest(b) {
 const STASH_KEY = 'rivenmark.stash.v1';
 const VAULT_MAX = 60;
 
+/* --- the gate-house -------------------------------------------------------
+   Coin was worth exactly three things: a commissioned piece, a temper, and a
+   reliquary. All three are consumables, so a good run bought a slightly better
+   next run and nothing else -- there was nowhere for the money to accumulate
+   into. The hall is that place. Four stations, three tiers each, every tier
+   paid for once and kept forever, and each one changes a number the player can
+   already feel.
+   -------------------------------------------------------------------- */
+const HALL = [
+  { id: 'vault', name: 'The Vault', mark: '\u25a4',
+    note: 'Shelves, and the stone to hold them.',
+    tiers: [
+      { cost: 900,  text: '+20 vault, +1 kit preset' },
+      { cost: 2600, text: '+40 vault, +2 kit presets' },
+      { cost: 6200, text: '+60 vault, +3 kit presets' }
+    ] },
+  { id: 'forge', name: 'The Forge', mark: '\u2692',
+    note: 'A fire hot enough to argue with.',
+    tiers: [
+      { cost: 1100, text: 'Commissions and tempers cost 12% less' },
+      { cost: 3000, text: '24% less' },
+      { cost: 7000, text: '36% less, and a wider bag by four' }
+    ] },
+  { id: 'reliquary', name: 'The Reliquary', mark: '\u2735',
+    note: 'Somewhere to keep what the delve gives up.',
+    tiers: [
+      { cost: 1400, text: 'Regalia falls 15% more often' },
+      { cost: 3600, text: '30% more often, reliquaries cost 15% less' },
+      { cost: 8000, text: '50% more often, reliquaries cost 30% less' }
+    ] },
+  { id: 'wardstone', name: 'The Wardstone', mark: '\u25c8',
+    note: 'It remembers every Vanguard who came back.',
+    tiers: [
+      { cost: 1200, text: '+10 life, +1.5% ward' },
+      { cost: 3200, text: '+22 life, +3% ward' },
+      { cost: 7500, text: '+38 life, +5% ward' }
+    ] }
+];
+const HALL_BY_ID = {};
+for (const h of HALL) HALL_BY_ID[h.id] = h;
+const HALL_MAX = 3;
+
+const hallTier = id => clamp((stash.hall && stash.hall[id]) || 0, 0, HALL_MAX);
+const hallTotal = () => HALL.reduce((n, h) => n + hallTier(h.id), 0);
+
+// The caps the hall moves. Read through these rather than the constants, or a
+// tier bought is a tier that does nothing.
+const vaultCap   = () => VAULT_MAX + 20 * hallTier('vault');
+const loadoutCap = () => LOADOUT_MAX + hallTier('vault');
+const bagCap     = () => BAG_MAX + (hallTier('forge') >= 3 ? 4 : 0);
+const forgeCut   = () => 1 - 0.12 * hallTier('forge');
+const relicCut   = () => 1 - 0.15 * Math.max(0, hallTier('reliquary') - 1);
+const setBoost   = () => 1 + [0, 0.15, 0.30, 0.50][hallTier('reliquary')];
+const wardStone  = () => ({ maxHp: [0, 10, 22, 38][hallTier('wardstone')],
+                            ward:  [0, 0.015, 0.03, 0.05][hallTier('wardstone')] });
+
+function hallCost(h) {
+  const t = hallTier(h.id);
+  return t >= HALL_MAX ? 0 : h.tiers[t].cost;
+}
+
+function hallBuy(h) {
+  const t = hallTier(h.id);
+  if (t >= HALL_MAX) return 'already whole';
+  const cost = h.tiers[t].cost;
+  if ((stash.coins || 0) < cost) return 'not enough coin';
+  stash.coins -= cost;
+  stash.hall[h.id] = t + 1;
+  saveStash();
+  return null;
+}
+
 function blankStash() {
   const g = {};
   for (const sl of SLOTS) g[sl.id] = null;
   return { gear: g, vault: [], hero: 'isaac', seq: 0, xp: 0, level: 1,
-           coins: 0, pity: 0, loadouts: [], corpse: null };
+           coins: 0, pity: 0, loadouts: [], corpse: null,
+           hall: { vault: 0, forge: 0, reliquary: 0, wardstone: 0 } };
 }
 
 function loadStash() {
@@ -6567,7 +6947,7 @@ function loadStash() {
     if (validItem(st.gear[sl.id], sl.id)) out.gear[sl.id] = st.gear[sl.id];
   }
   if (Array.isArray(st.vault)) {
-    out.vault = st.vault.filter(it => validItem(it)).slice(0, VAULT_MAX);
+    out.vault = st.vault.filter(it => validItem(it)).slice(0, vaultCap());
   }
   if (HEROES[st.hero]) out.hero = st.hero;
   out.seq = +st.seq || 0;
@@ -6575,10 +6955,16 @@ function loadStash() {
   out.level = levelForXp(out.xp);            // derived, never trusted from disk
   out.coins = Math.max(0, +st.coins || 0);
   out.pity = clamp(+st.pity || 0, 0, 20);
+  // Tiers are the only thing on disk that cannot be re-earned, so they are
+  // filtered as carefully as the gear: an id that no longer exists is dropped
+  // rather than carried, and a tier above the ceiling is clamped to it.
+  if (st.hall && typeof st.hall === 'object') {
+    for (const h of HALL) out.hall[h.id] = clamp(+st.hall[h.id] || 0, 0, HALL_MAX);
+  }
   // Loadouts hold item ids, not items, so a preset can never resurrect a
   // piece that has since been sold, tempered away or left in a delve.
   if (Array.isArray(st.loadouts)) {
-    out.loadouts = st.loadouts.slice(0, LOADOUT_MAX).map(L => ({
+    out.loadouts = st.loadouts.slice(0, loadoutCap()).map(L => ({
       name: String(L && L.name || 'Kit').slice(0, 18),
       hero: HEROES[L && L.hero] ? L.hero : 'isaac',
       slots: (() => {
@@ -6637,7 +7023,7 @@ function bankRun(extracted) {
   for (const sl of SLOTS) stash.gear[sl.id] = player.gear[sl.id] || null;
   if (extracted) {
     for (const it of player.bag) {
-      if (stash.vault.length >= VAULT_MAX) break;
+      if (stash.vault.length >= vaultCap()) break;
       stash.vault.push(it);
     }
   }
@@ -6879,7 +7265,7 @@ function saveLoadout(name) {
   const L = { name: (name || 'Kit ' + (stash.loadouts.length + 1)).slice(0, 18),
               hero: stash.hero || 'isaac', slots };
   stash.loadouts.push(L);
-  if (stash.loadouts.length > LOADOUT_MAX) stash.loadouts.shift();
+  if (stash.loadouts.length > loadoutCap()) stash.loadouts.shift();
   saveStash();
   return L;
 }
@@ -6919,13 +7305,13 @@ function applyLoadout(L) {
 const VENDOR = [
   { id: 'commission', name: 'Commission a piece',
     note: 'A Spirit-wrought piece for a slot of your choosing.',
-    cost: p => 180 + p * 6, slot: true },
+    cost: p => Math.round((180 + p * 6) * forgeCut()), slot: true },
   { id: 'temper', name: 'Temper a piece',
     note: 'Reroll every affix on something you are wearing, keeping its rarity.',
-    cost: p => 120 + p * 4, worn: true },
+    cost: p => Math.round((120 + p * 4) * forgeCut()), worn: true },
   { id: 'reliquary', name: 'Open a reliquary',
     note: 'A piece of the Sundered Regalia. Costs less the longer one has ' +
-          'refused to drop.', cost: p => Math.max(300, 1400 - (stash.pity || 0) * 55) }
+          'refused to drop.', cost: p => Math.round(Math.max(300, 1400 - (stash.pity || 0) * 55) * relicCut()) }
 ];
 
 function vendorCost(v) { return Math.round(v.cost(stashPower())); }
@@ -6944,7 +7330,7 @@ function vendorBuy(v, arg) {
   const cost = vendorCost(v);
   if (v.id === 'commission') {
     if (!arg || !SLOT_BY_ID[arg]) return false;
-    if (stash.vault.length >= VAULT_MAX) return false;
+    if (stash.vault.length >= vaultCap()) return false;
     const it = rollItem(0.75, arg);
     it.rarity = 'wrought';
     // A commission is worth the price: three affixes, rolled at depth.
@@ -6976,7 +7362,7 @@ function vendorBuy(v, arg) {
     }
     it.name = AFFIX_BY_ID[it.affixes[0].id].name + ' ' + it.base;
   } else if (v.id === 'reliquary') {
-    if (stash.vault.length >= VAULT_MAX) return false;
+    if (stash.vault.length >= vaultCap()) return false;
     stash.vault.push(rollSetPiece());
     stash.pity = 0;
   }
@@ -7003,13 +7389,13 @@ let gearCtx = null;
 // sorting and equipping happen in the hub between delves, so a fight is never
 // paused to compare two rings.
 function runCtx() {
-  return { gear: player.gear, bag: player.bag, cap: BAG_MAX, live: true,
+  return { gear: player.gear, bag: player.bag, cap: bagCap(), live: true,
            readOnly: true,
            sub: 'Carried so far', back: 'Back to the delve',
            bagName: 'Bag' };
 }
 function stashCtx() {
-  return { gear: stash.gear, bag: stash.vault, cap: VAULT_MAX, live: false,
+  return { gear: stash.gear, bag: stash.vault, cap: vaultCap(), live: false,
            sub: 'What you carried home', back: 'Back to the gate-house',
            bagName: 'Vault' };
 }
@@ -7133,7 +7519,7 @@ function renderLoadouts() {
     h += '<button data-load="' + i + '">' + L.name +
          '<i>' + worn + '/8 \u00b7 ' + HEROES[L.hero].name + '</i></button>';
   });
-  if (stash.loadouts.length < LOADOUT_MAX) h += '<button data-save="1">Save current<i>as a preset</i></button>';
+  if (stash.loadouts.length < loadoutCap()) h += '<button data-save="1">Save current<i>as a preset</i></button>';
   h += '</div><div class="lnote" id="lnote"></div>';
   el.loadouts.innerHTML = h;
 
@@ -7480,14 +7866,89 @@ window.addEventListener('orientationchange', () => setTimeout(resize, 120));
   $('beginRun').addEventListener('click', () => startRun(pick.hero, pick.level, pick.diff));
   $('toKit').addEventListener('click', () => openGear('stash'));
   $('toVendor').addEventListener('click', openVendor);
+  $('toHall').addEventListener('click', openHall);
+  $('hallBack').addEventListener('click', () => { showScreen('start'); });
   $('vendorBack').addEventListener('click', () => {
-    refreshKitLine(); refreshVendorLine(); showScreen('start');
+    refreshKitLine(); refreshVendorLine(); refreshHallLine(); showScreen('start');
   });
 })();
 
 // How much is waiting in the vault, shown on the menu so the kit is not a
 // door you have to open to find out whether anything is behind it.
 let vendorSel = null;
+
+let hallSel = null;
+
+function openHall() {
+  hallSel = null;
+  state = 'menu';
+  renderHall();
+  showScreen('hall');
+}
+
+function renderHall() {
+  const built = hallTotal();
+  el.hallPurse.innerHTML = '<b>' + (stash.coins || 0) + '</b> coin  \u00b7  ' +
+    built + ' of ' + (HALL.length * HALL_MAX) + ' stones laid';
+  el.hallList.innerHTML = '';
+  for (const h of HALL) {
+    const t = hallTier(h.id);
+    const done = t >= HALL_MAX;
+    const cost = hallCost(h);
+    const ok = done || (stash.coins || 0) >= cost;
+    const card = document.createElement('button');
+    card.className = 'card' + (hallSel === h.id ? ' sel' : '') + (ok ? '' : ' poor');
+    card.type = 'button';
+    card.innerHTML = '<span class="glyph">' + h.mark + '</span><span><h4>' + h.name +
+      ' <span class="pips">' + '\u25c6'.repeat(t) + '\u25c7'.repeat(HALL_MAX - t) +
+      '</span></h4><p>' + h.note +
+      ' <span class="tier">' + (done ? 'whole' : cost + ' coin') + '</span></p></span>';
+    card.addEventListener('click', () => { hallSel = h.id; renderHall(); });
+    el.hallList.appendChild(card);
+  }
+  renderHallDetail();
+}
+
+function renderHallDetail() {
+  const h = HALL_BY_ID[hallSel];
+  if (!h) {
+    el.hallDetail.innerHTML =
+      '<p class="fine">A delve pays in coin and the vendor spends it on one ' +
+      'run at a time. What is laid here is laid for good.</p>';
+    return;
+  }
+  const t = hallTier(h.id);
+  let rows = '';
+  for (let i = 0; i < HALL_MAX; i++) {
+    const have = i < t;
+    rows += '<div class="hrow' + (have ? ' have' : '') + '">' +
+            '<span>' + (have ? '\u25c6' : '\u25c7') + '</span>' +
+            '<span>' + h.tiers[i].text + '</span>' +
+            '<b>' + (have ? 'laid' : h.tiers[i].cost + ' coin') + '</b></div>';
+  }
+  const done = t >= HALL_MAX;
+  el.hallDetail.innerHTML = '<h4>' + h.name + '</h4>' + rows +
+    '<div class="gear-acts">' + (done
+      ? '<button disabled>Whole</button>'
+      : '<button class="prime" data-lay="1">Lay the next stone</button>') +
+    '</div><p class="fine" id="hnote"></p>';
+  const btn = el.hallDetail.querySelector('[data-lay]');
+  if (btn) btn.addEventListener('click', () => {
+    const err = hallBuy(h);
+    renderHall();
+    refreshHallLine();
+    refreshVendorLine();
+    const n = $('hnote');
+    if (n) n.textContent = err || 'The stone is laid.';
+  });
+}
+
+function refreshHallLine() {
+  const built = hallTotal();
+  el.hallLine.textContent = built
+    ? built + ' of ' + (HALL.length * HALL_MAX) + ' stones laid'
+    : 'four stations, all of them cold';
+}
 
 function openVendor() {
   vendorSel = null;
@@ -7623,11 +8084,12 @@ resetRun(stash.hero);
 refreshBestLine();
 refreshKitLine();
 refreshVendorLine();
+refreshHallLine();
 showScreen('start');
 requestAnimationFrame(frame);
 </script>
 <script>
-/* generated 2026-08-25T12:09:30Z by tools/build-debug.js — do not edit */
+/* generated 2026-08-25T12:25:58Z by tools/build-debug.js — do not edit */
 /* =============================================================================
    THE RIVENMARK — debug overlay
    Injected into debug.html by tools/build-debug.js. Never shipped in the
