@@ -134,7 +134,10 @@
   // --- panel ----------------------------------------------------------------
   const css = document.createElement('style');
   css.textContent = `
+  /* The panel has grown as the game has. Cap it against the viewport and let
+     it scroll, or the seed box at the bottom ends up off-screen on a phone. */
   #dbg{position:fixed;left:6px;top:88px;z-index:9999;width:216px;
+    max-height:calc(100vh - 104px);overflow-y:auto;overscroll-behavior:contain;
     font:11px/1.45 ui-monospace,Menlo,Consolas,monospace;color:#d8e6c8;
     background:rgba(6,10,8,.9);border:1px solid #2f4a34;border-radius:4px;
     padding:7px 8px;pointer-events:auto;-webkit-user-select:none;user-select:none}
@@ -212,7 +215,10 @@
     ['wipe horde', () => { for (const e of enemies) if (e.kind !== 'deceiver') e.hp = 0;
                            compactEnemies(); }],
     ['+50 horde', () => { for (let i = 0; i < 50; i++) _spawn(run.time); }],
-    ['rank up', () => { run.pendingLevels++; }],
+    ['+5 levels', () => { stash.xp = xpForLevel(Math.min(HERO_MAX_LEVEL,
+        (stash.level || 1) + 5)); stash.level = levelForXp(stash.xp);
+        player.level = stash.level; recomputeStats(); saveStash(); }],
+    ['+200 coins', () => { stash.coins = (stash.coins || 0) + 200; saveStash(); }],
     ['heal', () => { player.hp = player.maxHp; }],
     ['remake map', () => resetRun(run.hero)],
     ['drop item', () => { if (player.bag.length < BAG_MAX) {
@@ -273,7 +279,9 @@
       row('fps', fps.toFixed(0), fps < 50) +
       row('draw / upd', drawMs.toFixed(1) + ' / ' + updMs.toFixed(2) + 'ms', ms > 16.7) +
       row('lowFx', lowFx, lowFx) +
-      row('level', LEVEL.id) +
+      row('delve', LEVEL.id) +
+      row('hero lv / power', (player ? player.level : 1) + ' / ' + stashPower()) +
+      row('coins', stash ? (stash.coins || 0) : 0) +
       row('region', REGION.id) +
       row('hero', (run && run.hero) || '-') +
       row('enemies', enemies.length) +

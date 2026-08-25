@@ -203,6 +203,17 @@
     background:linear-gradient(100deg,#2a2015,#181109);}
   .mbtn:active{background:linear-gradient(100deg,#3a2d1d,#241a10);}
   .card.sel{border-color:var(--gold); background:linear-gradient(100deg,#33271a,#1d150d);}
+  .ladder{max-height:min(34vh,260px); overflow-y:auto; padding-right:3px;}
+  /* Fifty-two rungs plus heroes plus difficulties overflows a short phone, and
+     the one control you always need is at the bottom -- so it stays put rather
+     than being something you have to go looking for. */
+  #delve .menu{position:sticky; bottom:0; padding-top:8px; margin-top:2px;
+    background:linear-gradient(0deg,rgba(9,7,5,.97) 68%,rgba(9,7,5,0));}
+  .card.rung{position:relative; padding-right:96px;}
+  .card.rung .standing{position:absolute; right:12px; top:50%; transform:translateY(-50%);
+    font:600 9px/1.3 ui-monospace,monospace; letter-spacing:.6px; text-align:right;
+    width:76px;}
+  #pwLine{color:#c4b795; letter-spacing:0;}
   .card .tier{font:600 9px/1 ui-monospace,monospace; letter-spacing:1.4px;
     color:#8a7c60; text-transform:uppercase;}
   .setline{width:100%; max-width:520px; font:11px/1.5 ui-monospace,monospace;
@@ -350,8 +361,8 @@
     <p class="sub">Choose your ground</p>
     <h5 class="gear-h">The Vanguard</h5>
     <div class="cards" id="heroPick"></div>
-    <h5 class="gear-h">The delve</h5>
-    <div class="cards" id="levelPick"></div>
+    <h5 class="gear-h">The delve <span id="pwLine"></span></h5>
+    <div class="cards ladder" id="levelPick"></div>
     <h5 class="gear-h">How hard it bites</h5>
     <div class="cards" id="diffPick"></div>
     <div class="menu">
@@ -387,11 +398,6 @@
     <button class="btn" id="gearClose">Back to the delve</button>
   </div>
 
-  <div class="screen" id="levelup">
-    <p class="sub" id="lvlSub">A boon is offered</p>
-    <h1 class="title" style="font-size:clamp(24px,7vw,38px)">Rank <span id="lvlNum">2</span></h1>
-    <div class="cards" id="cards"></div>
-  </div>
 
   <div class="screen" id="paused">
     <h1 class="title" style="font-size:clamp(24px,8vw,44px)">Held</h1>
@@ -572,22 +578,60 @@ const REGIONS = [
    Only the test delve exists so far. It deliberately rolls all five regions,
    because its job is to exercise every environment the generator can build.
    ------------------------------------------------------------------------ */
-const LEVELS = [
-  { id:'test', name:'The Test Delve', tag:'TEST LEVEL',
-    note:'A proving ground cut across all five regions of the Shattered Realm.',
-    regions:['slag','vaelk','kraggen','weald','firth'],
-    horde:['thrall','eclipse','breaker'],
-    boss:'deceiver',
-    // 125 against the ~185 slag the generator places -- about a two-thirds
-    // clear. Quota is the difficulty lever rather than enemy health: the depth
-    // health ramp scales the fragile hero far harder than the tank (at 0.65 it
-    // put Zayd at 7/40 against Isaac's 15/40), where quota moves both together.
-    quota:125, channel:4.0,
-    // What the delve hits back with. Gear is a large power budget -- a full
-    // kit took the bot from 43% to 60% -- so the opposition is scaled to meet
-    // it here rather than by nerfing the loot, which is the point of the loot.
-    }
+/* Fifty-two delves, generated rather than authored: each one names the region
+   it is cut from, what walks it, how much slag buys passage out, and the power
+   it expects you to bring. The ladder is the spine of the game -- the power
+   level you carry is measured against `power` here, and the delve tells you
+   plainly whether you are under it. */
+const LEVEL_COUNT = 52;
+const DELVE_NAMES = [
+  'The Test Delve', 'Ashfall Shallows', 'The Weeping Stair', 'Tor-Varden Undercroft',
+  'The Rending Cut', 'Kael-Dorm Approach', 'The Iron Teeth', 'Ghor Slagworks',
+  'The Rot-Weald Verge', 'Heart-Rot Hollow', 'The Ash Shoals', 'Drowned Barrows',
+  'The Sundered Span', 'Vaelk Deepcut', 'The Cinder Vault', 'Hollow Processional',
+  'The Thrall Pits', 'Brand-Marked Halls', 'The Silent Choir', 'Dúath Threshold',
+  'The Long Dark', 'Bonewright Yard', 'The Shattered Ward', 'Gilded Approach',
+  'The Deceiver\u2019s Antechamber'
 ];
+
+function buildLevels() {
+  const out = [];
+  const regions = ['slag', 'vaelk', 'kraggen', 'weald', 'firth'];
+  for (let i = 0; i < LEVEL_COUNT; i++) {
+    const d = i / (LEVEL_COUNT - 1);                 // 0 at the mouth, 1 at the deep
+    const name = i < DELVE_NAMES.length
+      ? DELVE_NAMES[i]
+      : DELVE_NAMES[i % DELVE_NAMES.length] + ' \u00b7 ' +
+        ['II', 'III', 'IV'][Math.floor(i / DELVE_NAMES.length) - 1];
+    // Region pool widens as you go down: the first delves are one place, the
+    // deepest could be cut from anywhere in the realm.
+    const pool = i === 0 ? regions.slice()
+               : regions.slice(0, Math.min(regions.length, 1 + Math.floor(d * 5)));
+    const horde = ['thrall'];
+    if (i >= 1) horde.push('eclipse');
+    if (i >= 3) horde.push('breaker');
+    out.push({
+      id: i === 0 ? 'test' : 'delve' + i,
+      name: name,
+      tag: i === 0 ? 'TEST LEVEL' : 'DELVE ' + i,
+      note: i === 0
+        ? 'A proving ground cut across all five regions of the Shattered Realm.'
+        : 'Cut from ' + pool.length + (pool.length === 1 ? ' region' : ' regions') +
+          ' of the Shattered Realm.',
+      regions: pool,
+      horde: horde,
+      boss: 'deceiver',
+      // Expected power, and the terms that follow from it.
+      power: Math.round(4 + d * 96),
+      depth: d,
+      quota: Math.round(125 + d * 145),
+      channel: 4.0
+    });
+  }
+  return out;
+}
+const LEVELS = buildLevels();
+
 /* Difficulty is the bargain the genre runs on: harder ground pays better.
    Threat scales enemy health and damage; the loot rates scale how often gear
    falls and how often a piece of the Regalia is among it. `riven` carries the
@@ -610,8 +654,67 @@ for (const L of LEVELS) {
   if (L.channel == null) L.channel = EXTRACT_CHANNEL;
   LEVEL_BY_ID[L.id] = L;
 }
+
+// How a delve's expected power compares with what you are carrying. Advisory,
+// not a gate: the ladder guides, it does not lock the door.
+function delveStanding(L, pw) {
+  const d = pw - L.power;
+  if (d >= 14) return { id: 'trivial', text: 'well within you', colour: '#7fa869' };
+  if (d >= 0)  return { id: 'even',    text: 'an even match',   colour: '#c4b795' };
+  if (d >= -12) return { id: 'hard',   text: 'above your weight', colour: '#c9863e' };
+  return { id: 'deadly', text: 'far beyond you', colour: '#c0503f' };
+}
 const REGION_BY_ID = {};
 for (const R of REGIONS) REGION_BY_ID[R.id] = R;
+
+/* --- the Vanguard's own strength ------------------------------------------
+   Slag is experience now and nothing else: it drives a hero level that
+   persists across delves. Boons chosen mid-run are gone -- power comes from
+   the level you have earned and the gear you are wearing, and both survive
+   the delve that won them.
+   ---------------------------------------------------------------------- */
+const HERO_MAX_LEVEL = 60;
+
+// Slag needed to reach a given level, from 1. Deliberately shallow early and
+// steep late, so the first delves move and the fiftieth still means something.
+function xpForLevel(l) {
+  return Math.round(38 * Math.pow(l, 1.62));
+}
+function levelForXp(xp) {
+  let l = 1;
+  while (l < HERO_MAX_LEVEL && xp >= xpForLevel(l + 1)) l++;
+  return l;
+}
+
+// What a level is worth on the sheet. Flat and legible rather than clever:
+// the interesting numbers are supposed to come off the gear.
+function heroLevelBonus(l) {
+  const n = l - 1;
+  return { maxHp: n * 6, damage: n * 1.15, ward: Math.min(0.12, n * 0.0022) };
+}
+
+/* Power level: one number for "how strong am I", averaging what the hero
+   brings with what the kit brings, so a level-40 hero in rags and a level-10
+   hero in a full set both read honestly. It is what the delve ladder is
+   measured against. */
+function itemPower(it) {
+  if (!it) return 0;
+  const tier = RARITY.findIndex(r => r.id === it.rarity);
+  let p = 6 + tier * 5;
+  for (const af of it.affixes) {
+    const a = AFFIX_BY_ID[af.id];
+    if (!a) continue;
+    p += a.mul ? Math.abs(af.v) * 90 : Math.abs(af.v) * (a.id === 'life' ? 0.5 : 2.2);
+  }
+  return p;
+}
+function powerLevel(gear, level) {
+  let kit = 0;
+  for (const sl of SLOTS) kit += itemPower(gear && gear[sl.id]);
+  kit /= SLOTS.length;                       // average, not sum
+  return Math.max(1, Math.round((level * 2.1 + kit) / 2));
+}
+const stashPower = () => powerLevel(stash.gear, stash.level || 1);
 
 const UPGRADES = [
   { id:'dmg',    glyph:'✦', name:'Keen Edge',   desc:'your ward bites a quarter deeper',   max:99, apply:p=>p.damage      *= 1.25 },
@@ -778,7 +881,7 @@ function rollItem(depth, slotId) {
   const n = Math.min(rarity.affixes, pool.length);
   // Item level lifts the rolls, so a deep drop is better than a shallow one of
   // the same rarity rather than merely more likely.
-  const ilvl = (0.55 + clamp(depth, 0, 1) * 0.75) * AFFIX_SCALE;
+  const ilvl = (0.55 + clamp(depth, 0, 1) * 0.75 + (LEVEL.depth || 0) * 0.9) * AFFIX_SCALE;
   for (let i = 0; i < n; i++) {
     const id = pool.splice((Math.random() * pool.length) | 0, 1)[0];
     const a = AFFIX_BY_ID[id];
@@ -814,11 +917,12 @@ function recomputeStats() {
   base.sweep = H.sweep; base.arcSpeed = H.arcSpeed;
   base.ward = 0;
 
-  // Boons, re-applied from the tally rather than remembered as a total.
-  for (const u of UPGRADES) {
-    const n = p.upg[u.id] || 0;
-    for (let i = 0; i < n; i++) u.apply(base);
-  }
+  // What the hero has earned. Applied before gear so the kit multiplies a
+  // level's worth of strength rather than the other way round.
+  const hb = heroLevelBonus(p.level || 1);
+  base.maxHp += hb.maxHp;
+  base.damage += hb.damage;
+  base.ward += hb.ward;
 
   // Gear on top: additive terms first, then the multiplicative ones, so the
   // order two items were equipped in cannot change the result.
@@ -1759,6 +1863,7 @@ function makePlayer(x, y, heroId) {
   p.fireTimer = 0; p.invuln = 0; p.hitFlash = 0;
   p.swing = 0; p.swingA = 0; p.swingDir = 1;
   p.upg = {};
+  p.level = stash.level || 1;
   p.gear = {};
   // Wear what came home from the last delve.
   for (const sl of SLOTS) p.gear[sl.id] = (stash.gear && stash.gear[sl.id]) || null;
@@ -1788,7 +1893,7 @@ function typeWeights(t) {
 function placeEnemy(kind, x, y, depth) {
   if (enemies.length >= MAX_ENEMIES) return null;
   const d = ENEMY_TYPES[kind];
-  const scale = (1 + depth * PACK_DEPTH_HP) * DIFF.threat;
+  const scale = (1 + depth * PACK_DEPTH_HP) * DIFF.threat * (1 + (LEVEL.depth || 0) * 1.6);
   const e = {
     kind, x, y, r: d.r, speed: d.speed * rand(0.92, 1.08),
     hp: d.hp * scale, maxHp: d.hp * scale, dmg: d.dmg * DIFF.threat, tech: d.tech,
@@ -2269,15 +2374,10 @@ function damageEnemy(e, dmg) {
   }
 }
 
+// Slag is experience. It is banked on the hero at the end of the delve rather
+// than spent on a card mid-fight, so the run is never interrupted to choose.
 function collectTech(v) {
   run.tech += v;
-  run.xp += v;
-  while (run.xp >= run.xpNeed) {
-    run.xp -= run.xpNeed;
-    run.level++;
-    run.xpNeed = 6 + run.level * 5;
-    run.pendingLevels++;
-  }
 }
 
 function updatePlayer(dt) {
@@ -2724,7 +2824,6 @@ function update(dt) {
   updatePortal(dt);
   updateSpawning(dt);
   updateCamera(dt);
-  if (run.pendingLevels > 0 && state === 'play') openLevelUp();
 }
 
 /* ---------------------------------------------------------------------------
@@ -5042,8 +5141,8 @@ const el = {
   hud: $('hud'), hpBar: $('hpBar'), hpFill: $('hpFill'), hpText: $('hpText'),
   techBar: $('techBar'), techFill: $('techFill'), techText: $('techText'),
   clock: $('clock'), lvlText: $('lvlText'), flash: $('flash'),
-  start: $('start'), levelup: $('levelup'), paused: $('paused'), over: $('over'),
-  cards: $('cards'), lvlNum: $('lvlNum'), lvlSub: $('lvlSub'), bestLine: $('bestLine'),
+  start: $('start'), paused: $('paused'), over: $('over'),
+  bestLine: $('bestLine'),
   overTitle: $('overTitle'), overSub: $('overSub'), overStats: $('overStats'),
   delve: $('delve'), kitLine: $('kitLine'), gearSub: $('gearSub'), setLine: $('setLine'),
   gear: $('gear'), gearSlots: $('gearSlots'), gearStats: $('gearStats'),
@@ -5054,7 +5153,7 @@ const el = {
 let state = 'menu';   // menu | play | levelup | pause | over
 
 function showScreen(name) {
-  for (const s of ['start', 'delve', 'levelup', 'paused', 'over', 'gear']) {
+  for (const s of ['start', 'delve', 'paused', 'over', 'gear']) {
     el[s].classList.toggle('on', s === name);
   }
   el.hud.hidden = (name === 'start' || name === 'delve');
@@ -5085,7 +5184,7 @@ const VAULT_MAX = 60;
 function blankStash() {
   const g = {};
   for (const sl of SLOTS) g[sl.id] = null;
-  return { gear: g, vault: [], hero: 'isaac', seq: 0 };
+  return { gear: g, vault: [], hero: 'isaac', seq: 0, xp: 0, level: 1, coins: 0 };
 }
 
 function loadStash() {
@@ -5103,6 +5202,9 @@ function loadStash() {
   }
   if (HEROES[st.hero]) out.hero = st.hero;
   out.seq = +st.seq || 0;
+  out.xp = Math.max(0, +st.xp || 0);
+  out.level = levelForXp(out.xp);            // derived, never trusted from disk
+  out.coins = Math.max(0, +st.coins || 0);
   return out;
 }
 
@@ -5127,6 +5229,11 @@ let stash = blankStash();
 // Carried home from a finished delve. Equipped kit always; the bag only if the
 // Vanguard actually walked out.
 function bankRun(extracted) {
+  // Slag is only worth anything if it leaves the delve with you.
+  if (extracted) {
+    stash.xp = (stash.xp || 0) + run.tech;
+    stash.level = levelForXp(stash.xp);
+  }
   for (const sl of SLOTS) stash.gear[sl.id] = player.gear[sl.id] || null;
   if (extracted) {
     for (const it of player.bag) {
@@ -5171,7 +5278,12 @@ function syncHud() {
   }
   const secs = Math.floor(run.time);
   if (secs !== hudCache.time) { hudCache.time = secs; el.clock.textContent = fmtTime(secs); }
-  if (run.level !== hudCache.lvl) { hudCache.lvl = run.level; el.lvlText.textContent = 'Rank ' + run.level; }
+  // The HUD shows the hero's standing power, not a per-run rank -- there is
+  // no per-run rank any more.
+  if (player.level !== hudCache.lvl) {
+    hudCache.lvl = player.level;
+    el.lvlText.textContent = 'Lv ' + player.level;
+  }
 }
 
 let flashTimer = 0;
@@ -5211,8 +5323,8 @@ function resetRun(heroId, levelId, diffId) {
   enemies = []; arcs = []; loot = []; drops = []; particles = []; rings = [];
   enemyGrid = new SpatialHash(ENEMY_CELL);
 
-  run = { time: 0, tech: 0, xp: 0, xpNeed: 11, level: 1, kills: 0,
-          spawnTimer: 1.4, pendingLevels: 0, hero: hero, level_id: LEVEL.id,
+  run = { time: 0, tech: 0, kills: 0,
+          spawnTimer: 1.4, hero: hero, level_id: LEVEL.id,
           diff_id: DIFF.id,
           banner: 4.2,
           bannerText: null, bannerNote: null,
@@ -5274,55 +5386,10 @@ function endRun(won) {
 
 /* --- level-up ----------------------------------------------------------- */
 
-function rollUpgrades(n) {
-  const pool = UPGRADES.filter(u => (player.upg[u.id] || 0) < u.max);
-  const out = [];
-  while (out.length < n && pool.length) {
-    out.push(pool.splice((Math.random() * pool.length) | 0, 1)[0]);
-  }
-  return out;
-}
-
-function openLevelUp() {
-  state = 'levelup';
-  stickEnd();
-  el.lvlNum.textContent = run.level;
-  el.lvlSub.textContent = run.pendingLevels > 1
-    ? run.pendingLevels + ' boons await'
-    : 'A boon is offered';
-  el.cards.innerHTML = '';
-
-  const offer = rollUpgrades(3);
-  if (!offer.length) {                    // everything maxed — just bank it
-    run.pendingLevels = 0;
-    state = 'play';
-    return;
-  }
-  for (const u of offer) {
-    const have = player.upg[u.id] || 0;
-    const card = document.createElement('button');
-    card.className = 'card';
-    card.type = 'button';
-    card.innerHTML =
-      '<span class="glyph">' + u.glyph + '</span>' +
-      '<span><h4>' + u.name + '</h4><p>' + u.desc +
-      (have ? ' <span class="tier">· held ' + have + '</span>' : '') + '</p></span>';
-    card.addEventListener('click', () => takeUpgrade(u));
-    el.cards.appendChild(card);
-  }
-  showScreen('levelup');
-}
-
-function takeUpgrade(u) {
-  player.upg[u.id] = (player.upg[u.id] || 0) + 1;
-  recomputeStats();
-  if (u.onTake) u.onTake(player);
-  run.pendingLevels--;
-  hudCache.hp = -1;
-  if (run.pendingLevels > 0) { openLevelUp(); return; }
-  state = 'play';
-  showScreen(null);
-}
+/* rollUpgrades / openLevelUp / takeUpgrade are gone with the boons. Slag is
+   experience now, banked on the hero when the delve ends, so nothing
+   interrupts a run to offer a card. UPGRADES itself is kept only as the
+   vendor's crafting table -- see the hub. */
 
 /* --- the bag ------------------------------------------------------------
    Opening it pauses the delve. There is no drag-and-drop: on a phone that is
@@ -5675,18 +5742,37 @@ window.addEventListener('orientationchange', () => setTimeout(resize, 120));
     heroWrap.appendChild(card);
   }
 
+  // Fifty-two delves is too many to lay out as cards, so the ladder is a
+  // scrolling list that opens on the deepest one you are equal to -- the place
+  // you would have chosen anyway.
   const lvlWrap = $('levelPick');
-  for (const L of LEVELS) {
-    const card = document.createElement('button');
-    card.className = 'card';
-    card.type = 'button';
-    card.dataset.level = L.id;
-    card.innerHTML =
-      '<span class="glyph">\u25C8</span>' +
-      '<span><h4>' + L.name + '</h4><p>' + L.note +
-      (L.tag ? ' <span class="tier">' + L.tag + '</span>' : '') + '</p></span>';
-    card.addEventListener('click', () => { pick.level = L.id; syncPick(); });
-    lvlWrap.appendChild(card);
+  function buildLadder() {
+    const pw = stashPower();
+    lvlWrap.innerHTML = '';
+    for (const L of LEVELS) {
+      const st = delveStanding(L, pw);
+      const card = document.createElement('button');
+      card.className = 'card rung';
+      card.type = 'button';
+      card.dataset.level = L.id;
+      card.innerHTML =
+        '<span class="glyph">\u25C8</span>' +
+        '<span><h4>' + L.name + '</h4><p>' + L.note +
+        ' <span class="tier">' + L.tag + ' \u00b7 power ' + L.power +
+        ' \u00b7 slag ' + L.quota + '</span></p></span>' +
+        '<span class="standing" style="color:' + st.colour + '">' + st.text + '</span>';
+      card.addEventListener('click', () => { pick.level = L.id; syncPick(); });
+      lvlWrap.appendChild(card);
+    }
+  }
+  buildLadder();
+
+  // Open on the deepest delve you are an even match for.
+  function defaultLevel() {
+    const pw = stashPower();
+    let best = LEVELS[0].id;
+    for (const L of LEVELS) if (pw >= L.power) best = L.id;
+    return best;
   }
 
   const diffWrap = $('diffPick');
@@ -5706,11 +5792,15 @@ window.addEventListener('orientationchange', () => setTimeout(resize, 120));
   }
 
   function syncPick() {
+    const pwl = $('pwLine');
+    if (pwl) pwl.textContent = '\u00b7 your power ' + stashPower();
     for (const c of heroWrap.children) c.classList.toggle('sel', c.dataset.hero === pick.hero);
     for (const c of lvlWrap.children)  c.classList.toggle('sel', c.dataset.level === pick.level);
     for (const c of diffWrap.children) c.classList.toggle('sel', c.dataset.diff === pick.diff);
     const H = HEROES[pick.hero], D = DIFF_BY_ID[pick.diff], L = LEVEL_BY_ID[pick.level];
-    $('beginLine').textContent = H.name + ' \u00b7 ' + L.name + ' \u00b7 ' + D.name;
+    const st = delveStanding(L, stashPower());
+    $('beginLine').textContent = H.name + ' \u00b7 ' + L.name + ' \u00b7 ' + D.name +
+      '  \u2014  ' + st.text;
   }
 
   window.__syncPick = syncPick;
@@ -5719,9 +5809,15 @@ window.addEventListener('orientationchange', () => setTimeout(resize, 120));
 
   $('toDelve').addEventListener('click', () => {
     pick.hero = stash.hero || pick.hero;
+    buildLadder();
+    pick.level = defaultLevel();
     syncPick();
     state = 'menu';
     showScreen('delve');
+    // Scroll the chosen rung into view, or the ladder always opens at the top
+    // however deep you have got.
+    const sel = lvlWrap.querySelector('.card.sel');
+    if (sel) sel.scrollIntoView({ block: 'center' });
   });
   $('delveBack').addEventListener('click', () => { showScreen('start'); });
   $('beginRun').addEventListener('click', () => startRun(pick.hero, pick.level, pick.diff));
@@ -5781,7 +5877,7 @@ function frame(now) {
   if (state === 'play') {
     update(dt);
     syncHud();
-  } else if (state === 'levelup' || state === 'pause' || state === 'gear') {
+  } else if (state === 'pause' || state === 'gear') {
     updateCamera(dt);
   }
   draw(t);
@@ -5797,7 +5893,7 @@ showScreen('start');
 requestAnimationFrame(frame);
 </script>
 <script>
-/* generated 2026-08-25T02:28:45Z by tools/build-debug.js — do not edit */
+/* generated 2026-08-25T02:41:45Z by tools/build-debug.js — do not edit */
 /* =============================================================================
    THE RIVENMARK — debug overlay
    Injected into debug.html by tools/build-debug.js. Never shipped in the
@@ -5934,7 +6030,10 @@ requestAnimationFrame(frame);
   // --- panel ----------------------------------------------------------------
   const css = document.createElement('style');
   css.textContent = `
+  /* The panel has grown as the game has. Cap it against the viewport and let
+     it scroll, or the seed box at the bottom ends up off-screen on a phone. */
   #dbg{position:fixed;left:6px;top:88px;z-index:9999;width:216px;
+    max-height:calc(100vh - 104px);overflow-y:auto;overscroll-behavior:contain;
     font:11px/1.45 ui-monospace,Menlo,Consolas,monospace;color:#d8e6c8;
     background:rgba(6,10,8,.9);border:1px solid #2f4a34;border-radius:4px;
     padding:7px 8px;pointer-events:auto;-webkit-user-select:none;user-select:none}
@@ -6012,7 +6111,10 @@ requestAnimationFrame(frame);
     ['wipe horde', () => { for (const e of enemies) if (e.kind !== 'deceiver') e.hp = 0;
                            compactEnemies(); }],
     ['+50 horde', () => { for (let i = 0; i < 50; i++) _spawn(run.time); }],
-    ['rank up', () => { run.pendingLevels++; }],
+    ['+5 levels', () => { stash.xp = xpForLevel(Math.min(HERO_MAX_LEVEL,
+        (stash.level || 1) + 5)); stash.level = levelForXp(stash.xp);
+        player.level = stash.level; recomputeStats(); saveStash(); }],
+    ['+200 coins', () => { stash.coins = (stash.coins || 0) + 200; saveStash(); }],
     ['heal', () => { player.hp = player.maxHp; }],
     ['remake map', () => resetRun(run.hero)],
     ['drop item', () => { if (player.bag.length < BAG_MAX) {
@@ -6073,7 +6175,9 @@ requestAnimationFrame(frame);
       row('fps', fps.toFixed(0), fps < 50) +
       row('draw / upd', drawMs.toFixed(1) + ' / ' + updMs.toFixed(2) + 'ms', ms > 16.7) +
       row('lowFx', lowFx, lowFx) +
-      row('level', LEVEL.id) +
+      row('delve', LEVEL.id) +
+      row('hero lv / power', (player ? player.level : 1) + ' / ' + stashPower()) +
+      row('coins', stash ? (stash.coins || 0) : 0) +
       row('region', REGION.id) +
       row('hero', (run && run.hero) || '-') +
       row('enemies', enemies.length) +
