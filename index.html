@@ -305,6 +305,8 @@
     text-transform:uppercase; color:#9fc2d8; vertical-align:middle;}
   .ward{display:block; margin-top:3px; font:400 10.5px/1.3 Georgia,serif;
     font-style:italic; color:#b09a6e;}
+  .teach{display:block; margin-top:3px; font:600 9.5px/1.35 ui-monospace,monospace;
+    letter-spacing:.04em; color:#7fa8b8;}
   #gateBtn.held{border-color:var(--blood); box-shadow:0 0 26px rgba(194,53,42,.34);}
   #gateBtn.held i{color:#e0a08c;}
   #gateBtn.lull{border-color:#7fb0a0; box-shadow:0 0 26px rgba(127,176,160,.28);}
@@ -520,6 +522,10 @@ const AGGRO_FAR     = 340;   // ...and the bigger, slower ones a little sooner
 const ALERT_R       = 155;   // a woken body pulls its neighbours up with it
 const ALERT_DELAY   = 0.18;  // ...one beat later, so a pack rouses in sequence
 const ELITE_CHANCE  = 0.16;  // share of packs led by a branded champion
+// Odds a pack site gets pitch beside it. Lives here with the other placement
+// knobs rather than down with the scenery it describes, because buildLevels
+// reads it and that runs long before the scenery section is reached.
+let PITCH_RATE      = 0.55;
 const ELITE_HP      = 2.6;   // and what that champion is worth fighting through
 // Health ramp from the spawn pocket to the far edge of the delve -- this is
 // what replaced the old run-time ramp, since a placed dungeon gets harder by
@@ -822,6 +828,36 @@ function rollMutators(index, depth) {
   return out;
 }
 
+/* --- the onboarding ramp --------------------------------------------------
+   The first three rungs teach the game by leaving things out of it, not by
+   explaining them. Each one adds exactly one thing the player has to have an
+   answer for, and until they have met it nothing else is allowed to arrive at
+   the same time:
+
+     the mouth   thralls and the gate, and nothing else. Walk, cut, gather,
+                 leave. No champion, no pitch, no invader, no epithet on the
+                 avatar, and no escort holding him.
+     the second  eclipses. Something that does not come at you down the middle,
+                 met while nothing else is complicating the room.
+     the third   breakers and pitch. Ground that has to be taken, and ground
+                 that cannot be stood on.
+
+   From the fourth the delve is the whole game. Nothing here is announced --
+   the player is not told a lesson is happening, only handed one thing at a
+   time until they are not being handed things any more.
+   -------------------------------------------------------------------- */
+const RAMP = [
+  { horde: ['thrall'],
+    elites: 0, pitch: 0, invade: 0, guard: 0, mutate: false,
+    lesson: 'Cut, gather, and find the ley-gate.' },
+  { horde: ['thrall', 'eclipse'],
+    elites: 0.05, pitch: 0, invade: 0, guard: 1, mutate: false,
+    lesson: 'Some of them will not come at you down the middle.' },
+  { horde: ['thrall', 'eclipse', 'breaker'],
+    elites: 0.11, pitch: 0.4, invade: 0, guard: 1, mutate: true,
+    lesson: 'Some ground is held. Some cannot be stood on.' }
+];
+
 function buildLevels() {
   const out = [];
   const regions = ['slag', 'vaelk', 'kraggen', 'weald', 'firth'];
@@ -835,9 +871,8 @@ function buildLevels() {
     // deepest could be cut from anywhere in the realm.
     const pool = i === 0 ? regions.slice()
                : regions.slice(0, Math.min(regions.length, 1 + Math.floor(d * 5)));
-    const horde = ['thrall'];
-    if (i >= 1) horde.push('eclipse');
-    if (i >= 3) horde.push('breaker');
+    const ramp = RAMP[i];
+    const horde = ramp ? ramp.horde.slice() : ['thrall', 'eclipse', 'breaker'];
     out.push({
       id: i === 0 ? 'test' : 'delve' + i,
       name: name,
@@ -849,7 +884,14 @@ function buildLevels() {
       regions: pool,
       horde: horde,
       boss: 'deceiver',
-      mutators: rollMutators(i, d),
+      // The first rungs meet the avatar plainly. An epithet is a rule you have
+      // to read, and there is nothing to read it against yet.
+      mutators: (!ramp || ramp.mutate) ? rollMutators(i, d) : [],
+      elites: ramp ? ramp.elites : ELITE_CHANCE,
+      pitch: ramp ? ramp.pitch : PITCH_RATE,
+      invade: ramp ? ramp.invade : 1,
+      guard: ramp ? ramp.guard : -1,       // -1 means "however deep it is"
+      lesson: ramp ? ramp.lesson : null,
       // Expected power, and the terms that follow from it.
       power: Math.round(4 + d * 96),
       depth: d,
@@ -2296,7 +2338,9 @@ function placePacks(spawn) {
         // One champion at most, and only in some packs -- an elite in every
         // group is just a tougher baseline rather than a thing you notice.
         if (k === 0 && Math.random() <
-            (ELITE_CHANCE + st.depth * 0.14) * DIFF.setRate) makeElite(e);
+            ((LEVEL.elites === undefined ? ELITE_CHANCE : LEVEL.elites) +
+             st.depth * 0.14 * (LEVEL.elites === 0 ? 0 : 1)) *
+            DIFF.setRate) makeElite(e);
         slag += e.tech;
       }
     }
@@ -2326,7 +2370,7 @@ function placePacks(spawn) {
   // is not a tactic. They go beside the packs instead, which is the only place
   // a barrel is interesting: something has to be standing next to it.
   for (let i = 0; i < sites.length; i++) {
-    if (Math.random() > PITCH_RATE) continue;
+    if (Math.random() > (LEVEL.pitch === undefined ? PITCH_RATE : LEVEL.pitch)) continue;
     const st = sites[i];
     const n = 1 + ((Math.random() * 2) | 0);
     for (let k = 0; k < n; k++) {
@@ -2342,7 +2386,10 @@ function placePacks(spawn) {
     const kind = k < 2 && roster.indexOf('breaker') >= 0 ? 'breaker' : roster[0];
     const pos = scatterNear(portal.x, portal.y, 150, ENEMY_TYPES[kind].r + 4, spawn);
     const g = pos && placeEnemy(kind, pos.x, pos.y, 0.85);
-    if (g && k < 2) makeElite(g);      // the gate is held by champions
+    // The gate is held by champions -- except on a rung that has not shown the
+    // player one yet, where the two standing guards were the only champions in
+    // the delve and walked straight through the ramp's whole point.
+    if (g && k < 2 && LEVEL.elites !== 0) makeElite(g);
   }
 
   // The barrels above were added after the scenery pass indexed itself.
@@ -2650,7 +2697,6 @@ let hazards = [];
    comes down at once, because a column of stone does not hesitate.
    -------------------------------------------------------------------- */
 const PROP_HP    = { barrel: 26, pillar: 70 };
-let PITCH_RATE   = 0.55;   // odds a pack site gets pitch beside it; a sweep knob
 // Long enough to walk out of at hero speed with room to spare. The blade aims
 // itself, so the player cannot choose not to break a barrel between them and
 // what they are hitting -- the fuse is the whole of their agency here, and it
@@ -3629,6 +3675,7 @@ function updateRings(dt) {
 // Odds a delve is invaded at all, and when. Rolled per run rather than per
 // rung: a scheduled ambush is not an ambush.
 function rollInvasion() {
+  if (LEVEL.invade === 0) return 0;      // not while the game is still teaching
   const dep = LEVEL.depth || 0;
   const odds = (0.16 + dep * 0.24) * (DIFF.setRate || 1);
   if (Math.random() >= odds) return 0;
@@ -3736,7 +3783,8 @@ function spawnDeceiver() {
   // delve, where the horde is thirty-four-hit-point thralls and the hero has
   // power four: the fight has to be learnable before it is hard.
   const dep = LEVEL.depth || 0;
-  const guard = 1 + Math.round(dep * 2) + e.extraGuard;
+  const guard = (LEVEL.guard >= 0 ? LEVEL.guard : 1 + Math.round(dep * 2)) +
+                e.extraGuard;
   for (let i = 0; i < guard; i++) {
     let ok = false, x = 0, y = 0;
     for (let k = 0; k < 20 && !ok; k++) {
@@ -5629,6 +5677,10 @@ function forgeProps() {
 // The breakable subset, gathered once a delve is cut. Pillars and pitch
 // barrels only -- a crate is furniture.
 function indexBreakables() {
+  // A rung that has not taught pitch yet does not contain any. The scenery
+  // scatter puts barrels down on its own, quite apart from the pass that seeds
+  // them beside the packs, so suppressing one source is not enough.
+  if (LEVEL && LEVEL.pitch === 0) props = props.filter(pr => pr.kind !== 'barrel');
   propGrid = [];
   for (let i = 0; i < props.length; i++) {
     const pr = props[i];
@@ -6383,7 +6435,11 @@ function draw(t) {
     ctx.fillText(run.bannerText || LEVEL.name, view.w / 2, view.h * 0.42);
     ctx.fillStyle = 'rgba(186,164,128,.85)';
     ctx.font = 'italic 400 13px Georgia, "Times New Roman", serif';
-    ctx.fillText(run.bannerNote || REGION.name, view.w / 2, view.h * 0.42 + 24);
+    // On a ramp rung the opening line is the one thing this delve is for. It
+    // is phrased as an instruction to a Vanguard rather than a tutorial hint,
+    // and it only ever appears on the first three.
+    ctx.fillText(run.bannerNote || LEVEL.lesson || REGION.name,
+                 view.w / 2, view.h * 0.42 + 24);
     ctx.strokeStyle = 'rgba(196,164,116,.4)';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -7347,7 +7403,9 @@ window.addEventListener('orientationchange', () => setTimeout(resize, 120));
         ' \u00b7 slag ' + L.quota + '</span>' +
         // What waits at the gate. A rung's boss never changes, so naming it
         // here is the difference between choosing a delve and drawing one.
-        '<span class="ward">' + bossTitle(L) + bossNote(L) + '</span></p></span>' +
+        '<span class="ward">' + bossTitle(L) + bossNote(L) + '</span>' +
+        (L.lesson ? '<span class="teach">' + L.lesson + '</span>' : '') +
+        '</p></span>' +
         '<span class="standing" style="color:' + st.colour + '">' + st.text + '</span>';
       card.addEventListener('click', () => { pick.level = L.id; syncPick(); });
       lvlWrap.appendChild(card);
