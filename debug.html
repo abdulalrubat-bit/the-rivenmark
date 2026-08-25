@@ -224,6 +224,14 @@
   .setline{width:100%; max-width:520px; font:11px/1.5 ui-monospace,monospace;
     color:#8a7c60; text-align:left;}
   .setline b{color:#e0563f;}
+  .loadouts{width:100%; max-width:520px; text-align:left;}
+  .lrow{display:flex; flex-wrap:wrap; gap:5px;}
+  .lrow button{flex:1 1 auto; min-width:96px; font:600 11px/1.2 ui-monospace,monospace;
+    color:#cbbf9f; background:#1d1710; border:1px solid var(--line); border-radius:2px;
+    padding:7px 8px; cursor:pointer; touch-action:manipulation; text-align:left;}
+  .lrow button i{display:block; font-style:normal; font-size:9px; color:#8a7c60;
+    margin-top:2px;}
+  .lnote{font:11px/1.5 ui-monospace,monospace; color:#8a7c60; margin-top:5px;}
   .setline .on{color:#e6dcc4;}
 
   /* ---------- Gear ---------- */
@@ -410,6 +418,7 @@
     </div>
     <div class="gear-detail" id="gearDetail"></div>
     <div class="setline" id="setLine"></div>
+    <div class="loadouts" id="loadouts"></div>
     <button class="btn" id="gearClose">Back to the delve</button>
   </div>
 
@@ -852,6 +861,30 @@ const AFFIXES = [
 // from 30% to 73%. Left mutable so the balance harness can sweep it.
 let AFFIX_SCALE = 1;
 
+/* Some affixes suit one hero far more than the other, and say so. A `hero`
+   tag pays a bonus when it is worn by the Vanguard it was made for, which
+   turns "which is the bigger number" into "which is the bigger number for me"
+   -- and gives the two heroes genuinely different best-in-slot. */
+const SYNERGY = [
+  { id:'isaacWard',  hero:'isaac', stat:'ward',   mul:false, lo:0.04, hi:0.10, dp:0,
+    name:"Warden's",  word:'@ harm turned',
+    slots:['offhand','mail','girdle','ring1','ring2'] },
+  { id:'isaacSweep', hero:'isaac', stat:'sweep',  mul:true,  lo:0.10, hi:0.26, dp:0,
+    name:'Sun-Wide',  word:'+@ sweep',
+    slots:['blade','offhand','amulet'] },
+  { id:'zaydReach',  hero:'zayd',  stat:'range',  mul:true,  lo:0.10, hi:0.24, dp:0,
+    name:'Glaive-Cut', word:'+@ reach',
+    slots:['blade','amulet','ring1','ring2'] },
+  { id:'zaydHaste',  hero:'zayd',  stat:'fireDelay', mul:true, lo:-0.20, hi:-0.08, dp:0,
+    name:'Frost-Quick', word:'@ swing time',
+    slots:['blade','boots','ring1','ring2'] }
+];
+for (const sy of SYNERGY) AFFIXES.push(sy);
+// The slot pools are declared below, so registering into them waits until
+// they exist -- see the loop after SLOT_AFFIXES.
+// Worn by the hero it was forged for, a synergy affix is worth half again.
+const SYNERGY_BONUS = 1.5;
+
 const AFFIX_BY_ID = {};
 for (const a of AFFIXES) AFFIX_BY_ID[a.id] = a;
 
@@ -866,6 +899,14 @@ const SLOT_AFFIXES = {
   ring1:   ['damage','damageP','life','ward','speed','magnet','cadence'],
   ring2:   ['damage','damageP','life','ward','speed','magnet','cadence']
 };
+
+// Hero-tagged affixes join the pools of the slots they were forged for. Done
+// here rather than beside SYNERGY itself because the pools are declared after
+// it, and touching them earlier is a temporal-dead-zone error that takes the
+// whole page down at load.
+for (const sy of SYNERGY) {
+  for (const sl of sy.slots) if (SLOT_AFFIXES[sl]) SLOT_AFFIXES[sl].push(sy.id);
+}
 
 function rollRarity(depth) {
   // Deeper ground gives up better things. Shift weight off the bottom tier.
@@ -908,13 +949,19 @@ function rollItem(depth, slotId) {
            name: affixes.length ? AFFIX_BY_ID[affixes[0].id].name + ' ' + base : base };
 }
 
-function affixText(af) {
+function affixText(af, hero) {
   const a = AFFIX_BY_ID[af.id];
+  if (!a) return '';
   let v;
   if (a.mul) v = (af.v >= 0 ? '+' : '') + Math.round(af.v * 100) + '%';
   else if (a.id === 'ward') v = Math.round(af.v * 100) + '%';
   else v = (af.v >= 0 ? '+' : '') + (a.dp ? af.v.toFixed(a.dp) : af.v);
-  return a.word.replace('+@', v).replace('@', v);
+  let out = a.word.replace('+@', v).replace('@', v);
+  if (a.hero) {
+    out += ' \u2014 ' + HEROES[a.hero].name +
+           (hero === a.hero ? ' (worn: half again)' : '');
+  }
+  return out;
 }
 
 const rarityOf = it => RARITY.find(r => r.id === it.rarity) || RARITY[0];
@@ -947,8 +994,12 @@ function recomputeStats() {
     if (!it) continue;
     for (const af of it.affixes) {
       const a = AFFIX_BY_ID[af.id];
-      if (a.mul) mul[a.stat] = (mul[a.stat] === undefined ? 1 : mul[a.stat]) * (1 + af.v);
-      else add[a.stat] = (add[a.stat] || 0) + af.v;
+      if (!a) continue;
+      // An affix forged for this Vanguard pays more in their hands.
+      const k = (a.hero && a.hero === p.hero) ? SYNERGY_BONUS : 1;
+      const v = af.v * k;
+      if (a.mul) mul[a.stat] = (mul[a.stat] === undefined ? 1 : mul[a.stat]) * (1 + v);
+      else add[a.stat] = (add[a.stat] || 0) + v;
     }
   }
   // Set bonuses ride in on the same two piles, so they cannot be applied twice
@@ -2226,7 +2277,10 @@ function updateDrops(dt) {
     const d = Math.hypot(dx, dy) || 1;
     // Gear is drawn in at a shorter reach than slag: it should be picked up
     // on purpose, not hoovered off the far side of a room.
-    if (!d0.pulled && d < player.magnet * 0.55) d0.pulled = true;
+    // Vacuum looting. Gear used to need a deliberate walk-over; with the bag
+    // now sorted between delves rather than during one, there is nothing to
+    // decide in the moment, so picking it up should never cost tempo.
+    if (!d0.pulled && d < player.magnet * 1.6) d0.pulled = true;
     if (d0.pulled) {
       const k = Math.min(1, dt * 6);
       d0.vx = lerp(d0.vx, (dx / d) * 420, k);
@@ -5169,6 +5223,7 @@ const el = {
   bestLine: $('bestLine'),
   overTitle: $('overTitle'), overSub: $('overSub'), overStats: $('overStats'),
   delve: $('delve'), kitLine: $('kitLine'), gearSub: $('gearSub'), setLine: $('setLine'),
+  loadouts: $('loadouts'),
   vendor: $('vendor'), vendorList: $('vendorList'), vendorDetail: $('vendorDetail'),
   purseLine: $('purseLine'), vendorLine: $('vendorLine'),
   gear: $('gear'), gearSlots: $('gearSlots'), gearStats: $('gearStats'),
@@ -5211,7 +5266,7 @@ function blankStash() {
   const g = {};
   for (const sl of SLOTS) g[sl.id] = null;
   return { gear: g, vault: [], hero: 'isaac', seq: 0, xp: 0, level: 1,
-           coins: 0, pity: 0 };
+           coins: 0, pity: 0, loadouts: [] };
 }
 
 function loadStash() {
@@ -5233,6 +5288,22 @@ function loadStash() {
   out.level = levelForXp(out.xp);            // derived, never trusted from disk
   out.coins = Math.max(0, +st.coins || 0);
   out.pity = clamp(+st.pity || 0, 0, 20);
+  // Loadouts hold item ids, not items, so a preset can never resurrect a
+  // piece that has since been sold, tempered away or left in a delve.
+  if (Array.isArray(st.loadouts)) {
+    out.loadouts = st.loadouts.slice(0, LOADOUT_MAX).map(L => ({
+      name: String(L && L.name || 'Kit').slice(0, 18),
+      hero: HEROES[L && L.hero] ? L.hero : 'isaac',
+      slots: (() => {
+        const o = {};
+        for (const sl of SLOTS) {
+          const v = L && L.slots && L.slots[sl.id];
+          o[sl.id] = typeof v === 'number' ? v : null;
+        }
+        return o;
+      })()
+    }));
+  }
   return out;
 }
 
@@ -5423,6 +5494,66 @@ function endRun(won) {
    interrupts a run to offer a card. UPGRADES itself is kept only as the
    vendor's crafting table -- see the hub. */
 
+/* --- loadouts -------------------------------------------------------------
+   A preset is a list of item ids, not a copy of the items. Anything the
+   preset names that is no longer in the kit or the vault is simply skipped,
+   so a saved loadout degrades gracefully instead of conjuring back a piece
+   that was tempered, sold or lost in a delve.
+   ---------------------------------------------------------------------- */
+const LOADOUT_MAX = 4;
+
+function findItem(uid) {
+  if (uid == null) return null;
+  for (const sl of SLOTS) {
+    const it = stash.gear[sl.id];
+    if (it && it.uid === uid) return { it, from: 'gear', slot: sl.id };
+  }
+  for (let i = 0; i < stash.vault.length; i++) {
+    if (stash.vault[i].uid === uid) return { it: stash.vault[i], from: 'vault', index: i };
+  }
+  return null;
+}
+
+function saveLoadout(name) {
+  const slots = {};
+  for (const sl of SLOTS) {
+    const it = stash.gear[sl.id];
+    slots[sl.id] = it ? it.uid : null;
+  }
+  const L = { name: (name || 'Kit ' + (stash.loadouts.length + 1)).slice(0, 18),
+              hero: stash.hero || 'isaac', slots };
+  stash.loadouts.push(L);
+  if (stash.loadouts.length > LOADOUT_MAX) stash.loadouts.shift();
+  saveStash();
+  return L;
+}
+
+// Returns how many pieces it could actually restore, so the UI can say when a
+// preset has aged badly rather than silently equipping half a kit.
+function applyLoadout(L) {
+  if (!L) return { set: 0, missing: 0 };
+  let set = 0, missing = 0;
+  // Everything currently worn goes back to the vault first, or a swap could
+  // drop a piece on the floor of the gate-house.
+  for (const sl of SLOTS) {
+    const it = stash.gear[sl.id];
+    if (it) { stash.gear[sl.id] = null; stash.vault.push(it); }
+  }
+  for (const sl of SLOTS) {
+    const uid = L.slots[sl.id];
+    if (uid == null) continue;
+    const found = findItem(uid);
+    if (!found || found.from !== 'vault') { missing++; continue; }
+    if (found.it.slot !== sl.id) { missing++; continue; }
+    stash.vault.splice(found.index, 1);
+    stash.gear[sl.id] = found.it;
+    set++;
+  }
+  if (HEROES[L.hero]) stash.hero = L.hero;
+  saveStash();
+  return { set, missing };
+}
+
 /* --- the vendor ----------------------------------------------------------
    Coin exists to take the sting out of luck. Everything here is a way of
    spending it to make a specific thing happen rather than hoping it does:
@@ -5512,9 +5643,13 @@ let gearSel = null;   // {from:'bag'|'worn', index|slot}
    equip logic has to be written twice. */
 let gearCtx = null;
 
+// Mid-delve the bag is a record of what you have found, not a workbench:
+// sorting and equipping happen in the hub between delves, so a fight is never
+// paused to compare two rings.
 function runCtx() {
   return { gear: player.gear, bag: player.bag, cap: BAG_MAX, live: true,
-           sub: "The Vanguard's kit", back: 'Back to the delve',
+           readOnly: true,
+           sub: 'Carried so far', back: 'Back to the delve',
            bagName: 'Bag' };
 }
 function stashCtx() {
@@ -5627,7 +5762,40 @@ function renderGear() {
   }
 
   renderSetLine();
+  renderLoadouts();
   renderDetail();
+}
+
+// Presets, and the button that makes one. Only in the hub -- swapping kit
+// mid-delve is exactly what the hub exists to prevent.
+function renderLoadouts() {
+  if (!el.loadouts) return;
+  if (gearCtx.live) { el.loadouts.innerHTML = ''; return; }
+  let h = '<h5 class="gear-h">Loadouts</h5><div class="lrow">';
+  stash.loadouts.forEach((L, i) => {
+    const worn = SLOTS.filter(sl => L.slots[sl.id] != null).length;
+    h += '<button data-load="' + i + '">' + L.name +
+         '<i>' + worn + '/8 \u00b7 ' + HEROES[L.hero].name + '</i></button>';
+  });
+  if (stash.loadouts.length < LOADOUT_MAX) h += '<button data-save="1">Save current<i>as a preset</i></button>';
+  h += '</div><div class="lnote" id="lnote"></div>';
+  el.loadouts.innerHTML = h;
+
+  el.loadouts.querySelectorAll('[data-load]').forEach(b => {
+    b.onclick = () => {
+      const L = stash.loadouts[+b.dataset.load];
+      const r = applyLoadout(L);
+      gearSel = null;
+      renderGear();
+      const n = document.getElementById('lnote');
+      if (n) n.textContent = r.missing
+        ? L.name + ': ' + r.set + ' equipped, ' + r.missing + ' no longer in the vault'
+        : L.name + ': ' + r.set + ' equipped';
+    };
+    b.oncontextmenu = e => { e.preventDefault(); };
+  });
+  const sv = el.loadouts.querySelector('[data-save]');
+  if (sv) sv.onclick = () => { saveLoadout(); renderGear(); };
 }
 
 // How much of the Regalia is on, and what that is currently paying.
@@ -5692,18 +5860,21 @@ function renderDetail() {
   el.gearDetail.innerHTML =
     '<div class="dt" style="color:' + r.colour + '">' + it.name + '</div>' +
     '<div class="db">' + r.name + ' · ' + SLOT_BY_ID[it.slot].name + '</div>' +
-    '<ul>' + it.affixes.map(a => '<li>' + affixText(a) + '</li>').join('') + '</ul>' +
+    '<ul>' + it.affixes.map(a => '<li>' + affixText(a, gearCtx.live
+        ? player.hero : (stash.hero || 'isaac')) + '</li>').join('') + '</ul>' +
     (cmp.length
       ? '<div class="cmp">against ' + (worn ? worn.name : 'an empty slot') + ': ' +
         cmp.map(c => '<span class="' + (c.good ? 'up' : 'dn') + '">' +
                      c.txt + ' ' + c.name + '</span>').join(', ') + '</div>'
       : '') +
-    '<div class="gear-acts">' +
-      (gearSel.from === 'bag'
-        ? '<button class="prime" id="gaEquip">Equip</button>' +
-          '<button id="gaDrop">Discard</button>'
-        : '<button id="gaOff">Take off</button>') +
-    '</div>';
+    (gearCtx.readOnly
+      ? '<div class="cmp">Sorted back at the gate-house.</div>'
+      : '<div class="gear-acts">' +
+        (gearSel.from === 'bag'
+          ? '<button class="prime" id="gaEquip">Equip</button>' +
+            '<button id="gaDrop">Discard</button>'
+          : '<button id="gaOff">Take off</button>') +
+        '</div>');
   const eq = document.getElementById('gaEquip');
   if (eq) eq.onclick = equipSelected;
   const dp = document.getElementById('gaDrop');
@@ -6076,7 +6247,7 @@ showScreen('start');
 requestAnimationFrame(frame);
 </script>
 <script>
-/* generated 2026-08-25T02:43:29Z by tools/build-debug.js — do not edit */
+/* generated 2026-08-25T05:46:44Z by tools/build-debug.js — do not edit */
 /* =============================================================================
    THE RIVENMARK — debug overlay
    Injected into debug.html by tools/build-debug.js. Never shipped in the
