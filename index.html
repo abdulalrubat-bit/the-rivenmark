@@ -44,11 +44,16 @@
     padding:5px 10px 6px; border-radius:3px;
     background:linear-gradient(180deg,rgba(46,34,22,.82),rgba(18,12,7,.86));
     border:1px solid rgba(122,100,66,.42);
-    box-shadow:inset 0 1px 0 rgba(214,182,124,.16), 0 2px 10px rgba(0,0,0,.6);
+    box-shadow:inset 0 1px 0 rgba(214,182,124,.16),
+               0 4px 18px rgba(0,0,0,.85), 0 1px 3px rgba(0,0,0,.9);
     z-index:7;                       /* above the frame chrome, below screens */
   }
   .hud[hidden]{display:none;}
   .hud-left{flex:1; min-width:0; max-width:340px;}
+  /* Everything in the HUD is DOM over a canvas; a drop shadow is what stops it
+     reading as part of the picture. */
+  .hud, #bagBtn, .iconbtn{text-shadow:0 1px 2px rgba(0,0,0,.95);}
+  #bagBtn{box-shadow:0 4px 16px rgba(0,0,0,.8);}
 
   .bar{
     position:relative; height:14px; border:1px solid var(--line);
@@ -454,6 +459,10 @@ const MAX_DT        = 0.05;  // clamp after tab-switches / long frames
 
 // Extraction terms live on the level (see LEVELS); these are the fallbacks a
 // level may leave unset.
+// One light for the whole delve, high and off to the north-west. Every cast
+// shadow in the game is derived from it, so masonry, bodies and loot all agree
+// about where the light is -- which is most of what sells depth in a flat view.
+const LIGHT = { x: 0.62, y: 0.78, wall: 11, body: 5 };
 const HUD_H           = 78;   // canvas UI clears the HUD panel by this much
 const SWING_TIME      = 0.17; // how long the blade takes to come round
 const EXTRACT_QUOTA   = 70;  // slag needed before the ley-gate powers up
@@ -906,7 +915,8 @@ class SpatialHash {
    4. WORLD GENERATION
    ------------------------------------------------------------------------ */
 
-let walls = [];              // {x,y,w,h}
+let walls = [];              // {x,y,w,h} -- and {pit:true} for a chasm
+let pitGrid = null;          // cells that are a hole rather than masonry
 let wallGrid = null;         // SpatialHash of wall indices
 let wallSeen = null;         // stamp buffer for deduping multi-cell walls
 let wallStamp = 0;
@@ -1125,6 +1135,7 @@ function generateWorld(spawn, portal) {
   for (let k = 0; k < grid.length; k++) if (!seen[k]) grid[k] = SOLID;
 
   buildWallRects();
+  cutChasms(sc, pc);
   buildEdges();
   buildStains(spawn, portal);
   buildScenery(spawn, portal);
@@ -1345,6 +1356,12 @@ function buildWallRects() {
     }
   }
 
+  rebuildWallGrid();
+}
+
+// The broad-phase index over the wall list. Split out because chasms are added
+// after the rects are merged, and the index has to take them in too.
+function rebuildWallGrid() {
   wallGrid = new SpatialHash(WALL_CELL);
   wallSeen = new Int32Array(walls.length);
   wallStamp = 0;
@@ -1364,6 +1381,69 @@ function buildWallRects() {
 
 // Every face where rock meets open floor. Drawn as one batched neon rim, which
 // is what makes a grid of boxes read as a carved cave wall.
+/* Holes in the floor. A chasm is impassable like a wall, so it rides in the
+   same list and the same collision -- but it is a hole, not a mass, so it is
+   flagged and drawn as a pit falling away to black instead of coursed stone.
+   Cut after the wall rects so a chasm is always its own rect and never merged
+   into a run of masonry. */
+function cutChasms(sc, pc) {
+  pitGrid = new Uint8Array(GW * GH);
+  const want = 3 + ((Math.random() * 4) | 0);
+  let cut = 0;
+  for (let tries = 0; tries < 700 && cut < want; tries++) {
+    const w = 2 + ((Math.random() * 3) | 0), h = 2 + ((Math.random() * 3) | 0);
+    const cx = 3 + ((Math.random() * (GW - w - 6)) | 0);
+    const cy = 3 + ((Math.random() * (GH - h - 6)) | 0);
+    // open floor only, with a margin, and never near the spawn or the gate
+    let ok = true;
+    for (let y = cy - 1; y <= cy + h && ok; y++)
+      for (let x = cx - 1; x <= cx + w && ok; x++)
+        if (!inGrid(x, y) || cellAt(x, y) === SOLID) ok = false;
+    if (!ok) continue;
+    if (Math.abs(cx - sc.x) + Math.abs(cy - sc.y) < 9) continue;
+    if (Math.abs(cx - pc.x) + Math.abs(cy - pc.y) < 9) continue;
+
+    // A hole that severs the delve is a broken delve, so cut it, check every
+    // open cell is still reachable from the spawn, and put it back if not.
+    const undo = [];
+    for (let y = cy; y < cy + h; y++)
+      for (let x = cx; x < cx + w; x++) { undo.push(gi(x, y)); grid[gi(x, y)] = SOLID; }
+    if (!allReachable(sc)) {
+      for (const k of undo) grid[k] = OPEN;
+      continue;
+    }
+    for (const k of undo) pitGrid[k] = 1;
+    walls.push({ x: cx * CELL_W, y: cy * CELL_W,
+                 w: w * CELL_W, h: h * CELL_W, pit: true });
+    cut++;
+  }
+  if (cut) rebuildWallGrid();
+}
+
+// Is every open cell still walkable from the spawn? Used to refuse a chasm
+// that would cut the delve in two.
+function allReachable(sc) {
+  const seen = new Uint8Array(GW * GH);
+  const stack = [gi(sc.x, sc.y)];
+  if (grid[stack[0]] === SOLID) return false;
+  seen[stack[0]] = 1;
+  let n = 1, total = 0;
+  for (let i = 0; i < grid.length; i++) if (grid[i] === OPEN) total++;
+  while (stack.length) {
+    const k = stack.pop();
+    const cx = k % GW, cy = (k / GW) | 0;
+    for (let i = 0; i < 4; i++) {
+      const nx = cx + (i === 0 ? 1 : i === 1 ? -1 : 0);
+      const ny = cy + (i === 2 ? 1 : i === 3 ? -1 : 0);
+      if (!inGrid(nx, ny)) continue;
+      const nk = gi(nx, ny);
+      if (seen[nk] || grid[nk] === SOLID) continue;
+      seen[nk] = 1; n++; stack.push(nk);
+    }
+  }
+  return n === total;
+}
+
 function buildEdges() {
   const C = CELL_W;
   // Collect faces per line, then merge collinear neighbours into single long
@@ -1494,6 +1574,33 @@ function buildScenery(spawn, portal) {
   }
 
   scatterKnots(spawn, portal);
+  standPillars(spawn, portal);
+}
+
+// Columns, set where a hall would have been built with them: down the middle
+// of the wider open ground, and in pairs flanking a long run of wall.
+function standPillars(spawn, portal) {
+  let placed = 0;
+  for (let tries = 0; tries < 900 && placed < 26; tries++) {
+    const c = openCells[(Math.random() * openCells.length) | 0];
+    if (dist2(c.x, c.y, spawn.x, spawn.y) < 170 * 170) continue;
+    if (dist2(c.x, c.y, portal.x, portal.y) < 170 * 170) continue;
+    // needs room around it, or it blocks a corridor it has no business in
+    let clear = true;
+    for (let a = 0; a < 8 && clear; a++) {
+      const t = a / 8 * TAU;
+      if (pointInWalls(c.x + Math.cos(t) * 46, c.y + Math.sin(t) * 46, 6)) clear = false;
+    }
+    if (!clear) continue;
+    let near = false;
+    for (let i = 0; i < props.length && !near; i++) {
+      if (props[i].kind !== 'pillar') continue;
+      if (dist2(props[i].x, props[i].y, c.x, c.y) < 120 * 120) near = true;
+    }
+    if (near) continue;
+    props.push({ x: c.x + rand(-6, 6), y: c.y + rand(-6, 6), q: 0, kind: 'pillar' });
+    placed++;
+  }
 }
 
 /* Debris arrives in knots, where it would actually collect: jammed into
@@ -3202,11 +3309,15 @@ function forgeVignette() {
   const w = Math.max(1, view.w), h = Math.max(1, view.h);
   const c = newCanvas(w, h);
   const g = c.getContext('2d');
-  const grd = g.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.26,
-                                     w / 2, h / 2, Math.max(w, h) * 0.74);
+  // Pulled in tighter and taken darker at the rim: the Vanguard carries the
+  // only light, so the edge of the screen should read as the edge of what that
+  // light reaches rather than as the edge of a picture.
+  const grd = g.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.16,
+                                     w / 2, h / 2, Math.max(w, h) * 0.70);
   grd.addColorStop(0, 'rgba(0,0,0,0)');
-  grd.addColorStop(0.55, 'rgba(8,5,3,.42)');
-  grd.addColorStop(1, 'rgba(4,2,1,.92)');
+  grd.addColorStop(0.42, 'rgba(8,5,3,.34)');
+  grd.addColorStop(0.74, 'rgba(6,4,2,.72)');
+  grd.addColorStop(1, 'rgba(2,1,1,.985)');
   g.fillStyle = grd;
   g.fillRect(0, 0, w, h);
   // Faint warmth up top, cold blue down low: torch above, something else below.
@@ -3242,6 +3353,7 @@ function forgeAll() {
   SPR.loot = forgeLoot(false);
   SPR.lootBig = forgeLoot(true);
   forgeProps();
+  forgeShadow();
   forgeGround();
   forgeWallCourses();
   vignette = forgeVignette();
@@ -3267,6 +3379,10 @@ function resize() {
   ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
   if (forgedAt !== view.dpr) { forgeAll(); forgedAt = view.dpr; }
   else vignette = forgeVignette();
+  // Fog and ash are screen-space, so they are rebuilt whenever the viewport
+  // changes rather than baked with the sprites.
+  forgeFog();
+  seedMotes();
 }
 
 /* --- world ------------------------------------------------------------- */
@@ -3779,11 +3895,13 @@ function drawGround(x0, y0, x1, y1) {
 function drawWalls(x0, y0, x1, y1) {
   // 1. The shadow the mass throws onto the floor. Drawn for every wall first,
   //    so a neighbouring wall's shadow never lands on top of finished stone.
-  ctx.fillStyle = 'rgba(6,5,4,.55)';
+  ctx.fillStyle = 'rgba(6,5,4,.58)';
+  const sx = LIGHT.x * LIGHT.wall, sy = LIGHT.y * LIGHT.wall;
   for (let i = 0; i < walls.length; i++) {
     const w = walls[i];
+    if (w.pit) continue;                       // a hole throws nothing
     if (w.x > x1 || w.y > y1 || w.x + w.w < x0 || w.y + w.h < y0) continue;
-    ctx.fillRect(w.x + 5, w.y + 7, w.w, w.h);
+    ctx.fillRect(w.x + sx, w.y + sy, w.w, w.h);
   }
 
   // 2. The mass itself. A flat dark fill first so nothing shows between tiles,
@@ -3792,8 +3910,24 @@ function drawWalls(x0, y0, x1, y1) {
   ctx.fillStyle = PAL.stoneLow;
   for (let i = 0; i < walls.length; i++) {
     const w = walls[i];
+    if (w.pit) continue;
     if (w.x > x1 || w.y > y1 || w.x + w.w < x0 || w.y + w.h < y0) continue;
     ctx.fillRect(w.x, w.y, w.w, w.h);
+  }
+  // Chasms: the floor stops and keeps going down. A rim of light on the near
+  // lip, then black -- nothing to say how far, which is the whole point.
+  for (let i = 0; i < walls.length; i++) {
+    const w = walls[i];
+    if (!w.pit) continue;
+    if (w.x > x1 || w.y > y1 || w.x + w.w < x0 || w.y + w.h < y0) continue;
+    const g2 = ctx.createLinearGradient(0, w.y - 6, 0, w.y + w.h * 0.75);
+    g2.addColorStop(0,    'rgba(46,38,28,.95)');
+    g2.addColorStop(0.22, 'rgba(14,11,8,.99)');
+    g2.addColorStop(1,    '#000000');
+    ctx.fillStyle = g2;
+    ctx.fillRect(w.x, w.y, w.w, w.h);
+    ctx.fillStyle = 'rgba(198,178,138,.20)';   // lip catching the light
+    ctx.fillRect(w.x, w.y, w.w, 2);
   }
   if (wallTops.length && !lowFx) {
     const T = CELL_W;
@@ -3802,6 +3936,7 @@ function drawWalls(x0, y0, x1, y1) {
     for (let cy = cy0; cy <= cy1; cy++) {
       for (let cx = cx0; cx <= cx1; cx++) {
         if (cellAt(cx, cy) !== SOLID) continue;
+        if (pitGrid && pitGrid[gi(cx, cy)]) continue;    // a hole gets no top
         const h = ((cx * 73856093) ^ (cy * 19349663)) >>> 0;
         ctx.drawImage(wallTops[h % WALL_TOPS], cx * T, cy * T, T, T);
       }
@@ -3887,8 +4022,143 @@ function wallGradient(h) {
   return g;
 }
 
+// A soft shadow, baked once and blitted under everything that stands on the
+// floor. Scaled per body rather than re-forged, and never blurred at draw
+// time -- shadowBlur measured 7ms a crescent earlier in this project and
+// nothing has made it cheaper since.
+/* --- air ------------------------------------------------------------------
+   Two layers that sit between the floor and the eye: fog drifting over the
+   ground, and motes of ash hanging in front of it. Both are screen-space and
+   parallaxed off the camera rather than placed in the world, so they cost the
+   same whatever the delve looks like and never need generating.
+   ---------------------------------------------------------------------- */
+let fogTile = null;
+const MOTES = 54;
+const motes = [];
+
+function forgeFog() {
+  const S = 256;
+  fogTile = newCanvas(S, S);
+  const g = fogTile.getContext('2d');
+  for (let i = 0; i < 26; i++) {
+    const x = Math.random() * S, y = Math.random() * S;
+    const r = 34 + Math.random() * 70;
+    const grd = g.createRadialGradient(x, y, 0, x, y, r);
+    grd.addColorStop(0, 'rgba(150,150,160,.055)');
+    grd.addColorStop(1, 'rgba(150,150,160,0)');
+    g.fillStyle = grd;
+    g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+  }
+}
+
+function seedMotes() {
+  motes.length = 0;
+  for (let i = 0; i < MOTES; i++) {
+    motes.push({
+      x: Math.random(), y: Math.random(),
+      // three depths: the near ones drift faster and read bigger
+      z: 0.35 + Math.random() * 0.85,
+      s: 0.7 + Math.random() * 1.9,
+      vy: 3 + Math.random() * 9,
+      vx: -5 + Math.random() * 10,
+      a: 0.12 + Math.random() * 0.3
+    });
+  }
+}
+
+// Fog is two copies of one tile, drifting at different speeds and parallaxed
+// against the camera, which reads as depth without a second texture.
+function drawFog(t) {
+  if (!fogTile || lowFx) return;
+  // One layer, source-over, point-sampled. Two layers under 'lighter' measured
+  // 20ms a frame on the software rasteriser -- more than the rest of the game
+  // put together -- because it is two full-viewport alpha blends. This is the
+  // same picture for a fraction of it: additive blending and the second pass
+  // were what cost, not the texture.
+  const S = 512;
+  let ox = (-cam.x * 0.9 + t * 6) % S; if (ox > 0) ox -= S;
+  let oy = (-cam.y * 0.9 + t * 3) % S; if (oy > 0) oy -= S;
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  for (let y = oy; y < view.h; y += S)
+    for (let x = ox; x < view.w; x += S)
+      ctx.drawImage(fogTile, x, y, S, S);
+  ctx.imageSmoothingEnabled = true;
+  ctx.restore();
+}
+
+// Ash hanging in the air, in front of everything. Screen-space with a parallax
+// nudge from the camera, so it belongs to the air rather than to the floor.
+function drawMotes(t) {
+  if (lowFx) return;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < motes.length; i++) {
+    const m = motes[i];
+    let x = m.x * view.w + (m.vx * t) - cam.x * (1 - m.z) * 0.25;
+    let y = m.y * view.h + (m.vy * t) - cam.y * (1 - m.z) * 0.25;
+    x = ((x % view.w) + view.w) % view.w;
+    y = ((y % view.h) + view.h) % view.h;
+    const sz = m.s * m.z;
+    ctx.fillStyle = 'rgba(214,198,164,' + (m.a * m.z).toFixed(3) + ')';
+    ctx.fillRect(x, y, sz, sz);
+  }
+  ctx.restore();
+}
+
+function forgeShadow() {
+  SPR.shadow = forge(64, g => {
+    const grd = g.createRadialGradient(0, 0, 0, 0, 0, 30);
+    grd.addColorStop(0,   'rgba(0,0,0,.62)');
+    grd.addColorStop(0.55,'rgba(0,0,0,.34)');
+    grd.addColorStop(1,   'rgba(0,0,0,0)');
+    g.fillStyle = grd;
+    g.beginPath(); g.ellipse(0, 0, 30, 30, 0, 0, TAU); g.fill();
+  });
+}
+
+// Anything that stands gets one: squashed into an ellipse and thrown along the
+// light, so a body reads as being *on* the floor rather than pasted over it.
+function dropShadow(x, y, r, lift) {
+  const sp = SPR.shadow;
+  if (!sp) return;
+  const w = r * 2.05, h = r * 1.05;
+  const ox = x + LIGHT.x * (LIGHT.body + (lift || 0));
+  const oy = y + LIGHT.y * (LIGHT.body + (lift || 0)) + r * 0.42;
+  ctx.drawImage(sp, ox - w / 2, oy - h / 2, w, h);
+}
+
 function forgeProps() {
   const P = (kind, span, paint) => { SPR['p_' + kind] = forge(span, paint); };
+
+  // A standing column. Authored with its base at the sprite's centre and the
+  // shaft running up, so y-sorting against bodies works on the base.
+  P('pillar', 96, g => {
+    g.translate(0, 6);
+    g.fillStyle = 'rgba(4,3,2,.5)';
+    g.beginPath(); g.ellipse(3, 2, 15, 6, 0, 0, TAU); g.fill();
+    for (let i = 0; i < 5; i++) {
+      const y = -i * 11, w = 22 - i * 0.7;
+      const grd = g.createLinearGradient(-w / 2, 0, w / 2, 0);
+      const t = 92 + i * 3;
+      grd.addColorStop(0,   'rgb(' + Math.round(t * 0.72) + ',' + Math.round(t * 0.65) + ',' + Math.round(t * 0.52) + ')');
+      grd.addColorStop(0.42,'rgb(' + Math.round(t * 1.42) + ',' + Math.round(t * 1.30) + ',' + Math.round(t * 1.06) + ')');
+      grd.addColorStop(1,   'rgb(' + Math.round(t * 0.80) + ',' + Math.round(t * 0.72) + ',' + Math.round(t * 0.58) + ')');
+      g.fillStyle = grd;
+      g.fillRect(-w / 2, y - 11, w, 11);
+      g.fillStyle = 'rgba(10,8,5,.55)';
+      g.fillRect(-w / 2, y - 11, w, 1.4);
+      if (Math.random() < 0.5) {
+        g.fillStyle = 'rgba(12,10,7,.22)';
+        g.fillRect(-w / 2 + Math.random() * w * 0.6, y - 9, 2 + Math.random() * 3, 8);
+      }
+    }
+    // capital, catching the light
+    g.fillStyle = 'rgba(226,208,166,.9)';
+    g.fillRect(-14, -60, 28, 5);
+    g.fillStyle = 'rgba(150,130,94,.9)';
+    g.fillRect(-14, -55, 28, 3);
+  });
 
   /* --- wall fittings: authored pointing +x, out of the stone ------------ */
   P('torch', 34, g => {
@@ -4108,13 +4378,61 @@ function forgeProps() {
   }
 }
 
+// Scenery that stands up rather than lying flat. These are drawn with the
+// bodies, sorted by depth, so a thrall can pass behind a pillar and be hidden
+// by it -- which is the cheapest verticality a flat view can buy.
+const STANDING = { pillar: 26, barrel: 12, crate: 11, urn: 10, banner: 16, chain: 14 };
+
 function drawProps(x0, y0, x1, y1) {
   if (lowFx) return;
   for (let i = 0; i < props.length; i++) {
     const p = props[i];
+    if (STANDING[p.kind]) continue;            // drawn later, with the bodies
     if (p.x < x0 || p.x > x1 || p.y < y0 || p.y > y1) continue;
     const spr = SPR['p_' + p.kind + '_' + p.q];
     if (spr) blit(spr, p.x, p.y);
+  }
+}
+
+// One depth-sorted pass over everything that stands on the floor: standing
+// scenery, bodies, the player. Sorting by the foot rather than the centre is
+// what makes an overlap look like one thing being in front of another.
+const _sortable = [];
+function drawStanding(t, x0, y0, x1, y1) {
+  _sortable.length = 0;
+  if (!lowFx) {
+    for (let i = 0; i < props.length; i++) {
+      const p = props[i];
+      if (!STANDING[p.kind]) continue;
+      if (p.x < x0 || p.x > x1 || p.y < y0 || p.y > y1) continue;
+      _sortable.push(p);
+    }
+  }
+  for (let i = 0; i < enemies.length; i++) {
+    const e = enemies[i];
+    if (e.hp <= 0) continue;
+    if (e.x < x0 || e.x > x1 || e.y < y0 || e.y > y1) continue;
+    _sortable.push(e);
+  }
+  _sortable.push(player);
+  _sortable.sort((a, b) => a.y - b.y);
+
+  // Shadows first, all of them, so one body's shadow never lands on top of
+  // another body that is standing in front of it.
+  for (let i = 0; i < _sortable.length; i++) {
+    const o = _sortable[i];
+    if (o.kind && STANDING[o.kind]) dropShadow(o.x, o.y, STANDING[o.kind], 2);
+    else dropShadow(o.x, o.y, o.r || 13, 0);
+  }
+  for (let i = 0; i < _sortable.length; i++) {
+    const o = _sortable[i];
+    if (o === player) { drawPlayer(t); continue; }
+    if (o.kind && STANDING[o.kind]) {
+      const spr = SPR['p_' + o.kind + '_' + o.q];
+      if (spr) blit(spr, o.x, o.y);
+    } else {
+      drawEnemy(o);
+    }
   }
 }
 
@@ -4626,21 +4944,21 @@ function draw(t) {
 
   drawGround(x0, y0, x1, y1);
   drawPortal(t);
+  ctx.restore();
+  drawFog(t);                       // screen-space: drifts over the ground
+  ctx.save();
+  ctx.translate(-cam.x + shx, -cam.y + shy);
   drawWalls(x0, y0, x1, y1);
   drawProps(x0, y0, x1, y1);
   drawLoot(t);
   drawDrops(t);
-  for (let i = 0; i < enemies.length; i++) {
-    const e = enemies[i];
-    if (e.x < x0 || e.x > x1 || e.y < y0 || e.y > y1) continue;
-    drawEnemy(e);
-  }
-  drawPlayer(t);
+  drawStanding(t, x0, y0, x1, y1);
   drawArcs();
   drawParticles();
   if (!lowFx) drawLightPass(t);
   ctx.restore();
 
+  drawMotes(t);
   if (vignette && !lowFx) ctx.drawImage(vignette, 0, 0, view.w, view.h);
   if (run && run.banner > 0 && state !== 'menu') {
     const a = Math.min(1, run.banner / 1.1) * Math.min(1, (4.2 - run.banner) / 0.5);
