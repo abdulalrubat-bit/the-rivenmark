@@ -1326,6 +1326,10 @@ const SOLID = 1, OPEN = 0;
 let grid = null;          // Uint8Array, row-major
 let edges = [];           // {x1,y1,x2,y2,nx,ny} lit rock/floor boundaries
 let props = [];           // {x,y,rot,kind} scenery instances
+// Just the ones that can be broken, so the crescent's per-substep test walks a
+// handful of entries rather than the several hundred pieces of furniture in a
+// delve.
+let propGrid = [];
 let lamps = [];           // {x,y,color} ambient light sources
 let openCells = [];       // {x,y} world centres of every reachable cell
 // Walls touching each open cell, 0..4. A corridor scores 2, a dead end 3.
@@ -1961,6 +1965,7 @@ function buildScenery(spawn, portal) {
 
   scatterKnots(spawn, portal);
   standPillars(spawn, portal);
+  indexBreakables();
 }
 
 // Columns, set where a hall would have been built with them: down the middle
@@ -2315,6 +2320,22 @@ function placePacks(spawn) {
     }
   }
 
+  // Pitch where the fighting will be. Scattered by the scenery pass a delve
+  // averaged five barrels across four million square units -- you would go
+  // whole runs without ever standing near one, and a tactic you cannot reach
+  // is not a tactic. They go beside the packs instead, which is the only place
+  // a barrel is interesting: something has to be standing next to it.
+  for (let i = 0; i < sites.length; i++) {
+    if (Math.random() > PITCH_RATE) continue;
+    const st = sites[i];
+    const n = 1 + ((Math.random() * 2) | 0);
+    for (let k = 0; k < n; k++) {
+      const pos = scatterNear(st.x, st.y, 74, 16, spawn);
+      if (!pos) continue;
+      props.push({ x: pos.x, y: pos.y, q: (Math.random() * 4) | 0, kind: 'barrel' });
+    }
+  }
+
   // The gate is the objective, so it is guarded -- and that guard is awake to
   // nobody until you come for it.
   for (let k = 0; k < 6; k++) {
@@ -2323,6 +2344,9 @@ function placePacks(spawn) {
     const g = pos && placeEnemy(kind, pos.x, pos.y, 0.85);
     if (g && k < 2) makeElite(g);      // the gate is held by champions
   }
+
+  // The barrels above were added after the scenery pass indexed itself.
+  indexBreakables();
 }
 
 // A free spot within `spread` of a point, clear of rock. Returns null rather
@@ -2615,6 +2639,89 @@ function maybeDropItem(e) {
 const HAZARD_TICK = 0.4;   // how often standing in one costs you
 let hazards = [];
 
+/* --- reactive scenery -----------------------------------------------------
+   The player has a stick and an automatic blade, so the only tactical input
+   they have is *where* they fight. That is what this is for: a room with a
+   pitch barrel in it is a different room, and standing in the right part of
+   it is a decision the controls can actually express.
+
+   A barrel takes a beat to go up after it is broken, so setting one off and
+   then standing in it is your own fault rather than the auto-aim's. A pillar
+   comes down at once, because a column of stone does not hesitate.
+   -------------------------------------------------------------------- */
+const PROP_HP    = { barrel: 26, pillar: 70 };
+let PITCH_RATE   = 0.55;   // odds a pack site gets pitch beside it; a sweep knob
+// Long enough to walk out of at hero speed with room to spare. The blade aims
+// itself, so the player cannot choose not to break a barrel between them and
+// what they are hitting -- the fuse is the whole of their agency here, and it
+// has to be generous enough that being caught is a mistake rather than a tax.
+const BARREL_FUSE = 1.1;
+const BARREL_R    = 96;
+const PILLAR_R    = 78;
+// Shorter than a barrel's -- a column of stone does not hesitate long -- but
+// not nothing. The blade aims itself, so an instant collapse for a third of a
+// hero's life is a blow the player was never offered the chance to avoid.
+const PILLAR_FUSE = 0.5;
+
+// Everything in reach, player included. Scenery does not take sides.
+function blastAt(x, y, r, dmg, hue) {
+  shake(8);
+  burst(x, y, hue, 22, 300);
+  ring(x, y, hue, r * 0.35, r, 0.34);
+  enemyGrid.query(x, y, r + 30, _near);
+  for (let i = 0; i < _near.length; i++) {
+    const e = _near[i];
+    if (e.hp <= 0) continue;
+    const d = Math.hypot(e.x - x, e.y - y);
+    if (d > r + e.r) continue;
+    damageEnemy(e, dmg * (1 - Math.min(0.6, d / (r * 2))));
+  }
+  if (dist2(player.x, player.y, x, y) < r * r) {
+    const was = player.invuln;
+    player.invuln = 0;
+    hurtPlayerBy(dmg * 0.4, x, y);
+    player.invuln = Math.max(player.invuln, was);
+  }
+}
+
+function hurtProp(pr, dmg) {
+  const cap = PROP_HP[pr.kind];
+  if (!cap || pr.gone) return;
+  if (pr.hp === undefined) pr.hp = cap;
+  pr.hp -= dmg;
+  pr.shake = 0.16;
+  if (pr.hp > 0) return;
+  pr.gone = true;
+  // Both queue a marked circle, drawn like a slam so every promise the floor
+  // makes reads the same way. What differs is how long you have.
+  if (pr.kind === 'barrel') {
+    slams.push({ x: pr.x, y: pr.y, r: BARREL_R, wind: BARREL_FUSE, t: 0,
+                 dmg: 0, struck: false, barrel: true });
+  } else {
+    slams.push({ x: pr.x, y: pr.y, r: PILLAR_R, wind: PILLAR_FUSE, t: 0,
+                 dmg: 0, struck: false, pillar: true });
+  }
+}
+
+// A struck barrel rocks before it goes. Cheap, and it is the only warning the
+// player gets that the thing they are standing next to is now a bomb.
+function updateProps(dt) {
+  for (let i = 0; i < propGrid.length; i++) {
+    const pr = propGrid[i];
+    if (pr.shake > 0) pr.shake = Math.max(0, pr.shake - dt);
+  }
+}
+
+// Whatever is standing inside a radius and can be broken.
+function hurtPropsNear(x, y, r, dmg) {
+  for (let i = 0; i < props.length; i++) {
+    const pr = props[i];
+    if (pr.gone || !PROP_HP[pr.kind]) continue;
+    if (dist2(pr.x, pr.y, x, y) > r * r) continue;
+    hurtProp(pr, dmg);
+  }
+}
+
 function addHazard(x, y, r, dps, life, hue) {
   if (hazards.length > 40) hazards.shift();
   hazards.push({ x, y, r, dps, life, max: life, tick: 0,
@@ -2672,11 +2779,28 @@ function updateSlams(dt) {
     s.t += dt;
     if (!s.struck && s.t >= s.wind) {
       s.struck = true;
-      shake(7);
-      burst(s.x, s.y, '#ffce70', 20, 260);
-      ring(s.x, s.y, '#ffce70', s.r * 0.5, s.r, 0.32);
-      if (dist2(player.x, player.y, s.x, s.y) < s.r * s.r) {
-        hurtPlayerBy(s.dmg, s.x, s.y);
+      if (s.barrel) {
+        const dmg = 62 * (1 + (LEVEL.depth || 0));
+        blastAt(s.x, s.y, s.r, dmg, '#ff9a3c');
+        // and it keeps burning, so the ground it took stays taken
+        addHazard(s.x, s.y, s.r * 0.78, dmg * 0.22, 4.5, '#ff9a3c');
+        // pitch spreads: a barrel takes its neighbours with it
+        hurtPropsNear(s.x, s.y, s.r, 999);
+      } else if (s.pillar) {
+        blastAt(s.x, s.y, s.r, 88 * (1 + (LEVEL.depth || 0)), '#cbbfa4');
+        for (let i = 0; i < 5; i++) {
+          props.push({ x: s.x + rand(-24, 24), y: s.y + rand(-16, 16),
+                       q: (Math.random() * 4) | 0, kind: 'rubble' });
+        }
+      } else {
+        shake(7);
+        burst(s.x, s.y, '#ffce70', 20, 260);
+        ring(s.x, s.y, '#ffce70', s.r * 0.5, s.r, 0.32);
+        // and a slam brings scenery down with it
+        hurtPropsNear(s.x, s.y, s.r, s.dmg);
+        if (dist2(player.x, player.y, s.x, s.y) < s.r * s.r) {
+          hurtPlayerBy(s.dmg, s.x, s.y);
+        }
       }
     }
     if (s.t >= s.wind + 0.34) slams.splice(i, 1);
@@ -2694,13 +2818,17 @@ function drawSlams(t) {
     // This was a tenth of its current strength and simply did not register
     // against a lit floor -- for a blow that takes half a hero's life the
     // warning has to be the brightest thing on the ground.
+    // Falling stone is dust, not fire.
+    const warm = s.pillar ? [198, 186, 160] : [226, 120, 44];
+    const rim  = s.pillar ? [232, 222, 196] : [255, 206, 112];
+    const rgba = (c, a) => 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a.toFixed(3) + ')';
     const fill = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.r);
-    fill.addColorStop(0, 'rgba(226,120,44,' + (0.06 + 0.16 * f).toFixed(3) + ')');
-    fill.addColorStop(0.72, 'rgba(226,150,60,' + (0.04 + 0.12 * f).toFixed(3) + ')');
-    fill.addColorStop(1, 'rgba(255,206,112,' + (0.10 + 0.22 * f).toFixed(3) + ')');
+    fill.addColorStop(0, rgba(warm, 0.06 + 0.16 * f));
+    fill.addColorStop(0.72, rgba(warm, 0.04 + 0.12 * f));
+    fill.addColorStop(1, rgba(rim, 0.10 + 0.22 * f));
     ctx.fillStyle = fill;
     ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, TAU); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,214,130,' + (0.55 + 0.45 * f).toFixed(3) + ')';
+    ctx.strokeStyle = rgba(rim, 0.55 + 0.45 * f);
     ctx.lineWidth = 3;
     ctx.beginPath(); ctx.arc(s.x, s.y, s.r - 1.5, 0, TAU); ctx.stroke();
     // and a closing sweep, so the wind-up reads as a countdown and not a stain
@@ -3425,6 +3553,18 @@ function updateArcs(dt) {
         damageEnemy(e, b.dmg);
         b.hit.push(e);
       }
+      // Scenery is in the way of an edge too. Only the leading centre is
+      // tested against it rather than the whole sweep: a barrel is a thing you
+      // aim at by standing somewhere, and cutting one down every time a horn
+      // happened to clip it would make the room disassemble itself.
+      for (let k = 0; k < propGrid.length; k++) {
+        const pr = propGrid[k];
+        if (pr.gone || b.hit.indexOf(pr) !== -1) continue;
+        const rr = pr.kind === 'pillar' ? 18 : 13;
+        if (dist2(b.x, b.y, pr.x, pr.y) > rr * rr) continue;
+        hurtProp(pr, b.dmg);
+        b.hit.push(pr);
+      }
     }
     if (!b.dead) arcs[w++] = b;
   }
@@ -3800,6 +3940,7 @@ function update(dt) {
   compactEnemies();
   updateLoot(dt);
   updateInvasion(dt);
+  updateProps(dt);
   updateSlams(dt);
   updateHazards(dt);
   updateDrops(dt);
@@ -5485,6 +5626,20 @@ function forgeProps() {
   }
 }
 
+// The breakable subset, gathered once a delve is cut. Pillars and pitch
+// barrels only -- a crate is furniture.
+function indexBreakables() {
+  propGrid = [];
+  for (let i = 0; i < props.length; i++) {
+    const pr = props[i];
+    if (!PROP_HP[pr.kind]) continue;
+    pr.hp = PROP_HP[pr.kind];
+    pr.gone = false;
+    pr.shake = 0;
+    propGrid.push(pr);
+  }
+}
+
 // Scenery that stands up rather than lying flat. These are drawn with the
 // bodies, sorted by depth, so a thrall can pass behind a pillar and be hidden
 // by it -- which is the cheapest verticality a flat view can buy.
@@ -5510,7 +5665,7 @@ function drawStanding(t, x0, y0, x1, y1) {
   if (!lowFx) {
     for (let i = 0; i < props.length; i++) {
       const p = props[i];
-      if (!STANDING[p.kind]) continue;
+      if (!STANDING[p.kind] || p.gone) continue;
       if (p.x < x0 || p.x > x1 || p.y < y0 || p.y > y1) continue;
       _sortable.push(p);
     }
@@ -5536,7 +5691,11 @@ function drawStanding(t, x0, y0, x1, y1) {
     if (o === player) { drawPlayer(t); continue; }
     if (o.kind && STANDING[o.kind]) {
       const spr = SPR['p_' + o.kind + '_' + o.q];
-      if (spr) blit(spr, o.x, o.y);
+      // A struck barrel rocks on its base, so a room tells you it is about to
+      // be a worse room.
+      if (spr && o.shake > 0) {
+        blit(spr, o.x + Math.sin(o.shake * 90) * 2.4, o.y);
+      } else if (spr) blit(spr, o.x, o.y);
     } else {
       drawEnemy(o);
     }
