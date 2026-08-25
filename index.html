@@ -576,18 +576,43 @@ const BASE_PLAYER = {
 };
 
 // Enemy archetypes. `weight` is the spawn share, ramped by `from` (seconds).
+// role decides how a body fights, not how hard. Until now every kind pressed
+// straight in and differed only in speed and hit points, which makes a horde
+// of five types read as one type at five sizes.
+//   press  -- walks at you. The baseline the others are read against.
+//   flank  -- refuses the front. Arcs wide across open ground and commits
+//             only once it is off your shoulder; funnels like anything else
+//             in a corridor, because there is no room to go round.
+//   anchor -- holds ground instead of chasing. Takes the narrowest cell it
+//             can find near where it woke and guards it, and braces on a
+//             rhythm you can read: shielded and immovable, then open.
 const ENEMY_TYPES = {
   thrall:   { r: 13, speed: 96,  hp: 34,  dmg: 8,  tech: 1, cd: 0.95, mass: 1.0,
+              role: 'press',
               color: '#9dbb5a', halo: 'rgba(157,187,90,.20)', weight: 10, from: 0 },
   eclipse:    { r: 11, speed: 152, hp: 22,  dmg: 6,  tech: 1, cd: 0.70, mass: 0.7,
+              role: 'flank',
               color: '#b07cff', halo: 'rgba(176,124,255,.22)', weight: 8,  from: 25 },
   deceiver: { r: 24, speed: 76,  hp: 540, dmg: 32, tech: 30, cd: 1.15, mass: 7.0,
+              role: 'press',
               color: '#e8c060', halo: 'rgba(232,192,96,.22)', weight: 0, from: 1e9 },
   mirage:   { r: 20, speed: 92,  hp: 1,   dmg: 0,  tech: 0,  cd: 9.0,  mass: 0.2,
+              role: 'press',
               color: '#e8c060', halo: 'rgba(232,192,96,.18)', weight: 0, from: 1e9 },
   breaker: { r: 23, speed: 62,  hp: 135, dmg: 21, tech: 4, cd: 1.30, mass: 2.8,
+              role: 'anchor',
               color: '#e0552a', halo: 'rgba(224,85,42,.22)', weight: 4,  from: 55 }
 };
+
+// --- role tuning ----------------------------------------------------------
+const FLANK_OPEN   = 190;  // inside this it stops manoeuvring and commits
+const FLANK_SWING  = 1.75; // radians round the player it wants to come from
+const FLANK_COMMIT = 2.6;  // seconds it presses before it may manoeuvre again
+const ANCHOR_POST  = 260;  // how far it will look for ground worth holding
+const ANCHOR_GUARD = 330;  // and how far off that post it will step to meet you
+const BRACE_UP     = 2.2;  // seconds shielded
+const BRACE_DOWN   = 1.7;  // and seconds open, which is your window
+const BRACE_SOAK   = 0.26; // damage that gets through the guard
 
 // One place for the look. Everything on the canvas pulls from here.
 const PAL = {
@@ -1188,6 +1213,8 @@ let edges = [];           // {x1,y1,x2,y2,nx,ny} lit rock/floor boundaries
 let props = [];           // {x,y,rot,kind} scenery instances
 let lamps = [];           // {x,y,color} ambient light sources
 let openCells = [];       // {x,y} world centres of every reachable cell
+// Walls touching each open cell, 0..4. A corridor scores 2, a dead end 3.
+const narrowGrid = new Uint8Array(GW * GH);
 
 const gi = (cx, cy) => cy * GW + cx;
 const inGrid = (cx, cy) => cx >= 0 && cy >= 0 && cx < GW && cy < GH;
@@ -1354,10 +1381,19 @@ function generateWorld(spawn, portal) {
   const stack = [gi(sc.x, sc.y)];
   seen[stack[0]] = 1;
   openCells = [];
+  narrowGrid.fill(0);
   while (stack.length) {
     const k = stack.pop();
     const cx = k % GW, cy = (k / GW) | 0;
     openCells.push({ x: cx * CELL_W + CELL_W / 2, y: cy * CELL_W + CELL_W / 2 });
+    // How penned in this cell is, 0 (a crossroads) to 4 (a dead end). The
+    // anchors read it to find ground worth holding.
+    let walls = 0;
+    if (cellAt(cx + 1, cy) === SOLID) walls++;
+    if (cellAt(cx - 1, cy) === SOLID) walls++;
+    if (cellAt(cx, cy + 1) === SOLID) walls++;
+    if (cellAt(cx, cy - 1) === SOLID) walls++;
+    narrowGrid[k] = walls;
     for (let i = 0; i < 4; i++) {
       const nx = cx + (i === 0 ? 1 : i === 1 ? -1 : 0);
       const ny = cy + (i === 2 ? 1 : i === 3 ? -1 : 0);
@@ -2025,14 +2061,16 @@ function placeEnemy(kind, x, y, depth) {
   if (enemies.length >= MAX_ENEMIES) return null;
   const d = ENEMY_TYPES[kind];
   const scale = (1 + depth * PACK_DEPTH_HP) * DIFF.threat * (1 + (LEVEL.depth || 0) * 1.6);
-  const e = {
-    kind, x, y, r: d.r, speed: d.speed * rand(0.92, 1.08),
-    hp: d.hp * scale, maxHp: d.hp * scale, dmg: d.dmg * DIFF.threat, tech: d.tech,
-    cd: d.cd, mass: d.mass, color: d.color, halo: d.halo,
-    atk: rand(0, d.cd), hitFlash: 0, wob: Math.random() * TAU, angle: 0, face: 1,
-    awake: false, alert: 0, home: { x, y }, drowse: Math.random() * TAU,
-    aggro: d.r >= 20 ? AGGRO_FAR : AGGRO_NEAR, elite: false
-  };
+  // Same body newBody makes, then the things that only a placed one has: it is
+  // asleep where the generator put it, it remembers that spot, and a heavy one
+  // notices further off.
+  const e = newBody(kind, x, y, 0);
+  e.hp = e.maxHp = d.hp * scale;
+  e.dmg = d.dmg * DIFF.threat;
+  e.awake = false;
+  e.home = { x, y };
+  e.aggro = d.r >= 20 ? AGGRO_FAR : AGGRO_NEAR;
+  e.elite = false;
   enemies.push(e);
   return e;
 }
@@ -2231,8 +2269,54 @@ function newBody(kind, x, y, t) {
     hp: d.hp * scale, maxHp: d.hp * scale, dmg: d.dmg * DIFF.threat, tech: d.tech,
     cd: d.cd, mass: d.mass, color: d.color, halo: d.halo,
     atk: rand(0, d.cd), hitFlash: 0, wob: Math.random() * TAU, angle: 0, face: 1,
-    awake: true, alert: 0, drowse: Math.random() * TAU, aggro: AGGRO_NEAR
+    awake: true, alert: 0, drowse: Math.random() * TAU, aggro: AGGRO_NEAR,
+    role: d.role || 'press', spin: Math.random() < 0.5 ? -1 : 1,
+    markX: 0, markY: 0, markT: 0, markCd: 0,
+    postX: 0, postY: 0, posted: false, guard: rand(0, BRACE_UP), braced: false
   };
+}
+
+// The ground an anchor decides to hold.
+//
+// Not a corridor: a heavy body is forty-six units across and a corridor cell
+// is forty, so it cannot stand in one -- measured, a breaker fits half the
+// open cells in a delve and a thrall fits ninety-eight per cent of them. That
+// split is worth keeping (it is why the Deceiver blinks instead of walking),
+// so the anchor holds the *mouth* instead: ground it fits on whose neighbours
+// are pinched. That is the cell you have to come through anyway.
+//
+// Score is its own walls plus the tightest of its neighbours', tie broken by
+// distance. On genuinely open floor with no mouth in reach it holds where it
+// woke, which is the right answer for a body with nothing to guard.
+function takePost(e) {
+  e.postX = e.x; e.postY = e.y;
+  e.posted = true;
+  const cx = clamp(Math.floor(e.x / CELL_W), 0, GW - 1);
+  const cy = clamp(Math.floor(e.y / CELL_W), 0, GH - 1);
+  const span = Math.ceil(ANCHOR_POST / CELL_W);
+  const mouth = (x, y) => {
+    let best = 0;
+    if (cellAt(x + 1, y) !== SOLID) best = Math.max(best, narrowGrid[gi(x + 1, y)]);
+    if (cellAt(x - 1, y) !== SOLID) best = Math.max(best, narrowGrid[gi(x - 1, y)]);
+    if (cellAt(x, y + 1) !== SOLID) best = Math.max(best, narrowGrid[gi(x, y + 1)]);
+    if (cellAt(x, y - 1) !== SOLID) best = Math.max(best, narrowGrid[gi(x, y - 1)]);
+    return narrowGrid[gi(x, y)] + best;
+  };
+  let bestS = -1, bestD = 0;
+  for (let y = cy - span; y <= cy + span; y++) {
+    for (let x = cx - span; x <= cx + span; x++) {
+      if (x < 0 || y < 0 || x >= GW || y >= GH) continue;
+      if (cellAt(x, y) === SOLID) continue;
+      const wx = x * CELL_W + CELL_W / 2, wy = y * CELL_W + CELL_W / 2;
+      const dd = dist2(wx, wy, e.x, e.y);
+      if (dd > ANCHOR_POST * ANCHOR_POST) continue;
+      const sc = mouth(x, y);
+      if (sc < bestS) continue;
+      if (sc === bestS && dd >= bestD) continue;
+      if (pointInWalls(wx, wy, e.r + 2)) continue;
+      bestS = sc; bestD = dd; e.postX = wx; e.postY = wy;
+    }
+  }
 }
 
 // A ring of champions closing on a point. Used by the corpse ambush: the
@@ -2646,6 +2730,13 @@ function hurtPlayer(e) {
 function damageEnemy(e, dmg) {
   if (e.hp <= 0) return;
   if (!e.awake) wakeEnemy(e);          // struck from the dark: everyone hears
+  // A braced anchor eats most of it. It cannot move or swing while it does,
+  // and it has to drop the guard on a rhythm, so the answer is to back off and
+  // come back rather than to keep hitting the shield.
+  if (e.braced) {
+    dmg *= BRACE_SOAK;
+    burst(e.x, e.y, '#ffe6a8', 2, 130);
+  }
   e.hp -= dmg;
   e.hitFlash = 0.12;
   if (e.hp <= 0) {
@@ -2876,10 +2967,37 @@ function updateEnemies(dt) {
     const rl = Math.hypot(rx, ry);
     if (rl > 1.7) { rx = rx / rl * 1.7; ry = ry / rl * 1.7; }
 
+    // --- role ------------------------------------------------------------
+    // An anchor guards ground rather than chasing. It takes the most penned-in
+    // cell it can find near where it woke, and steps off that post only as far
+    // as ANCHOR_GUARD -- so it holds a corridor and you either fight it there
+    // or go the long way, which is the whole point of a maze.
+    let leash = false;
+    if (e.role === 'anchor') {
+      if (!e.posted) takePost(e);
+      e.guard -= dt;
+      if (e.guard <= 0) {
+        e.braced = !e.braced;
+        e.guard = e.braced ? BRACE_UP : BRACE_DOWN;
+      }
+      const pd = dist2(player.x, player.y, e.postX, e.postY);
+      leash = pd > ANCHOR_GUARD * ANCHOR_GUARD;
+    }
+
     // --- seek / melee -----------------------------------------------------
     let sx = 0, sy = 0;
     const touch = e.r + player.r + 3;
-    if (d > touch) {
+    // Braced, it is a wall: it does not advance and it does not swing.
+    if (e.braced) {
+      moveEntity(e, rx * 0.4 * e.speed * dt, ry * 0.4 * e.speed * dt);
+      continue;
+    }
+    if (leash) {
+      // Back to its post, and stand there once it arrives.
+      const px = e.postX - e.x, py = e.postY - e.y;
+      const pm = Math.hypot(px, py);
+      if (pm > 14) { sx = px / pm; sy = py / pm; }
+    } else if (d > touch) {
       // Close in, head straight at the target so the swarm keeps its shape;
       // further out, follow the field so rock never traps anything.
       if (d < 78 || !flowDir(e, _flow)) {
@@ -2889,6 +3007,50 @@ function updateEnemies(dt) {
         sy = _flow.y * 0.82 + (dy / d) * 0.18;
         const m = Math.hypot(sx, sy) || 1;
         sx /= m; sy /= m;
+      }
+      // A flanker picks a mark off the player's shoulder and runs at that
+      // instead, then commits once it is close. The mark is latched when it
+      // first has room to use one: recomputed every frame it recedes as the
+      // body moves and the flanker just orbits, which is what a continuous
+      // tangent bias does and why that version never closed at all.
+      //
+      // Only on a clear line: in a corridor there is nothing to go round, and
+      // running at a mark through rock wedges it against a wall for the whole
+      // approach.
+      if (e.role === 'flank') {
+        if (e.markX !== 0) {
+          // Run the mark down. Crucially this is checked before the range
+          // test: a straight line from out wide to a mark off the shoulder
+          // passes nearer the player than the mark itself, so a version that
+          // dropped the mark the moment range closed abandoned the manoeuvre
+          // a third of the way through it and swung twenty degrees instead of
+          // a hundred.
+          e.markT -= dt;
+          const vx = e.markX - e.x, vy = e.markY - e.y;
+          const m = Math.hypot(vx, vy);
+          if (m < 34 || e.markT <= 0) {
+            e.markX = 0; e.markY = 0;
+            // Press for a beat before manoeuvring again. Without this it
+            // latches a fresh mark the frame it spends one and spirals: a
+            // sixth of them never reached the player inside eight seconds.
+            e.markCd = FLANK_COMMIT;
+          } else { sx = vx / m; sy = vy / m; }
+        } else if (e.markCd > 0) {
+          e.markCd -= dt;
+        } else if (d > FLANK_OPEN && clearShot(e.x, e.y, player.x, player.y)) {
+          const bear = Math.atan2(e.y - player.y, e.x - player.x);
+          for (let k = 0; k < 3; k++) {
+            const want = bear + e.spin * FLANK_SWING * (1 - k * 0.33);
+            const mx = player.x + Math.cos(want) * FLANK_OPEN;
+            const my = player.y + Math.sin(want) * FLANK_OPEN;
+            if (pointInWalls(mx, my, e.r + 2)) continue;
+            e.markX = mx; e.markY = my; e.markT = 4;
+            sx = (mx - e.x); sy = (my - e.y);
+            const mm = Math.hypot(sx, sy) || 1;
+            sx /= mm; sy /= mm;
+            break;
+          }
+        }
       }
     } else {
       e.atk -= dt;
@@ -3057,11 +3219,10 @@ function spawnMirages(src, n) {
       ok = !pointInWalls(x, y, d.r * 0.6);
     }
     if (!ok) continue;
-    enemies.push({
-      kind: 'mirage', x, y, r: d.r, speed: d.speed, hp: 1, maxHp: 1,
-      dmg: 0, tech: 0, cd: d.cd, mass: d.mass, color: d.color, halo: d.halo,
-      atk: 99, hitFlash: 0, wob: 0, angle: 0, face: 1, fade: 9
-    });
+    const m = newBody('mirage', x, y, 0);
+    m.speed = d.speed; m.hp = m.maxHp = 1; m.dmg = 0; m.tech = 0;
+    m.atk = 99; m.wob = 0; m.fade = 9;
+    enemies.push(m);
   }
 }
 
@@ -5210,6 +5371,25 @@ function drawEnemy(e) {
     ctx.globalCompositeOperation = 'lighter';
     ctx.fillStyle = tint(PAL.brand, 1, 0.10);
     ctx.beginPath(); ctx.arc(e.x, e.y, e.r * 1.1, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+  // The guard has to be readable across a room or the rhythm is not a rhythm:
+  // a plate of light across its front while it is up, gone the instant it
+  // drops. That gap is the whole tactic.
+  if (e.braced) {
+    const a = e.angle;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = 'rgba(255,214,140,.34)';
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, e.r + 7, a - 1.05, a + 1.05);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,236,196,.72)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, e.r + 7, a - 1.05, a + 1.05);
+    ctx.stroke();
     ctx.restore();
   }
   if ((e.kind === 'breaker' || e.elite) && e.hp < e.maxHp * 0.92) {
