@@ -18,6 +18,12 @@
     --moss:#9dbb5a; --spectre:#b07cff;
     --font-display:'Iowan Old Style','Palatino Linotype','Book Antiqua',Palatino,Georgia,'Times New Roman',serif;
     --font-ui:'Iowan Old Style',Georgia,'Times New Roman',serif;
+    /* Item icons, cut from a pixel-art sheet and graded into this palette by
+       tools/build-icons.py. The game ships as one self-contained file, so they
+       live in it as a data URI rather than beside it -- ten 16px cells in a
+       160x16 strip, under two kilobytes. */
+    --icons:url(data:image/png;base64,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);
+
     --safe-t:env(safe-area-inset-top,0px);
     --safe-b:env(safe-area-inset-bottom,0px);
     --safe-l:env(safe-area-inset-left,0px);
@@ -307,10 +313,9 @@
     cursor:pointer; touch-action:manipulation; padding:0;}
   .cellbtn.sel{border-color:var(--gold) !important; background:#2a2115;}
   .cellbtn.mythic{box-shadow:inset 0 0 0 1px rgba(224,86,63,.55);}
-  .cellbtn i{display:block; width:11px; height:11px; transform:rotate(45deg);
-    border-radius:1px;}
   .cellbtn{position:relative;}
-  .cmk{font-size:15px; line-height:1;}
+  .slot .ico{flex:0 0 auto;}
+  .slot.empty .ico{opacity:.34; filter:grayscale(.7);}
   .cup{position:absolute; right:2px; top:1px; font-size:7px; color:#8fd08a;}
   .bagbar{display:flex; flex-wrap:wrap; gap:3px; margin:0 0 5px;}
   .chip{border:1px solid var(--line); background:#171209; color:#9d917a;
@@ -361,6 +366,19 @@
     font-style:italic; color:#b09a6e;}
   .teach{display:block; margin-top:3px; font:600 9.5px/1.35 ui-monospace,monospace;
     letter-spacing:.04em; color:#7fa8b8;}
+  /* One class for every icon at every size: --i picks the cell, --sz sets how
+     big it is drawn, and the background is scaled to match so the pixels stay
+     square. image-rendering keeps them hard at 2x rather than smearing. */
+  .ico{display:inline-block; vertical-align:middle;
+    width:var(--sz,32px); height:var(--sz,32px);
+    background-image:var(--icons); background-repeat:no-repeat;
+    background-size:calc(var(--sz,32px) * 10) var(--sz,32px);
+    background-position:calc(var(--i,0) * var(--sz,32px) * -1) 0;
+    image-rendering:pixelated; image-rendering:crisp-edges;
+    /* the cells and slot rows are flex containers, and without this the icon
+       is the one item in them that will shrink -- it came out as a sliver */
+    flex:0 0 auto;}
+
   .pips{font-size:11px; letter-spacing:2px; color:var(--gold);}
   .hrow{display:flex; gap:9px; align-items:baseline; padding:5px 0;
     border-bottom:1px solid rgba(120,104,78,.22);
@@ -1108,6 +1126,13 @@ const SLOTS = [
   { id:'ring1',   name:'Ring',     mark:'\u25cb' },
   { id:'ring2',   name:'Ring',     mark:'\u25cb' }
 ];
+// Cell index into the icon strip. Both rings share one -- they are the same
+// object worn twice -- and the last three are not slots at all.
+const ICON = { blade:0, offhand:1, mail:2, girdle:3, boots:4, amulet:5,
+               ring1:6, ring2:6, coin:7, skull:8, gem:9 };
+const icoTag = (key, px) =>
+  '<i class="ico" style="--i:' + (ICON[key] || 0) + ';--sz:' + px + 'px"></i>';
+
 const SLOT_BY_ID = {};
 for (const s of SLOTS) SLOT_BY_ID[s.id] = s;
 
@@ -4508,6 +4533,21 @@ function forgeDeceiver(kind, flash) {
 // and the weapon carries the order: Isaac's sun-gold blade and sun shield,
 // Zayd's two-handed Sapphire Glaive. Drawn front-on and mirrored by heading,
 // like the rest of the cast.
+/* Sampled off the reference knight sheets and pulled down about a sixth for
+   the delve. Their plate is a cool lavender-steel -- #a3a7c2 over #5e718e over
+   #485262 -- where this hero's was a warm neutral grey, and that hue is most
+   of what made the reference read as one order of armoured men rather than
+   generic fantasy. The leather is theirs too: a dark warm brown-red that is
+   the only warm note on the whole figure, which is why the belt carries it. */
+const PLATE = {
+  hi:      [196, 210, 220],
+  up:      [150, 155, 182],
+  mid:     [ 98, 108, 136],
+  dk:      [ 54,  61,  79],
+  deep:    [ 30,  34,  47],
+  leather: [ 96,  53,  45]
+};
+
 function forgeHero(id, flash) {
   const H = HEROES[id];
   const u = BASE_PLAYER.r * 1.28;
@@ -4534,7 +4574,7 @@ function forgeHero(id, flash) {
     g.strokeStyle = 'rgba(0,0,0,.82)'; g.lineWidth = 2; g.stroke();
 
     // Legs
-    g.fillStyle = lit(44, 40, 35);
+    g.fillStyle = lit(PLATE.dk[0], PLATE.dk[1], PLATE.dk[2]);
     [[-0.36, 0], [0.08, 0]].forEach(o => {
       g.beginPath();
       g.roundRect ? g.roundRect(u * o[0], u * 0.64, u * 0.28, u * 0.6, u * 0.1)
@@ -4545,9 +4585,9 @@ function forgeHero(id, flash) {
 
     // Cuirass
     const tg = g.createLinearGradient(0, -u * 0.34, 0, u * 0.8);
-    tg.addColorStop(0, lit(118, 114, 106));
-    tg.addColorStop(0.5, lit(66, 63, 57));
-    tg.addColorStop(1, lit(28, 26, 22));
+    tg.addColorStop(0, lit(PLATE.up[0], PLATE.up[1], PLATE.up[2]));
+    tg.addColorStop(0.5, lit(PLATE.mid[0], PLATE.mid[1], PLATE.mid[2]));
+    tg.addColorStop(1, lit(PLATE.deep[0], PLATE.deep[1], PLATE.deep[2]));
     g.fillStyle = tg;
     g.beginPath();
     g.moveTo(-u * 0.5, -u * 0.24);
@@ -4562,8 +4602,12 @@ function forgeHero(id, flash) {
     g.moveTo(-u * 0.15, -u * 0.22); g.lineTo(u * 0.15, -u * 0.22);
     g.lineTo(u * 0.11, u * 0.7); g.lineTo(-u * 0.11, u * 0.7);
     g.closePath(); g.fill();
-    g.fillStyle = lit(56, 44, 28);
-    g.fillRect(-u * 0.44, u * 0.44, u * 0.88, u * 0.13);
+    g.fillStyle = lit(PLATE.leather[0], PLATE.leather[1], PLATE.leather[2]);
+    g.fillRect(-u * 0.44, u * 0.44, u * 0.88, u * 0.15);
+    g.fillStyle = 'rgba(18,12,10,.55)';
+    g.fillRect(-u * 0.44, u * 0.555, u * 0.88, u * 0.04);
+    g.fillStyle = trim;                                   // the buckle
+    g.fillRect(-u * 0.07, u * 0.43, u * 0.14, u * 0.17);
 
     if (id === 'isaac') {
       // Sun-emblazoned shield
@@ -4615,8 +4659,8 @@ function forgeHero(id, flash) {
     // Pauldrons
     [-1, 1].forEach(sx => {
       const pg = g.createLinearGradient(0, -u * 0.5, 0, u * 0.06);
-      pg.addColorStop(0, lit(148, 142, 130));
-      pg.addColorStop(1, lit(46, 43, 38));
+      pg.addColorStop(0, lit(PLATE.hi[0], PLATE.hi[1], PLATE.hi[2]));
+      pg.addColorStop(1, lit(PLATE.dk[0], PLATE.dk[1], PLATE.dk[2]));
       g.fillStyle = pg;
       g.beginPath();
       g.ellipse(sx * u * 0.56, -u * 0.12, u * 0.27, u * 0.23, sx * 0.3, 0, TAU);
@@ -4628,7 +4672,33 @@ function forgeHero(id, flash) {
       g.stroke();
     });
 
-    // Bare head: the compendium's point, so it gets the detail
+    // A mail coif, not a great-helm. The reference knights fight with their
+    // faces closed, and the silhouette that gives them is most of their
+    // character -- but this order is the Clear-Sighted and the compendium
+    // makes a point of the bare head, so the helm would be borrowing the look
+    // at the cost of the fiction. The coif takes the shape and leaves the
+    // face: a swept steel hood behind the head, its throat-guard at the neck.
+    const cg = g.createLinearGradient(0, -u * 0.95, 0, -u * 0.2);
+    cg.addColorStop(0, lit(PLATE.up[0], PLATE.up[1], PLATE.up[2]));
+    cg.addColorStop(1, lit(PLATE.deep[0], PLATE.deep[1], PLATE.deep[2]));
+    g.fillStyle = cg;
+    g.beginPath();
+    g.moveTo(-u * 0.40, -u * 0.22);
+    g.quadraticCurveTo(-u * 0.46, -u * 0.94, 0, -u * 0.97);
+    g.quadraticCurveTo(u * 0.46, -u * 0.94, u * 0.40, -u * 0.22);
+    g.quadraticCurveTo(0, -u * 0.06, -u * 0.40, -u * 0.22);
+    g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(0,0,0,.82)'; g.lineWidth = 1.8; g.stroke();
+    // the rings, suggested rather than drawn -- three courses is enough at
+    // this size and any more turns to noise the moment it is scaled down
+    g.strokeStyle = 'rgba(12,14,20,.5)'; g.lineWidth = 1;
+    for (let i = 0; i < 3; i++) {
+      g.beginPath();
+      g.ellipse(0, -u * 0.74 + i * u * 0.16, u * 0.40 - i * u * 0.03,
+                u * 0.10, 0, 0.15, Math.PI - 0.15);
+      g.stroke();
+    }
+
     g.fillStyle = lit(126, 92, 64);                                  // neck
     g.fillRect(-u * 0.12, -u * 0.36, u * 0.24, u * 0.18);
     const fg = g.createLinearGradient(0, -u * 0.86, 0, -u * 0.26);
@@ -7647,8 +7717,10 @@ function renderGear() {
     b.className = 'slot' + (!it ? ' empty' : '') +
       (gearSel && gearSel.from === 'worn' && gearSel.slot === sl.id ? ' sel' : '');
     if (it) b.style.borderLeftColor = rarityOf(it).colour;
-    b.innerHTML = '<span class="sname">' + sl.name + '</span>' +
+    b.innerHTML = icoTag(sl.id, 20) +
+                  '<span class="sname">' + sl.name + '</span>' +
                   '<span class="iname">' + (it ? it.name : 'empty') + '</span>';
+    if (!it) b.style.opacity = '';
     if (it && it.set === SET_ID) b.style.borderLeftColor = '#e0563f';
     b.onclick = () => { gearSel = it ? { from: 'worn', slot: sl.id } : null; renderGear(); };
     el.gearSlots.appendChild(b);
@@ -7696,8 +7768,9 @@ function renderGear() {
     const key = sl.id === 'ring2' ? 'ring1' : sl.id;
     if (seen[key]) continue;
     seen[key] = 1;
-    chip(sl.mark, bagFilter === key, sl.name,
-         () => { bagFilter = bagFilter === key ? 'all' : key; renderGear(); });
+    chip('', bagFilter === key, sl.name,
+         () => { bagFilter = bagFilter === key ? 'all' : key; renderGear(); })
+      .innerHTML = icoTag(sl.id, 14);
   }
 
   el.bagGrid.innerHTML = '';
@@ -7713,10 +7786,13 @@ function renderGear() {
       (it && it.set === SET_ID ? ' mythic' : '');
     if (it) {
       const col = rarityOf(it).colour;
-      b.innerHTML = '<span class="cmk" style="color:' + col + '">' +
-                    (SLOT_BY_ID[it.slot].mark) + '</span>' +
+      // The icon says what it is; the border and the wash behind it say how
+      // good it is. A glyph could only ever do one of those two jobs.
+      b.innerHTML = icoTag(it.slot, 28) +
                     (isUpgrade(it, C.gear) ? '<span class="cup">\u25b2</span>' : '');
       b.style.borderColor = col + '55';
+      b.style.background =
+        'radial-gradient(circle at 50% 58%, ' + col + '1f, #17120900 70%), #171209';
     }
     b.onclick = () => {
       gearSel = it ? { from: 'bag', index: o.i, uid: it.uid } : null;
