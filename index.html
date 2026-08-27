@@ -779,35 +779,35 @@ const REGIONS = [
   { id:'slag',    name:'The Slag-Moors of Drak-Hald',
     note:'Dead ash around the Weeping Keep of Tor-Varden.',
     landmark:'The Weeping Keep of Tor-Varden', build:'keep',
-    layout:{ pitch:4, braid:0.42, chambers:7 },
+    layout:{ roomMin:6, roomMax:13, corridor:3, chambers:7 },
     earth:[58,44,30], mottle:[[26,18,11],[84,64,41],[116,90,58]],
     moss:[84,96,50],
     flag:[56,26], stone:['#241d16','#16110b','#0b0805'], lamp:'#e5761f' },
   { id:'vaelk',   name:'The Rending Gorges of Vaelk',
     note:'Split earth below the Kael-Dorm Redoubt.',
     landmark:'The Kael-Dorm Redoubt', build:'redoubt',
-    layout:{ pitch:5, braid:0.20, chambers:4, rifts:true },
+    layout:{ roomMin:7, roomMax:16, corridor:4, chambers:4 },
     earth:[38,46,58], mottle:[[16,20,28],[52,66,86],[78,102,130]],
     moss:[66,92,80],
     flag:[58,24], stone:['#1a2430','#101720','#070b0f'], lamp:'#5fd0ff' },
   { id:'kraggen', name:'Kraggen-Tor, the Iron-Teeth',
     note:'Volcanic west, holding the Shatter-Gate of Ghor.',
     landmark:'The Shatter-Gate of Ghor', build:'shattergate',
-    layout:{ pitch:3, braid:0.26, chambers:5 },
+    layout:{ roomMin:5, roomMax:11, corridor:3, chambers:5 },
     earth:[52,30,22], mottle:[[28,12,8],[86,42,24],[128,62,30]],
     moss:[94,94,44],
     flag:[54,22], stone:['#2a1a14','#1a0f0a','#0c0705'], lamp:'#ff5f28' },
   { id:'weald',   name:'The Rot-Weald',
     note:'Creeping mutation in the southern forest.',
     landmark:'The Heart-Rot Clearing', build:'thicket',
-    layout:{ pitch:4, braid:0.55, chambers:9 },
+    layout:{ roomMin:6, roomMax:12, corridor:3, chambers:9 },
     earth:[40,48,30], mottle:[[18,24,12],[58,74,38],[86,106,54]],
     moss:[100,128,52],
     flag:[52,26], stone:['#1c2418','#121810','#080b07'], lamp:'#9dbb5a' },
   { id:'firth',   name:'The Dead Firth',
     note:'A blackened ocean, drained and refilled with drifting ash.',
     landmark:'The Ash-Shoals', build:'ashflat',
-    layout:{ pitch:6, braid:0.60, chambers:11 },
+    layout:{ roomMin:8, roomMax:17, corridor:4, chambers:11 },
     earth:[34,32,34], mottle:[[14,13,15],[52,50,54],[78,76,82]],
     moss:[74,88,70],
     flag:[50,20], stone:['#1c1c1f','#121215','#07070a'], lamp:'#b9c4cf' }
@@ -1509,10 +1509,26 @@ function carveDisc(cx, cy, r) {
 }
 
 // L-shaped corridor, `half` cells either side of the centre line.
+// An L of two rectangles. This used to step a disc along each leg, which left
+// every corridor with a scalloped edge -- a row of overlapping circles rather
+// than a straight cut -- and that read as the ragged winding passage it was.
 function carveCorridor(ax, ay, bx, by, half) {
-  const stepX = ax < bx ? 1 : -1, stepY = ay < by ? 1 : -1;
-  for (let x = ax; x !== bx + stepX; x += stepX) carveDisc(x, ay, half);
-  for (let y = ay; y !== by + stepY; y += stepY) carveDisc(bx, y, half);
+  carveRect(Math.min(ax, bx) - half, ay - half, Math.max(ax, bx) + half, ay + half);
+  carveRect(bx - half, Math.min(ay, by) - half, bx + half, Math.max(ay, by) + half);
+}
+
+// A hollow rectangle of rock, with a gap left in the middle of each side.
+// Landmarks are built from this rather than from rings of cells stepped round
+// a circle: a ring rasterises to a staircase at this cell size, which is the
+// opposite of a clean geometric block.
+function carveWalls(x0, y0, x1, y1, gap) {
+  const midX = (x0 + x1) >> 1, midY = (y0 + y1) >> 1;
+  for (let x = x0; x <= x1; x++) {
+    if (Math.abs(x - midX) > gap) { setCell(x, y0, SOLID); setCell(x, y1, SOLID); }
+  }
+  for (let y = y0; y <= y1; y++) {
+    if (Math.abs(y - midY) > gap) { setCell(x0, y, SOLID); setCell(x1, y, SOLID); }
+  }
 }
 
 function carveRect(x0, y0, x1, y1) {
@@ -1532,98 +1548,102 @@ function carveRect(x0, y0, x1, y1) {
    cell wall runs are laid along the maze boundaries that were never linked.
    Corridors are the space between walls, so the whole map reads as walled
    paths instead of tunnels bored through a lump. */
-function carveMaze() {
+/* --- the layout ----------------------------------------------------------
+   Rooms and corridors, not a maze. The maze this replaced was built by drawing
+   single-cell wall lines on open ground, which is exactly what produced the
+   narrow winding passages: every route was one cell wide, every wall was one
+   cell thick, and the two were the same thing seen from opposite sides.
+
+   This starts solid and cuts into it. A binary split carves the map into
+   leaves, each leaf gets one axis-aligned rectangular room with rock left as a
+   margin around it, and the rooms are joined by corridors three cells wide.
+   Nothing is ever one cell of anything: the thinnest wall between two rooms is
+   two cells and the narrowest floor is three, so corridors are walkable
+   abreast and walls have a body to them.
+   -------------------------------------------------------------------- */
+function carveHalls() {
   const LY = REGION.layout || {};
-  const P = LY.pitch || 4;                        // fine cells per maze cell
-  const MW = Math.floor((GW - 2) / P), MH = Math.floor((GH - 2) / P);
-  const seen = new Uint8Array(MW * MH);
-  const mi = (x, y) => y * MW + x;
-  const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-  const open = new Set();                         // boundaries with a way through
-  const key = (x, y, nx, ny) => x < nx || y < ny
-    ? x + ',' + y + '>' + nx + ',' + ny
-    : nx + ',' + ny + '>' + x + ',' + y;
+  const CORR = LY.corridor || 3;          // corridor width, in cells
+  const MINR = LY.roomMin || 6;           // shortest room side
+  const MAXR = LY.roomMax || 13;          // and its longest
+  const MARGIN = 2;                       // rock kept between a room and its leaf
 
-  const stack = [[(Math.random() * MW) | 0, (Math.random() * MH) | 0]];
-  seen[mi(stack[0][0], stack[0][1])] = 1;
-  while (stack.length) {
-    const [x, y] = stack[stack.length - 1];
-    const opts = [];
-    for (let i = 0; i < 4; i++) {
-      const nx = x + DIRS[i][0], ny = y + DIRS[i][1];
-      if (nx < 0 || ny < 0 || nx >= MW || ny >= MH || seen[mi(nx, ny)]) continue;
-      opts.push([nx, ny]);
+  grid.fill(SOLID);
+
+  const leaves = [];
+  const minLeaf = MINR + MARGIN * 2 + 1;
+  const split = (x, y, w, h, depth) => {
+    const canW = w >= minLeaf * 2, canH = h >= minLeaf * 2;
+    if (depth >= 6 || (!canW && !canH) || (depth >= 3 && Math.random() < 0.12)) {
+      leaves.push({ x, y, w, h });
+      return;
     }
-    if (!opts.length) { stack.pop(); continue; }
-    const n = opts[(Math.random() * opts.length) | 0];
-    seen[mi(n[0], n[1])] = 1;
-    open.add(key(x, y, n[0], n[1]));
-    stack.push(n);
+    const horiz = canW && canH ? (w === h ? Math.random() < 0.5 : w > h) : canW;
+    if (horiz) {
+      const cut = minLeaf + ((Math.random() * (w - minLeaf * 2 + 1)) | 0);
+      split(x, y, cut, h, depth + 1);
+      split(x + cut, y, w - cut, h, depth + 1);
+    } else {
+      const cut = minLeaf + ((Math.random() * (h - minLeaf * 2 + 1)) | 0);
+      split(x, y, w, cut, depth + 1);
+      split(x, y + cut, w, h - cut, depth + 1);
+    }
+  };
+  split(1, 1, GW - 2, GH - 2, 0);
+
+  // One room per leaf, and capped in size rather than filling whatever leaf it
+  // landed in. Letting a room take its whole leaf gave single chambers of
+  // twenty-eight by twenty-seven that swallowed a quarter of the map each, and
+  // the result read as open ground with rocks in it rather than as rooms. A
+  // large leaf now holds a normal room with a lot of rock around it.
+  const halls = [];
+  for (const L of leaves) {
+    const maxW = Math.min(MAXR, L.w - MARGIN * 2);
+    const maxH = Math.min(MAXR, L.h - MARGIN * 2);
+    if (maxW < MINR || maxH < MINR) continue;
+    const w = MINR + ((Math.random() * (maxW - MINR + 1)) | 0);
+    const h = MINR + ((Math.random() * (maxH - MINR + 1)) | 0);
+    const x = L.x + MARGIN + ((Math.random() * (L.w - MARGIN * 2 - w + 1)) | 0);
+    const y = L.y + MARGIN + ((Math.random() * (L.h - MARGIN * 2 - h + 1)) | 0);
+    carveRect(x, y, x + w - 1, y + h - 1);
+    halls.push({ x, y, w, h, cx: x + (w >> 1), cy: y + (h >> 1) });
   }
 
-  // Braiding knocks extra walls out, so the maze loops instead of being one
-  // path with dead ends everywhere.
-  const braids = Math.floor(MW * MH * (LY.braid === undefined ? 0.34 : LY.braid));
-  for (let i = 0; i < braids; i++) {
-    const x = (Math.random() * MW) | 0, y = (Math.random() * MH) | 0;
-    const d = DIRS[(Math.random() * 4) | 0];
-    const nx = x + d[0], ny = y + d[1];
-    if (nx < 0 || ny < 0 || nx >= MW || ny >= MH) continue;
-    open.add(key(x, y, nx, ny));
+  // L-shaped joins, cut as two rectangles so a corridor is a clean run rather
+  // than a chain of overlapping discs with a scalloped edge.
+  const lo = (CORR - 1) >> 1, hi = CORR >> 1;
+  const join = (a, b) => {
+    const bendFirstX = Math.random() < 0.5;
+    const kx = bendFirstX ? b.cx : a.cx;
+    const ky = bendFirstX ? a.cy : b.cy;
+    carveRect(Math.min(a.cx, kx) - lo, ky - lo, Math.max(a.cx, kx) + hi, ky + hi);
+    carveRect(kx - lo, Math.min(a.cy, ky) - lo, kx + hi, Math.max(a.cy, ky) + hi);
+    carveRect(Math.min(kx, b.cx) - lo, b.cy - lo, Math.max(kx, b.cx) + hi, b.cy + hi);
+    carveRect(b.cx - lo, Math.min(ky, b.cy) - lo, b.cx + hi, Math.max(ky, b.cy) + hi);
+  };
+
+  // A spanning chain first so everything is reachable, then a few extra links
+  // so the map loops rather than being one line of rooms.
+  halls.sort((a, b) => (a.cx + a.cy) - (b.cx + b.cy));
+  for (let i = 1; i < halls.length; i++) join(halls[i - 1], halls[i]);
+  const extra = Math.max(1, halls.length >> 2);
+  for (let i = 0; i < extra; i++) {
+    const a = halls[(Math.random() * halls.length) | 0];
+    const b = halls[(Math.random() * halls.length) | 0];
+    if (a !== b) join(a, b);
   }
 
-  grid.fill(OPEN);
-
-  // The rim of the world is solid, so nothing walks off the edge.
+  // The rim of the world stays solid, so nothing walks off the edge.
   for (let y = 0; y < GH; y++)
     for (let x = 0; x < GW; x++)
       if (x < 1 || y < 1 || x >= GW - 1 || y >= GH - 1) grid[gi(x, y)] = SOLID;
 
-  const wallLine = (x0, y0, x1, y1) => {
-    for (let y = y0; y <= y1; y++)
-      for (let x = x0; x <= x1; x++)
-        if (inGrid(x, y)) grid[gi(x, y)] = SOLID;
-  };
-
-  // One cell of wall on every boundary the maze never opened.
-  for (let my = 0; my < MH; my++) {
-    for (let mx = 0; mx < MW; mx++) {
-      const ox = 1 + mx * P, oy = 1 + my * P;
-      const ex = ox + P - 1, ey = oy + P - 1;       // the wall columns/rows
-      if (mx + 1 < MW && !open.has(key(mx, my, mx + 1, my))) wallLine(ex, oy, ex, ey);
-      if (my + 1 < MH && !open.has(key(mx, my, mx, my + 1))) wallLine(ox, ey, ex, ey);
-      // Posts at the corners, so wall runs meet cleanly instead of stopping
-      // a cell short of each other and leaving the join looking chewed.
-      wallLine(ex, ey, ex, ey);
-    }
-  }
-
-  // A few junctions open out: the posts around them go, leaving a hall.
-  const nch = LY.chambers === undefined ? 7 : LY.chambers;
-  for (let i = 0; i < nch; i++) {
-    const mx = 1 + ((Math.random() * Math.max(1, MW - 2)) | 0);
-    const my = 1 + ((Math.random() * Math.max(1, MH - 2)) | 0);
-    const ox = 1 + mx * P, oy = 1 + my * P;
-    carveRect(ox - P, oy - P, ox + P, oy + P);
-  }
-
-  // Vaelk is split earth, not corridors: long unbroken runs with one crossing.
-  if (LY.rifts) {
-    for (let i = 0; i < 5; i++) {
-      const gy = 5 + ((Math.random() * (GH - 12)) | 0);
-      const len = 14 + ((Math.random() * 26) | 0);
-      const gx = 3 + ((Math.random() * Math.max(1, GW - len - 6)) | 0);
-      wallLine(gx, gy, gx + len, gy);
-      const bridge = gx + ((Math.random() * len) | 0);
-      carveRect(bridge, gy - 1, bridge + 1, gy + 1);
-    }
-  }
-  return P;
+  return halls;
 }
 
 function generateWorld(spawn, portal) {
   grid = new Uint8Array(GW * GH);
-  carveMaze();
+  const halls = carveHalls();
 
   // Roughening and widening both existed to break up a solid rock mass. With
   // walls a single cell thick there is no mass to break up -- flipping
@@ -1635,15 +1655,15 @@ function generateWorld(spawn, portal) {
                y: clamp(Math.floor(spawn.y / CELL_W), 2, GH - 3) };
   const pc = { x: clamp(Math.floor(portal.x / CELL_W), 2, GW - 3),
                y: clamp(Math.floor(portal.y / CELL_W), 2, GH - 3) };
-  carveDisc(sc.x, sc.y, 4);
-  carveDisc(pc.x, pc.y, 3);
+  carveRect(sc.x - 4, sc.y - 4, sc.x + 4, sc.y + 4);
+  carveRect(pc.x - 3, pc.y - 3, pc.x + 3, pc.y + 3);
   carveCorridor(sc.x, sc.y, pc.x, pc.y, 1);   // never strand the objective
 
 
   // The lone-pillar sweep is gone with them: on a thin-wall map an isolated
   // cell is usually a corner post or the end of a run, not debris.
 
-  carveRooms(sc, pc);
+  dressRooms(halls, sc, pc);
   buildLandmark(pc);
   connectPortal(sc, pc);
 
@@ -1652,9 +1672,31 @@ function generateWorld(spawn, portal) {
   // back over the gate. Cut it again, last, wide enough for the whole gate
   // circle plus a body, so the extraction point can never load inside rock.
   const apron = Math.ceil((PORTAL_R + 22) / CELL_W) + 1;
-  carveDisc(pc.x, pc.y, apron);
+  carveRect(pc.x - apron, pc.y - apron, pc.x + apron, pc.y + apron);
 
   // Keep only what is reachable from spawn; everything else becomes rock.
+  const seen = indexOpenCells(sc);
+  for (let k = 0; k < grid.length; k++) if (!seen[k]) grid[k] = SOLID;
+
+  buildWallRects();
+  cutChasms(sc, pc);
+  // A chasm turns standable floor into a hole, so the index has to be taken
+  // again. Without this every pass that samples openCells -- pack seeding,
+  // scenery, the loot scatter, the corpse, the ambush ring -- can drop
+  // something into a pit, and a body that starts inside a wall rect is
+  // resolved out of it at the next step. That was invisible while the rock
+  // was thin maze wall; with rooms cut from continuous masses the same rect
+  // is hundreds of units across and the body left the room.
+  indexOpenCells(sc);
+  buildEdges();
+  buildStains(spawn, portal);
+  buildScenery(spawn, portal);
+}
+
+// Flood from the spawn: every cell you can actually stand on, and how penned
+// in each one is. Called once before the unreachable rock is filled in, and
+// again after the chasms are cut, since a chasm takes floor away.
+function indexOpenCells(sc) {
   const seen = new Uint8Array(GW * GH);
   const stack = [gi(sc.x, sc.y)];
   seen[stack[0]] = 1;
@@ -1681,13 +1723,7 @@ function generateWorld(spawn, portal) {
       seen[nk] = 1; stack.push(nk);
     }
   }
-  for (let k = 0; k < grid.length; k++) if (!seen[k]) grid[k] = SOLID;
-
-  buildWallRects();
-  cutChasms(sc, pc);
-  buildEdges();
-  buildStains(spawn, portal);
-  buildScenery(spawn, portal);
+  return seen;
 }
 
 // A curtain wall can seal its own gate, and Vaelk's rifts can strand a corner.
@@ -1698,7 +1734,7 @@ function connectPortal(sc, pc) {
   for (let attempt = 0; attempt < 3; attempt++) {
     const seen = new Uint8Array(GW * GH);
     const q = [gi(sc.x, sc.y)];
-    if (grid[q[0]] === SOLID) carveDisc(sc.x, sc.y, 2);
+    if (grid[q[0]] === SOLID) carveRect(sc.x - 2, sc.y - 2, sc.x + 2, sc.y + 2);
     seen[q[0]] = 1;
     let best = -1, bestD = Infinity;
     while (q.length) {
@@ -1734,88 +1770,77 @@ function setCell(cx, cy, v) { if (inGrid(cx, cy)) grid[gi(cx, cy)] = v; }
    --------------------------------------------------------------------- */
 let rooms = [];
 
-function carveRooms(sc, pc) {
+/* Dress rooms that already exist rather than cutting new ones. This used to
+   carve three to five more rectangles on top of the layout and run a corridor
+   from each to the gate, and between the extra rooms and the extra channels
+   the map stopped being rooms-and-corridors and became one connected cavern.
+   The layout decides where the rooms are; this decides what is in them. */
+function dressRooms(halls, sc, pc) {
   rooms = [];
-  const KINDS = ['hall', 'cistern', 'barracks', 'collapse'];
-  const want = 3 + ((Math.random() * 3) | 0);
-  const tries = 260;
-  for (let t = 0; t < tries && rooms.length < want; t++) {
-    const kind = KINDS[(Math.random() * KINDS.length) | 0];
-    const rw = kind === 'cistern' ? 0 : 5 + ((Math.random() * 4) | 0);
-    const rh = kind === 'cistern' ? 0 : 4 + ((Math.random() * 4) | 0);
-    const rad = 4 + ((Math.random() * 2) | 0);
-    const half = kind === 'cistern' ? rad : Math.max(rw, rh);
-    const cx = half + 2 + ((Math.random() * (GW - 2 * half - 4)) | 0);
-    const cy = half + 2 + ((Math.random() * (GH - 2 * half - 4)) | 0);
-    // keep clear of the spawn pocket, the gate, and each other
-    if (Math.abs(cx - sc.x) + Math.abs(cy - sc.y) < 12) continue;
-    if (Math.abs(cx - pc.x) + Math.abs(cy - pc.y) < 12) continue;
-    let ok = true;
-    for (let i = 0; i < rooms.length && ok; i++) {
-      const r = rooms[i];
-      if (Math.abs(cx - r.cx) < half + r.half + 4 &&
-          Math.abs(cy - r.cy) < half + r.half + 4) ok = false;
-    }
-    if (!ok) continue;
+  const KINDS = ['hall', 'barracks', 'collapse', 'cistern'];
+  const want = Math.min(halls.length, 3 + ((Math.random() * 3) | 0));
+  const picked = [];
 
-    if (kind === 'cistern') carveDisc(cx, cy, rad);
-    else carveRect(cx - rw, cy - rh, cx + rw, cy + rh);
+  for (const h of halls) {
+    if (picked.length >= want) break;
+    if (h.w < 7 || h.h < 6) continue;                 // too small to furnish
+    const near = (a, b) => Math.abs(h.cx - a) + Math.abs(h.cy - b) < 10;
+    if (near(sc.x, sc.y) || near(pc.x, pc.y)) continue;
+    picked.push(h);
+  }
+
+  for (const h of picked) {
+    const kind = KINDS[(Math.random() * KINDS.length) | 0];
+    const x0 = h.x + 1, y0 = h.y + 1;
+    const x1 = h.x + h.w - 2, y1 = h.y + h.h - 2;
 
     if (kind === 'hall') {
       // Pillars on a regular grid: the one shape that reads as built rather
       // than as eroded, and it gives a fight cover to break line of sight on.
-      for (let py = -rh + 1; py <= rh - 1; py += 3) {
-        for (let px = -rw + 1; px <= rw - 1; px += 3) {
-          grid[gi(cx + px, cy + py)] = SOLID;
-        }
-      }
+      for (let py = y0 + 1; py <= y1 - 1; py += 3)
+        for (let px = x0 + 1; px <= x1 - 1; px += 3) setCell(px, py, SOLID);
     } else if (kind === 'barracks') {
       // Stub walls in rows, like bunk partitions off one side.
-      for (let py = -rh + 1; py <= rh - 1; py += 2) {
-        const len = 1 + ((Math.random() * (rw - 1)) | 0);
-        for (let px = 0; px < len; px++) grid[gi(cx - rw + 1 + px, cy + py)] = SOLID;
+      for (let py = y0 + 1; py <= y1 - 1; py += 2) {
+        const len = 1 + ((Math.random() * Math.max(1, h.w - 3)) | 0);
+        for (let px = 0; px < len; px++) setCell(x0 + px, py, SOLID);
       }
     } else if (kind === 'collapse') {
       // A caved-in ceiling: a scatter of loose blocks, no pattern at all.
       const n = 4 + ((Math.random() * 5) | 0);
       for (let i = 0; i < n; i++) {
-        const px = cx - rw + 1 + ((Math.random() * (rw * 2 - 2)) | 0);
-        const py = cy - rh + 1 + ((Math.random() * (rh * 2 - 2)) | 0);
-        grid[gi(px, py)] = SOLID;
+        setCell(x0 + ((Math.random() * (x1 - x0 + 1)) | 0),
+                y0 + ((Math.random() * (y1 - y0 + 1)) | 0), SOLID);
       }
     }
+    // a cistern is left bare -- a wide empty room is its own kind of place
 
-    rooms.push({ kind, cx, cy, half,
-                 x: cx * CELL_W + CELL_W / 2, y: cy * CELL_W + CELL_W / 2,
+    const half = Math.max(h.w, h.h) >> 1;
+    rooms.push({ kind, cx: h.cx, cy: h.cy, half,
+                 x: h.cx * CELL_W + CELL_W / 2, y: h.cy * CELL_W + CELL_W / 2,
                  r: half * CELL_W });
-    // A room nobody can reach is scenery, so tie it back to the gate route.
-    carveCorridor(cx, cy, pc.x, pc.y, 0);
   }
 }
 
 function buildLandmark(pc) {
   const kind = REGION.build;
-  const cx = clamp(pc.x, 9, GW - 10), cy = clamp(pc.y, 9, GH - 10);
+  const cx = clamp(pc.x, 10, GW - 11), cy = clamp(pc.y, 10, GH - 11);
+  // Every landmark used to be a ring of cells stepped round a circle, which at
+  // a forty-unit cell rasterises to a staircase. They are built square now --
+  // curtain walls, colonnades and bars -- so the place at the gate reads as
+  // masonry someone laid rather than as a scribble of blocks.
 
   if (kind === 'keep') {
-    // A ruined curtain wall with breaches on each side, and a broken
-    // inner ward: the capital that fell, not a tidy castle.
-    carveDisc(cx, cy, 8);
-    for (let a = 0; a < 360; a += 4) {
-      const r = 7, rad = a * Math.PI / 180;
-      const x = Math.round(cx + Math.cos(rad) * r), y = Math.round(cy + Math.sin(rad) * r);
-      const gap = (a > 78 && a < 102) || (a > 168 && a < 192) ||
-                  (a > 258 && a < 282) || (a < 12 || a > 348);
-      if (!gap) setCell(x, y, SOLID);
-    }
-    for (let a = 0; a < 360; a += 6) {
-      if (a % 90 < 34) continue;                       // collapsed sections
-      const rad = a * Math.PI / 180;
-      setCell(Math.round(cx + Math.cos(rad) * 3.5), Math.round(cy + Math.sin(rad) * 3.5), SOLID);
+    // A ruined curtain wall with a breach in each side, and a broken inner ward.
+    carveRect(cx - 8, cy - 8, cx + 8, cy + 8);
+    carveWalls(cx - 7, cy - 7, cx + 7, cy + 7, 2);
+    carveWalls(cx - 3, cy - 3, cx + 3, cy + 3, 1);
+    for (let i = -3; i <= 3; i += 3) {                   // collapsed corners
+      setCell(cx - 4 + (i > 0 ? 8 : 0), cy + i, OPEN);
     }
   } else if (kind === 'redoubt') {
-    // Cliffside fort: a walled approach with one mouth.
-    carveDisc(cx, cy, 7);
+    // Cliffside fort: a walled approach with one mouth, and two bastions.
+    carveRect(cx - 7, cy - 7, cx + 7, cy + 7);
     for (let x = cx - 6; x <= cx + 6; x++) {
       setCell(x, cy - 6, SOLID);
       if (x < cx - 1 || x > cx + 1) setCell(x, cy + 6, SOLID);
@@ -1823,31 +1848,34 @@ function buildLandmark(pc) {
     for (let y = cy - 6; y <= cy + 6; y++) { setCell(cx - 6, y, SOLID); setCell(cx + 6, y, SOLID); }
     for (let y = cy - 3; y <= cy + 3; y += 3) { setCell(cx - 3, y, SOLID); setCell(cx + 3, y, SOLID); }
   } else if (kind === 'shattergate') {
-    // The breach itself: a ring of standing stones with four wide mouths.
-    carveDisc(cx, cy, 7);
-    for (let a = 0; a < 360; a += 5) {
-      if (a % 90 < 30) continue;
-      const rad = a * Math.PI / 180;
-      setCell(Math.round(cx + Math.cos(rad) * 6), Math.round(cy + Math.sin(rad) * 6), SOLID);
-      setCell(Math.round(cx + Math.cos(rad) * 5), Math.round(cy + Math.sin(rad) * 5), SOLID);
+    // The breach itself: a colonnade on a square grid, four wide mouths.
+    carveRect(cx - 8, cy - 8, cx + 8, cy + 8);
+    for (let i = -6; i <= 6; i += 3) {
+      for (const j of [-6, 6]) {
+        if (Math.abs(i) <= 1) continue;                 // the mouths
+        setCell(cx + i, cy + j, SOLID);
+        setCell(cx + j, cy + i, SOLID);
+      }
     }
   } else if (kind === 'thicket') {
     // A clearing choked with growth: cover everywhere, sightlines nowhere.
-    carveDisc(cx, cy, 8);
-    for (let i = 0; i < 26; i++) {
-      const a = Math.random() * TAU, d = 2.4 + Math.random() * 5.2;
-      setCell(Math.round(cx + Math.cos(a) * d), Math.round(cy + Math.sin(a) * d), SOLID);
+    carveRect(cx - 8, cy - 8, cx + 8, cy + 8);
+    for (let gy = -6; gy <= 6; gy += 2) {
+      for (let gx = -6; gx <= 6; gx += 2) {
+        if (Math.abs(gx) < 3 && Math.abs(gy) < 3) continue;
+        if (Math.random() < 0.42) setCell(cx + gx, cy + gy, SOLID);
+      }
     }
   } else {
     // Ash shoals: open ground broken by long drifting bars.
-    carveDisc(cx, cy, 9);
+    carveRect(cx - 9, cy - 8, cx + 9, cy + 8);
     for (let i = 0; i < 5; i++) {
       const y = cy - 6 + i * 3, len = 5 + ((Math.random() * 7) | 0);
       const x0 = cx - 7 + ((Math.random() * 6) | 0);
       for (let x = x0; x < x0 + len; x++) setCell(x, y, SOLID);
     }
   }
-  carveDisc(cx, cy, 2);                                 // the gate always stands clear
+  carveRect(cx - 2, cy - 2, cx + 2, cy + 2);   // the gate always stands clear
 }
 
 // No passage may be one cell wide: the widest enemy is 46 units across and a
@@ -2258,13 +2286,23 @@ function circleHitsRect(x, y, r, w) {
 }
 
 function moveEntity(e, dx, dy) {
+  // Resolution puts the body against the nearer face of the block, not the
+  // face its travel came from. For a normal step those are the same face --
+  // a frame moves a body a few units, so the side it entered is the side it
+  // is nearest. They differ only for a body that is already inside the rock,
+  // and there the travel-side rule threw it clean through: rooms are cut out
+  // of continuous masses now, so one block can be six hundred units across
+  // and "push it out the way it was going" teleports it to the far side of
+  // the map. Nearest-face is the same answer for real motion and a sane one
+  // for a body that should not have been in there to begin with.
   if (dx !== 0) {
     e.x += dx;
     const hits = wallsNear(e.x, e.y, e.r);
     for (let i = 0; i < hits.length; i++) {
       const w = walls[hits[i]];
       if (circleHitsRect(e.x, e.y, e.r, w)) {
-        e.x = dx > 0 ? w.x - e.r : w.x + w.w + e.r;
+        const left = w.x - e.r, right = w.x + w.w + e.r;
+        e.x = (e.x - left) < (right - e.x) ? left : right;
       }
     }
   }
@@ -2274,7 +2312,8 @@ function moveEntity(e, dx, dy) {
     for (let i = 0; i < hits.length; i++) {
       const w = walls[hits[i]];
       if (circleHitsRect(e.x, e.y, e.r, w)) {
-        e.y = dy > 0 ? w.y - e.r : w.y + w.h + e.r;
+        const up = w.y - e.r, down = w.y + w.h + e.r;
+        e.y = (e.y - up) < (down - e.y) ? up : down;
       }
     }
   }
@@ -5056,56 +5095,38 @@ function forgeGround() {
       g.fill();
     }
 
-    // Laid flagstone. Slabs used to be cut 5-11 units smaller than their cell,
-    // which left every stone floating in a moat of bare dirt -- so paving read
-    // as a scatter of loose slabs lying about rather than as a floor. Joints
-    // are tight now and the courses line up: neat work, aged by wear and the
-    // occasional missing stone rather than by being strewn around.
-    if (v % 4 > 1) {
-      const rows = 4, cols = 4, cell = T / cols;
-      const off = (v % 4 === 3) ? cell * 0.5 : 0;
-      for (let ry = 0; ry < rows; ry++) {
-        for (let cx2 = -1; cx2 < cols + 1; cx2++) {
-          if (v % 4 === 2 && ry !== 1 && ry !== 2) continue;  // a path, two slabs wide
-          if (v % 4 === 3 && (ry * 5 + cx2 * 3) % 8 === 0) continue;  // a stone lost
-          const x = cx2 * cell + (ry % 2 ? off : 0) + rand(-1, 1);
-          const y = ry * cell + rand(-1, 1);
-          const w = cell - rand(1.5, 3), h = cell - rand(1.5, 3);
-          const tone = REGION.flag[0] + Math.random() * REGION.flag[1];
-          g.fillStyle = 'rgb(' + Math.round(tone * 1.05) + ',' +
-                                 Math.round(tone * 0.96) + ',' +
-                                 Math.round(tone * 0.84) + ')';
-          g.beginPath();
-          g.moveTo(x + rand(0, 1.2), y + rand(0, 1.2));
-          g.lineTo(x + w - rand(0, 1.2), y + rand(0, 1.2));
-          g.lineTo(x + w - rand(0, 1.2), y + h - rand(0, 1.2));
-          g.lineTo(x + rand(0, 1.2), y + h - rand(0, 1.2));
-          g.closePath();
-          g.fill();
-          // age: a chipped corner or a crack across the face now and then
-          if (Math.random() < 0.30) {
-            g.fillStyle = 'rgba(12,9,6,.30)';
-            const cw = 3 + Math.random() * 5;
-            g.beginPath();
-            g.moveTo(x, y); g.lineTo(x + cw, y); g.lineTo(x, y + cw);
-            g.closePath(); g.fill();
-          }
-          if (Math.random() < 0.22) {
-            g.strokeStyle = 'rgba(10,8,5,.34)';
-            g.lineWidth = 0.9;
-            g.beginPath();
-            g.moveTo(x + rand(2, w * 0.4), y + 2);
-            g.lineTo(x + rand(w * 0.5, w - 2), y + h - 2);
-            g.stroke();
-          }
-          // worn lip catching the light, dark seam below
-          g.strokeStyle = 'rgba(150,136,110,.18)';
-          g.lineWidth = 1.1;
-          g.beginPath(); g.moveTo(x + 2, y + 1.5); g.lineTo(x + w - 3, y + 1.5); g.stroke();
-          g.strokeStyle = 'rgba(10,7,5,.5)';
-          g.lineWidth = 1.4;
-          g.beginPath(); g.moveTo(x + 2, y + h - 1); g.lineTo(x + w - 3, y + h - 1); g.stroke();
+    // No paving. The floor is bare packed earth throughout -- flagstone courses
+    // fought the wall blocks for the eye and broke rooms into panels. Two of the
+    // four variants carry a little extra character so a large room does not read
+    // as one flat wash: a trodden lane worn pale by traffic, and dried cracking.
+    if (v % 4 === 2) {
+      // a lane beaten smooth down the middle of the tile
+      const cy2 = T * 0.5;
+      for (let i = 0; i < 90; i++) {
+        const x = Math.random() * T;
+        const y = cy2 + rand(-T * 0.17, T * 0.17);
+        const r = 4 + Math.random() * 11;
+        g.fillStyle = 'rgba(' + REGION.mottle[2].join(',') + ',.13)';
+        g.beginPath();
+        g.ellipse(x, y, r, r * 0.42, rand(-0.25, 0.25), 0, TAU);
+        g.fill();
+      }
+    } else if (v % 4 === 3) {
+      // sun-dried earth, cracked in a loose web
+      g.strokeStyle = 'rgba(10,7,5,.26)';
+      for (let i = 0; i < 22; i++) {
+        let x = Math.random() * T, y = Math.random() * T;
+        let a = Math.random() * TAU;
+        g.lineWidth = 0.7 + Math.random() * 0.6;
+        g.beginPath();
+        g.moveTo(x, y);
+        for (let s = 0; s < 4; s++) {
+          a += rand(-0.9, 0.9);
+          x += Math.cos(a) * (5 + Math.random() * 9);
+          y += Math.sin(a) * (5 + Math.random() * 9);
+          g.lineTo(x, y);
         }
+        g.stroke();
       }
     }
 
@@ -5482,40 +5503,36 @@ function drawWalls(x0, y0, x1, y1) {
     const len = Math.hypot(e.x2 - e.x1, e.y2 - e.y1);
     const ux = (e.x2 - e.x1) / (len || 1), uy = (e.y2 - e.y1) / (len || 1);
     const q = ((Math.round((Math.atan2(e.ny, e.nx) + Math.PI / 2) / (Math.PI / 2)) % 4) + 4) % 4;
-    // Faces are built per direction, so where a horizontal run meets a vertical
-    // one neither covers the corner square and the near-black wall interior
-    // shows through as a notch -- a hole in the masonry rather than a join.
-    // Running the course past that end closes it. Only that end, though: a run
-    // that ends because the wall ends has open floor beyond it, and overhanging
-    // there leaves stone hanging in the air off the end of the wall.
-    const EXT = 12;
-    const eA = e.capA ? EXT : 0, eB = e.capB ? EXT : 0;
-    const span = len + eA + eB;
-    const n = Math.max(1, Math.ceil(span / L));
-    const start = -eA + (span - n * L) / 2;
+    // No overhang at all now. A run is laid exactly along its own face and
+    // stops where the face stops: courses that ran past the end left masonry
+    // hanging over open floor, and where two faces met they overlapped each
+    // other rather than meeting. The corner square is closed below instead,
+    // by drawing the block that actually sits there.
+    const n = Math.max(1, Math.round(len / L));
+    const step = len / n;
+    const start = 0;
     for (let k = 0; k < n; k++) {
-      const d = start + L * (k + 0.5);
+      // Stepped by the run's own length divided evenly, so courses butt
+      // against each other instead of tiling at a fixed pitch and leaving a
+      // ragged part-course at the end.
+      const d = start + step * (k + 0.5);
       const cx = e.x1 + ux * d - e.nx * 7;
       const cy = e.y1 + uy * d - e.ny * 7;
       const set = wallCourses[(((cx * 7 + cy * 13) | 0) % wallCourses.length +
                                wallCourses.length) % wallCourses.length];
       const spr = set[q];
-      ctx.drawImage(spr, cx - spr.spanW / 2, cy - spr.spanH / 2, spr.spanW, spr.spanH);
+      // Stretch whichever dimension lies along the run to exactly one step, so
+      // courses butt against each other with no seam and no overlap. A run's
+      // normal points across it: ny is set on a face that runs along x.
+      const alongX = e.ny !== 0;
+      const sw = alongX ? step : spr.spanW;
+      const sh = alongX ? spr.spanH : step;
+      ctx.drawImage(spr, cx - sw / 2, cy - sh / 2, sw, sh);
 
-      // Rubble on roughly every fourth course, chosen by position hash rather
-      // than by Math.random -- a per-frame roll would make the stones crawl.
-      // Every third measured 2.9ms a frame in a busy corridor, which is a lot
-      // for a silhouette detail; a quarter of the faces breaks the line just
-      // as well.
-      if (!wallRubble.length) continue;
-      const hh = (((cx * 31 + cy * 17) | 0) % 4 + 4) % 4;
-      if (hh !== 0) continue;
-      const rset = wallRubble[(((cx * 11 + cy * 23) | 0) % wallRubble.length +
-                               wallRubble.length) % wallRubble.length];
-      const rs = rset[q];
-      const rx = e.x1 + ux * d + e.nx * 4;
-      const ry = e.y1 + uy * d + e.ny * 4;
-      ctx.drawImage(rs, rx - rs.spanW / 2, ry - rs.spanH / 2, rs.spanW, rs.spanH);
+      // The rubble skirt that used to break the foot of every wall is gone.
+      // It was drawn half over the floor and half over the course, which is
+      // most of what made the bases read as broken, overlapping edges rather
+      // than as one clean block meeting the ground.
     }
   }
 }
