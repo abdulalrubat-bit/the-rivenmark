@@ -711,7 +711,25 @@ const ENEMY_TYPES = {
               color: '#e8c060', halo: 'rgba(232,192,96,.18)', weight: 0, from: 1e9 },
   breaker: { r: 23, speed: 62,  hp: 135, dmg: 21, tech: 4, cd: 1.30, mass: 2.8,
               role: 'anchor',
-              color: '#e0552a', halo: 'rgba(224,85,42,.22)', weight: 4,  from: 55 },
+              color: '#c85a24', halo: 'rgba(200,90,36,.22)', weight: 4,  from: 55 },
+  // One slag each, not two. At two the pair of them were worth about twice a
+  // thrall's slag for about the same health, and the bot filled the quota
+  // nearly six seconds sooner across twenty-four runs -- new archetypes are
+  // meant to change what the fight is, not how long it lasts.
+  // Bloated with something that wants out. It does not strike: it closes,
+  // commits, and bursts -- and it bursts when it dies as well, so a husk broken
+  // across the room is a husk that cost you nothing, and one broken at your
+  // feet is the same blast either way. That is the whole of it, and it is
+  // learnable in one delve.
+  husk:    { r: 17, speed: 112, hp: 40,  dmg: 0,  tech: 1, cd: 9.00, mass: 1.3,
+              role: 'burst',
+              color: '#c8d63a', halo: 'rgba(200,214,58,.22)', weight: 5,  from: 22 },
+  // It never closes. It holds the range it likes and throws, and rock stops
+  // what it throws -- the first thing in the delve that makes a wall worth
+  // standing behind rather than walking round.
+  cantor:  { r: 13, speed: 78,  hp: 28,  dmg: 12, tech: 1, cd: 1.45, mass: 0.9,
+              role: 'shade',
+              color: '#48d0c0', halo: 'rgba(72,208,192,.22)', weight: 4,  from: 40 },
   // The Deceiver's own. They never appear in the horde roster -- they arrive
   // with him and they are the reason he is hard to reach.
   lieutenant: { r: 21, speed: 80, hp: 300, dmg: 26, tech: 12, cd: 1.15, mass: 4.4,
@@ -734,6 +752,28 @@ const ENEMY_TYPES = {
 const INVADE_EARLY = 34;   // never before this, so a run has started properly
 const INVADE_HUNT  = 78;   // and he leaves after this long without reaching you
 const INVADE_GIVEUP = 380; // "without reaching you" means staying this far off
+
+// --- the husk -------------------------------------------------------------
+const HUSK_NEAR  = 50;    // it commits to the burst this close
+const HUSK_FUSE  = 0.52;  // and this is how long you have to be somewhere else
+const HUSK_R     = 94;    // what the burst takes
+// Measured: blastAt passes 0.4 of this to the player, so at 34 a burst in your
+// face cost fifteen per cent of life and the lesson it is meant to teach --
+// break them before they arrive -- was not worth learning. At 72 it costs
+// nearer a quarter, and it is also finally enough to kill a neighbouring husk,
+// so a knot of them goes off in sequence. Each link has its own telegraphed
+// ring, so a cascade is something you walk out of rather than something that
+// happens to you.
+const HUSK_DMG   = 62;
+
+// --- the cantor -----------------------------------------------------------
+const SHADE_WANT = 240;   // the range it tries to hold
+const SHADE_NEAR = 150;   // inside this it gives ground
+const BOLT_WIND  = 0.55;  // the cast you can see coming
+const BOLT_SPEED = 296;
+const BOLT_R     = 7;
+const BOLT_RANGE = 420;
+const MAX_BOLTS  = 48;
 
 const SLAM_R     = 104;   // reach
 const SLAM_WIND  = 0.9;   // seconds of warning
@@ -962,7 +1002,13 @@ const RAMP = [
     lesson: 'Some of them will not come at you down the middle.' },
   { horde: ['thrall', 'eclipse', 'breaker'],
     elites: 0.11, pitch: 0.4, invade: 0, guard: 1, mutate: true,
-    lesson: 'Some ground is held. Some cannot be stood on.' }
+    lesson: 'Some ground is held. Some cannot be stood on.' },
+  { horde: ['thrall', 'eclipse', 'breaker', 'husk'],
+    elites: 0.13, pitch: 0.5, invade: 0, guard: 1, mutate: true,
+    lesson: 'Some of them are carrying it with them. Break those early.' },
+  { horde: ['thrall', 'eclipse', 'breaker', 'husk', 'cantor'],
+    elites: 0.15, pitch: 0.6, invade: 1, guard: 1, mutate: true,
+    lesson: 'Some of them never close at all. Put stone between you.' }
 ];
 
 function buildLevels() {
@@ -979,7 +1025,8 @@ function buildLevels() {
     const pool = i === 0 ? regions.slice()
                : regions.slice(0, Math.min(regions.length, 1 + Math.floor(d * 5)));
     const ramp = RAMP[i];
-    const horde = ramp ? ramp.horde.slice() : ['thrall', 'eclipse', 'breaker'];
+    const horde = ramp ? ramp.horde.slice()
+                       : ['thrall', 'eclipse', 'breaker', 'husk', 'cantor'];
     out.push({
       id: i === 0 ? 'test' : 'delve' + i,
       name: name,
@@ -2462,6 +2509,24 @@ function wakeEnemy(e, chain) {
 // near the spawn pocket, biggest and meanest deepest in, plus a guard on the
 // ley-gate itself. Placement stops once enough slag is on the map to make the
 // quota with room to spare -- the level has to be completable by clearing it.
+// What a pack member is, by how deep in the delve its site sits. Deeper packs
+// lean on the heavier archetypes and the near ones are thralls. Written out
+// twice once -- in the main placement and in the top-up pass -- which meant
+// two copies of the same table to keep in step by hand.
+function packKind(roster, depth) {
+  const has = k => roster.indexOf(k) >= 0;
+  const r = Math.random();
+  // The bands are cumulative on one roll, so widening one narrows what comes
+  // after it. The breaker's share was quietly cut from 0.28 to 0.22 making
+  // room for the new pair, and fewer of the tanky body showed up as a faster
+  // delve rather than as anything anyone would notice happening.
+  if (depth > 0.62 && r < 0.28 && has('breaker')) return 'breaker';
+  if (depth > 0.45 && r < 0.40 && has('cantor'))  return 'cantor';
+  if (depth > 0.28 && r < 0.56 && has('husk'))    return 'husk';
+  if (depth > 0.30 && r < 0.68 && has('eclipse')) return 'eclipse';
+  return roster[0];
+}
+
 function placePacks(spawn) {
   if (!openCells.length) return;
   const far = Math.hypot(WORLD.w, WORLD.h) * 0.5;
@@ -2495,11 +2560,7 @@ function placePacks(spawn) {
     const n = 3 + ((Math.random() * 3) | 0) + (st.depth > 0.55 ? 1 : 0) +
               Math.round((LEVEL.depth || 0) * 2);
     for (let k = 0; k < n; k++) {
-      // Deeper packs lean on the heavier archetypes; near ones are thralls.
-      let kind = roster[0];
-      const r = Math.random();
-      if (st.depth > 0.62 && r < 0.28 && roster.indexOf('breaker') >= 0) kind = 'breaker';
-      else if (st.depth > 0.3 && r < 0.55 && roster.indexOf('eclipse') >= 0) kind = 'eclipse';
+      const kind = packKind(roster, st.depth);
       // The site is kept clear of the spawn pocket, but members scatter off
       // the site -- so the clearance has to be enforced on the body, not the
       // site, or one can drift back inside its own aggro radius of the player.
@@ -2525,10 +2586,7 @@ function placePacks(spawn) {
   for (let pass = 0; pass < 4 && slag < budget; pass++) {
     for (let i = 0; i < sites.length && slag < budget; i++) {
       const st = sites[i];
-      let kind = roster[0];
-      const r = Math.random();
-      if (st.depth > 0.62 && r < 0.28 && roster.indexOf('breaker') >= 0) kind = 'breaker';
-      else if (st.depth > 0.3 && r < 0.55 && roster.indexOf('eclipse') >= 0) kind = 'eclipse';
+      const kind = packKind(roster, st.depth);
       const pos = scatterNear(st.x, st.y, 110, ENEMY_TYPES[kind].r + 4, spawn);
       if (!pos) continue;
       const e = placeEnemy(kind, pos.x, pos.y, st.depth);
@@ -2633,7 +2691,9 @@ function newBody(kind, x, y, t) {
     slam: !!d.slam, slamCd: rand(1.2, SLAM_CD),
     postX: 0, postY: 0, posted: false, guard: rand(0, BRACE_UP), braced: false,
     // Started somewhere random in the cycle, or a pack arrives in lockstep.
-    gait: Math.random() * GAIT_STEP * GAIT_N, pace: 0
+    gait: Math.random() * GAIT_STEP * GAIT_N, pace: 0,
+    fuse: 0,                                   // husk: counting down to the burst
+    cast: rand(0, 1.2), casting: 0             // cantor: between throws, and mid-throw
   };
 }
 
@@ -2855,6 +2915,236 @@ function maybeDropItem(e) {
   }
 }
 
+/* --- bolts ----------------------------------------------------------------
+   The first thing in the delve that comes at you through the air. A cantor
+   only throws when it has a clear line, and rock stops the bolt in flight, so
+   a wall is cover rather than scenery -- which is what the rooms were cut for.
+
+   Travel is substepped like the crescent's, so a bolt cannot skip a thin wall
+   or step over the player between one frame and the next.
+   -------------------------------------------------------------------- */
+let bolts = [];
+
+function fireBolt(e) {
+  if (bolts.length >= MAX_BOLTS) return;
+  const dx = player.x - e.x, dy = player.y - e.y;
+  const d = Math.hypot(dx, dy) || 1;
+  bolts.push({ x: e.x + (dx / d) * (e.r + 6), y: e.y + (dy / d) * (e.r + 6),
+               dx: dx / d, dy: dy / d, dmg: e.dmg, colour: e.color,
+               life: BOLT_RANGE / BOLT_SPEED, spin: Math.random() * TAU, dead: false });
+  burst(e.x, e.y, e.color, 5, 90);
+}
+
+function updateBolts(dt) {
+  let w = 0;
+  for (let i = 0; i < bolts.length; i++) {
+    const b = bolts[i];
+    b.life -= dt;
+    b.spin += dt * 9;
+    if (b.life <= 0) continue;
+    const travel = BOLT_SPEED * dt;
+    const steps = Math.min(6, Math.max(1, Math.ceil(travel / 8)));
+    const st = travel / steps;
+    for (let k = 0; k < steps && !b.dead; k++) {
+      b.x += b.dx * st;
+      b.y += b.dy * st;
+      if (b.x < 0 || b.y < 0 || b.x > WORLD.w || b.y > WORLD.h) { b.dead = true; break; }
+      if (pointInWalls(b.x, b.y, BOLT_R * 0.6)) {
+        b.dead = true;
+        burst(b.x, b.y, b.colour, 7, 130);
+        break;
+      }
+      if (dist2(b.x, b.y, player.x, player.y) < (player.r + BOLT_R) * (player.r + BOLT_R)) {
+        b.dead = true;
+        hurtPlayerBy(b.dmg, b.x, b.y);
+        burst(b.x, b.y, b.colour, 9, 160);
+        break;
+      }
+    }
+    if (!b.dead) bolts[w++] = b;
+  }
+  bolts.length = w;
+}
+
+function drawBolts(t) {
+  for (let i = 0; i < bolts.length; i++) {
+    const b = bolts[i];
+    if (lowFx) {
+      ctx.fillStyle = b.colour;
+      ctx.fillRect(b.x - BOLT_R, b.y - BOLT_R, BOLT_R * 2, BOLT_R * 2);
+      continue;
+    }
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    // A tail back along the line it came, so which way it is going is legible
+    // without having to watch it for a frame.
+    const g = ctx.createLinearGradient(b.x, b.y, b.x - b.dx * 26, b.y - b.dy * 26);
+    g.addColorStop(0, tint(b.colour, 1, 0.5));
+    g.addColorStop(1, tint(b.colour, 1, 0));
+    ctx.strokeStyle = g;
+    ctx.lineWidth = BOLT_R * 1.3;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(b.x, b.y);
+    ctx.lineTo(b.x - b.dx * 26, b.y - b.dy * 26);
+    ctx.stroke();
+    ctx.fillStyle = tint(b.colour, 1, 0.75);
+    ctx.beginPath(); ctx.arc(b.x, b.y, BOLT_R, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.85)';
+    ctx.beginPath(); ctx.arc(b.x, b.y, BOLT_R * 0.42, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+}
+
+// A husk coming apart. The blast is a slam, because a slam is already a
+// telegraphed circle of ground that is about to be taken and there is no
+// reason for this to be a second one of those.
+//
+// The ground is marked the moment it commits, not at the end of the fuse. The
+// swelling sprite alone is not a telegraph the way the rest of the game means
+// one: everything else that is about to take a piece of floor says so on the
+// floor, and with only the last quarter-second marked there was not room to
+// walk out of ninety-four units of blast.
+//
+// Arming is once. A husk that commits and is then broken still goes off, on
+// its own clock, where it committed -- killing it early moves nothing.
+function armHusk(e, wind) {
+  if (e.armed) return;
+  e.armed = true;
+  slams.push({ x: e.x, y: e.y, r: HUSK_R, wind: wind, t: 0,
+               dmg: HUSK_DMG * DIFF.threat, struck: false, husk: true });
+}
+
+function burstHusk(e) {
+  e.hp = 0;
+  e.burst = true;
+  armHusk(e, HUSK_FUSE * 0.45);
+  burst(e.x, e.y, e.color, 12, 150);
+}
+
+/* --- coffers --------------------------------------------------------------
+   Something to find. Everything in the delve up to now came off a body, which
+   makes the whole map one long corridor between fights; a coffer in a dead end
+   is a reason to take the turning you did not have to take.
+
+   They sit in penned-in ground by preference -- nooks, ends, the backs of
+   rooms -- so finding one is a small piece of exploring rather than something
+   you walk over on the way to the gate. Opening is walking onto it, like the
+   corpse: there is no free hand on a phone for an action button.
+   -------------------------------------------------------------------- */
+let chests = [];
+const CHEST_REACH = 30;
+const CHEST_SAFE  = 320;    // never this near the spawn pocket
+const CHEST_APART = 300;    // nor this near each other
+
+// Every coffer in a delve, opened, comes to about a third of what the whole
+// horde in it is worth in coin -- measured across five depths, and it holds at
+// each because both scale on the same depth term. That is meant to be plainly
+// worth the detour without making the player who walks straight at the gate
+// feel robbed, and the gear the warded ones carry is on top of it.
+const CHEST_KINDS = {
+  coffer: { coin: [34, 74],  gear: 0.34, floor: 0,    name: 'A coffer',
+            colour: '#c9a24a' },
+  warded: { coin: [112, 205], gear: 1,   floor: 0.62, name: 'A warded coffer',
+            colour: '#8fb8ff' }
+};
+
+function placeChests(spawn, portal) {
+  chests = [];
+  if (!openCells.length) return;
+  const depth = LEVEL.depth || 0;
+  const want = 3 + Math.round(depth * 3);
+  const warded = Math.random() < 0.45 + depth * 0.4 ? 1 : 0;
+
+  // Penned-in ground first. narrowGrid is 0 at a crossroads and 4 at a dead
+  // end, and it is already built by the time this runs.
+  const pool = [];
+  for (let i = 0; i < openCells.length; i++) {
+    const c = openCells[i];
+    if (pointInWalls(c.x, c.y, 20)) continue;
+    if (dist2(c.x, c.y, spawn.x, spawn.y) < CHEST_SAFE * CHEST_SAFE) continue;
+    if (portal && dist2(c.x, c.y, portal.x, portal.y) < 200 * 200) continue;
+    const cx = Math.floor(c.x / CELL_W), cy = Math.floor(c.y / CELL_W);
+    pool.push({ x: c.x, y: c.y, pen: narrowGrid[gi(cx, cy)] || 0 });
+  }
+  if (!pool.length) return;
+  // Shuffled, then sorted by how penned in -- so it is the tightest ground
+  // available rather than the first tight cell the scan happened to reach.
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = (Math.random() * (i + 1)) | 0;
+    const t = pool[i]; pool[i] = pool[j]; pool[j] = t;
+  }
+  pool.sort((a, b) => b.pen - a.pen);
+
+  const total = want + warded;
+  for (let i = 0; i < pool.length && chests.length < total; i++) {
+    const c = pool[i];
+    let ok = true;
+    for (let k = 0; k < chests.length && ok; k++) {
+      if (dist2(c.x, c.y, chests[k].x, chests[k].y) < CHEST_APART * CHEST_APART) ok = false;
+    }
+    if (!ok) continue;
+    const kind = (warded && chests.length === 0) ? 'warded' : 'coffer';
+    chests.push({ x: c.x, y: c.y, kind, open: false,
+                  q: (Math.random() * 4) | 0, pulse: Math.random() * TAU });
+  }
+}
+
+function openChest(ch) {
+  if (ch.open) return;
+  ch.open = true;
+  const K = CHEST_KINDS[ch.kind];
+  const depth = LEVEL.depth || 0;
+  const coin = Math.round(rand(K.coin[0], K.coin[1]) * (1 + depth * 1.4) * DIFF.lootRate);
+  run.coins += coin;
+  run.chests = (run.chests || 0) + 1;
+
+  burst(ch.x, ch.y, K.colour, 18, 190);
+  ring(ch.x, ch.y, K.colour, 8, 46, 0.4);
+  floatDmg(ch.x, ch.y - 12, coin, 'coin');
+
+  // Gear lands on the floor as an ordinary drop, so a full bag behaves the
+  // same way here as it does everywhere else rather than silently eating it.
+  if (Math.random() < K.gear * DIFF.lootRate) {
+    const it = rollItem(Math.max(depth, K.floor));
+    drops.push({ x: ch.x + rand(-10, 10), y: ch.y + rand(-10, 10),
+                 vx: rand(-40, 40), vy: rand(-40, 40),
+                 item: it, r: 9, life: 0, pulled: false });
+    toast(K.name + ' — ' + it.name, rarityOf(it).colour);
+  } else {
+    toast(K.name + ' — ' + coin + ' coin', K.colour);
+  }
+}
+
+function updateChests(dt) {
+  for (let i = 0; i < chests.length; i++) {
+    const ch = chests[i];
+    ch.pulse += dt;
+    if (ch.open) continue;
+    if (dist2(player.x, player.y, ch.x, ch.y) < CHEST_REACH * CHEST_REACH) openChest(ch);
+  }
+}
+
+function drawChests(t) {
+  for (let i = 0; i < chests.length; i++) {
+    const ch = chests[i];
+    if (ch.x < cam.x - 60 || ch.x > cam.x + view.w + 60 ||
+        ch.y < cam.y - 60 || ch.y > cam.y + view.h + 60) continue;
+    const spr = SPR['ch_' + ch.kind + (ch.open ? '_open' : '')];
+    if (spr) blit(spr, ch.x, ch.y);
+    if (ch.open || lowFx) continue;
+    // A closed one breathes, so it catches the eye across a dark room without
+    // needing a marker drawn over the top of it.
+    const K = CHEST_KINDS[ch.kind];
+    const p = 0.5 + 0.5 * Math.sin(ch.pulse * 1.7);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = tint(K.colour, 1, 0.06 + p * 0.09);
+    ctx.beginPath(); ctx.arc(ch.x, ch.y - 2, 26 + p * 5, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+}
+
 /* --- hazards --------------------------------------------------------------
    Ground you cannot stand on. A slam is a moment; a hazard is a place, and
    the difference is what turns a room into terrain. The Riftborn leaves them
@@ -2887,7 +3177,14 @@ const PILLAR_R    = 78;
 const PILLAR_FUSE = 0.5;
 
 // Everything in reach, player included. Scenery does not take sides.
-function blastAt(x, y, r, dmg, hue) {
+// `pierce` forces the hit through the player's i-frames. A pitch barrel should
+// land whether or not you were just clipped by something -- one blast, one
+// blow. A husk cascade is a different thing: each link is its own blast, and
+// piercing every one of them meant three husks standing on you was a certain
+// death with no cap and no counterplay. Cascades respect i-frames, so a chain
+// costs one blow and then costs another only if you are still standing in it
+// when they run out.
+function blastAt(x, y, r, dmg, hue, pierce) {
   shake(8);
   burst(x, y, hue, 22, 300);
   ring(x, y, hue, r * 0.35, r, 0.34);
@@ -2900,10 +3197,14 @@ function blastAt(x, y, r, dmg, hue) {
     damageEnemy(e, dmg * (1 - Math.min(0.6, d / (r * 2))));
   }
   if (dist2(player.x, player.y, x, y) < r * r) {
-    const was = player.invuln;
-    player.invuln = 0;
-    hurtPlayerBy(dmg * 0.4, x, y);
-    player.invuln = Math.max(player.invuln, was);
+    if (pierce === false) {
+      hurtPlayerBy(dmg * 0.4, x, y);
+    } else {
+      const was = player.invuln;
+      player.invuln = 0;
+      hurtPlayerBy(dmg * 0.4, x, y);
+      player.invuln = Math.max(player.invuln, was);
+    }
   }
 }
 
@@ -3009,6 +3310,10 @@ function updateSlams(dt) {
         addHazard(s.x, s.y, s.r * 0.78, dmg * 0.22, 4.5, '#ff9a3c');
         // pitch spreads: a barrel takes its neighbours with it
         hurtPropsNear(s.x, s.y, s.r, 999);
+      } else if (s.husk) {
+        blastAt(s.x, s.y, s.r, s.dmg, '#c8d63a', false);
+        addHazard(s.x, s.y, s.r * 0.5, s.dmg * 0.18, 2.6, '#c8d63a');
+        hurtPropsNear(s.x, s.y, s.r, s.dmg);
       } else if (s.pillar) {
         blastAt(s.x, s.y, s.r, 88 * (1 + (LEVEL.depth || 0)), '#cbbfa4');
         for (let i = 0; i < 5; i++) {
@@ -3275,7 +3580,8 @@ const FLOAT_STYLE = {
   hit:    { c: '#f2e6c4', px: 15 },
   heavy:  { c: '#ffd870', px: 20 },
   soaked: { c: '#8c8168', px: 12 },
-  taken:  { c: '#e0563f', px: 18 }
+  taken:  { c: '#e0563f', px: 18 },
+  coin:   { c: '#e8c060', px: 17 }
 };
 
 function drawFloaters() {
@@ -3424,6 +3730,9 @@ function damageEnemy(e, dmg) {
   }
   e.hp -= dmg;
   e.hitFlash = 0.12;
+  // Broken across the room or broken at your feet, it goes off either way --
+  // and that is the whole lesson, so it must hold however it died.
+  if (e.hp <= 0 && e.kind === 'husk' && !e.burst) burstHusk(e);
   // "Heavy" is measured against the body being hit, not against a fixed
   // number: forty off a thrall is a killing blow and forty off the avatar is
   // a scratch, and the number should read like whichever it was.
@@ -3751,6 +4060,50 @@ function updateEnemies(dt) {
       leash = pd > ANCHOR_GUARD * ANCHOR_GUARD;
     }
 
+    // A husk commits once it is close enough that walking out is a decision
+    // rather than a formality, then it is a lit fuse and nothing else.
+    let planted = false;
+    if (e.role === 'burst') {
+      if (e.fuse > 0) {
+        e.fuse -= dt;
+        if (e.fuse <= 0) {
+          e.hp = 0; e.burst = true;
+          burst(e.x, e.y, e.color, 12, 150);
+          continue;
+        }
+        planted = true;
+      } else if (d < HUSK_NEAR) {
+        e.fuse = HUSK_FUSE;
+        armHusk(e, HUSK_FUSE);
+        ring(e.x, e.y, e.color, e.r, HUSK_R, HUSK_FUSE);
+        planted = true;
+      }
+    }
+
+    // A cantor holds its distance and throws. Giving ground when you close is
+    // the whole of its defence, and it will not throw through rock -- so it
+    // walks to find a line, and you break the line to stop it.
+    let shade = 0;    // -1 give ground, 1 close in, 2 planted to cast
+    if (e.role === 'shade') {
+      const clear = clearShot(e.x, e.y, player.x, player.y);
+      if (e.casting > 0) {
+        e.casting -= dt;
+        if (e.casting <= 0) {
+          if (clear) fireBolt(e);
+          e.cast = e.cd * rand(0.8, 1.35);
+        }
+        shade = 2;
+      } else {
+        e.cast -= dt;
+        if (e.cast <= 0 && clear && d < SHADE_WANT * 1.4 && d > SHADE_NEAR * 0.5) {
+          e.casting = BOLT_WIND;
+          shade = 2;
+        } else if (d < SHADE_NEAR) shade = -1;
+        else if (d > SHADE_WANT || !clear) shade = 1;
+        else shade = 2;
+      }
+    }
+
     // --- seek / melee -----------------------------------------------------
     let sx = 0, sy = 0;
     const touch = e.r + player.r + 3;
@@ -3761,7 +4114,18 @@ function updateEnemies(dt) {
       advanceGait(e, bx0, by0, dt);
       continue;
     }
-    if (leash) {
+    if (planted) {
+      // Swelling. It is going off wherever it is standing.
+      sx = 0; sy = 0;
+    } else if (shade === -1) {
+      // Straight back down the line it is being pressed along. Following the
+      // flow field away from the player walks it into the nearest wall, and a
+      // cornered cantor that cannot retreat is a cantor that stands and dies,
+      // which is the fight it is meant to avoid.
+      sx = -dx / d; sy = -dy / d;
+    } else if (shade === 2) {
+      sx = 0; sy = 0;
+    } else if (leash) {
       // Back to its post, and stand there once it arrives.
       const px = e.postX - e.x, py = e.postY - e.y;
       const pm = Math.hypot(px, py);
@@ -4289,6 +4653,8 @@ function update(dt) {
   updateCorpse(dt);
   updateParticles(dt);
   updateFloaters(dt);
+  updateBolts(dt);
+  updateChests(dt);
   updateRings(dt);
   updatePortal(dt);
   updateSpawning(dt);
@@ -4678,6 +5044,140 @@ function forgeEnemy(kind, r, color, P) {
       });
       g.shadowBlur = 0;
 
+    } else if (kind === 'husk') {
+      // A body that has kept growing after it stopped being one. Everything
+      // about it is the sack: the legs are too short for it, the arms are
+      // vestigial, the head has sunk into the shoulders, and the light in it
+      // is on the wrong side of the skin.
+      g.strokeStyle = 'rgb(58,60,34)'; g.lineWidth = u * 0.2;          // stub legs
+      g.beginPath();
+      g.moveTo(-u * 0.2, u * 0.5); g.lineTo(-u * 0.26 + swB, u * 0.98 + lfB);
+      g.moveTo(u * 0.2, u * 0.5);  g.lineTo(u * 0.28 + swA, u * 0.96 + lfA);
+      g.stroke();
+
+      const sg = g.createRadialGradient(-u * 0.1, -u * 0.12, u * 0.05,
+                                        0, 0, u * 0.82);              // the sack
+      sg.addColorStop(0, 'rgb(150,164,66)');
+      sg.addColorStop(0.55, 'rgb(96,106,42)');
+      sg.addColorStop(1, 'rgb(44,48,24)');
+      g.fillStyle = sg;
+      g.beginPath();
+      g.ellipse(0, u * 0.02, u * 0.72, u * 0.64, 0, 0, TAU);
+      g.fill(); outline(u * 0.13);
+
+      // What is inside it, showing through where the skin has gone thin.
+      g.fillStyle = color;
+      g.shadowColor = color; g.shadowBlur = u * 0.5;
+      g.beginPath(); g.ellipse(-u * 0.06, u * 0.06, u * 0.26, u * 0.22, 0.2, 0, TAU); g.fill();
+      g.shadowBlur = 0;
+      g.fillStyle = 'rgba(248,255,196,.7)';
+      g.beginPath(); g.ellipse(-u * 0.1, u * 0.0, u * 0.11, u * 0.09, 0.2, 0, TAU); g.fill();
+
+      // Seams under strain, running round the belly.
+      g.strokeStyle = 'rgba(206,222,96,.5)'; g.lineWidth = u * 0.045;
+      for (let i = 0; i < 3; i++) {
+        g.beginPath();
+        g.ellipse(0, u * 0.02, u * 0.66 - i * u * 0.02, u * 0.58 - i * u * 0.16,
+                  0, 0.5 + i * 0.15, Math.PI - 0.5 - i * 0.15);
+        g.stroke();
+      }
+      g.strokeStyle = 'rgba(12,14,6,.5)'; g.lineWidth = u * 0.05;
+      g.beginPath();
+      g.moveTo(-u * 0.5, -u * 0.3); g.lineTo(-u * 0.3, -u * 0.12);
+      g.moveTo(u * 0.44, -u * 0.34); g.lineTo(u * 0.26, -u * 0.16);
+      g.stroke();
+
+      g.strokeStyle = 'rgb(104,114,52)'; g.lineWidth = u * 0.12;        // little arms
+      g.beginPath();
+      g.moveTo(-u * 0.6, -u * 0.24);
+      g.quadraticCurveTo(-u * 0.86 + arB, -u * 0.02, -u * 0.74 + arB, u * 0.26);
+      g.moveTo(u * 0.6, -u * 0.26);
+      g.quadraticCurveTo(u * 0.86 + arA, -u * 0.04, u * 0.74 + arA, u * 0.24);
+      g.stroke();
+
+      const hh = g.createLinearGradient(0, -u * 0.92, 0, -u * 0.5);     // sunken head
+      hh.addColorStop(0, 'rgb(158,168,96)');
+      hh.addColorStop(1, 'rgb(62,68,36)');
+      g.fillStyle = hh;
+      g.beginPath(); g.ellipse(0, -u * 0.66, u * 0.26, u * 0.22, 0, 0, TAU); g.fill();
+      outline(u * 0.09);
+      g.fillStyle = 'rgba(8,10,5,.95)';                                  // and its open mouth
+      g.beginPath(); g.ellipse(0, -u * 0.58, u * 0.13, u * 0.1, 0, 0, TAU); g.fill();
+      g.fillStyle = color;
+      g.beginPath(); g.ellipse(-u * 0.1, -u * 0.74, u * 0.045, u * 0.04, 0, 0, TAU); g.fill();
+      g.beginPath(); g.ellipse(u * 0.1, -u * 0.74, u * 0.045, u * 0.04, 0, 0, TAU); g.fill();
+
+    } else if (kind === 'cantor') {
+      // Thin, and it keeps its distance. The lit thing in its hand is the
+      // whole tell: while that is up it is about to throw, and it is the part
+      // of the silhouette that carries across a room.
+      const rb = g.createLinearGradient(0, -u * 0.7, 0, u * 1.1);       // robe
+      rb.addColorStop(0, 'rgb(38,74,76)');
+      rb.addColorStop(0.6, 'rgb(20,42,46)');
+      rb.addColorStop(1, 'rgb(10,22,26)');
+      g.fillStyle = rb;
+      g.beginPath();
+      g.moveTo(-u * 0.34, -u * 0.5);
+      g.quadraticCurveTo(-u * 0.56, u * 0.3, -u * 0.44 + swB, u * 1.04 + lfB);
+      g.lineTo(u * 0.44 + swA, u * 1.02 + lfA);
+      g.quadraticCurveTo(u * 0.56, u * 0.3, u * 0.34, -u * 0.5);
+      g.closePath(); g.fill(); outline(u * 0.12);
+
+      g.strokeStyle = 'rgba(72,208,192,.35)'; g.lineWidth = u * 0.05;   // cold trim
+      g.beginPath();
+      g.moveTo(-u * 0.3, -u * 0.34); g.lineTo(u * 0.3, -u * 0.34);
+      g.moveTo(-u * 0.4, u * 0.86); g.lineTo(u * 0.4, u * 0.84);
+      g.stroke();
+
+      // The off hand hangs; the throwing hand is up with the focus in it.
+      g.strokeStyle = 'rgb(46,88,90)'; g.lineWidth = u * 0.13;
+      g.beginPath();
+      g.moveTo(-u * 0.3, -u * 0.3);
+      g.quadraticCurveTo(-u * 0.56 + arB, u * 0.1, -u * 0.46 + arB, u * 0.44);
+      g.stroke();
+      const fx = u * 0.68 + arA * 0.5, fy = -u * 0.72;
+      g.beginPath();
+      g.moveTo(u * 0.3, -u * 0.34);
+      g.quadraticCurveTo(u * 0.58 + arA * 0.4, -u * 0.6, fx, fy + u * 0.14);
+      g.stroke();
+      g.strokeStyle = 'rgba(190,236,232,.8)'; g.lineWidth = u * 0.04;   // bone fingers
+      g.beginPath();
+      for (let k = -1; k <= 1; k++) {
+        g.moveTo(-u * 0.46 + arB, u * 0.44);
+        g.lineTo(-u * 0.46 + arB + k * u * 0.06, u * 0.6 - Math.abs(k) * u * 0.03);
+      }
+      g.stroke();
+
+      // The focus.
+      g.fillStyle = color;
+      g.shadowColor = color; g.shadowBlur = u * 0.7;
+      g.beginPath();
+      g.moveTo(fx, fy - u * 0.2);
+      g.lineTo(fx + u * 0.13, fy);
+      g.lineTo(fx, fy + u * 0.2);
+      g.lineTo(fx - u * 0.13, fy);
+      g.closePath(); g.fill();
+      g.fillStyle = 'rgba(238,255,252,.9)';
+      g.beginPath(); g.ellipse(fx, fy, u * 0.05, u * 0.07, 0, 0, TAU); g.fill();
+      g.shadowBlur = 0;
+
+      const hd = g.createLinearGradient(0, -u * 1.0, 0, -u * 0.42);     // hood
+      hd.addColorStop(0, 'rgb(46,88,92)');
+      hd.addColorStop(1, 'rgb(16,34,38)');
+      g.fillStyle = hd;
+      g.beginPath();
+      g.moveTo(-u * 0.32, -u * 0.44);
+      g.quadraticCurveTo(-u * 0.36, -u * 0.98, 0, -u * 1.0);
+      g.quadraticCurveTo(u * 0.36, -u * 0.98, u * 0.32, -u * 0.44);
+      g.closePath(); g.fill(); outline(u * 0.1);
+      g.fillStyle = 'rgba(200,214,206,.92)';                             // a blank mask
+      g.beginPath(); g.ellipse(0, -u * 0.66, u * 0.2, u * 0.24, 0, 0, TAU); g.fill();
+      outline(u * 0.07);
+      g.fillStyle = color;
+      g.shadowColor = color; g.shadowBlur = u * 0.35;
+      g.fillRect(-u * 0.13, -u * 0.72, u * 0.26, u * 0.05);
+      g.shadowBlur = 0;
+
     } else {
       // Planted, over-armoured, bound together by seams that are burning
       // through from the inside.
@@ -4786,8 +5286,10 @@ function forgeEnemy(kind, r, color, P) {
     // people who gave up their will rather than monsters. It rides the body,
     // so it sits where the body is not moving much -- the shoulder on the
     // thrall, whose head now hangs, and the helm on the armoured ones.
-    const bx = kind === 'eclipse' ? -u * 0.09 : kind === 'thrall' ? -u * 0.3 : u * 0.1;
-    const by = kind === 'eclipse' ? -u * 0.9 : kind === 'thrall' ? -u * 0.3 : -u * 0.86;
+    const bx = kind === 'eclipse' ? -u * 0.09 : kind === 'thrall' ? -u * 0.3 :
+               kind === 'husk' ? -u * 0.38 : kind === 'cantor' ? -u * 0.2 : u * 0.1;
+    const by = kind === 'eclipse' ? -u * 0.9 : kind === 'thrall' ? -u * 0.3 :
+               kind === 'husk' ? -u * 0.3 : kind === 'cantor' ? -u * 0.88 : -u * 0.86;
     g.shadowColor = PAL.brand; g.shadowBlur = u * 0.3;
     g.strokeStyle = PAL.brand; g.lineWidth = u * 0.05;
     g.beginPath();
@@ -4914,6 +5416,111 @@ const PLATE = {
   deep:    [ 30,  34,  47],
   leather: [ 96,  53,  45]
 };
+
+// A coffer, seen from above and a little in front: the lid is the face you
+// read, and an open one shows the empty box so a cleared room stays cleared
+// at a glance rather than tempting you back to it.
+function forgeChest(kind, open) {
+  const K = CHEST_KINDS[kind];
+  const u = 15;
+  const warded = kind === 'warded';
+  return forge(u * 3.4, g => {
+    g.lineJoin = 'round'; g.lineCap = 'round';
+    const outline = w => { g.strokeStyle = 'rgba(0,0,0,.82)'; g.lineWidth = w; g.stroke(); };
+
+    // the box
+    const bg = g.createLinearGradient(0, -u * 0.1, 0, u * 0.9);
+    bg.addColorStop(0, warded ? 'rgb(64,72,96)' : 'rgb(84,60,36)');
+    bg.addColorStop(1, warded ? 'rgb(24,28,42)' : 'rgb(34,24,14)');
+    g.fillStyle = bg;
+    g.beginPath();
+    g.roundRect ? g.roundRect(-u * 0.86, -u * 0.1, u * 1.72, u * 0.92, u * 0.08)
+                : g.rect(-u * 0.86, -u * 0.1, u * 1.72, u * 0.92);
+    g.fill(); outline(u * 0.11);
+
+    // staves down the front
+    g.strokeStyle = warded ? 'rgba(150,170,214,.3)' : 'rgba(150,116,72,.3)';
+    g.lineWidth = u * 0.05;
+    g.beginPath();
+    for (let i = -1; i <= 1; i++) { g.moveTo(i * u * 0.42, -u * 0.06); g.lineTo(i * u * 0.42, u * 0.78); }
+    g.stroke();
+
+    if (open) {
+      // Lid thrown back and standing behind it, so the silhouette still says
+      // "coffer" rather than "dark rectangle on the floor" -- an emptied one
+      // has to be recognisable at a glance or a cleared room keeps drawing
+      // you back to it.
+      const lg = g.createLinearGradient(0, -u * 1.02, 0, -u * 0.24);
+      lg.addColorStop(0, warded ? 'rgb(78,90,124)' : 'rgb(98,72,44)');
+      lg.addColorStop(1, warded ? 'rgb(34,40,60)' : 'rgb(48,34,20)');
+      g.fillStyle = lg;
+      g.beginPath();
+      g.moveTo(-u * 0.9, -u * 0.22);
+      g.quadraticCurveTo(-u * 0.86, -u * 0.98, 0, -u * 1.0);
+      g.quadraticCurveTo(u * 0.86, -u * 0.98, u * 0.9, -u * 0.22);
+      g.closePath(); g.fill(); outline(u * 0.11);
+      g.strokeStyle = warded ? 'rgba(52,62,90,.9)' : 'rgba(46,32,18,.9)';
+      g.lineWidth = u * 0.1;
+      g.beginPath();
+      g.moveTo(-u * 0.42, -u * 0.92); g.lineTo(-u * 0.42, -u * 0.24);
+      g.moveTo(u * 0.42, -u * 0.92);  g.lineTo(u * 0.42, -u * 0.24);
+      g.stroke();
+      // the empty inside, with a lip catching the light so it reads as depth
+      g.fillStyle = 'rgba(10,8,6,.95)';
+      g.beginPath();
+      g.roundRect ? g.roundRect(-u * 0.74, -u * 0.18, u * 1.48, u * 0.44, u * 0.06)
+                  : g.rect(-u * 0.74, -u * 0.18, u * 1.48, u * 0.44);
+      g.fill();
+      g.strokeStyle = warded ? 'rgba(140,164,214,.4)' : 'rgba(168,132,84,.4)';
+      g.lineWidth = u * 0.05;
+      g.beginPath();
+      g.moveTo(-u * 0.74, -u * 0.16); g.lineTo(u * 0.74, -u * 0.16);
+      g.stroke();
+    } else {
+      // the lid, banded, with a lock
+      const lg = g.createLinearGradient(0, -u * 0.62, 0, -u * 0.02);
+      lg.addColorStop(0, warded ? 'rgb(96,112,152)' : 'rgb(122,88,52)');
+      lg.addColorStop(1, warded ? 'rgb(40,48,70)' : 'rgb(56,40,24)');
+      g.fillStyle = lg;
+      g.beginPath();
+      g.moveTo(-u * 0.9, -u * 0.08);
+      g.quadraticCurveTo(-u * 0.86, -u * 0.62, 0, -u * 0.64);
+      g.quadraticCurveTo(u * 0.86, -u * 0.62, u * 0.9, -u * 0.08);
+      g.closePath(); g.fill(); outline(u * 0.11);
+      g.strokeStyle = warded ? 'rgba(60,70,98,.9)' : 'rgba(52,38,22,.9)';
+      g.lineWidth = u * 0.11;
+      g.beginPath();
+      g.moveTo(-u * 0.42, -u * 0.56); g.lineTo(-u * 0.42, -u * 0.06);
+      g.moveTo(u * 0.42, -u * 0.56);  g.lineTo(u * 0.42, -u * 0.06);
+      g.stroke();
+      // lock plate, lit in the colour the thing is worth
+      g.fillStyle = K.colour;
+      g.shadowColor = K.colour; g.shadowBlur = u * 0.45;
+      g.beginPath();
+      g.roundRect ? g.roundRect(-u * 0.16, -u * 0.24, u * 0.32, u * 0.36, u * 0.05)
+                  : g.rect(-u * 0.16, -u * 0.24, u * 0.32, u * 0.36);
+      g.fill();
+      g.shadowBlur = 0;
+      g.fillStyle = 'rgba(8,6,4,.85)';
+      g.beginPath(); g.arc(0, -u * 0.08, u * 0.06, 0, TAU); g.fill();
+      if (warded) {
+        // a ward cut into the lid: the tell that this one is worth the walk
+        g.strokeStyle = 'rgba(180,206,255,.75)'; g.lineWidth = u * 0.05;
+        g.beginPath();
+        g.moveTo(-u * 0.62, -u * 0.34); g.lineTo(-u * 0.5, -u * 0.2);
+        g.lineTo(-u * 0.6, -u * 0.12); g.lineTo(-u * 0.46, -u * 0.3);
+        g.moveTo(u * 0.62, -u * 0.34); g.lineTo(u * 0.5, -u * 0.2);
+        g.lineTo(u * 0.6, -u * 0.12); g.lineTo(u * 0.46, -u * 0.3);
+        g.stroke();
+      }
+    }
+
+    g.globalCompositeOperation = 'destination-over';
+    g.fillStyle = 'rgba(0,0,0,.42)';
+    g.beginPath(); g.ellipse(0, u * 0.86, u * 0.9, u * 0.24, 0, 0, TAU); g.fill();
+    g.globalCompositeOperation = 'source-over';
+  });
+}
 
 /* --- the weapon -----------------------------------------------------------
    Forged on its own, grip at the centre of the sprite, blade running along
@@ -5257,6 +5864,10 @@ function forgeAll() {
     }
   }
 
+  for (const ck in CHEST_KINDS) {
+    SPR['ch_' + ck] = forgeChest(ck, false);
+    SPR['ch_' + ck + '_open'] = forgeChest(ck, true);
+  }
   SPR.loot = forgeLoot(false);
   SPR.lootBig = forgeLoot(true);
   forgeProps();
@@ -6698,10 +7309,41 @@ function drawEnemy(e) {
     ctx.beginPath(); ctx.arc(e.x, e.y + e.r * 0.55, e.r * 1.15, 0, TAU); ctx.stroke();
     ctx.restore();
   }
+  // A husk that has committed swells, and goes on swelling until it goes.
+  // The ring it threw when it committed marks the ground; this is the part
+  // that says which body the ring belongs to.
+  const swell = e.fuse > 0 ? 1 - e.fuse / HUSK_FUSE : 0;
   // A dormant body is not walking, but it is not a statue either: it sways
   // where it stands, off the drowse clock it already keeps.
-  blit(spr, e.x, e.y, e.awake ? 0 : Math.sin(e.drowse) * 0.035, 1, 1, flip);
+  blit(spr, e.x, e.y, e.awake ? 0 : Math.sin(e.drowse) * 0.035,
+       1, 1 + swell * 0.3, flip);
   if (e.hitFlash > 0) blitFlash(spr, e.x, e.y, flip);
+  if (swell > 0) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = tint(e.color, 1, 0.1 + swell * 0.4);
+    ctx.beginPath(); ctx.arc(e.x, e.y, e.r * (1.1 + swell * 0.7), 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+  // A cantor mid-cast draws a line to where it is throwing. Breaking that
+  // line is the answer to it, so the line has to be the thing you see.
+  if (e.casting > 0) {
+    const c = 1 - e.casting / BOLT_WIND;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = tint(e.color, 1, 0.12 + c * 0.3);
+    ctx.lineWidth = 1 + c * 1.6;
+    ctx.setLineDash([5, 7]);
+    ctx.lineDashOffset = -e.wob * 12;
+    ctx.beginPath();
+    ctx.moveTo(e.x, e.y - e.r * 0.4);
+    ctx.lineTo(player.x, player.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = tint(e.color, 1, 0.2 + c * 0.55);
+    ctx.beginPath(); ctx.arc(e.x, e.y - e.r * 0.55, 3 + c * 7, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
   if (e.elite) {
     // scaled up a touch so the champion reads as bodily bigger, not just lit
     ctx.save();
@@ -7154,6 +7796,19 @@ function drawMinimap() {
     ctx.strokeStyle = 'rgba(226,120,44,.8)'; ctx.lineWidth = 1.4 * mk;
     ctx.beginPath(); ctx.arc(ix, iy, 6.4 * mk, 0, TAU); ctx.stroke();
   }
+  // Unopened coffers are plotted, and opened ones stop being. A coffer you
+  // cannot find is not a reason to explore, it is a reason to be annoyed; a
+  // coffer you can see but have to reach is the decision the map is for.
+  for (let i = 0; i < chests.length; i++) {
+    const ch = chests[i];
+    if (ch.open) continue;
+    const K = CHEST_KINDS[ch.kind];
+    const bx = x + ch.x * k, by = y + ch.y * k, r = 2.6 * mk;
+    ctx.fillStyle = K.colour;
+    ctx.fillRect(bx - r, by - r * 0.8, r * 2, r * 1.6);
+    ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.lineWidth = 1;
+    ctx.strokeRect(bx - r, by - r * 0.8, r * 2, r * 1.6);
+  }
   // Your own corpse is always plotted. Finding it is not meant to be the
   // challenge -- getting to it and back out is.
   if (run.corpse && !run.corpse.taken) {
@@ -7476,6 +8131,7 @@ function draw(t) {
   ctx.translate(-cam.x + shx, -cam.y + shy);
   drawWalls(x0, y0, x1, y1);
   drawProps(x0, y0, x1, y1);
+  drawChests(t);
   drawLoot(t);
   drawHazards(t);
   drawSlams(t);
@@ -7483,6 +8139,7 @@ function draw(t) {
   drawDrops(t);
   drawStanding(t, x0, y0, x1, y1);
   drawArcs();
+  drawBolts(t);
   drawParticles();
   if (!lowFx) drawLightPass(t);
   // Over the light pass, not under it: a number a glow has washed out is
@@ -7537,17 +8194,23 @@ function draw(t) {
     const a = Math.min(1, t0.life / 0.5);
     ctx.save();
     ctx.globalAlpha = Math.max(0, a);
-    ctx.textAlign = 'center';
-    ctx.font = '400 13px Georgia, "Times New Roman", serif';
-    const w = ctx.measureText(t0.text).width + 26;
-    const bx = view.w / 2 - w / 2, by = HUD_H + 8 + view.safeT;
+    // Left-aligned and fitted rather than centred at its natural width. A
+    // centred box grows into the minimap, and an item name is long enough
+    // that it did: "A warded coffer -- Warden's Sa" and then a map.
+    ctx.textAlign = 'left';
+    const S = Math.round(Math.min(132, Math.max(96, view.w * 0.30)));
+    const room = view.w - S - 14 - view.safeR - 24;
+    const txt = fitText(t0.text, room - 20, 13,
+                        'Georgia, "Times New Roman", serif', 10);
+    const w = ctx.measureText(txt).width + 22;
+    const bx = 12, by = HUD_H + 8 + view.safeT + bossBarDrop();
     ctx.fillStyle = 'rgba(10,8,5,.82)';
     ctx.fillRect(bx, by, w, 24);
     ctx.strokeStyle = tint(t0.colour, 1, 0.55);
     ctx.lineWidth = 1;
     ctx.strokeRect(bx + 0.5, by + 0.5, w - 1, 23);
     ctx.fillStyle = t0.colour;
-    ctx.fillText(t0.text, view.w / 2, by + 16);
+    ctx.fillText(txt, bx + 11, by + 16);
     ctx.restore();
     ctx.textAlign = 'left';
   }
@@ -7902,7 +8565,7 @@ function resetRun(heroId, levelId, diffId) {
   portal  = { x: pt.x, y: pt.y, pulse: 0, channel: 0, active: false, inside: false };
   player  = makePlayer(spawn.x, spawn.y, hero);
   enemies = []; arcs = []; loot = []; drops = []; particles = []; rings = [];
-  floaters = [];
+  floaters = []; bolts = []; chests = [];
   slams = []; hazards = [];
   enemyGrid = new SpatialHash(ENEMY_CELL);
 
@@ -7927,6 +8590,7 @@ function resetRun(heroId, levelId, diffId) {
 
   recomputeStats();
   placePacks(spawn);
+  placeChests(spawn, portal);
   flowFrom = -1;
   rebuildFlow();
   hudCache.hp = hudCache.tech = hudCache.time = hudCache.lvl = -1;
