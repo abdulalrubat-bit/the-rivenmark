@@ -262,6 +262,14 @@
      flex content that overflows puts its first rows above the scroll origin,
      where nothing can reach them. */
   #delve, #gear, #vendor, #hall{justify-content:flex-start;}
+  /* And it must not shrink them either. A flex child defaults to shrinkable,
+     so on a screen taller than the phone every row is squeezed under its own
+     content -- the item card keeps its 96px floor while 200px of text carries
+     on past the border, over the Loadouts heading, and puts Equip underneath
+     the Back button where it cannot be tapped. Worse, the spilled part is
+     outside the flow, so the scroll box does not know it is there and
+     scrolling cannot reach it. Natural height, and let the screen scroll. */
+  #delve > *, #gear > *, #vendor > *, #hall > *{flex:0 0 auto;}
   /* Fifty-two rungs plus heroes plus difficulties overflows a short phone, and
      the one control you always need is at the bottom -- so it stays put rather
      than being something you have to go looking for. */
@@ -1206,7 +1214,8 @@ const AFFIXES = [
   { id:'damage',  stat:'damage',    mul:false, lo:2,    hi:7,    dp:0, name:'Keen',      word:'+@ damage' },
   { id:'damageP', stat:'damage',    mul:true,  lo:0.06, hi:0.20, dp:0, name:'Cruel',     word:'+@ damage' },
   { id:'life',    stat:'maxHp',     mul:false, lo:8,    hi:26,   dp:0, name:'Stout',     word:'+@ life' },
-  { id:'ward',    stat:'ward',      mul:false, lo:0.03, hi:0.09, dp:0, name:'Warded',    word:'@ harm turned' },
+  { id:'ward',    stat:'ward',      mul:false, lo:0.03, hi:0.09, dp:0, pct:true,
+    name:'Warded',    word:'@ harm turned' },
   { id:'speed',   stat:'speed',     mul:true,  lo:0.03, hi:0.09, dp:0, name:'Fleet',     word:'+@ stride' },
   { id:'reach',   stat:'range',     mul:true,  lo:0.04, hi:0.13, dp:0, name:'Far',       word:'+@ reach' },
   { id:'sweep',   stat:'sweep',     mul:true,  lo:0.05, hi:0.16, dp:0, name:'Broad',     word:'+@ sweep' },
@@ -1224,7 +1233,7 @@ let AFFIX_SCALE = 1;
    turns "which is the bigger number" into "which is the bigger number for me"
    -- and gives the two heroes genuinely different best-in-slot. */
 const SYNERGY = [
-  { id:'isaacWard',  hero:'isaac', stat:'ward',   mul:false, lo:0.04, hi:0.10, dp:0,
+  { id:'isaacWard',  hero:'isaac', stat:'ward',   mul:false, lo:0.04, hi:0.10, dp:0, pct:true,
     name:"Warden's",  word:'@ harm turned',
     slots:['offhand','mail','girdle','ring1','ring2'] },
   { id:'isaacSweep', hero:'isaac', stat:'sweep',  mul:true,  lo:0.10, hi:0.26, dp:0,
@@ -1311,9 +1320,13 @@ function affixText(af, hero) {
   const a = AFFIX_BY_ID[af.id];
   if (!a) return '';
   let v;
-  if (a.mul) v = (af.v >= 0 ? '+' : '') + Math.round(af.v * 100) + '%';
-  else if (a.id === 'ward') v = Math.round(af.v * 100) + '%';
-  else v = (af.v >= 0 ? '+' : '') + (a.dp ? af.v.toFixed(a.dp) : af.v);
+  // An additive affix whose roll is a fraction has to say so, or it prints the
+  // float: the synergy ward is `isaacWard`, so keying the percentage off the
+  // id `ward` missed it and put "+0.03952737067873269 harm turned" on the
+  // card. `pct` is carried by the affix rather than inferred, so the next
+  // fractional stat added does not have to rediscover this.
+  if (a.mul || a.pct) v = (af.v >= 0 && !a.pct ? '+' : '') + Math.round(af.v * 100) + '%';
+  else v = (af.v >= 0 ? '+' : '') + (a.dp ? af.v.toFixed(a.dp) : Math.round(af.v));
   let out = a.word.replace('+@', v).replace('@', v);
   if (a.hero) {
     out += ' \u2014 ' + HEROES[a.hero].name +
@@ -2326,6 +2339,7 @@ function moveEntity(e, dx, dy) {
    ------------------------------------------------------------------------ */
 
 let player, enemies, arcs, loot, drops, particles, rings, portal;
+let floaters = [];
 let enemyGrid = new SpatialHash(ENEMY_CELL);
 const _near = [];
 // wakeEnemy runs from inside damageEnemy, which is itself called while
@@ -2346,8 +2360,9 @@ function makePlayer(x, y, heroId) {
   p.hp = p.maxHp;
   p.face = 1;
   p.fireTimer = 0; p.invuln = 0; p.hitFlash = 0;
-  p.swing = 0; p.swingA = 0; p.swingDir = 1;
+  p.swing = 0; p.swingA = 0;
   p.gait = 0; p.pace = 0;
+  p.strike = 0; p.recov = 0;
   p.upg = {};
   p.level = stash.level || 1;
   p.gear = {};
@@ -2741,8 +2756,11 @@ function fire() {
     releaseCrescent(a, i * 0.055);
   }
   player.swing    = SWING_TIME;
+  player.recov    = 0;
   player.swingA   = base;
-  player.swingDir = player.swingDir < 0 ? 1 : -1;   // alternate shoulders
+  // Next form in the cycle. Slash, then rise, then chop, then round again --
+  // three swings before the picture repeats instead of one.
+  player.strike   = (player.strike + 1) % STRIKES.length;
   player.angle    = base;
   if (Math.abs(Math.cos(base)) > 0.25) player.face = Math.cos(base) < 0 ? -1 : 1;
   return true;
@@ -3194,6 +3212,98 @@ function burst(x, y, color, n, spd) {
   }
 }
 
+/* --- floating combat text -------------------------------------------------
+   What a hit was worth, said in the place it landed. Without it the only
+   feedback a blow gives is a flash and a health bar creeping, and the two
+   things the player most needs to read -- that a braced anchor is eating the
+   swing, and that the Deceiver takes almost nothing while his Lieutenants
+   stand -- are invisible. Those come through as a dimmed number, so the
+   mechanic teaches itself.
+
+   Capped, and merged: a crescent sweeping eight bodies at once would
+   otherwise put eight numbers in the same square inch, and text is the most
+   expensive thing this renderer draws. A second hit on a body inside the
+   merge window adds to the number already rising off it instead.        */
+const MAX_FLOATERS = 22;
+const FLOAT_LIFE   = 0.85;
+const FLOAT_MERGE  = 0.22;   // a follow-up this soon joins the running total
+
+function floatDmg(x, y, amount, kind) {
+  if (lowFx) return;
+  const n = Math.max(1, Math.round(amount));
+  // Merge into a number already climbing off the same spot.
+  for (let i = 0; i < floaters.length; i++) {
+    const f = floaters[i];
+    if (f.kind !== kind || FLOAT_LIFE - f.life > FLOAT_MERGE) continue;
+    if (Math.abs(f.x0 - x) > 26 || Math.abs(f.y0 - y) > 26) continue;
+    f.n += n;
+    f.life = Math.min(FLOAT_LIFE, f.life + 0.12);
+    f.pop = 1;
+    return;
+  }
+  if (floaters.length >= MAX_FLOATERS) {
+    // Drop the oldest rather than the new one: the newest hit is the one the
+    // player is looking for.
+    let old = 0;
+    for (let i = 1; i < floaters.length; i++) if (floaters[i].life < floaters[old].life) old = i;
+    floaters.splice(old, 1);
+  }
+  floaters.push({ x0: x, y0: y, x, y, n, kind, life: FLOAT_LIFE, pop: 1,
+                  drift: rand(-26, 26), rise: rand(56, 74) });
+}
+
+function updateFloaters(dt) {
+  let w = 0;
+  for (let i = 0; i < floaters.length; i++) {
+    const f = floaters[i];
+    f.life -= dt;
+    if (f.life <= 0) continue;
+    const t = 1 - f.life / FLOAT_LIFE;
+    // Thrown up and falling back, the way a struck number reads best: fast
+    // out of the body, slowing at the top.
+    f.x = f.x0 + f.drift * t;
+    f.y = f.y0 - f.rise * (1 - (1 - t) * (1 - t)) + 26 * t * t;
+    f.pop = Math.max(0, f.pop - dt * 6);
+    floaters[w++] = f;
+  }
+  floaters.length = w;
+}
+
+// Colour and weight by what the hit was. Soaked hits are deliberately dull and
+// small -- they are meant to read as "this is not working".
+const FLOAT_STYLE = {
+  hit:    { c: '#f2e6c4', px: 15 },
+  heavy:  { c: '#ffd870', px: 20 },
+  soaked: { c: '#8c8168', px: 12 },
+  taken:  { c: '#e0563f', px: 18 }
+};
+
+function drawFloaters() {
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.lineJoin = 'round';
+  for (let i = 0; i < floaters.length; i++) {
+    const f = floaters[i];
+    const st = FLOAT_STYLE[f.kind] || FLOAT_STYLE.hit;
+    const t = 1 - f.life / FLOAT_LIFE;
+    const a = t < 0.1 ? t / 0.1 : Math.min(1, (1 - t) / 0.45);
+    const px = st.px * (1 + f.pop * 0.22);
+    ctx.globalAlpha = a;
+    ctx.font = '700 ' + px.toFixed(1) + 'px ui-monospace, "SF Mono", monospace';
+    const txt = (f.kind === 'taken' ? '-' : '') + f.n;
+    // Struck out of the dark, so it needs its own edge to stay legible over
+    // a lit floor, a body, and a wall alike.
+    ctx.strokeStyle = 'rgba(6,4,3,.85)';
+    ctx.lineWidth = 3;
+    ctx.strokeText(txt, f.x, f.y);
+    ctx.fillStyle = st.c;
+    ctx.fillText(txt, f.x, f.y);
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+  ctx.textAlign = 'left';
+}
+
 /* ---------------------------------------------------------------------------
    7. INPUT — floating virtual joystick (+ keyboard on desktop)
    Pointer events unify mouse and touch. The stick locks to one pointer id, so
@@ -3288,6 +3398,7 @@ function hurtPlayerBy(dmg, fx, fy) {
   const oy = fy === undefined ? player.y : fy;
   burst(player.x + (ox - player.x) * 0.5, player.y + (oy - player.y) * 0.5,
         PAL.blood, 10, 180);
+  floatDmg(player.x, player.y - player.r * 1.2, taken, 'taken');
   if (player.hp <= 0) { player.hp = 0; endRun(false); }
 }
 
@@ -3297,8 +3408,10 @@ function damageEnemy(e, dmg) {
   // He is held up by his escort. Hitting him through it is not forbidden, just
   // close to pointless -- so the read is "kill the crimson ones" rather than a
   // rule the game refuses to let you break.
+  let soaked = false;
   if (e.kind === 'deceiver' && escortAlive()) {
     dmg *= 0.14;
+    soaked = true;
     burst(e.x, e.y, '#e8c060', 2, 120);
   }
   // A braced anchor eats most of it. It cannot move or swing while it does,
@@ -3306,10 +3419,16 @@ function damageEnemy(e, dmg) {
   // come back rather than to keep hitting the shield.
   if (e.braced) {
     dmg *= BRACE_SOAK;
+    soaked = true;
     burst(e.x, e.y, '#ffe6a8', 2, 130);
   }
   e.hp -= dmg;
   e.hitFlash = 0.12;
+  // "Heavy" is measured against the body being hit, not against a fixed
+  // number: forty off a thrall is a killing blow and forty off the avatar is
+  // a scratch, and the number should read like whichever it was.
+  floatDmg(e.x, e.y - e.r * 0.9, dmg,
+           soaked ? 'soaked' : dmg > e.maxHp * 0.34 ? 'heavy' : 'hit');
   if (e.hp <= 0) {
     if (e.kind === 'mirage') {
       burst(e.x, e.y, '#e8c060', 10, 150);
@@ -3378,7 +3497,15 @@ function updatePlayer(dt) {
   advanceGait(player, px0, py0, dt);
   player.invuln  = Math.max(0, player.invuln - dt);
   player.hitFlash = Math.max(0, player.hitFlash - dt);
-  player.swing   = Math.max(0, player.swing - dt);
+  // The blade does not teleport back to the guard when the strike ends: it is
+  // carried back over a short recovery, which is also the beat that makes the
+  // next swing read as a separate blow rather than a continuation.
+  if (player.swing > 0) {
+    player.swing -= dt;
+    if (player.swing <= 0) { player.swing = 0; player.recov = RECOVER_TIME; }
+  } else if (player.recov > 0) {
+    player.recov = Math.max(0, player.recov - dt);
+  }
   if (player.regen > 0) player.hp = Math.min(player.maxHp, player.hp + player.regen * dt);
 
   player.fireTimer -= dt;
@@ -4161,6 +4288,7 @@ function update(dt) {
   updateDrops(dt);
   updateCorpse(dt);
   updateParticles(dt);
+  updateFloaters(dt);
   updateRings(dt);
   updatePortal(dt);
   updateSpawning(dt);
@@ -4787,6 +4915,91 @@ const PLATE = {
   leather: [ 96,  53,  45]
 };
 
+/* --- the weapon -----------------------------------------------------------
+   Forged on its own, grip at the centre of the sprite, blade running along
+   +x. Rotating it about its own centre therefore rotates it about the hand,
+   which is what lets the hero swing rather than hold a still blade with a
+   streak painted over it. One sprite per hero, one extra blit per frame, and
+   the arc is continuous instead of stepped through baked poses.
+   ------------------------------------------------------------------------ */
+function forgeWeapon(id) {
+  const H = HEROES[id];
+  const u = BASE_PLAYER.r * 1.28;
+  const magic = H.magic;
+  // How far the edge is from the hand. The streak is struck at this radius --
+  // guessed at from the body's radius instead, it floats off the blade and
+  // reads as a ring hanging in the air beside him.
+  const reach = (id === 'isaac' ? 1.52 : 1.66) * u;
+  const c = forge(u * 3.6, g => {
+    g.lineJoin = 'round'; g.lineCap = 'round';
+    if (id === 'isaac') {
+      // A hand-and-a-half sword: grip, cross, and a blade lit along its edge.
+      g.strokeStyle = '#6a5432'; g.lineWidth = u * 0.15;             // grip
+      g.beginPath(); g.moveTo(-u * 0.34, 0); g.lineTo(-u * 0.02, 0); g.stroke();
+      g.fillStyle = '#8a6a3a';                                        // pommel
+      g.beginPath(); g.arc(-u * 0.4, 0, u * 0.09, 0, TAU); g.fill();
+      g.strokeStyle = 'rgb(96,88,74)'; g.lineWidth = u * 0.11;        // cross-guard
+      g.beginPath(); g.moveTo(0, -u * 0.26); g.lineTo(0, u * 0.26); g.stroke();
+      g.shadowColor = magic; g.shadowBlur = u * 0.55;                 // the blade
+      g.fillStyle = magic;
+      g.beginPath();
+      g.moveTo(u * 0.06, -u * 0.11);
+      g.lineTo(u * 1.42, -u * 0.035);
+      g.lineTo(u * 1.6, 0);
+      g.lineTo(u * 1.42, u * 0.035);
+      g.lineTo(u * 0.06, u * 0.11);
+      g.closePath(); g.fill();
+      g.shadowBlur = 0;
+      g.strokeStyle = 'rgba(255,250,232,.95)'; g.lineWidth = u * 0.045;
+      g.beginPath(); g.moveTo(u * 0.12, 0); g.lineTo(u * 1.5, 0); g.stroke();
+    } else {
+      // A glaive: a long haft with the edge out at the end of it.
+      g.strokeStyle = '#4a3c28'; g.lineWidth = u * 0.12;              // haft
+      g.beginPath(); g.moveTo(-u * 0.62, 0); g.lineTo(u * 0.86, 0); g.stroke();
+      g.strokeStyle = 'rgb(90,84,72)'; g.lineWidth = u * 0.15;        // ferrule
+      g.beginPath(); g.moveTo(u * 0.78, 0); g.lineTo(u * 0.94, 0); g.stroke();
+      g.strokeStyle = 'rgb(74,68,58)'; g.lineWidth = u * 0.13;        // butt-cap
+      g.beginPath(); g.moveTo(-u * 0.72, 0); g.lineTo(u * -0.6, 0); g.stroke();
+      g.shadowColor = magic; g.shadowBlur = u * 0.6;                  // the edge
+      g.fillStyle = magic;
+      g.beginPath();
+      g.moveTo(u * 0.92, -u * 0.09);
+      g.quadraticCurveTo(u * 1.42, -u * 0.34, u * 1.72, -u * 0.1);
+      g.quadraticCurveTo(u * 1.36, u * 0.02, u * 0.94, u * 0.1);
+      g.closePath(); g.fill();
+      g.shadowBlur = 0;
+      g.strokeStyle = 'rgba(232,248,255,.95)'; g.lineWidth = u * 0.045;
+      g.beginPath();
+      g.moveTo(u * 0.96, -u * 0.06);
+      g.quadraticCurveTo(u * 1.4, -u * 0.26, u * 1.68, -u * 0.09);
+      g.stroke();
+    }
+  });
+  c.reach = reach;
+  return c;
+}
+
+/* --- strikes --------------------------------------------------------------
+   One crescent thrown the same way every time is the whole of the fight seen
+   from the outside, so the strike is a shape now rather than only a timer.
+   Three cycle in order: the blade comes across level, then up from low, then
+   down the centre. `from` and `to` are the weapon's angle through the swing,
+   in the hero's own space so it mirrors with his facing; `lunge` is how far he
+   is drawn into it; `span` and `wide` shape the streak it leaves.
+
+   The forms are drawing only. Damage, reach and the crescent's hit geometry
+   are untouched by which one is playing -- a strike that hit differently
+   depending on where you were in the cycle would be a balance change wearing
+   an animation's clothes.
+   ------------------------------------------------------------------------ */
+const STRIKES = [
+  { id: 'slash', from: -1.75, to:  1.15, lunge:  5, span: 1.7,  wide: 1.0,  R: 1.0 },
+  { id: 'rise',  from:  1.30, to: -1.55, lunge:  4, span: 1.45, wide: 0.78, R: 0.94 },
+  { id: 'chop',  from: -2.45, to:  0.30, lunge: 12, span: 1.0,  wide: 1.5,  R: 1.12 }
+];
+const REST_ANGLE = -0.95;      // blade carried up and forward at the guard
+const RECOVER_TIME = 0.13;     // and how long it takes to come back to it
+
 // The hero in one pose. `P` is a gait pose -- GAIT_REST for standing still.
 function forgeHero(id, P) {
   const H = HEROES[id];
@@ -4884,36 +5097,11 @@ function forgeHero(id, P) {
         g.lineTo(-u * 0.8 + Math.cos(a) * u * 0.21, u * 0.3 + Math.sin(a) * u * 0.29);
         g.stroke();
       }
-      // Sun-Gold sword
-      g.strokeStyle = lit(70, 66, 59); g.lineWidth = u * 0.22;
-      g.beginPath(); g.moveTo(u * 0.46, u * 0.08); g.lineTo(u * 0.74, u * 0.3); g.stroke();
-      g.strokeStyle = '#6a5432'; g.lineWidth = u * 0.14;
-      g.beginPath(); g.moveTo(u * 0.62, u * 0.4); g.lineTo(u * 0.84, u * 0.08); g.stroke();
-      g.shadowColor = magic; g.shadowBlur = u * 0.7;
-      g.strokeStyle = magic; g.lineWidth = u * 0.16;
-      g.beginPath(); g.moveTo(u * 0.82, u * 0.04); g.lineTo(u * 1.26, -u * 1.06); g.stroke();
-      g.shadowBlur = 0;
-      g.strokeStyle = 'rgba(255,248,224,.95)'; g.lineWidth = u * 0.06;
-      g.beginPath(); g.moveTo(u * 0.8, u * 0.0); g.lineTo(u * 1.22, -u * 1.02); g.stroke();
-    } else {
-      // Sapphire Glaive, held two-handed across the body
-      g.strokeStyle = '#4a3c28'; g.lineWidth = u * 0.13;
-      g.beginPath(); g.moveTo(-u * 0.62, u * 0.86); g.lineTo(u * 0.9, -u * 0.5); g.stroke();
-      g.strokeStyle = lit(70, 66, 59); g.lineWidth = u * 0.2;
-      g.beginPath(); g.moveTo(-u * 0.36, u * 0.36); g.lineTo(-u * 0.1, u * 0.16); g.stroke();
-      g.beginPath(); g.moveTo(u * 0.38, u * 0.06); g.lineTo(u * 0.6, -u * 0.14); g.stroke();
-      g.shadowColor = magic; g.shadowBlur = u * 0.75;
-      g.fillStyle = magic;
-      g.beginPath();
-      g.moveTo(u * 0.88, -u * 0.48);
-      g.quadraticCurveTo(u * 1.34, -u * 0.96, u * 1.18, -u * 1.3);
-      g.quadraticCurveTo(u * 0.98, -u * 0.92, u * 0.74, -u * 0.66);
-      g.closePath(); g.fill();
-      g.shadowBlur = 0;
-      g.strokeStyle = 'rgba(226,246,255,.95)'; g.lineWidth = u * 0.05;
-      g.beginPath(); g.moveTo(u * 0.9, -u * 0.5); g.lineTo(u * 1.16, -u * 1.24); g.stroke();
+      // The weapon is not in here. It is forged on its own and drawn over the
+      // body so it can actually swing -- see forgeWeapon and drawWeapon. A
+      // blade baked into the sprite can only ever be a streak painted over a
+      // still arm.
     }
-
     // Pauldrons
     [-1, 1].forEach(sx => {
       const pg = g.createLinearGradient(0, -u * 0.5, 0, u * 0.06);
@@ -5053,6 +5241,7 @@ function forgeAll() {
   // the run only -- a dormant body does not move at all and a woken one comes
   // at you flat out.
   for (const hid in HEROES) {
+    SPR['w_' + hid] = forgeWeapon(hid);
     SPR['h_' + hid] = forgeHero(hid, GAIT_REST);
     for (let i = 0; i < GAIT_N; i++) {
       SPR['h_' + hid + 'w' + i] = forgeHero(hid, gaitPose(i, 0.30));
@@ -6557,38 +6746,79 @@ function drawPlayer(t) {
 
   const hurt = blink || p.hitFlash > 0;
   const spr = heroFrame(p);
-  blit(spr, p.x, p.y, 0, 1, 1, p.face < 0);
-  if (hurt) blitFlash(spr, p.x, p.y, p.face < 0);
-
-  // The forged hero sprites hold a still blade, so the swing is drawn over the
-  // top as a streak sweeping through the strike -- far cheaper than re-forging
-  // a sprite per frame, and it reads at a glance which way the edge went.
+  const dir = p.face < 0 ? -1 : 1;
+  // How far through the strike, and where that puts the blade. The ease is
+  // slow-fast-slow: a swing accelerates through the middle, and a linear
+  // sweep reads like a windscreen wiper.
+  const S = STRIKES[p.strike] || STRIKES[0];
+  let ang = REST_ANGLE, lunge = 0, f = -1;
   if (p.swing > 0) {
-    const f = 1 - p.swing / SWING_TIME;            // 0 at the wind-up, 1 done
-    const arcSpan = 1.55;
-    const a = p.swingA + p.swingDir * (arcSpan * (0.5 - f));
-    const R = p.r + 13;
+    f = 1 - p.swing / SWING_TIME;
+    const e = f < 0.5 ? 2 * f * f : 1 - Math.pow(2 - 2 * f, 2) / 2;
+    ang = S.from + (S.to - S.from) * e;
+    lunge = Math.sin(f * Math.PI) * S.lunge;
+  } else if (p.recov > 0) {
+    const r = 1 - p.recov / RECOVER_TIME;
+    ang = S.to + (REST_ANGLE - S.to) * (r * r * (3 - 2 * r));
+    lunge = (1 - r) * S.lunge * 0.35;
+  }
+  const bx = p.x + dir * lunge;
+  blit(spr, bx, p.y, 0, 1, 1, p.face < 0);
+  if (hurt) blitFlash(spr, bx, p.y, p.face < 0);
+  drawWeapon(p, bx, dir, ang, f, S);
+
+}
+
+// The blade itself, rotated about the hand. The swing happens in the hero's
+// own space and mirrors with his facing rather than pointing at the target:
+// the body is a front-facing figure, and a weapon free to rotate the whole way
+// round it spends half the arc pointing into the floor behind him. The
+// crescent it throws is the part that goes at the target.
+function drawWeapon(p, bx, dir, ang, f, S) {
+  const spr = SPR['w_' + p.hero];
+  if (!spr) return;
+  const hy = p.y - p.r * 0.18;
+  const hx = bx + dir * p.r * 0.30;
+  const sz = spr.span;
+
+  // The streak the edge leaves, drawn first so the blade sits over its own
+  // trail. Its width and reach come from the form, so a chop reads heavier
+  // than a level slash even though both do the same damage.
+  if (f >= 0) {
     const colour = HEROES[p.hero].magic;
-    const trail = 0.62 * (1 - f);
+    const R = (spr.reach || p.r + 15) * 0.88 * S.R;
+    const trail = S.span * 0.42 * (1 - f);
+    const way = S.to > S.from ? 1 : -1;
     ctx.save();
+    ctx.translate(hx, hy);
+    ctx.scale(dir, 1);
     ctx.globalCompositeOperation = 'lighter';
     ctx.lineCap = 'round';
-    // ctx.arc sweeps clockwise from start to end, so the ends must be ordered
-    // low-to-high: handed the other way round it wraps the long way and rings
-    // the player instead of trailing the blade.
+    // ctx.arc sweeps clockwise, so the ends must be ordered low-to-high or it
+    // wraps the long way and rings the player instead of trailing the blade.
     const span = (t0, t1) => {
       ctx.beginPath();
-      ctx.arc(p.x, p.y, R, Math.min(t0, t1), Math.max(t0, t1));
+      ctx.arc(0, 0, R, Math.min(t0, t1), Math.max(t0, t1));
       ctx.stroke();
     };
-    ctx.strokeStyle = tint(colour, 1.2, 0.42 * (1 - f * 0.7));
-    ctx.lineWidth = 5.5;
-    span(a - p.swingDir * trail, a);
+    ctx.strokeStyle = tint(colour, 0.8, 0.16 * (1 - f * 0.6));
+    ctx.lineWidth = 13 * S.wide;
+    span(ang - way * trail, ang);
+    ctx.strokeStyle = tint(colour, 1.2, 0.44 * (1 - f * 0.7));
+    ctx.lineWidth = 5.5 * S.wide;
+    span(ang - way * trail, ang);
     ctx.strokeStyle = 'rgba(255,255,255,' + (0.5 * (1 - f)).toFixed(3) + ')';
     ctx.lineWidth = 1.8;
-    span(a - p.swingDir * trail * 0.6, a);
+    span(ang - way * trail * 0.6, ang);
     ctx.restore();
   }
+
+  ctx.save();
+  ctx.translate(hx, hy);
+  ctx.scale(dir, 1);
+  ctx.rotate(ang);
+  ctx.drawImage(spr, -sz / 2, -sz / 2, sz, sz);
+  ctx.restore();
 }
 
 function drawParticles() {
@@ -6736,6 +6966,135 @@ function drawViewFrame() {
   ctx.strokeRect(6.5, 6.5, view.w - 13, view.h - 13);
 }
 
+/* --- the boss frame -------------------------------------------------------
+   It used to sit at a hardcoded y of 84 with a fixed 320px width, centred.
+   On a notched phone HUD_H plus the safe inset is more than 84, so the whole
+   thing -- name included -- was drawn behind the HUD panel, and its right half
+   ran under the minimap. It owns the top of the screen now: it is the thing
+   the fight is about, and the minimap steps down rather than the frame being
+   squeezed into the 230px left beside it, which cannot carry a name, a bar
+   and a count.
+   ------------------------------------------------------------------------ */
+const BOSS_BAR_H = 44;
+
+function bossShown() {
+  if (!run) return null;
+  // An invader is the nearer problem: while one is standing he owns the frame,
+  // because he is the thing about to kill you.
+  if (run.invader && run.invader.hp > 0) return run.invader;
+  if (run.boss && run.boss.hp > 0) return run.boss;
+  return null;
+}
+function bossBarDrop() { return bossShown() ? BOSS_BAR_H + 8 : 0; }
+
+// Shrink to fit, then clip with an ellipsis if it still will not. Boss titles
+// run to "The Deceiver, the Unbroken and the Unblinking", which at a fixed
+// size overhangs both edges of a phone and reads as neither.
+// Leaves ctx.font set to the size it settled on, so the caller draws at it.
+function fitText(text, maxW, px, family, floorPx, style) {
+  const st = style || '400 ';
+  const fl = floorPx || 9;
+  for (let size = px; size > fl; size--) {
+    ctx.font = st + size + 'px ' + family;
+    if (ctx.measureText(text).width <= maxW) return text;
+  }
+  ctx.font = st + fl + 'px ' + family;
+  if (ctx.measureText(text).width <= maxW) return text;
+  let t = text;
+  while (t.length > 1 && ctx.measureText(t + '\u2026').width > maxW) t = t.slice(0, -1);
+  return t + '\u2026';
+}
+
+function drawBossBar() {
+  const bs = bossShown();
+  if (!bs) return;
+  const pad = 12;
+  // Only safeT and safeR exist on `view` -- the canvas UI has never tracked a
+  // left inset. Reading a safeL that was never defined made x0 NaN, and every
+  // draw call in here silently did nothing.
+  const x0 = pad;
+  const w = view.w - x0 - pad - view.safeR;
+  const y0 = HUD_H + view.safeT + 8;
+  const f = clamp(bs.hp / bs.maxHp, 0, 1);
+  // While a Lieutenant stands he takes fourteen per cent. Without saying so
+  // the bar simply looks broken, and the player keeps hitting the wrong thing.
+  const held = !bs.invader && escortAlive();
+  const hue = bs.invader ? [226, 120, 44] : [232, 192, 96];
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(10,7,4,.72)';
+  ctx.fillRect(x0 - 4, y0 - 3, w + 8, BOSS_BAR_H);
+  ctx.strokeStyle = 'rgba(120,100,72,.5)'; ctx.lineWidth = 1;
+  ctx.strokeRect(x0 - 3.5, y0 - 2.5, w + 7, BOSS_BAR_H - 1);
+
+  // Name left, the count right, both on the same line.
+  ctx.textAlign = 'right';
+  ctx.font = '600 11px ui-monospace, Menlo, monospace';
+  const count = Math.max(0, Math.ceil(bs.hp)) + ' / ' + Math.round(bs.maxHp);
+  ctx.fillStyle = 'rgba(206,190,158,.9)';
+  ctx.fillText(count, x0 + w, y0 + 11);
+  const countW = ctx.measureText(count).width + 10;
+
+  ctx.textAlign = 'left';
+  const title = bs.title || (bs.invader ? 'The Uninvited' : 'The Gilded Deceiver');
+  const shown = fitText(title, w - countW, 14, 'Georgia, "Times New Roman", serif', 10);
+  ctx.fillStyle = 'rgba(238,224,192,.95)';
+  ctx.fillText(shown, x0, y0 + 11);
+
+  // The bar.
+  const by = y0 + 17, bh = 11;
+  ctx.fillStyle = 'rgba(24,17,11,.9)';
+  ctx.fillRect(x0, by, w, bh);
+  const g = ctx.createLinearGradient(0, by, 0, by + bh);
+  g.addColorStop(0, 'rgba(' + hue.join(',') + ',1)');
+  g.addColorStop(1, 'rgba(' + hue.map(c => (c * 0.55) | 0).join(',') + ',1)');
+  ctx.fillStyle = g;
+  ctx.fillRect(x0, by, w * f, bh);
+  // Quarter ticks, so a bar that moves slowly still shows that it moved.
+  ctx.strokeStyle = 'rgba(10,7,4,.55)'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 1; i < 4; i++) {
+    const tx = Math.round(x0 + w * (i / 4)) + 0.5;
+    ctx.moveTo(tx, by); ctx.lineTo(tx, by + bh);
+  }
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(206,180,140,.55)';
+  ctx.strokeRect(x0 - 0.5, by - 0.5, w + 1, bh + 1);
+
+  if (held) {
+    // Hatched over the bar, and named: the fight has an order to it and this
+    // is where the player is told what the order is.
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x0, by, w * f, bh); ctx.clip();
+    ctx.strokeStyle = 'rgba(20,14,8,.5)'; ctx.lineWidth = 3;
+    ctx.beginPath();
+    for (let hx = -bh; hx < w * f + bh; hx += 8) {
+      ctx.moveTo(x0 + hx, by + bh); ctx.lineTo(x0 + hx + bh, by);
+    }
+    ctx.stroke();
+    ctx.restore();
+    let live = 0;
+    for (let i = 0; i < enemies.length; i++)
+      if (enemies[i].kind === 'lieutenant' && enemies[i].hp > 0) live++;
+    ctx.textAlign = 'left';
+    ctx.font = '600 9px ui-monospace, Menlo, monospace';
+    ctx.fillStyle = 'rgba(232,192,96,.9)';
+    ctx.fillText('HELD \u2014 BREAK THE LIEUTENANTS', x0, y0 + BOSS_BAR_H - 5);
+    // one pip per Lieutenant still standing
+    ctx.textAlign = 'right';
+    for (let i = 0; i < live; i++) {
+      ctx.fillStyle = 'rgba(194,53,42,.95)';
+      ctx.beginPath();
+      ctx.arc(x0 + w - 5 - i * 11, y0 + BOSS_BAR_H - 8, 3.4, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(232,192,96,.8)'; ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+  ctx.textAlign = 'left';
+}
+
 function drawMinimap() {
   // Top-right, tucked under the HUD bar. The bottom corners are where the
   // thumbs live on a phone -- a map there is under a hand for most of a run --
@@ -6744,7 +7103,7 @@ function drawMinimap() {
   const S = Math.round(Math.min(132, Math.max(96, view.w * 0.30)));
   const pad = 14;   // the stone surround overhangs the panel by 7px each side
   const x = view.w - S - pad - view.safeR;
-  const y = HUD_H + pad + view.safeT;
+  const y = HUD_H + pad + view.safeT + bossBarDrop();
   const k = S / WORLD.w;
   const mk = S / 108;              // marker scale, so dots grow with the frame
 
@@ -7126,6 +7485,9 @@ function draw(t) {
   drawArcs();
   drawParticles();
   if (!lowFx) drawLightPass(t);
+  // Over the light pass, not under it: a number a glow has washed out is
+  // worse than no number, and this is the layer the player reads fastest.
+  drawFloaters();
   ctx.restore();
 
   drawMotes(t);
@@ -7147,15 +7509,19 @@ function draw(t) {
       ctx.letterSpacing = '0px';
       ctx.fillStyle = 'rgba(238,224,192,.95)';
     }
-    ctx.font = '400 21px Georgia, "Times New Roman", serif';
-    ctx.fillText(run.bannerText || LEVEL.name, view.w / 2, view.h * 0.42);
+    // Fitted, not fixed: "The Deceiver, the Unbroken and the Unblinking" at a
+    // flat 21px overhangs both edges of a phone and reads as neither end.
+    const bw = view.w - 36;
+    const serif = 'Georgia, "Times New Roman", serif';
+    const bt = fitText(run.bannerText || LEVEL.name, bw, 21, serif, 13);
+    ctx.fillText(bt, view.w / 2, view.h * 0.42);
     ctx.fillStyle = 'rgba(186,164,128,.85)';
-    ctx.font = 'italic 400 13px Georgia, "Times New Roman", serif';
     // On a ramp rung the opening line is the one thing this delve is for. It
     // is phrased as an instruction to a Vanguard rather than a tutorial hint,
     // and it only ever appears on the first three.
-    ctx.fillText(run.bannerNote || LEVEL.lesson || REGION.name,
-                 view.w / 2, view.h * 0.42 + 24);
+    const bn = fitText(run.bannerNote || LEVEL.lesson || REGION.name,
+                       bw, 13, serif, 10, 'italic 400 ');
+    ctx.fillText(bn, view.w / 2, view.h * 0.42 + 24);
     ctx.strokeStyle = 'rgba(196,164,116,.4)';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -7185,26 +7551,7 @@ function draw(t) {
     ctx.restore();
     ctx.textAlign = 'left';
   }
-  // An invader is the nearer problem: while one is standing he owns the bar,
-  // because he is the thing about to kill you.
-  const shown = run && ((run.invader && run.invader.hp > 0) ? run.invader :
-                        (run.boss && run.boss.hp > 0) ? run.boss : null);
-  if (shown) {
-    const bs = shown, f = clamp(bs.hp / bs.maxHp, 0, 1);
-    const w = Math.min(320, view.w - 96), x0 = (view.w - w) / 2, y0 = 84;
-    ctx.fillStyle = 'rgba(10,7,4,.8)';
-    ctx.fillRect(x0 - 2, y0 - 2, w + 4, 12);
-    ctx.fillStyle = bs.invader ? 'rgba(226,120,44,.95)' : 'rgba(232,192,96,.9)';
-    ctx.fillRect(x0, y0, w * f, 8);
-    ctx.strokeStyle = 'rgba(206,180,140,.6)'; ctx.lineWidth = 1;
-    ctx.strokeRect(x0 - 2.5, y0 - 2.5, w + 5, 13);
-    ctx.save();
-    ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(238,224,192,.9)';
-    ctx.font = '400 12px Georgia, "Times New Roman", serif';
-    ctx.fillText(bs.title || 'The Gilded Deceiver', view.w / 2, y0 - 7);
-    ctx.restore();
-  }
+  drawBossBar();
   drawPortalArrow(t);
   drawMinimap();
   drawStick();
@@ -7555,6 +7902,7 @@ function resetRun(heroId, levelId, diffId) {
   portal  = { x: pt.x, y: pt.y, pulse: 0, channel: 0, active: false, inside: false };
   player  = makePlayer(spawn.x, spawn.y, hero);
   enemies = []; arcs = []; loot = []; drops = []; particles = []; rings = [];
+  floaters = [];
   slams = []; hazards = [];
   enemyGrid = new SpatialHash(ENEMY_CELL);
 
@@ -8628,7 +8976,7 @@ showScreen('start');
 requestAnimationFrame(frame);
 </script>
 <script>
-/* generated from index.html c5cbe63c767f + overlay c49f1ecc083e by tools/build-debug.js — do not edit */
+/* generated from index.html b80757b81afd + overlay c49f1ecc083e by tools/build-debug.js — do not edit */
 /* =============================================================================
    THE RIVENMARK — debug overlay
    Injected into debug.html by tools/build-debug.js. Never shipped in the
