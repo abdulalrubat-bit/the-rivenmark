@@ -2347,6 +2347,7 @@ function makePlayer(x, y, heroId) {
   p.face = 1;
   p.fireTimer = 0; p.invuln = 0; p.hitFlash = 0;
   p.swing = 0; p.swingA = 0; p.swingDir = 1;
+  p.gait = 0; p.pace = 0;
   p.upg = {};
   p.level = stash.level || 1;
   p.gear = {};
@@ -2615,7 +2616,9 @@ function newBody(kind, x, y, t) {
     role: d.role || 'press', spin: Math.random() < 0.5 ? -1 : 1,
     markX: 0, markY: 0, markT: 0, markCd: 0,
     slam: !!d.slam, slamCd: rand(1.2, SLAM_CD),
-    postX: 0, postY: 0, posted: false, guard: rand(0, BRACE_UP), braced: false
+    postX: 0, postY: 0, posted: false, guard: rand(0, BRACE_UP), braced: false,
+    // Started somewhere random in the cycle, or a pack arrives in lockstep.
+    gait: Math.random() * GAIT_STEP * GAIT_N, pace: 0
   };
 }
 
@@ -3363,12 +3366,16 @@ function collectTech(v) {
 
 function updatePlayer(dt) {
   const mv = moveVector();
+  const px0 = player.x, py0 = player.y;
   if (mv.x !== 0 || mv.y !== 0) {
     const target = Math.atan2(mv.y, mv.x);
     player.angle += angleDelta(player.angle, target) * Math.min(1, dt * 15);
     if (Math.abs(mv.x) > 0.12) player.face = mv.x < 0 ? -1 : 1;
     moveEntity(player, mv.x * player.speed * dt, mv.y * player.speed * dt);
   }
+  // The gait is driven by ground actually covered, not by a clock, so the
+  // feet cannot skate: walk into a wall and the stride stops with him.
+  advanceGait(player, px0, py0, dt);
   player.invuln  = Math.max(0, player.invuln - dt);
   player.hitFlash = Math.max(0, player.hitFlash - dt);
   player.swing   = Math.max(0, player.swing - dt);
@@ -3622,7 +3629,9 @@ function updateEnemies(dt) {
     const touch = e.r + player.r + 3;
     // Braced, it is a wall: it does not advance and it does not swing.
     if (e.braced) {
+      const bx0 = e.x, by0 = e.y;
       moveEntity(e, rx * 0.4 * e.speed * dt, ry * 0.4 * e.speed * dt);
+      advanceGait(e, bx0, by0, dt);
       continue;
     }
     if (leash) {
@@ -3690,7 +3699,9 @@ function updateEnemies(dt) {
       if (e.atk <= 0) { e.atk = e.cd; hurtPlayer(e); }
     }
 
+    const mx0 = e.x, my0 = e.y;
     moveEntity(e, (sx + rx * 0.8) * e.speed * dt, (sy + ry * 0.8) * e.speed * dt);
+    advanceGait(e, mx0, my0, dt);
   }
 }
 
@@ -4206,9 +4217,9 @@ function forge(span, paint) {
   return c;
 }
 
-function blit(spr, x, y, rot, alpha, scale) {
+function blit(spr, x, y, rot, alpha, scale, flip) {
   const s = spr.span * (scale || 1);
-  if (!rot) {
+  if (!rot && !flip) {
     if (alpha !== undefined && alpha !== 1) ctx.globalAlpha = alpha;
     ctx.drawImage(spr, x - s / 2, y - s / 2, s, s);
     if (alpha !== undefined && alpha !== 1) ctx.globalAlpha = 1;
@@ -4216,9 +4227,22 @@ function blit(spr, x, y, rot, alpha, scale) {
   }
   ctx.save();
   ctx.translate(x, y);
-  ctx.rotate(rot);
+  if (rot) ctx.rotate(rot);
+  if (flip) ctx.scale(-1, 1);
   if (alpha !== undefined && alpha !== 1) ctx.globalAlpha = alpha;
   ctx.drawImage(spr, -s / 2, -s / 2, s, s);
+  ctx.restore();
+}
+
+// A struck body flashes by being drawn over itself in additive light, not by
+// keeping a second brightened copy of every sprite. That mattered little at
+// one pose per body; at a whole gait cycle each it is half the atlas. Black
+// outlines add nothing to themselves, so they stay black, which is what the
+// baked version did too.
+function blitFlash(spr, x, y, flip, scale) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  blit(spr, x, y, 0, 0.55, scale, flip);
   ctx.restore();
 }
 
@@ -4257,122 +4281,290 @@ function lightFor(color, span) {
    plants itself -- so they are told apart by silhouette before colour.
    ---------------------------------------------------------------------- */
 
-function forgeEnemy(kind, r, color, flash) {
+/* --- gait -----------------------------------------------------------------
+   A body is forged as a short cycle of poses rather than one still frame, and
+   the pose is chosen by how far the body has actually travelled -- not by a
+   clock -- so feet land on the ground instead of skating over it.
+
+   Enemies get one cycle. They are either dormant, in which case they do not
+   move at all, or they have woken and are coming at you flat out; there is no
+   third speed to animate. The hero gets two, because the stick is analogue:
+   ease it over and he walks, push it to the ring and he runs, and stride is
+   the one part of that difference which cannot be faked at blit time. Cadence,
+   lean and bob all can, and are.
+   ------------------------------------------------------------------------ */
+// Eight, not six: sin repeats its magnitude in pairs over six samples, so a
+// six-pose cycle is really four poses with two of them shown twice, and the
+// stutter is visible.
+const GAIT_N = 8;            // poses in a cycle
+const GAIT_STEP = 21;        // world units of travel per pose at a run
+const WALK_STEP = 13;        // and at a walk, which is a shorter, quicker one
+const WALK_PACE = 0.62;      // above this fraction of top speed, he is running
+
+// One pose. `sw` scales the stride, so the same shape serves both cycles.
+function gaitPose(i, sw) {
+  const ph = (i / GAIT_N) * TAU;
+  const sn = Math.sin(ph), cs = Math.cos(ph);
+  return {
+    swing: sn * sw,                            // near leg forward, far leg back
+    lift: Math.max(0, -cs) * sw * 0.8,         // the near foot comes up passing
+    liftB: Math.max(0, cs) * sw * 0.8,
+    arm: -sn * sw * 0.9,                       // arms counter the legs
+    bob: -Math.abs(sn) * sw * 0.34,            // rises at each push-off
+    roll: sn * sw * 0.06,                      // and rocks around the spine
+    lean: sw * 0.22                            // leaning into the travel
+  };
+}
+const GAIT_REST = { swing: 0, lift: 0, liftB: 0, arm: 0, bob: 0, roll: 0, lean: 0 };
+
+// Book the ground a body just covered against its stride, and keep a smoothed
+// reading of how hard it is travelling. Pace is what picks walk from run and
+// what tells a body it has stopped: gait alone cannot, because a body held up
+// against a wall keeps its last frame and would stand there mid-step forever.
+function advanceGait(e, x0, y0, dt) {
+  const moved = Math.hypot(e.x - x0, e.y - y0);
+  e.gait += moved;
+  const want = dt > 0 ? Math.min(1.4, (moved / dt) / (e.speed || 1)) : 0;
+  e.pace += (want - e.pace) * Math.min(1, dt * 9);
+}
+
+// Which sprite a body wears this frame. Below GAIT_STILL it is standing.
+const GAIT_STILL = 0.16;
+function bodyFrame(e) {
+  if (e.pace < GAIT_STILL || e.braced) return SPR[e.kind];
+  const f = ((e.gait / GAIT_STEP) | 0) % GAIT_N;
+  return SPR[e.kind + 'r' + f] || SPR[e.kind];
+}
+function heroFrame(p) {
+  const key = 'h_' + p.hero;
+  if (p.pace < GAIT_STILL) return SPR[key];
+  const run = p.pace >= WALK_PACE;
+  const f = ((p.gait / (run ? GAIT_STEP : WALK_STEP)) | 0) % GAIT_N;
+  return SPR[key + (run ? 'r' : 'w') + f] || SPR[key];
+}
+
+// One body in one pose. `P` is a gait pose (GAIT_REST for the standing frame);
+// the hit flash is no longer baked in, it is an additive pass at draw time.
+function forgeEnemy(kind, r, color, P) {
   const u = r * 1.16;
-  const L = flash ? 1.5 : 1;
-  const lit = (a, b, c) => 'rgb(' + Math.round(Math.min(255, a * L)) + ',' +
-                                    Math.round(Math.min(255, b * L)) + ',' +
-                                    Math.round(Math.min(255, c * L)) + ')';
   const outline = (w) => { g0.strokeStyle = 'rgba(0,0,0,.82)'; g0.lineWidth = w; g0.stroke(); };
   let g0 = null;
 
+  // Where this pose puts the limbs. A is the near side, B the far one.
+  const swA = u * P.swing, swB = -u * P.swing;
+  const lfA = -u * P.lift, lfB = -u * P.liftB;
+  const arA = u * P.arm,   arB = -u * P.arm;
+
   // Bounds sized to the figure (widest extent is the shadow at 1.28u), not a
-  // round number: at 220 bodies on screen the padding is pure fill cost.
+  // round number: at 340 bodies in a delve the padding is pure fill cost.
   return forge(u * 2.9, g => {
     g0 = g;
     g.lineJoin = 'round';
     g.lineCap = 'round';
 
+    // Everything above the feet rides the gait: it rises at each push-off and
+    // rocks around the spine. The shadow does not -- it is on the floor.
+    g.save();
+    g.translate(0, u * P.bob);
+    // The lean is pivoted over the feet rather than the middle of the sprite,
+    // so a running body tips its head forward instead of sliding sideways.
+    // It is baked rather than applied at blit time because it is constant for
+    // the pose, and a rotation per body per frame is not free on a phone.
+    g.translate(0, u * 0.95);
+    g.rotate(P.roll + P.lean);
+    g.translate(0, -u * 0.95);
+
     if (kind === 'thrall') {
-      // Stooped, long-armed, dragging itself forward.
-      g.strokeStyle = lit(52, 56, 40); g.lineWidth = u * 0.26;      // legs
+      // A corpse that has been made to run: stooped over its own opened ribs,
+      // one shoulder wrenched higher than the other, arms longer than they
+      // should be and hands it can no longer close.
+      g.strokeStyle = 'rgb(46,50,36)'; g.lineWidth = u * 0.24;         // legs
       g.beginPath();
-      g.moveTo(-u * 0.2, u * 0.4); g.lineTo(-u * 0.3, u * 1.05);
-      g.moveTo(u * 0.2, u * 0.4);  g.lineTo(u * 0.32, u * 1.02);
+      g.moveTo(-u * 0.18, u * 0.4); g.lineTo(-u * 0.3 + swB, u * 1.05 + lfB);
+      g.moveTo(u * 0.2, u * 0.4);   g.lineTo(u * 0.32 + swA, u * 1.02 + lfA);
+      g.stroke();
+      g.strokeStyle = 'rgba(0,0,0,.55)'; g.lineWidth = u * 0.09;       // shins
+      g.beginPath();
+      g.moveTo(-u * 0.3 + swB, u * 1.05 + lfB); g.lineTo(-u * 0.42 + swB, u * 1.12 + lfB);
+      g.moveTo(u * 0.32 + swA, u * 1.02 + lfA); g.lineTo(u * 0.44 + swA, u * 1.09 + lfA);
       g.stroke();
 
-      const bg = g.createLinearGradient(0, -u * 0.6, 0, u * 0.6);   // hunched back
-      bg.addColorStop(0, lit(116, 128, 86));
-      bg.addColorStop(1, lit(44, 48, 32));
+      const bg = g.createLinearGradient(0, -u * 0.62, 0, u * 0.6);     // hunched back
+      bg.addColorStop(0, 'rgb(112,124,84)');
+      bg.addColorStop(1, 'rgb(40,44,30)');
       g.fillStyle = bg;
       g.beginPath();
       g.moveTo(-u * 0.52, u * 0.42);
-      g.quadraticCurveTo(-u * 0.72, -u * 0.34, -u * 0.14, -u * 0.5);
-      g.quadraticCurveTo(u * 0.62, -u * 0.44, u * 0.54, u * 0.42);
+      g.quadraticCurveTo(-u * 0.76, -u * 0.30, -u * 0.16, -u * 0.46);
+      g.quadraticCurveTo(u * 0.64, -u * 0.56, u * 0.54, u * 0.42);     // right shoulder higher
       g.closePath(); g.fill(); outline(u * 0.13);
 
-      g.fillStyle = 'rgba(38,36,26,.85)';                            // rags
+      // The chest is open. A dark cavity with three courses of rib across it:
+      // at this size that reads as ribs where anything more detailed reads as
+      // dirt on the sprite.
+      g.fillStyle = 'rgba(9,11,7,.9)';
+      g.beginPath(); g.ellipse(u * 0.02, -u * 0.06, u * 0.3, u * 0.26, 0.06, 0, TAU); g.fill();
+      g.strokeStyle = 'rgba(202,200,172,.72)'; g.lineWidth = u * 0.055;
+      for (let i = 0; i < 3; i++) {
+        g.beginPath();
+        g.ellipse(u * 0.02, -u * 0.21 + i * u * 0.15, u * 0.25 - i * u * 0.03,
+                  u * 0.08, 0, 0.3, Math.PI - 0.3);
+        g.stroke();
+      }
+
+      g.fillStyle = 'rgba(34,32,23,.88)';                              // rags below it
       g.beginPath();
-      g.moveTo(-u * 0.5, u * 0.18); g.lineTo(u * 0.52, u * 0.1);
-      g.lineTo(u * 0.44, u * 0.5); g.lineTo(-u * 0.44, u * 0.52);
+      g.moveTo(-u * 0.5, u * 0.2); g.lineTo(u * 0.52, u * 0.12);
+      g.lineTo(u * 0.42, u * 0.52); g.lineTo(u * 0.14, u * 0.4);
+      g.lineTo(-u * 0.1, u * 0.56); g.lineTo(-u * 0.44, u * 0.44);
       g.closePath(); g.fill();
 
-      g.strokeStyle = lit(104, 114, 76); g.lineWidth = u * 0.17;     // long arms
+      g.strokeStyle = 'rgb(100,110,74)'; g.lineWidth = u * 0.16;       // long arms
       g.beginPath();
-      g.moveTo(-u * 0.44, -u * 0.2); g.quadraticCurveTo(-u * 0.86, u * 0.3, -u * 0.62, u * 0.86);
-      g.moveTo(u * 0.46, -u * 0.24); g.quadraticCurveTo(u * 0.92, u * 0.26, u * 0.7, u * 0.84);
+      g.moveTo(-u * 0.44, -u * 0.16);
+      g.quadraticCurveTo(-u * 0.9 + arB * 0.5, u * 0.32, -u * 0.66 + arB, u * 0.9);
+      g.moveTo(u * 0.48, -u * 0.28);
+      g.quadraticCurveTo(u * 0.94 + arA * 0.5, u * 0.24, u * 0.72 + arA, u * 0.88);
       g.stroke();
-      g.strokeStyle = 'rgba(0,0,0,.5)'; g.lineWidth = u * 0.06;
+      g.strokeStyle = 'rgba(212,208,182,.8)'; g.lineWidth = u * 0.045; // and the claws
       g.beginPath();
-      g.moveTo(-u * 0.62, u * 0.86); g.lineTo(-u * 0.7, u * 1.0);
-      g.moveTo(u * 0.7, u * 0.84);  g.lineTo(u * 0.78, u * 0.98);
+      [[-u * 0.66 + arB, u * 0.9], [u * 0.72 + arA, u * 0.88]].forEach(h => {
+        for (let k = -1; k <= 1; k++) {
+          g.moveTo(h[0], h[1]);
+          g.lineTo(h[0] + k * u * 0.08, h[1] + u * 0.21 - Math.abs(k) * u * 0.05);
+        }
+      });
       g.stroke();
 
-      const hg = g.createLinearGradient(0, -u * 1.0, 0, -u * 0.4);   // sunken head
-      hg.addColorStop(0, lit(150, 160, 112));
-      hg.addColorStop(1, lit(60, 64, 44));
+      // The head hangs off the neck at an angle nothing living holds.
+      g.save();
+      g.translate(u * 0.08, -u * 0.62);
+      g.rotate(0.34);
+      const hg = g.createLinearGradient(0, -u * 0.32, 0, u * 0.3);
+      hg.addColorStop(0, 'rgb(154,164,116)');
+      hg.addColorStop(1, 'rgb(54,58,40)');
       g.fillStyle = hg;
-      g.beginPath(); g.ellipse(u * 0.06, -u * 0.66, u * 0.31, u * 0.29, 0.12, 0, TAU); g.fill();
-      outline(u * 0.1);
-      g.fillStyle = 'rgba(10,12,8,.9)';                              // jaw
-      g.beginPath(); g.ellipse(u * 0.08, -u * 0.5, u * 0.16, u * 0.09, 0, 0, TAU); g.fill();
-      g.fillStyle = color;                                           // sick eyes
-      g.beginPath(); g.ellipse(-u * 0.04, -u * 0.72, u * 0.07, u * 0.05, 0, 0, TAU); g.fill();
-      g.beginPath(); g.ellipse(u * 0.18, -u * 0.73, u * 0.07, u * 0.05, 0, 0, TAU); g.fill();
+      g.beginPath(); g.ellipse(0, 0, u * 0.3, u * 0.27, 0, 0, TAU); g.fill();
+      outline(u * 0.09);
+      g.fillStyle = 'rgba(6,8,5,.96)';                                  // sockets
+      g.beginPath(); g.ellipse(-u * 0.12, -u * 0.05, u * 0.11, u * 0.1, 0, 0, TAU); g.fill();
+      g.beginPath(); g.ellipse(u * 0.13, -u * 0.06, u * 0.11, u * 0.1, 0, 0, TAU); g.fill();
+      g.fillStyle = color;                                              // the light left in them
+      g.shadowColor = color; g.shadowBlur = u * 0.32;
+      g.beginPath(); g.ellipse(-u * 0.11, -u * 0.04, u * 0.04, u * 0.04, 0, 0, TAU); g.fill();
+      g.beginPath(); g.ellipse(u * 0.14, -u * 0.05, u * 0.04, u * 0.04, 0, 0, TAU); g.fill();
+      g.shadowBlur = 0;
+      g.fillStyle = 'rgba(9,11,7,.95)';                                 // the jaw hangs open
+      g.beginPath();
+      g.moveTo(-u * 0.15, u * 0.11); g.lineTo(u * 0.17, u * 0.09);
+      g.lineTo(u * 0.13, u * 0.35); g.lineTo(-u * 0.11, u * 0.35);
+      g.closePath(); g.fill(); outline(u * 0.05);
+      g.strokeStyle = 'rgba(210,206,178,.82)'; g.lineWidth = u * 0.035;
+      g.beginPath();
+      for (let k = 0; k < 4; k++) {
+        const tx = -u * 0.11 + k * u * 0.077;
+        g.moveTo(tx, u * 0.12); g.lineTo(tx, u * 0.2);
+      }
+      g.stroke();
+      g.restore();
 
     } else if (kind === 'eclipse') {
-      // Hangs rather than stands: a robe that frays into nothing.
+      // Nothing stands in the robe. It hangs and it travels, so the hem swings
+      // where the legs would be and the frayed end never quite touches down.
       const rg = g.createLinearGradient(0, -u * 0.9, 0, u * 1.1);
-      rg.addColorStop(0, lit(76, 64, 108));
-      rg.addColorStop(0.6, lit(34, 28, 52));
+      rg.addColorStop(0, 'rgb(76,64,108)');
+      rg.addColorStop(0.6, 'rgb(32,26,50)');
       rg.addColorStop(1, 'rgba(14,11,22,0)');
       g.fillStyle = rg;
       g.beginPath();
       g.moveTo(-u * 0.44, -u * 0.44);
-      g.quadraticCurveTo(-u * 0.72, u * 0.3, -u * 0.5, u * 1.06);
-      g.lineTo(-u * 0.24, u * 0.78); g.lineTo(-u * 0.04, u * 1.12);
-      g.lineTo(u * 0.2, u * 0.76);  g.lineTo(u * 0.46, u * 1.04);
+      g.quadraticCurveTo(-u * 0.74, u * 0.3, -u * 0.5 + swB, u * 1.06 + lfB);
+      g.lineTo(-u * 0.22 + swB * 0.5, u * 0.76);
+      g.lineTo(-u * 0.02, u * 1.12);
+      g.lineTo(u * 0.22 + swA * 0.5, u * 0.74);
+      g.quadraticCurveTo(u * 0.72, u * 0.28, u * 0.46 + swA, u * 1.04 + lfA);
       g.quadraticCurveTo(u * 0.7, u * 0.28, u * 0.44, -u * 0.44);
       g.closePath(); g.fill();
       g.strokeStyle = 'rgba(0,0,0,.6)'; g.lineWidth = u * 0.1; g.stroke();
 
-      g.strokeStyle = 'rgba(176,124,255,.28)'; g.lineWidth = u * 0.09;   // trailing wisps
+      g.strokeStyle = 'rgba(176,124,255,.26)'; g.lineWidth = u * 0.09;   // trailing wisps
       g.beginPath();
-      g.moveTo(-u * 0.42, u * 0.2); g.quadraticCurveTo(-u * 0.96, u * 0.5, -u * 1.1, u * 0.16);
-      g.moveTo(u * 0.42, u * 0.24); g.quadraticCurveTo(u * 0.96, u * 0.54, u * 1.1, u * 0.2);
+      g.moveTo(-u * 0.42, u * 0.2);
+      g.quadraticCurveTo(-u * 0.96, u * 0.5 + arB, -u * 1.1, u * 0.16 + arB);
+      g.moveTo(u * 0.42, u * 0.24);
+      g.quadraticCurveTo(u * 0.96, u * 0.54 + arA, u * 1.1, u * 0.2 + arA);
+      g.stroke();
+
+      // What comes out of the sleeves is bone.
+      g.strokeStyle = 'rgba(186,180,198,.9)'; g.lineWidth = u * 0.055;
+      g.beginPath();
+      [[-u * 0.34 + arB * 0.7, u * 0.24], [u * 0.36 + arA * 0.7, u * 0.28]].forEach(h => {
+        for (let k = -1; k <= 1; k++) {
+          g.moveTo(h[0], h[1]);
+          g.lineTo(h[0] + k * u * 0.07, h[1] + u * 0.17 - Math.abs(k) * u * 0.04);
+        }
+      });
       g.stroke();
 
       const hoodG = g.createLinearGradient(0, -u * 1.05, 0, -u * 0.3);   // hood
-      hoodG.addColorStop(0, lit(92, 78, 130));
-      hoodG.addColorStop(1, lit(28, 23, 44));
+      hoodG.addColorStop(0, 'rgb(92,78,130)');
+      hoodG.addColorStop(1, 'rgb(26,21,42)');
       g.fillStyle = hoodG;
       g.beginPath();
-      g.moveTo(-u * 0.42, -u * 0.36);
-      g.quadraticCurveTo(-u * 0.46, -u * 1.0, 0, -u * 1.04);
-      g.quadraticCurveTo(u * 0.46, -u * 1.0, u * 0.42, -u * 0.36);
+      g.moveTo(-u * 0.44, -u * 0.34);
+      g.quadraticCurveTo(-u * 0.5, -u * 1.04, 0, -u * 1.08);
+      g.quadraticCurveTo(u * 0.5, -u * 1.04, u * 0.44, -u * 0.34);
       g.closePath(); g.fill(); outline(u * 0.11);
-      g.fillStyle = 'rgba(6,5,10,.96)';                                   // hollow
-      g.beginPath(); g.ellipse(0, -u * 0.6, u * 0.26, u * 0.28, 0, 0, TAU); g.fill();
+      g.strokeStyle = 'rgba(168,146,214,.5)'; g.lineWidth = u * 0.05;    // lit edge
+      g.beginPath();
+      g.moveTo(-u * 0.42, -u * 0.4);
+      g.quadraticCurveTo(-u * 0.47, -u * 0.99, u * 0.02, -u * 1.03);
+      g.stroke();
+
+      g.fillStyle = 'rgba(4,3,7,.98)';                                   // the hollow
+      g.beginPath(); g.ellipse(0, -u * 0.6, u * 0.28, u * 0.3, 0, 0, TAU); g.fill();
+      // A face pressing out from the inside of the cloth: the brow ridge and
+      // the cheekbones catch the hood's own light, and nothing else does.
+      g.strokeStyle = 'rgba(150,132,186,.5)'; g.lineWidth = u * 0.05;
+      g.beginPath();
+      g.moveTo(-u * 0.2, -u * 0.74); g.quadraticCurveTo(0, -u * 0.82, u * 0.2, -u * 0.74);
+      g.moveTo(-u * 0.15, -u * 0.46); g.quadraticCurveTo(0, -u * 0.38, u * 0.15, -u * 0.46);
+      g.stroke();
+      // Two burning slits, and they have to carry the whole face: at eleven
+      // units of radius nothing subtler survives the trip to the screen.
       g.fillStyle = color;
-      g.beginPath(); g.ellipse(-u * 0.1, -u * 0.62, u * 0.06, u * 0.08, 0, 0, TAU); g.fill();
-      g.beginPath(); g.ellipse(u * 0.1, -u * 0.62, u * 0.06, u * 0.08, 0, 0, TAU); g.fill();
+      g.shadowColor = color; g.shadowBlur = u * 0.5;
+      [-1, 1].forEach(sx => {
+        g.beginPath();
+        g.moveTo(sx * u * 0.03, -u * 0.68);
+        g.lineTo(sx * u * 0.24, -u * 0.63);
+        g.lineTo(sx * u * 0.22, -u * 0.51);
+        g.lineTo(sx * u * 0.04, -u * 0.57);
+        g.closePath(); g.fill();
+      });
+      g.fillStyle = 'rgba(255,246,255,.9)';
+      [-1, 1].forEach(sx => {
+        g.beginPath();
+        g.ellipse(sx * u * 0.14, -u * 0.6, u * 0.055, u * 0.04, sx * 0.3, 0, TAU);
+        g.fill();
+      });
+      g.shadowBlur = 0;
 
     } else {
-      // Planted, over-armoured, bound together by burning seams.
-      g.fillStyle = lit(48, 44, 38);                                     // greaves
-      g.beginPath();
-      g.roundRect ? g.roundRect(-u * 0.44, u * 0.42, u * 0.36, u * 0.66, u * 0.1)
-                  : g.rect(-u * 0.44, u * 0.42, u * 0.36, u * 0.66);
-      g.fill(); outline(u * 0.08);
-      g.beginPath();
-      g.roundRect ? g.roundRect(u * 0.08, u * 0.42, u * 0.36, u * 0.66, u * 0.1)
-                  : g.rect(u * 0.08, u * 0.42, u * 0.36, u * 0.66);
-      g.fill(); outline(u * 0.08);
+      // Planted, over-armoured, bound together by seams that are burning
+      // through from the inside.
+      g.fillStyle = 'rgb(46,42,36)';                                     // greaves
+      [[-u * 0.44 + swB, lfB], [u * 0.08 + swA, lfA]].forEach(o => {
+        g.beginPath();
+        g.roundRect ? g.roundRect(o[0], u * 0.42 + o[1], u * 0.36, u * 0.66, u * 0.1)
+                    : g.rect(o[0], u * 0.42 + o[1], u * 0.36, u * 0.66);
+        g.fill(); outline(u * 0.08);
+      });
 
       const cg = g.createLinearGradient(0, -u * 0.6, 0, u * 0.6);        // cuirass
-      cg.addColorStop(0, lit(104, 96, 86));
-      cg.addColorStop(0.5, lit(56, 50, 44));
-      cg.addColorStop(1, lit(24, 21, 18));
+      cg.addColorStop(0, 'rgb(104,96,86)');
+      cg.addColorStop(0.5, 'rgb(56,50,44)');
+      cg.addColorStop(1, 'rgb(24,21,18)');
       g.fillStyle = cg;
       g.beginPath();
       g.moveTo(-u * 0.58, -u * 0.4);
@@ -4381,8 +4573,16 @@ function forgeEnemy(kind, r, color, flash) {
       g.quadraticCurveTo(u * 0.7, u * 0.2, u * 0.58, -u * 0.4);
       g.closePath(); g.fill(); outline(u * 0.12);
 
-      g.strokeStyle = color; g.lineWidth = u * 0.09;                     // burning seams
-      g.shadowColor = color; g.shadowBlur = u * 0.5;
+      // The seams are a crack running through the plate, not a decoration on
+      // it: black fracture first, fire in the bottom of it.
+      g.strokeStyle = 'rgba(6,4,3,.9)'; g.lineWidth = u * 0.15;
+      g.beginPath();
+      g.moveTo(-u * 0.34, -u * 0.34); g.lineTo(u * 0.06, u * 0.02);
+      g.lineTo(-u * 0.18, u * 0.18); g.lineTo(u * 0.22, u * 0.46);
+      g.moveTo(u * 0.36, -u * 0.24); g.lineTo(u * 0.16, u * 0.08);
+      g.stroke();
+      g.strokeStyle = color; g.lineWidth = u * 0.07;
+      g.shadowColor = color; g.shadowBlur = u * 0.26;
       g.beginPath();
       g.moveTo(-u * 0.3, -u * 0.3); g.lineTo(u * 0.06, u * 0.02);
       g.lineTo(-u * 0.16, u * 0.16); g.lineTo(u * 0.2, u * 0.44);
@@ -4391,34 +4591,50 @@ function forgeEnemy(kind, r, color, flash) {
       g.shadowBlur = 0;
 
       const pg = g.createLinearGradient(0, -u * 0.72, 0, -u * 0.1);      // pauldrons
-      pg.addColorStop(0, lit(128, 118, 104));
-      pg.addColorStop(1, lit(40, 36, 31));
-      [-1, 1].forEach(sx => {
+      pg.addColorStop(0, 'rgb(128,118,104)');
+      pg.addColorStop(1, 'rgb(40,36,31)');
+      [[-1, arB], [1, arA]].forEach(o => {
+        const sx = o[0];
         g.fillStyle = pg;
         g.beginPath();
         g.ellipse(sx * u * 0.62, -u * 0.3, u * 0.32, u * 0.27, sx * 0.34, 0, TAU);
         g.fill(); outline(u * 0.1);
-        g.strokeStyle = 'rgba(216,200,170,.4)'; g.lineWidth = u * 0.05;
+        // spikes, and a chain hung off each shoulder that swings with the arm
+        g.strokeStyle = 'rgba(28,24,20,.95)'; g.lineWidth = u * 0.07;
         g.beginPath();
-        g.ellipse(sx * u * 0.62, -u * 0.36, u * 0.22, u * 0.17, sx * 0.34, 0, TAU);
+        g.moveTo(sx * u * 0.72, -u * 0.44); g.lineTo(sx * u * 0.94, -u * 0.62);
+        g.stroke();
+        g.strokeStyle = 'rgba(74,66,56,.9)'; g.lineWidth = u * 0.055;
+        g.beginPath();
+        g.moveTo(sx * u * 0.66, -u * 0.16);
+        g.quadraticCurveTo(sx * u * 0.82 + o[1] * 0.6, u * 0.18, sx * u * 0.6 + o[1], u * 0.5);
         g.stroke();
       });
 
-      const hg2 = g.createLinearGradient(0, -u * 0.98, 0, -u * 0.4);     // great helm
-      hg2.addColorStop(0, lit(112, 104, 92));
-      hg2.addColorStop(1, lit(30, 27, 23));
+      // A helm with horns, and a slit with a furnace behind it.
+      const hg2 = g.createLinearGradient(0, -u * 0.98, 0, -u * 0.4);
+      hg2.addColorStop(0, 'rgb(112,104,92)');
+      hg2.addColorStop(1, 'rgb(30,27,23)');
       g.fillStyle = hg2;
       g.beginPath();
       g.moveTo(-u * 0.3, -u * 0.44);
-      g.lineTo(-u * 0.26, -u * 0.92); g.lineTo(u * 0.26, -u * 0.92);
+      g.lineTo(-u * 0.28, -u * 0.9); g.lineTo(0, -u * 0.98); g.lineTo(u * 0.28, -u * 0.9);
       g.lineTo(u * 0.3, -u * 0.44);
       g.closePath(); g.fill(); outline(u * 0.1);
-      g.fillStyle = 'rgba(6,5,4,.95)';
-      g.fillRect(-u * 0.22, -u * 0.74, u * 0.44, u * 0.13);
+      g.strokeStyle = 'rgb(38,34,29)'; g.lineWidth = u * 0.1;
+      g.lineCap = 'round';
+      [-1, 1].forEach(sx => {
+        g.beginPath();
+        g.moveTo(sx * u * 0.26, -u * 0.86);
+        g.quadraticCurveTo(sx * u * 0.6, -u * 1.0, sx * u * 0.5, -u * 1.3);
+        g.stroke();
+      });
+      g.fillStyle = 'rgba(4,3,2,.97)';
+      g.fillRect(-u * 0.23, -u * 0.76, u * 0.46, u * 0.15);
       g.fillStyle = color;
-      g.shadowColor = color; g.shadowBlur = u * 0.45;
-      g.fillRect(-u * 0.17, -u * 0.72, u * 0.12, u * 0.09);
-      g.fillRect(u * 0.05, -u * 0.72, u * 0.12, u * 0.09);
+      g.shadowColor = color; g.shadowBlur = u * 0.5;
+      g.fillRect(-u * 0.18, -u * 0.735, u * 0.13, u * 0.1);
+      g.fillRect(u * 0.05, -u * 0.735, u * 0.13, u * 0.1);
       g.shadowBlur = 0;
 
       // A Lieutenant wears his master's gold over the same plate, so the two
@@ -4427,13 +4643,7 @@ function forgeEnemy(kind, r, color, flash) {
         g.strokeStyle = 'rgba(232,192,96,.92)';
         g.lineWidth = u * 0.07;
         g.beginPath();                                    // circlet
-        g.moveTo(-u * 0.28, -u * 0.86); g.lineTo(u * 0.28, -u * 0.86);
-        g.stroke();
-        g.beginPath();                                    // and its points
-        g.moveTo(-u * 0.2, -u * 0.86); g.lineTo(-u * 0.14, -u * 1.0);
-        g.lineTo(-u * 0.08, -u * 0.86);
-        g.moveTo(u * 0.08, -u * 0.86); g.lineTo(u * 0.14, -u * 1.0);
-        g.lineTo(u * 0.2, -u * 0.86);
+        g.moveTo(-u * 0.28, -u * 0.84); g.lineTo(u * 0.28, -u * 0.84);
         g.stroke();
         g.lineWidth = u * 0.045;                          // pauldron trim
         [-1, 1].forEach(sx => {
@@ -4445,10 +4655,11 @@ function forgeEnemy(kind, r, color, flash) {
     }
 
     // The void-brand: asymmetrical by doctrine, and the tell that these were
-    // people who gave up their will rather than monsters.
-    const bx = kind === 'eclipse' ? -u * 0.09 : u * 0.1;
-    const by = kind === 'eclipse' ? -u * 0.78 :
-               (kind === 'breaker' || kind === 'lieutenant') ? -u * 0.84 : -u * 0.8;
+    // people who gave up their will rather than monsters. It rides the body,
+    // so it sits where the body is not moving much -- the shoulder on the
+    // thrall, whose head now hangs, and the helm on the armoured ones.
+    const bx = kind === 'eclipse' ? -u * 0.09 : kind === 'thrall' ? -u * 0.3 : u * 0.1;
+    const by = kind === 'eclipse' ? -u * 0.9 : kind === 'thrall' ? -u * 0.3 : -u * 0.86;
     g.shadowColor = PAL.brand; g.shadowBlur = u * 0.3;
     g.strokeStyle = PAL.brand; g.lineWidth = u * 0.05;
     g.beginPath();
@@ -4459,12 +4670,8 @@ function forgeEnemy(kind, r, color, flash) {
     g.stroke();
     g.shadowBlur = 0;
 
-    if (flash) {
-      g.globalCompositeOperation = 'source-atop';
-      g.fillStyle = 'rgba(255,240,220,.5)';
-      g.fillRect(-u * 2, -u * 2, u * 4, u * 4);
-      g.globalCompositeOperation = 'source-over';
-    }
+    g.restore();
+
     g.globalCompositeOperation = 'destination-over';
     g.fillStyle = 'rgba(0,0,0,.4)';
     g.beginPath(); g.ellipse(0, u * 1.06, u * 0.66, u * 0.22, 0, 0, TAU); g.fill();
@@ -4479,14 +4686,13 @@ function forgeEnemy(kind, r, color, flash) {
 // from them. Isaac, immune to illusion, simply sees through them.
 const DECEIVER_DRAW = 32;
 
-function forgeDeceiver(kind, flash) {
+// He blinks rather than walks -- there is no gait to give him -- so he keeps
+// the one pose the others used to have.
+function forgeDeceiver(kind) {
   const u = DECEIVER_DRAW;      // drawn larger than he collides, so he
                                 // still looms without wedging in corridors
   const mirage = kind === 'mirage';
-  const L = flash ? 1.5 : 1;
-  const lit = (a, b, c) => 'rgb(' + Math.round(Math.min(255, a * L)) + ',' +
-                                    Math.round(Math.min(255, b * L)) + ',' +
-                                    Math.round(Math.min(255, c * L)) + ')';
+  const lit = (a, b, c) => 'rgb(' + a + ',' + b + ',' + c + ')';
   return forge(u * 3.0, g => {
     g.lineJoin = 'round'; g.lineCap = 'round';
 
@@ -4554,12 +4760,6 @@ function forgeDeceiver(kind, flash) {
       g.beginPath(); g.ellipse(u * 0.12, -u * 0.64, u * 0.06, u * 0.05, 0, 0, TAU); g.fill();
     }
 
-    if (flash) {
-      g.globalCompositeOperation = 'source-atop';
-      g.fillStyle = 'rgba(255,240,220,.5)';
-      g.fillRect(-u * 2, -u * 2, u * 4, u * 4);
-      g.globalCompositeOperation = 'source-over';
-    }
     g.globalCompositeOperation = 'destination-over';
     g.fillStyle = 'rgba(0,0,0,.4)';
     g.beginPath(); g.ellipse(0, u * 1.0, u * 0.6, u * 0.2, 0, 0, TAU); g.fill();
@@ -4587,17 +4787,23 @@ const PLATE = {
   leather: [ 96,  53,  45]
 };
 
-function forgeHero(id, flash) {
+// The hero in one pose. `P` is a gait pose -- GAIT_REST for standing still.
+function forgeHero(id, P) {
   const H = HEROES[id];
   const u = BASE_PLAYER.r * 1.28;
-  const L = flash ? 1.55 : 1;
-  const lit = (a, b, c) => 'rgb(' + Math.round(Math.min(255, a * L)) + ',' +
-                                    Math.round(Math.min(255, b * L)) + ',' +
-                                    Math.round(Math.min(255, c * L)) + ')';
+  const lit = (a, b, c) => 'rgb(' + a + ',' + b + ',' + c + ')';
   const magic = H.magic, trim = H.trim;
+  const swA = u * P.swing, swB = -u * P.swing;
+  const lfA = -u * P.lift, lfB = -u * P.liftB;
+  const arA = u * P.arm;
 
   return forge(u * 4.0, g => {
     g.lineJoin = 'round'; g.lineCap = 'round';
+    g.save();
+    g.translate(0, u * P.bob);
+    g.translate(0, u * 1.2);
+    g.rotate(P.roll + P.lean);
+    g.translate(0, -u * 1.2);
 
     // Cloak
     const capeG = g.createLinearGradient(0, -u * 0.6, 0, u * 1.3);
@@ -4606,20 +4812,33 @@ function forgeHero(id, flash) {
     g.fillStyle = capeG;
     g.beginPath();
     g.moveTo(-u * 0.6, -u * 0.28);
-    g.quadraticCurveTo(-u * 1.1, u * 0.5, -u * 0.84, u * 1.2);
-    g.lineTo(u * 0.84, u * 1.2);
-    g.quadraticCurveTo(u * 1.1, u * 0.5, u * 0.6, -u * 0.28);
+    g.quadraticCurveTo(-u * 1.1 - arA * 0.5, u * 0.44, -u * 0.8 - arA, u * 1.02 - Math.abs(arA) * 0.3);
+    g.lineTo(u * 0.8 - arA, u * 1.02 - Math.abs(arA) * 0.3);
+    g.quadraticCurveTo(u * 1.1 - arA * 0.5, u * 0.5, u * 0.6, -u * 0.28);
     g.closePath(); g.fill();
     g.strokeStyle = 'rgba(0,0,0,.82)'; g.lineWidth = 2; g.stroke();
 
     // Legs
-    g.fillStyle = lit(PLATE.dk[0], PLATE.dk[1], PLATE.dk[2]);
-    [[-0.36, 0], [0.08, 0]].forEach(o => {
+    // Greave and boot in two tones with a lit edge. In one flat dark they
+    // vanished into the cloak behind them and the stride went with them.
+    [[u * -0.36 + swB, lfB], [u * 0.08 + swA, lfA]].forEach(o => {
+      g.fillStyle = lit(PLATE.mid[0], PLATE.mid[1], PLATE.mid[2]);
       g.beginPath();
-      g.roundRect ? g.roundRect(u * o[0], u * 0.64, u * 0.28, u * 0.6, u * 0.1)
-                  : g.rect(u * o[0], u * 0.64, u * 0.28, u * 0.6);
+      g.roundRect ? g.roundRect(o[0], u * 0.64 + o[1], u * 0.28, u * 0.46, u * 0.08)
+                  : g.rect(o[0], u * 0.64 + o[1], u * 0.28, u * 0.46);
       g.fill();
-      g.strokeStyle = 'rgba(0,0,0,.7)'; g.lineWidth = 1.4; g.stroke();
+      g.strokeStyle = 'rgba(0,0,0,.82)'; g.lineWidth = 1.6; g.stroke();
+      g.fillStyle = lit(PLATE.leather[0], PLATE.leather[1], PLATE.leather[2]);
+      g.beginPath();
+      g.roundRect ? g.roundRect(o[0] - u * 0.03, u * 1.02 + o[1], u * 0.34, u * 0.22, u * 0.07)
+                  : g.rect(o[0] - u * 0.03, u * 1.02 + o[1], u * 0.34, u * 0.22);
+      g.fill();
+      g.strokeStyle = 'rgba(0,0,0,.82)'; g.lineWidth = 1.6; g.stroke();
+      g.strokeStyle = lit(PLATE.hi[0], PLATE.hi[1], PLATE.hi[2]);
+      g.lineWidth = 1.1;
+      g.beginPath();
+      g.moveTo(o[0] + u * 0.03, u * 0.68 + o[1]); g.lineTo(o[0] + u * 0.03, u * 1.0 + o[1]);
+      g.stroke();
     });
 
     // Cuirass
@@ -4758,12 +4977,7 @@ function forgeHero(id, flash) {
     g.fillRect(-u * 0.14, -u * 0.6, u * 0.09, u * 0.05);
     g.fillRect(u * 0.05, -u * 0.6, u * 0.09, u * 0.05);
 
-    if (flash) {
-      g.globalCompositeOperation = 'source-atop';
-      g.fillStyle = 'rgba(255,238,212,.5)';
-      g.fillRect(-u * 2, -u * 2, u * 4, u * 4);
-      g.globalCompositeOperation = 'source-over';
-    }
+    g.restore();
     g.globalCompositeOperation = 'destination-over';
     g.fillStyle = 'rgba(0,0,0,.42)';
     g.beginPath(); g.ellipse(0, u * 1.3, u * 0.84, u * 0.28, 0, 0, TAU); g.fill();
@@ -4831,20 +5045,27 @@ function forgeAll() {
   SS = Math.min(3, Math.max(2, view.dpr));
   LIGHTS.clear();
   wallGrads.clear();
+  // Sprites are forged one per pose now, and facing is a flip at blit time
+  // rather than a second copy of every frame. That is what pays for the
+  // cycles: the atlas would otherwise be four sprites per pose.
+  //
+  // The hero carries both cycles because the stick is analogue. Enemies carry
+  // the run only -- a dormant body does not move at all and a woken one comes
+  // at you flat out.
   for (const hid in HEROES) {
-    SPR['h_' + hid] = forgeHero(hid, false);
-    SPR['h_' + hid + 'Hit'] = forgeHero(hid, true);
-    SPR['h_' + hid + 'L'] = mirrorSprite(SPR['h_' + hid]);
-    SPR['h_' + hid + 'HitL'] = mirrorSprite(SPR['h_' + hid + 'Hit']);
+    SPR['h_' + hid] = forgeHero(hid, GAIT_REST);
+    for (let i = 0; i < GAIT_N; i++) {
+      SPR['h_' + hid + 'w' + i] = forgeHero(hid, gaitPose(i, 0.30));
+      SPR['h_' + hid + 'r' + i] = forgeHero(hid, gaitPose(i, 0.58));
+    }
   }
   for (const k in ENEMY_TYPES) {
     const d = ENEMY_TYPES[k];
-    SPR[k] = (k === 'deceiver' || k === 'mirage')
-      ? forgeDeceiver(k, false) : forgeEnemy(k, d.r, d.color, false);
-    SPR[k + 'Hit'] = (k === 'deceiver' || k === 'mirage')
-      ? forgeDeceiver(k, true) : forgeEnemy(k, d.r, d.color, true);
-    SPR[k + 'L'] = mirrorSprite(SPR[k]);
-    SPR[k + 'HitL'] = mirrorSprite(SPR[k + 'Hit']);
+    if (k === 'deceiver' || k === 'mirage') { SPR[k] = forgeDeceiver(k); continue; }
+    SPR[k] = forgeEnemy(k, d.r, d.color, GAIT_REST);
+    for (let i = 0; i < GAIT_N; i++) {
+      SPR[k + 'r' + i] = forgeEnemy(k, d.r, d.color, gaitPose(i, 0.52));
+    }
   }
 
   SPR.loot = forgeLoot(false);
@@ -4903,16 +5124,6 @@ function forgeRect(w, h, paint) {
   paint(g);
   c.spanW = pw / SS;
   c.spanH = ph / SS;
-  return c;
-}
-
-function mirrorSprite(src) {
-  const c = newCanvas(src.width, src.height);
-  const g = c.getContext('2d');
-  g.translate(src.width, 0);
-  g.scale(-1, 1);
-  g.drawImage(src, 0, 0);
-  c.span = src.span;
   return c;
 }
 
@@ -6237,12 +6448,13 @@ function drawArcs() {
 }
 
 function drawEnemy(e) {
-  const key = e.kind + (e.hitFlash > 0 ? 'Hit' : '') + (e.face < 0 ? 'L' : '');
+  const spr = bodyFrame(e);
+  const flip = e.face < 0;
   if (e.kind === 'mirage') {
     // Isaac is immune to the Deceiver's illusions, so for him they are plainly
     // false. Zayd has to read the shattered eye like everyone else.
     const seen = player.hero === 'isaac';
-    blit(SPR[key] || SPR[e.kind], e.x, e.y, 0, seen ? 0.32 : 0.94);
+    blit(spr, e.x, e.y, 0, seen ? 0.32 : 0.94, 1, flip);
     if (seen) {
       ctx.strokeStyle = 'rgba(232,192,96,.5)';
       ctx.lineWidth = 1.2;
@@ -6297,7 +6509,10 @@ function drawEnemy(e) {
     ctx.beginPath(); ctx.arc(e.x, e.y + e.r * 0.55, e.r * 1.15, 0, TAU); ctx.stroke();
     ctx.restore();
   }
-  blit(SPR[key] || SPR[e.kind], e.x, e.y);
+  // A dormant body is not walking, but it is not a statue either: it sways
+  // where it stands, off the drowse clock it already keeps.
+  blit(spr, e.x, e.y, e.awake ? 0 : Math.sin(e.drowse) * 0.035, 1, 1, flip);
+  if (e.hitFlash > 0) blitFlash(spr, e.x, e.y, flip);
   if (e.elite) {
     // scaled up a touch so the champion reads as bodily bigger, not just lit
     ctx.save();
@@ -6341,8 +6556,9 @@ function drawPlayer(t) {
   const blink = p.invuln > 0 && Math.floor(t * 20) % 2 === 0;
 
   const hurt = blink || p.hitFlash > 0;
-  const key = 'h_' + p.hero + (hurt ? 'Hit' : '') + (p.face < 0 ? 'L' : '');
-  blit(SPR[key] || SPR['h_' + p.hero], p.x, p.y);
+  const spr = heroFrame(p);
+  blit(spr, p.x, p.y, 0, 1, 1, p.face < 0);
+  if (hurt) blitFlash(spr, p.x, p.y, p.face < 0);
 
   // The forged hero sprites hold a still blade, so the swing is drawn over the
   // top as a streak sweeping through the strike -- far cheaper than re-forging
