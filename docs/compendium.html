@@ -1,0 +1,1080 @@
+<title>The Rivenmark Compendium</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cardo:wght@400;700&family=Spectral:ital,wght@0,300;0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#12100c;
+  --panel:#1a1610;
+  --raised:#231d15;
+  --ink:#dbcfb4;
+  --ink-soft:#b3a68a;
+  --muted:#8a7d65;
+  --faint:#665c49;
+  --rule:#332b20;
+  --rule-soft:#241e16;
+  --gold:#d9a441;
+  --ember:#e5761f;
+  --brand:#cbb6ff;
+  --blood:#a8433a;
+
+  --f-display:"Cardo","Palatino Linotype",Palatino,Georgia,serif;
+  --f-body:"Spectral",Georgia,"Times New Roman",serif;
+  --f-mono:"IBM Plex Mono","SFMono-Regular",Menlo,Consolas,monospace;
+
+  --measure:66ch;
+  --pad:clamp(1.15rem,4vw,2.5rem);
+}
+
+*{box-sizing:border-box}
+
+body{
+  margin:0;
+  background:var(--ground);
+  color:var(--ink);
+  font-family:var(--f-body);
+  font-weight:400;
+  font-size:17px;
+  line-height:1.68;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* A faint lamp from the north-west, the way every shadow in the game is cast. */
+.lamp{
+  position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:
+    radial-gradient(120vh 90vh at 12% -10%, rgba(229,118,31,.09), transparent 62%),
+    radial-gradient(90vh 70vh at 96% 108%, rgba(203,182,255,.05), transparent 60%);
+}
+
+.wrap{position:relative;z-index:1}
+
+/* ---------- masthead ---------- */
+.mast{
+  padding:clamp(3rem,10vh,6.5rem) var(--pad) clamp(2rem,6vh,3.5rem);
+  max-width:1240px;margin:0 auto;
+}
+.crest{
+  display:flex;align-items:center;gap:.85rem;
+  font-family:var(--f-mono);font-size:.66rem;letter-spacing:.34em;
+  text-transform:uppercase;color:var(--faint);margin-bottom:1.6rem;
+}
+.crest::after{content:"";flex:1;height:1px;background:var(--rule)}
+.mast h1{
+  font-family:var(--f-display);font-weight:700;
+  font-size:clamp(2.9rem,10vw,6.2rem);
+  line-height:.92;margin:0;letter-spacing:-.015em;
+  text-wrap:balance;color:var(--ink);
+}
+.mast h1 em{
+  display:block;font-style:normal;color:var(--gold);
+}
+.mast .standfirst{
+  font-family:var(--f-body);font-weight:300;font-size:clamp(1.05rem,2.4vw,1.32rem);
+  line-height:1.6;color:var(--ink-soft);max-width:52ch;margin:1.7rem 0 0;
+}
+.mast .meta{
+  margin-top:2.2rem;padding-top:1.1rem;border-top:1px solid var(--rule);
+  display:flex;flex-wrap:wrap;gap:.55rem 2.2rem;
+  font-family:var(--f-mono);font-size:.72rem;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted);
+}
+.mast .meta b{color:var(--ink-soft);font-weight:500}
+
+/* ---------- shell ---------- */
+.shell{
+  max-width:1240px;margin:0 auto;padding:0 var(--pad) 6rem;
+  display:grid;grid-template-columns:1fr;gap:3rem;
+}
+@media(min-width:1000px){
+  .shell{grid-template-columns:210px minmax(0,1fr);gap:4.5rem;align-items:start}
+}
+
+/* ---------- contents rail ---------- */
+.rail{display:none}
+@media(min-width:1000px){
+  .rail{
+    display:block;position:sticky;top:2.5rem;
+    font-family:var(--f-mono);font-size:.74rem;line-height:1.5;
+  }
+}
+.rail .rail-h{
+  letter-spacing:.26em;text-transform:uppercase;color:var(--faint);
+  font-size:.64rem;padding-bottom:.7rem;margin-bottom:.7rem;
+  border-bottom:1px solid var(--rule);
+}
+.rail ol{list-style:none;margin:0;padding:0;counter-reset:bk}
+.rail li{counter-increment:bk;margin:0 0 .1rem}
+.rail a{
+  display:flex;gap:.6rem;text-decoration:none;color:var(--muted);
+  padding:.38rem 0;border-bottom:1px solid transparent;transition:color .16s;
+}
+.rail a::before{
+  content:counter(bk,upper-roman);color:var(--faint);
+  min-width:2.1em;font-size:.68rem;letter-spacing:.04em;
+}
+.rail a:hover,.rail a:focus-visible{color:var(--gold)}
+.rail a:focus-visible{outline:1px solid var(--gold);outline-offset:3px}
+
+/* ---------- books & sections ---------- */
+.book{padding-top:1rem;scroll-margin-top:2rem}
+.book + .book{margin-top:clamp(3.5rem,9vh,6rem)}
+.book-head{
+  display:flex;align-items:baseline;gap:1rem;flex-wrap:wrap;
+  padding-bottom:.9rem;margin-bottom:1.9rem;
+  border-bottom:1px solid var(--rule);
+}
+.book-num{
+  font-family:var(--f-mono);font-size:.68rem;letter-spacing:.28em;
+  text-transform:uppercase;color:var(--ember);
+}
+.book-head h2{
+  font-family:var(--f-display);font-weight:700;
+  font-size:clamp(1.75rem,4.6vw,2.6rem);line-height:1.1;
+  margin:0;letter-spacing:-.01em;text-wrap:balance;flex:1 1 14ch;
+}
+.book-head .kicker{
+  font-family:var(--f-body);font-style:italic;font-weight:300;
+  color:var(--muted);font-size:.95rem;flex:0 1 32ch;line-height:1.5;
+}
+
+h3{
+  font-family:var(--f-display);font-weight:700;
+  font-size:1.28rem;line-height:1.25;margin:2.6rem 0 .8rem;
+  color:var(--ink);text-wrap:balance;
+}
+h3:first-child{margin-top:0}
+h4{
+  font-family:var(--f-mono);font-weight:600;font-size:.72rem;
+  letter-spacing:.2em;text-transform:uppercase;color:var(--ember);
+  margin:2rem 0 .7rem;
+}
+p{margin:0 0 1.05rem;max-width:var(--measure)}
+p:last-child{margin-bottom:0}
+.book > p, .book > .lede{max-width:var(--measure)}
+.lede{
+  font-size:1.1rem;font-weight:300;color:var(--ink-soft);
+  line-height:1.62;margin-bottom:1.6rem;
+}
+a{color:var(--gold)}
+strong,b{font-weight:600;color:var(--ink)}
+em{font-style:italic}
+ul{margin:0 0 1.05rem;padding-left:1.15rem;max-width:var(--measure)}
+li{margin-bottom:.42rem}
+li::marker{color:var(--faint)}
+
+.term{
+  font-family:var(--f-mono);font-size:.86em;color:var(--brand);
+  font-weight:500;
+}
+.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:.92em}
+
+/* ---------- pull quote / fiction slab ---------- */
+.slab{
+  border-left:2px solid var(--gold);
+  padding:.2rem 0 .2rem 1.4rem;margin:2rem 0;
+  font-family:var(--f-display);font-size:1.24rem;line-height:1.45;
+  color:var(--ink);max-width:48ch;
+}
+.slab span{
+  display:block;margin-top:.7rem;font-family:var(--f-mono);
+  font-size:.68rem;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);
+}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto;margin:1.4rem 0 1.8rem;border:1px solid var(--rule);background:var(--panel)}
+table{border-collapse:collapse;width:100%;min-width:34rem;font-size:.88rem}
+caption{
+  caption-side:top;text-align:left;padding:.8rem 1rem .1rem;
+  font-family:var(--f-mono);font-size:.68rem;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--muted);
+}
+th,td{
+  padding:.55rem .85rem;text-align:left;
+  border-bottom:1px solid var(--rule-soft);vertical-align:top;
+}
+thead th{
+  font-family:var(--f-mono);font-weight:500;font-size:.68rem;
+  letter-spacing:.13em;text-transform:uppercase;color:var(--muted);
+  border-bottom:1px solid var(--rule);white-space:nowrap;
+}
+tbody tr:last-child td{border-bottom:none}
+td.n,th.n{font-family:var(--f-mono);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+tbody th{font-weight:600;color:var(--ink);white-space:nowrap}
+tbody tr:hover{background:rgba(217,164,65,.035)}
+
+/* ---------- bestiary ---------- */
+.beasts{display:grid;gap:1px;background:var(--rule);border:1px solid var(--rule);margin:1.6rem 0 2rem}
+@media(min-width:720px){.beasts{grid-template-columns:1fr 1fr}}
+.beast{background:var(--panel);padding:1.3rem 1.4rem 1.4rem;position:relative}
+.beast::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--sig)}
+.beast h5{
+  font-family:var(--f-display);font-weight:700;font-size:1.16rem;
+  margin:0 0 .1rem;color:var(--ink);
+}
+.beast .role{
+  font-family:var(--f-mono);font-size:.66rem;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--sig);margin-bottom:.75rem;
+}
+.beast p{font-size:.94rem;line-height:1.58;margin:0 0 .9rem;color:var(--ink-soft);max-width:none}
+.stats{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(4.1rem,1fr));
+  gap:.5rem .4rem;border-top:1px solid var(--rule-soft);padding-top:.8rem;
+}
+.stat{display:flex;flex-direction:column;gap:.1rem}
+.stat dt{
+  font-family:var(--f-mono);font-size:.6rem;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--faint);
+}
+.stat dd{
+  margin:0;font-family:var(--f-mono);font-size:.9rem;font-weight:500;
+  font-variant-numeric:tabular-nums;color:var(--ink);
+}
+
+/* ---------- regions ---------- */
+.regions{display:grid;gap:1px;background:var(--rule);border:1px solid var(--rule);margin:1.6rem 0 2rem}
+.region{background:var(--panel);padding:1.25rem 1.4rem;display:grid;gap:.3rem 1.4rem}
+@media(min-width:760px){.region{grid-template-columns:minmax(0,1.05fr) minmax(0,1fr) auto;align-items:start}}
+.region h5{font-family:var(--f-display);font-weight:700;font-size:1.12rem;margin:0;color:var(--ink)}
+.region .land{font-family:var(--f-mono);font-size:.68rem;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);margin-top:.25rem}
+.region p{font-size:.93rem;margin:0;color:var(--ink-soft);max-width:none}
+.sw{display:flex;gap:3px;margin-top:.5rem}
+.sw i{width:22px;height:22px;display:block;border:1px solid rgba(0,0,0,.45)}
+@media(min-width:760px){.sw{margin-top:.15rem}}
+
+/* ---------- the ramp: a real sequence, so it is numbered ---------- */
+.ramp{list-style:none;margin:1.5rem 0 2rem;padding:0;counter-reset:rung;border-top:1px solid var(--rule)}
+.ramp li{
+  counter-increment:rung;display:grid;gap:.15rem 1.1rem;
+  padding:.85rem 0;border-bottom:1px solid var(--rule-soft);margin:0;
+}
+@media(min-width:620px){.ramp li{grid-template-columns:2.6rem minmax(0,14ch) minmax(0,1fr)}}
+.ramp li::before{
+  content:counter(rung,decimal-leading-zero);
+  font-family:var(--f-mono);font-size:.76rem;color:var(--ember);
+  font-variant-numeric:tabular-nums;padding-top:.15rem;
+}
+.ramp .adds{font-family:var(--f-mono);font-size:.8rem;color:var(--ink);font-weight:500}
+.ramp .said{font-style:italic;color:var(--ink-soft);font-size:.96rem;line-height:1.5}
+
+/* ---------- key/value grid ---------- */
+.kv{display:grid;gap:1px;background:var(--rule);border:1px solid var(--rule);margin:1.4rem 0 1.9rem}
+@media(min-width:640px){.kv{grid-template-columns:1fr 1fr}}
+@media(min-width:980px){.kv.three{grid-template-columns:1fr 1fr 1fr}}
+.kv > div{background:var(--panel);padding:1rem 1.15rem}
+.kv dt{
+  font-family:var(--f-mono);font-size:.63rem;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:.3rem;
+}
+.kv dd{margin:0;font-size:.95rem;line-height:1.55;color:var(--ink-soft)}
+.kv dd b{color:var(--ink)}
+
+/* ---------- callout ---------- */
+.note{
+  border:1px solid var(--rule);border-left:2px solid var(--ember);
+  background:var(--panel);padding:1.1rem 1.3rem;margin:1.7rem 0;
+}
+.note h4{margin-top:0}
+.note p{font-size:.94rem;color:var(--ink-soft);max-width:none}
+.note p:last-child{margin-bottom:0}
+
+/* ---------- open ground list ---------- */
+.open{display:grid;gap:1px;background:var(--rule);border:1px solid var(--rule);margin:1.6rem 0}
+.open > div{background:var(--panel);padding:1.05rem 1.25rem}
+.open h5{
+  font-family:var(--f-display);font-weight:700;font-size:1.05rem;
+  margin:0 0 .25rem;color:var(--gold);
+}
+.open p{margin:0;font-size:.94rem;color:var(--ink-soft);max-width:none}
+
+/* ---------- names ---------- */
+.names{
+  display:flex;flex-wrap:wrap;gap:.4rem;margin:1.3rem 0 1.8rem;padding:0;list-style:none;
+}
+.names li{
+  margin:0;font-family:var(--f-mono);font-size:.76rem;
+  border:1px solid var(--rule);padding:.32rem .6rem;color:var(--ink-soft);
+  background:var(--panel);
+}
+
+footer{
+  max-width:1240px;margin:0 auto;padding:2.5rem var(--pad) 4rem;
+  border-top:1px solid var(--rule);
+  font-family:var(--f-mono);font-size:.7rem;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--faint);
+}
+
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="lamp" aria-hidden="true"></div>
+
+<div class="wrap">
+
+<header class="mast">
+  <div class="crest">A compendium of the Shattered Realm</div>
+  <h1>The<em>Rivenmark</em></h1>
+  <p class="standfirst">Everything the game currently knows about its own world &mdash; the fiction, the geography, the things that walk it, and the numbers underneath all of it. Written to be built on.</p>
+  <div class="meta">
+    <span><b>52</b> delves</span>
+    <span><b>5</b> regions</span>
+    <span><b>11</b> bodies</span>
+    <span><b>2</b> Vanguard</span>
+    <span><b>8</b> Regalia pieces</span>
+    <span><b>7</b> epithets</span>
+  </div>
+</header>
+
+<div class="shell">
+
+  <nav class="rail" aria-label="Contents">
+    <div class="rail-h">The Books</div>
+    <ol>
+      <li><a href="#fiction">The Premise</a></li>
+      <li><a href="#realm">The Realm</a></li>
+      <li><a href="#vanguard">The Vanguard</a></li>
+      <li><a href="#bestiary">The Bestiary</a></li>
+      <li><a href="#deceiver">The Deceiver</a></li>
+      <li><a href="#delve">The Delve</a></li>
+      <li><a href="#gate">The Gate</a></li>
+      <li><a href="#regalia">The Regalia</a></li>
+      <li><a href="#gatehouse">The Gate-House</a></li>
+      <li><a href="#open">Open Ground</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+  <!-- ============ I ============ -->
+  <section class="book" id="fiction">
+    <div class="book-head">
+      <span class="book-num">Book I</span>
+      <h2>The Premise</h2>
+      <span class="kicker">What broke, what it cost, and why anyone goes down there.</span>
+    </div>
+
+    <p class="lede">The Aegis is shattered. Raw magic kills now unless it runs through Spirit-wrought Steel. The Vanguard descend to cut <strong>Arcane Slag</strong> from the Hollow-Thralls, find a <strong>ley-gate</strong>, and hold it open long enough to carry the haul out from under the <strong>Shroud of Dúath</strong>.</p>
+
+    <p>That is the whole of the stated fiction, and everything else in the game is built on top of it. The pieces below are the load-bearing ones &mdash; each is named somewhere in the game and each is deliberately under-explained.</p>
+
+    <dl class="kv">
+      <div>
+        <dt>The Aegis</dt>
+        <dd>Whatever it was, it held magic away from people. Its shattering is the founding event and the game's title is a reference to it &mdash; the <b>Riven</b> mark. Nothing yet says who made it, when it broke, or whether it can be remade.</dd>
+      </div>
+      <div>
+        <dt>Raw magic</dt>
+        <dd>Lethal on contact. The only safe conduit is <b>Spirit-wrought Steel</b> &mdash; which is also the second-best gear rarity, so the material that keeps a Vanguard alive is the same material their kit is graded against.</dd>
+      </div>
+      <div>
+        <dt>Arcane Slag</dt>
+        <dd>Cut from the dead. It is simultaneously the extraction quota, the experience currency, and the thing the realm is being strip-mined for. Every body is worth a fixed number of it &mdash; a thrall one, the Deceiver thirty.</dd>
+      </div>
+      <div>
+        <dt>Ley-gates</dt>
+        <dd>The way out. They do not open on demand: the gate answers only once the quota is met, and answering it <em>summons the Deceiver to it</em>. Getting out means going through him.</dd>
+      </div>
+      <div>
+        <dt>The Shroud of Dúath</dt>
+        <dd>What lies over the delves. Dúath also names a threshold (delve 19) and an amulet in the Regalia (<b>Pendant of Dúath</b>), so it is a place, a boundary and a relic at once.</dd>
+      </div>
+      <div>
+        <dt>The hive-mind</dt>
+        <dd>What claims the dead. Thralls are described as tethered to it; Zayd's whole gift is severing those tethers. On a death the game says plainly: <em>&ldquo;The hive-mind claimed another of the Clear-Sighted.&rdquo;</em></dd>
+      </div>
+      <div>
+        <dt>The Clear-Sighted</dt>
+        <dd>An order or a condition &mdash; the game only ever says the Vanguard are &ldquo;two of the Clear-Sighted&rdquo; and that they fight <b>unhelmeted</b>. That is why there is no head slot in the whole gear system.</dd>
+      </div>
+      <div>
+        <dt>The void-brand</dt>
+        <dd>Every enemy carries an asymmetrical violet mark. It is stated to be the tell that these <em>were people who gave up their will</em>, rather than monsters. It rides on whichever part of the body moves least.</dd>
+      </div>
+    </dl>
+
+    <div class="slab">
+      &ldquo;Cut, gather, and find the ley-gate.&rdquo;
+      <span>The first delve, and the whole game in six words</span>
+    </div>
+  </section>
+
+  <!-- ============ II ============ -->
+  <section class="book" id="realm">
+    <div class="book-head">
+      <span class="book-num">Book II</span>
+      <h2>The Realm</h2>
+      <span class="kicker">Five sundered regions. Each delve is cut from one of them and takes its stone, its earth and its lamplight.</span>
+    </div>
+
+    <p>A region is not a level &mdash; it is an environment table a level draws from. The first delve deliberately rolls all five, because its job is to exercise every environment the generator can build. Deeper rungs widen their pool as they go, so a shallow delve is one place and the deepest could be cut from anywhere in the realm.</p>
+
+    <p>Each region also carries a <em>layout grammar</em>: how large its rooms run, how wide its corridors are, and how many chambers get cut. Kraggen-Tor is tight and cramped; the Dead Firth is wide and open.</p>
+
+    <div class="regions">
+      <article class="region">
+        <div>
+          <h5>The Slag-Moors of Drak-Hald</h5>
+          <div class="land">The Weeping Keep of Tor-Varden</div>
+        </div>
+        <p>Dead ash. Rooms 6&ndash;13, corridors 3 wide, 7 chambers. Amber lamplight over brown earth &mdash; the default face of the realm.</p>
+        <div class="sw" aria-hidden="true"><i style="background:#3a2c1e"></i><i style="background:#241d16"></i><i style="background:#16110b"></i><i style="background:#e5761f"></i></div>
+      </article>
+      <article class="region">
+        <div>
+          <h5>The Rending Gorges of Vaelk</h5>
+          <div class="land">The Kael-Dorm Redoubt</div>
+        </div>
+        <p>Split earth. The largest rooms in the realm (7&ndash;16) and the fewest chambers &mdash; cold blue stone, azure lamps, wide and quiet.</p>
+        <div class="sw" aria-hidden="true"><i style="background:#262e3a"></i><i style="background:#1a2430"></i><i style="background:#101720"></i><i style="background:#5fd0ff"></i></div>
+      </article>
+      <article class="region">
+        <div>
+          <h5>Kraggen-Tor, the Iron-Teeth</h5>
+          <div class="land">The Shatter-Gate of Ghor</div>
+        </div>
+        <p>Volcanic west. The tightest layout in the game &mdash; rooms 5&ndash;11, narrow corridors. Red rock under a hot orange lamp.</p>
+        <div class="sw" aria-hidden="true"><i style="background:#341e16"></i><i style="background:#2a1a14"></i><i style="background:#1a0f0a"></i><i style="background:#ff5f28"></i></div>
+      </article>
+      <article class="region">
+        <div>
+          <h5>The Rot-Weald</h5>
+          <div class="land">The Heart-Rot Clearing</div>
+        </div>
+        <p>Creeping mutation in the southern forest. Nine chambers &mdash; the most subdivided region. Green earth, sickly moss, pale green light.</p>
+        <div class="sw" aria-hidden="true"><i style="background:#28301e"></i><i style="background:#1c2418"></i><i style="background:#121810"></i><i style="background:#9dbb5a"></i></div>
+      </article>
+      <article class="region">
+        <div>
+          <h5>The Dead Firth</h5>
+          <div class="land">The Ash-Shoals</div>
+        </div>
+        <p>A blackened ocean, drained and refilled with drifting ash. The widest rooms (8&ndash;17) and eleven chambers &mdash; grey on grey under a cold white lamp.</p>
+        <div class="sw" aria-hidden="true"><i style="background:#222022"></i><i style="background:#1c1c1f"></i><i style="background:#121215"></i><i style="background:#b9c4cf"></i></div>
+      </article>
+    </div>
+
+    <h3>The named delves</h3>
+    <p>Twenty-five names are authored; the ladder runs to fifty-two, so past the twenty-fifth the names recur with a numeral (<span class="num">II</span>, <span class="num">III</span>, <span class="num">IV</span>) &mdash; the same place, cut deeper.</p>
+
+    <ul class="names">
+      <li>The Test Delve</li><li>Ashfall Shallows</li><li>The Weeping Stair</li>
+      <li>Tor-Varden Undercroft</li><li>The Rending Cut</li><li>Kael-Dorm Approach</li>
+      <li>The Iron Teeth</li><li>Ghor Slagworks</li><li>The Rot-Weald Verge</li>
+      <li>Heart-Rot Hollow</li><li>The Ash Shoals</li><li>Drowned Barrows</li>
+      <li>The Sundered Span</li><li>Vaelk Deepcut</li><li>The Cinder Vault</li>
+      <li>Hollow Processional</li><li>The Thrall Pits</li><li>Brand-Marked Halls</li>
+      <li>The Silent Choir</li><li>Dúath Threshold</li><li>The Long Dark</li>
+      <li>Bonewright Yard</li><li>The Shattered Ward</li><li>Gilded Approach</li>
+      <li>The Deceiver&rsquo;s Antechamber</li>
+    </ul>
+
+    <p>Several of these are proper nouns nothing else in the game explains &mdash; <strong>Bonewright Yard</strong>, <strong>The Silent Choir</strong>, <strong>Hollow Processional</strong>, <strong>Drowned Barrows</strong>. They are the most fertile ground in the whole document for world-building, because they are named and empty.</p>
+  </section>
+
+  <!-- ============ III ============ -->
+  <section class="book" id="vanguard">
+    <div class="book-head">
+      <span class="book-num">Book III</span>
+      <h2>The Vanguard</h2>
+      <span class="kicker">Two of the Clear-Sighted, fighting unhelmeted. Each is immune to a different one of the Deceiver&rsquo;s tricks.</span>
+    </div>
+
+    <p>Both heroes channel through Spirit-wrought Steel: they strike, and the magic leaves the edge as a crescent. <span class="term">range</span> is how far that crescent carries and how far the blade picks a target; <span class="term">sweep</span> is its half-width, so a wider sweep mows a broader swathe rather than punching through one more body.</p>
+
+    <div class="tw">
+      <table>
+        <caption>The two Vanguard, against the unmodified base</caption>
+        <thead>
+          <tr><th>&nbsp;</th><th>Isaac</th><th>Zayd</th><th>Base</th></tr>
+        </thead>
+        <tbody>
+          <tr><th>Title</th><td>The Unyielding Shield</td><td>The Piercing Truth</td><td>&mdash;</td></tr>
+          <tr><th>Order</th><td>Hearth-Wardens</td><td>Frost-Scholars of Kael</td><td>&mdash;</td></tr>
+          <tr><th>School</th><td>Sun-Gold</td><td>Azure</td><td>&mdash;</td></tr>
+          <tr><th>Life</th><td class="n">125</td><td class="n">92</td><td class="n">100</td></tr>
+          <tr><th>Stride</th><td class="n">196</td><td class="n">228</td><td class="n">205</td></tr>
+          <tr><th>Damage</th><td class="n">22</td><td class="n">17</td><td class="n">22</td></tr>
+          <tr><th>Swing time</th><td class="n">0.56s</td><td class="n">0.42s</td><td class="n">0.50s</td></tr>
+          <tr><th>Reach</th><td class="n">178</td><td class="n">206</td><td class="n">186</td></tr>
+          <tr><th>Sweep</th><td class="n">33</td><td class="n">21</td><td class="n">28</td></tr>
+          <tr><th>Crescent speed</th><td class="n">380</td><td class="n">520</td><td class="n">430</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Isaac, the Unyielding Shield</h3>
+    <p>The vanguard&rsquo;s anchor. Sun-Gold magic, a sun-emblazoned shield, and <em>no purchase for the Deceiver&rsquo;s illusions</em>. He is slower and hits less often, but he is tougher and his crescents cut far wider &mdash; a sweep of 33 against Zayd&rsquo;s 21. He is the crowd answer.</p>
+
+    <h3>Zayd, the Piercing Truth</h3>
+    <p>A tactician of Kael. The Sapphire Glaive <em>severs hive-mind tethers</em>, and inverted ley-lines hold no confusion for him. Fast, long-reaching, narrow, and fragile &mdash; 92 life is the thinnest margin in the game. He is the precision answer.</p>
+
+    <div class="note">
+      <h4>The design tell</h4>
+      <p>Isaac is proof against illusion; Zayd is proof against the hive-mind and against inverted ley-lines. The Deceiver&rsquo;s two signature tricks are illusion (mirages, splitting) and the tether. <strong>Each hero is written as the counter to one half of the antagonist</strong> &mdash; which strongly implies the two of them were meant to descend together, and the game only ever lets you take one.</p>
+    </div>
+
+    <h3>Strike forms</h3>
+    <p>Three shapes cycle in order: the blade comes <strong>across level</strong> (slash), then <strong>up from low</strong> (rise), then <strong>down the centre</strong> (chop). The chop pulls the hero furthest into the blow. The forms are drawing only &mdash; damage, reach and the crescent&rsquo;s hit geometry are identical between them, so no strike is better than another.</p>
+
+    <h3>Rank</h3>
+    <p>Slag is experience. It drives a hero level that persists across delves, to a maximum of <span class="num">60</span>. Each level is worth <span class="num">+6</span> life, <span class="num">+1.15</span> damage and a sliver of ward (capped at <span class="num">12%</span>). The curve is deliberately shallow early and steep late: <span class="num">38 &times; level<sup>1.62</sup></span> slag to reach a given rank, so the first delves move and the fiftieth still means something.</p>
+
+    <p><strong>Power level</strong> is the single number the ladder is measured against: it averages what the hero brings with what the kit brings, so a rank-40 hero in rags and a rank-10 hero in a full set both read honestly. A delve tells you plainly whether you are under it &mdash; <em>well within you</em>, <em>an even match</em>, <em>above your weight</em>, or <em>far beyond you</em>. It is advice, never a lock.</p>
+  </section>
+
+  <!-- ============ IV ============ -->
+  <section class="book" id="bestiary">
+    <div class="book-head">
+      <span class="book-num">Book IV</span>
+      <h2>The Bestiary</h2>
+      <span class="kicker">Eight archetypes walk the horde. Each asks a different question, and every one of them wears the void-brand.</span>
+    </div>
+
+    <p class="lede">A role decides <em>how</em> a body fights, not how hard. Before roles existed, five enemy types read as one type at five sizes; now each is a different problem with a different answer.</p>
+
+    <div class="tw">
+      <table>
+        <caption>The roles</caption>
+        <thead><tr><th>Role</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><th>press</th><td>Walks at you. The baseline everything else is read against.</td></tr>
+          <tr><th>flank</th><td>Refuses the front. Arcs wide across open ground and commits only once it is off your shoulder &mdash; but funnels like anything else in a corridor, because there is no room to go round.</td></tr>
+          <tr><th>anchor</th><td>Holds ground instead of chasing. Takes the narrowest cell near where it woke and guards it, bracing on a rhythm you can read: shielded and immovable, then open.</td></tr>
+          <tr><th>burst</th><td>Does not strike. Closes, commits, and detonates &mdash; and detonates when killed as well.</td></tr>
+          <tr><th>shade</th><td>Holds its distance and throws. Will not throw through rock, so it walks to find a line and you break the line to stop it.</td></tr>
+          <tr><th>stalk</th><td>Waits out of the fight, crosses in one fixed-length run, cuts, and leaves. Will not start a run it has no line for.</td></tr>
+          <tr><th>chant</th><td>Never closes and never throws anything dodgeable in flight. Puts fire on the ground you stand on, or takes the light.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="beasts">
+
+      <article class="beast" style="--sig:#9dbb5a">
+        <h5>The Hollow-Thrall</h5>
+        <div class="role">press &middot; from the first delve</div>
+        <p>A corpse that has been made to run: stooped over its own opened ribs, one shoulder wrenched higher than the other, arms longer than they should be and hands it can no longer close. The trash of the realm and the thing the whole economy is cut from.</p>
+        <dl class="stats">
+          <div class="stat"><dt>Life</dt><dd>34</dd></div>
+          <div class="stat"><dt>Damage</dt><dd>8</dd></div>
+          <div class="stat"><dt>Stride</dt><dd>96</dd></div>
+          <div class="stat"><dt>Slag</dt><dd>1</dd></div>
+          <div class="stat"><dt>Size</dt><dd>13</dd></div>
+        </dl>
+      </article>
+
+      <article class="beast" style="--sig:#b07cff">
+        <h5>The Eclipse</h5>
+        <div class="role">flank &middot; from the second delve</div>
+        <p>Small, fast and cloaked, and it will not come at you down the middle. It swings up to <span class="num">1.75</span> radians round you before committing, and once inside <span class="num">190</span> units it stops manoeuvring and presses for a full <span class="num">2.6</span> seconds. In a corridor it is just a fast thrall.</p>
+        <dl class="stats">
+          <div class="stat"><dt>Life</dt><dd>22</dd></div>
+          <div class="stat"><dt>Damage</dt><dd>6</dd></div>
+          <div class="stat"><dt>Stride</dt><dd>152</dd></div>
+          <div class="stat"><dt>Slag</dt><dd>1</dd></div>
+          <div class="stat"><dt>Size</dt><dd>11</dd></div>
+        </dl>
+      </article>
+
+      <article class="beast" style="--sig:#c85a24">
+        <h5>The Breaker</h5>
+        <div class="role">anchor &middot; from the third delve</div>
+        <p>Planted, over-armoured, bound together by seams burning through from the inside. It takes the tightest ground it can find within <span class="num">260</span> units of where it woke and holds it &mdash; it will step <span class="num">330</span> units to meet you but will not chase you across the delve. Braced <span class="num">2.2s</span>, open <span class="num">1.7s</span>: the open window is your whole answer, because the guard eats <span class="num">74%</span> of a blow.</p>
+        <dl class="stats">
+          <div class="stat"><dt>Life</dt><dd>135</dd></div>
+          <div class="stat"><dt>Damage</dt><dd>21</dd></div>
+          <div class="stat"><dt>Stride</dt><dd>62</dd></div>
+          <div class="stat"><dt>Slag</dt><dd>4</dd></div>
+          <div class="stat"><dt>Size</dt><dd>23</dd></div>
+        </dl>
+      </article>
+
+      <article class="beast" style="--sig:#c8d63a">
+        <h5>The Husk</h5>
+        <div class="role">burst &middot; from the fourth delve</div>
+        <p>Bloated with something that wants out. It does not strike: it closes to <span class="num">50</span> units, commits, and after <span class="num">0.52s</span> bursts for <span class="num">62</span> across a <span class="num">94</span>-unit radius. It bursts when it dies too &mdash; so one broken across the room cost you nothing, and one broken at your feet is the same blast either way. The blast kills neighbouring husks, so a knot of them goes off in sequence, each link with its own telegraphed ring.</p>
+        <dl class="stats">
+          <div class="stat"><dt>Life</dt><dd>40</dd></div>
+          <div class="stat"><dt>Burst</dt><dd>62</dd></div>
+          <div class="stat"><dt>Stride</dt><dd>112</dd></div>
+          <div class="stat"><dt>Slag</dt><dd>1</dd></div>
+          <div class="stat"><dt>Size</dt><dd>17</dd></div>
+        </dl>
+      </article>
+
+      <article class="beast" style="--sig:#48d0c0">
+        <h5>The Cantor</h5>
+        <div class="role">shade &middot; from the fifth delve</div>
+        <p>Thin, robed, and it keeps its distance &mdash; holding around <span class="num">240</span> units and giving ground inside <span class="num">150</span>. The lit thing in its hand is the whole tell: while that is up it is about to throw. It will not throw through rock, which makes it the first thing in the delve that makes a wall worth standing <em>behind</em> rather than walking round.</p>
+        <dl class="stats">
+          <div class="stat"><dt>Life</dt><dd>28</dd></div>
+          <div class="stat"><dt>Bolt</dt><dd>12</dd></div>
+          <div class="stat"><dt>Stride</dt><dd>78</dd></div>
+          <div class="stat"><dt>Slag</dt><dd>1</dd></div>
+          <div class="stat"><dt>Size</dt><dd>13</dd></div>
+        </dl>
+      </article>
+
+      <article class="beast" style="--sig:#c48a3a">
+        <h5>The Brimstone Flayer</h5>
+        <div class="role">stalk &middot; from the sixth delve</div>
+        <p>Lean, horned, purple, with a cleaver strapped along its forearm so the arm and the blade are one shape. It is not in the fight; it visits it. It holds off at <span class="num">220</span> units until its own clock lets it go, crosses in one <span class="num">0.85s</span> run, opens you and turns. The run has a fixed length rather than ending on contact, so it goes <em>past</em> you and out the other side. What it leaves is a wound: <span class="num">7</span> a second for <span class="num">3.2s</span>, ticking through your invulnerability frames. It does not stack &mdash; a second cut refreshes the clock.</p>
+        <dl class="stats">
+          <div class="stat"><dt>Life</dt><dd>46</dd></div>
+          <div class="stat"><dt>Damage</dt><dd>9</dd></div>
+          <div class="stat"><dt>Stride</dt><dd>172</dd></div>
+          <div class="stat"><dt>Slag</dt><dd>1</dd></div>
+          <div class="stat"><dt>Size</dt><dd>15</dd></div>
+        </dl>
+      </article>
+
+      <article class="beast" style="--sig:#e0402c">
+        <h5>The Ashen Gorger</h5>
+        <div class="role">press &middot; from the seventh delve</div>
+        <p>Ash and bolted iron, with a molten maw and short stumping legs under a mass too heavy for them. It is slow enough that it is never the thing that kills you &mdash; it is the thing that decides <em>where the fight happens</em>. Its slam does not just land; it opens the floor, and the ground stays broken and burning for <span class="num">6.5s</span> at <span class="num">9</span> a second. A corridor it has come down in is a corridor you now go round.</p>
+        <dl class="stats">
+          <div class="stat"><dt>Life</dt><dd>240</dd></div>
+          <div class="stat"><dt>Damage</dt><dd>24</dd></div>
+          <div class="stat"><dt>Stride</dt><dd>52</dd></div>
+          <div class="stat"><dt>Slag</dt><dd>3</dd></div>
+          <div class="stat"><dt>Size</dt><dd>26</dd></div>
+        </dl>
+      </article>
+
+      <article class="beast" style="--sig:#ff7a2c">
+        <h5>The Cinder-Maw Shaman</h5>
+        <div class="role">chant &middot; from the eighth delve</div>
+        <p>Cowled, skull-hung, carrying a caged burning heart on a staff. It carries <strong>no melee at all</strong> and holds around <span class="num">260</span> units. It alternates two spells so neither surprises you twice: an ember pool dropped on the ground you are standing on (<span class="num">16</span> a second for <span class="num">5s</span>), and the <strong>gloom</strong> &mdash; which takes the light for <span class="num">4.2s</span>, closing your view by roughly a third. Nothing is hidden that was not already off-screen; the reach of what the Vanguard carries simply closes. Neither can be dodged in flight. The only answer is to reach it.</p>
+        <dl class="stats">
+          <div class="stat"><dt>Life</dt><dd>74</dd></div>
+          <div class="stat"><dt>Melee</dt><dd>0</dd></div>
+          <div class="stat"><dt>Stride</dt><dd>58</dd></div>
+          <div class="stat"><dt>Slag</dt><dd>2</dd></div>
+          <div class="stat"><dt>Size</dt><dd>16</dd></div>
+        </dl>
+      </article>
+
+    </div>
+
+    <h3>Champions</h3>
+    <p>Roughly one pack in six is led by a branded champion. A champion is bodily bigger (<span class="num">+22%</span>), carries <span class="num">2.6&times;</span> the life and <span class="num">1.35&times;</span> the damage, moves slightly slower, notices you from further off, and is worth at least <span class="num">4&times;</span> the slag. Champions are also one of only three sources of Regalia in the entire game.</p>
+
+    <h3>Not of the horde</h3>
+    <div class="tw">
+      <table>
+        <caption>Bodies that never appear in a roster</caption>
+        <thead><tr><th>Body</th><th class="n">Life</th><th class="n">Damage</th><th class="n">Slag</th><th>What it is</th></tr></thead>
+        <tbody>
+          <tr><th>Lieutenant</th><td class="n">300</td><td class="n">26</td><td class="n">12</td><td>The Deceiver&rsquo;s own. They arrive with him and they are the reason he is hard to reach. They slam.</td></tr>
+          <tr><th>Mirage</th><td class="n">1</td><td class="n">0</td><td class="n">0</td><td>A lie of the Deceiver. Harmless, worth nothing, drops nothing &mdash; it exists to waste your blade.</td></tr>
+          <tr><th>The Deceiver</th><td class="n">540</td><td class="n">32</td><td class="n">30</td><td>The avatar at the gate. See Book V.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ V ============ -->
+  <section class="book" id="deceiver">
+    <div class="book-head">
+      <span class="book-num">Book V</span>
+      <h2>The Deceiver</h2>
+      <span class="kicker">Fifty-two rungs cannot each have a hand-built boss, and fifty-two copies of one boss is worse than having none.</span>
+    </div>
+
+    <p class="lede">The avatar at the end of a delve is always the Deceiver &mdash; he is the fiction. But <em>what he is capable of</em> is rolled per rung and stays rolled, so the same rung always answers with the same thing. A delve is learnable, and two rungs apart are not the same fight.</p>
+
+    <p>He is drawn to the gate by the slag counter filling, not summoned by you. He blinks rather than walks. He summons lieutenants, he splits into mirages, and he takes his name from what he can do.</p>
+
+    <h3>The seven epithets</h3>
+    <p>A rung rolls one to three of these, by depth. The boss&rsquo;s name is assembled from them &mdash; <em>The Deceiver, the Sundering and the Legion</em> &mdash; and the first one is stated plainly on the delve card <strong>before you descend</strong>, not shouted at you when he arrives. An unmutated boss is simply <em>The Gilded Deceiver</em>.</p>
+
+    <div class="tw">
+      <table>
+        <caption>Every epithet has to be visible in play &mdash; a boss that quietly has more life is the same boss taking longer</caption>
+        <thead><tr><th>Epithet</th><th>Said as</th><th>What changes</th></tr></thead>
+        <tbody>
+          <tr><th>the Sundering</th><td><em>His hand comes down where you stand.</em></td><td>He slams, on a 2.2s cadence at 1.5&times; reach.</td></tr>
+          <tr><th>the Legion</th><td><em>He does not come with two. He comes with five.</em></td><td>Two extra lieutenants.</td></tr>
+          <tr><th>the Wreathed</th><td><em>More of him is a lie than usual.</em></td><td>Splits faster, and into five mirages instead of three.</td></tr>
+          <tr><th>the Unblinking</th><td><em>This one does not step away. It walks.</em></td><td>Never blinks. Half again as fast, and a third more life.</td></tr>
+          <tr><th>the Ravenous</th><td><em>He eats what dies near him.</em></td><td>Heals off bodies dying beside him &mdash; including his own.</td></tr>
+          <tr><th>the Riftborn</th><td><em>The ground does not close behind him.</em></td><td>Every blink leaves a lasting hazard where he was.</td></tr>
+          <tr><th>the Unbroken</th><td><em>He gathers himself, and for a moment almost nothing touches him.</em></td><td>Braces on a 7.5s cycle, soaking almost everything.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>The Uninvited</h3>
+    <p>The avatar at the gate is scheduled &mdash; you know he is coming because you can watch the slag counter fill. <strong>The invader is not.</strong> Somewhere past the <span class="num">34</span>-second mark he simply arrives, and the delve says: <em>&ldquo;Something has come for you. He was not called. Kill him, or lose him in the dark.&rdquo;</em></p>
+
+    <p>He is lighter than the gate avatar &mdash; he is a fight you did not plan for and may not be equipped for, so <strong>running is a real answer</strong>. Keep more than <span class="num">380</span> units off him for <span class="num">78</span> seconds and he stops looking: <em>&ldquo;He has lost you. For now.&rdquo;</em> He leaves no loot and no kill.</p>
+
+    <p>But he hunts alone, he is faster than the scheduled one, the ground does not close behind him, and if you put him down he <strong>always</strong> drops a piece of the Regalia. Being hunted through a delve you did not plan to fight in is the price, and it should be paid.</p>
+  </section>
+
+  <!-- ============ VI ============ -->
+  <section class="book" id="delve">
+    <div class="book-head">
+      <span class="book-num">Book VI</span>
+      <h2>The Delve</h2>
+      <span class="kicker">Fifty-two rungs, cut fresh every descent, populated at generation and cleared by walking into it.</span>
+    </div>
+
+    <p class="lede">A delve is not a wave arena. It is a place that is already full when you arrive: packs sit dormant until something wakes them, so pressure comes from what you walk into rather than from what is pushed at you.</p>
+
+    <h3>How the ground is made</h3>
+    <p>Cellular automata gives organic rock. A carved skeleton of chambers and corridors is cut through it afterwards to give maze structure and guarantee the place is traversable. A flood fill from the spawn then fills in anything it could not reach, so <strong>every open cell in the finished map is reachable from every other one</strong>. The world is <span class="num">2000 &times; 2000</span> units on a <span class="num">50 &times; 50</span> grid.</p>
+
+    <h3>Rooms you can name</h3>
+    <p>A braided maze is uniform corridor and near-uniform chamber &mdash; nothing you would recognise on the way back. Three to five existing rooms get dressed with a shape instead:</p>
+    <ul>
+      <li><strong>Hall</strong> &mdash; pillars on a regular grid. The one shape that reads as <em>built</em> rather than eroded, and it gives a fight cover to break line of sight on.</li>
+      <li><strong>Barracks</strong> &mdash; stub walls in rows, like bunk partitions off one side.</li>
+      <li><strong>Collapse</strong> &mdash; a caved-in ceiling: a scatter of loose blocks, no pattern at all.</li>
+      <li><strong>Cistern</strong> &mdash; left deliberately bare. A wide empty room is its own kind of place.</li>
+    </ul>
+    <p>Chasms are cut afterwards &mdash; ground that cannot be stood on rather than rock you walk round.</p>
+
+    <h3>The landmark at the gate</h3>
+    <p>The ley-gate never stands in open cave. Each region <strong>builds its own landmark around it</strong>, laid square as masonry rather than stepped round a circle, so the place you extract from reads as something someone built:</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th>Region</th><th>Landmark</th><th>How it is laid</th></tr></thead>
+        <tbody>
+          <tr><th>Drak-Hald</th><td>The Weeping Keep of Tor-Varden</td><td>A ruined curtain wall with a breach in each side, and a broken inner ward.</td></tr>
+          <tr><th>Vaelk</th><td>The Kael-Dorm Redoubt</td><td>A cliffside fort: a walled approach with one mouth, and two bastions.</td></tr>
+          <tr><th>Kraggen-Tor</th><td>The Shatter-Gate of Ghor</td><td>The breach itself &mdash; a colonnade on a square grid with four wide mouths.</td></tr>
+          <tr><th>The Rot-Weald</th><td>The Heart-Rot Clearing</td><td>A clearing choked with growth: cover everywhere, sightlines nowhere.</td></tr>
+          <tr><th>The Dead Firth</th><td>The Ash-Shoals</td><td>Open ground broken by long drifting bars of ash.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Whatever the region does, <strong>the gate itself always stands clear</strong>.</p>
+
+    <h3>Things in the rooms</h3>
+    <dl class="kv three">
+      <div><dt>Pitch barrels</dt><dd>Break for <b>62</b> across <b>96</b> units, but with a <b>1.1s</b> fuse &mdash; long enough to walk out of. The blade aims itself, so the fuse is the player&rsquo;s whole agency here. Pitch spreads: a barrel takes its neighbours with it.</dd></div>
+      <div><dt>Pillars</dt><dd>Come down for <b>88</b> across <b>78</b> units after only <b>0.5s</b> &mdash; a column of stone does not hesitate long, but not nothing. They leave rubble.</dd></div>
+      <div><dt>Scenery</dt><dd>Bones, spilled coin, horned skulls, tombs, crates, urns, banners and chains. Some of it is standing cover; most of it is dressing that says what the room was.</dd></div>
+    </dl>
+
+    <h3>Coffers</h3>
+    <p>Everything in the delve up to now came off a body, which makes the whole map one long corridor between fights. <strong>A coffer in a dead end is a reason to take the turning you did not have to take.</strong> They sit in penned-in ground by preference &mdash; nooks, ends, the backs of rooms &mdash; and opening one is walking onto it, because there is no free hand on a phone for an action button.</p>
+
+    <div class="tw">
+      <table>
+        <caption>Three to six per delve, by depth</caption>
+        <thead><tr><th>Coffer</th><th class="n">Coin</th><th class="n">Gear odds</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><th>A coffer</th><td class="n">34&ndash;74</td><td class="n">34%</td><td>The common one.</td></tr>
+          <tr><th>A warded coffer</th><td class="n">112&ndash;205</td><td class="n">always</td><td>At most one per delve, likelier the deeper you go. The gear it carries has a quality floor.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Every coffer in a delve, opened, comes to about a third of what the whole horde in it is worth in coin &mdash; plainly worth the detour, without making the player who walks straight at the gate feel robbed.</p>
+
+    <h3>The ramp</h3>
+    <p>The first eight rungs teach the game <strong>by leaving things out of it</strong>, not by explaining them. Each adds exactly one thing the player has to have an answer for, and until they have met it nothing else is allowed to arrive at the same time. Nothing here is announced &mdash; the player is not told a lesson is happening, only handed one thing at a time until they are not being handed things any more.</p>
+
+    <ol class="ramp">
+      <li><span class="adds">thralls</span><span class="said">&ldquo;Cut, gather, and find the ley-gate.&rdquo;</span></li>
+      <li><span class="adds">+ eclipse</span><span class="said">&ldquo;Some of them will not come at you down the middle.&rdquo;</span></li>
+      <li><span class="adds">+ breaker, pitch</span><span class="said">&ldquo;Some ground is held. Some cannot be stood on.&rdquo;</span></li>
+      <li><span class="adds">+ husk</span><span class="said">&ldquo;Some of them are carrying it with them. Break those early.&rdquo;</span></li>
+      <li><span class="adds">+ cantor</span><span class="said">&ldquo;Some of them never close at all. Put stone between you.&rdquo;</span></li>
+      <li><span class="adds">+ flayer</span><span class="said">&ldquo;Something is waiting in the dark for your back to turn.&rdquo;</span></li>
+      <li><span class="adds">+ gorger</span><span class="said">&ldquo;One of them breaks the floor it lands on. Do not be on it.&rdquo;</span></li>
+      <li><span class="adds">+ shaman</span><span class="said">&ldquo;One of them fights from the back. Reach it or fight in its fire.&rdquo;</span></li>
+    </ol>
+
+    <p>The first delve carries <strong>no champion, no pitch, no invader, no epithet on the avatar, and no escort holding him</strong>. From the ninth rung the delve is the whole game: the roster does not grow again, and what changes is how much of it turns up.</p>
+
+    <h3>The ladder</h3>
+    <p>Across the fifty-two rungs the expected power climbs from <span class="num">4</span> to <span class="num">100</span> and the slag quota from <span class="num">125</span> to <span class="num">270</span>. The region pool widens with depth, champions grow more common, and the packs themselves shift composition &mdash; heavies only appear in the outer bands of a delve, so the far end of a map is a different fight from the near end.</p>
+
+    <div class="tw">
+      <table>
+        <caption>Measured share of bodies on a deep map</caption>
+        <thead><tr><th>Body</th><th class="n">Share</th><th>Appears from</th></tr></thead>
+        <tbody>
+          <tr><th>Thrall</th><td class="n">18%</td><td>everywhere, including the spawn</td></tr>
+          <tr><th>Husk</th><td class="n">18%</td><td>the near-middle outward</td></tr>
+          <tr><th>Eclipse</th><td class="n">17%</td><td>the near-middle outward</td></tr>
+          <tr><th>Flayer</th><td class="n">16%</td><td>earliest of the specialists</td></tr>
+          <tr><th>Cantor</th><td class="n">12%</td><td>the middle outward</td></tr>
+          <tr><th>Breaker</th><td class="n">10%</td><td>the outer bands only</td></tr>
+          <tr><th>Gorger</th><td class="n">6%</td><td>the outer half</td></tr>
+          <tr><th>Shaman</th><td class="n">4%</td><td>the outer bands only</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>How hard it bites</h3>
+    <div class="tw">
+      <table>
+        <caption>Harder ground pays better &mdash; the bargain the genre runs on</caption>
+        <thead><tr><th>Difficulty</th><th class="n">Threat</th><th class="n">Loot</th><th class="n">Regalia</th><th>Said as</th></tr></thead>
+        <tbody>
+          <tr><th>Harrowed</th><td class="n">1.00&times;</td><td class="n">0.85&times;</td><td class="n">0.6&times;</td><td>A delve you can learn on.</td></tr>
+          <tr><th>Riven</th><td class="n">1.42&times;</td><td class="n">1.00&times;</td><td class="n">1.0&times;</td><td>The Rivenmark as it is. Roughly one delve in three ends at the gate.</td></tr>
+          <tr><th>Sundered</th><td class="n">1.95&times;</td><td class="n">1.35&times;</td><td class="n">1.8&times;</td><td>Champions in every hall. The Regalia surfaces here.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ VII ============ -->
+  <section class="book" id="gate">
+    <div class="book-head">
+      <span class="book-num">Book VII</span>
+      <h2>The Gate</h2>
+      <span class="kicker">Meeting the quota does not open the ley-gate. It draws him to it.</span>
+    </div>
+
+    <p class="lede">A delve is bounded at roughly two minutes &mdash; a player clears bodies as fast as a populated map can present them. Everything that makes a run <em>long</em> happens at the gate.</p>
+
+    <h3>The sequence</h3>
+    <ul>
+      <li><strong>Fill the quota.</strong> Slag is cut from bodies. The counter is visible the whole time, so you always know how close he is.</li>
+      <li><strong>He arrives.</strong> Reaching the quota summons the Deceiver to the gate, with his lieutenants around him.</li>
+      <li><strong>Put him down.</strong> Only then does the gate answer.</li>
+      <li><strong>Wind it open.</strong> Four seconds standing inside it. Step out and it winds back down.</li>
+      <li><strong>Leave, or hold.</strong> <em>&ldquo;Step through, or hold it and let them come.&rdquo;</em></li>
+    </ul>
+
+    <h3>The hold</h3>
+    <p>Holding the gate is the delve&rsquo;s second act, and the only part of a run that can be stretched. It runs in <strong>surges</strong> rather than as one smooth ramp &mdash; each is a build, a crest and a short lull, and <strong>the lull is the window where leaving is a real choice rather than a scramble</strong>. Thirty seconds a surge, six of them quiet.</p>
+
+    <p>Bodies the gate calls are harder than bodies the delve was cut with, and each surge harder than the last &mdash; more life, more damage, and increasingly likely to be a champion. Payment lands at the crest of each surge you outlast, climbing steeply, with a piece of gear every other surge.</p>
+
+    <div class="note">
+      <h4>Why the hold ends at ten</h4>
+      <p>Ten surges is five minutes; with a two-minute delve in front of it, that is a session and a ceiling the economy can be balanced against. It is also the only thing stopping the hold paying for itself &mdash; an unbounded hold hands you gear faster than it can threaten you. Measured, one did: <strong>twenty-eight surges, no deaths, a hundred and sixty times a delve&rsquo;s own coin</strong>. On the tenth the gate shuts and takes you with it. Being thrown out of a delve you survived is an extraction, not a death.</p>
+    </div>
+
+    <h3>The corpse run</h3>
+    <p>Dying is not a reset. Everything unbanked &mdash; the bag and the run&rsquo;s coin &mdash; stays in the delve, and <strong>the delve keeps it</strong>. Descend into the same level again and it is lying where you fell.</p>
+
+    <p>Only one corpse exists at a time, so <strong>dying on the way back to a corpse costs you the first one</strong>. That is the whole tension, and it is why the walk back is worth anything. Because the delve is cut fresh every descent, the recorded point is a hint rather than an address &mdash; the corpse is snapped onto ground that exists <em>this</em> time.</p>
+
+    <p>Reclaiming it is an ambush. The delve raises a ring of three to seven champions around you and <strong>forces the ley-gate open</strong>: you get your things back and a way out at the same moment, and no time at all to spend deciding which. <em>&ldquo;It wants them back. The ley-gate is open &mdash; go.&rdquo;</em></p>
+
+    <p>What is <em>worn</em> survives either way. Losing the kit off your back to one bad tap would make every delve a decision about whether to risk playing at all.</p>
+  </section>
+
+  <!-- ============ VIII ============ -->
+  <section class="book" id="regalia">
+    <div class="book-head">
+      <span class="book-num">Book VIII</span>
+      <h2>The Regalia &amp; the Kit</h2>
+      <span class="kicker">Eight slots, no helm &mdash; because the Clear-Sighted fight unhelmeted, and the compendium is explicit about it.</span>
+    </div>
+
+    <p class="lede">Power comes from the rank you have earned and the gear you are wearing, and both survive the delve that won them. Nothing is accumulated by mutating the hero &mdash; every stat is recomputed from base whenever anything changes, because gear comes off as easily as it goes on.</p>
+
+    <h3>Slots and their arms</h3>
+    <div class="tw">
+      <table>
+        <caption>Eight slots, thirty base items</caption>
+        <thead><tr><th>Slot</th><th>Bases</th></tr></thead>
+        <tbody>
+          <tr><th>Blade</th><td>Longsword &middot; Falchion &middot; Warblade &middot; Glaive &middot; Cleaver</td></tr>
+          <tr><th>Off-hand</th><td>Kite Shield &middot; Buckler &middot; Warding Focus &middot; Tower Shield</td></tr>
+          <tr><th>Mail</th><td>Ringmail &middot; Scale Hauberk &middot; Plated Coat &middot; Padded Jack</td></tr>
+          <tr><th>Girdle</th><td>Leather Girdle &middot; Plated Belt &middot; Sash of Cord</td></tr>
+          <tr><th>Boots</th><td>Marching Boots &middot; Greaves &middot; Soft Treads</td></tr>
+          <tr><th>Amulet</th><td>Bone Amulet &middot; Ley-Charm &middot; Sun Pendant</td></tr>
+          <tr><th>Rings &times;2</th><td>Iron Band &middot; Signet &middot; Twisted Ring</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Grades</h3>
+    <div class="tw">
+      <table>
+        <caption>Deeper ground gives up better things &mdash; and lifts the rolls, not merely the odds</caption>
+        <thead><tr><th>Grade</th><th class="n">Affixes</th><th class="n">Weight</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><th style="color:#8d8676">Worn</th><td class="n">1</td><td class="n">52</td><td>The floor.</td></tr>
+          <tr><th style="color:#7fa869">Tempered</th><td class="n">2</td><td class="n">28</td><td>&nbsp;</td></tr>
+          <tr><th style="color:#5f9fd0">Spirit-wrought</th><td class="n">3</td><td class="n">14</td><td>The material that makes magic survivable. What a commission buys.</td></tr>
+          <tr><th style="color:#a98fd8">Hallowed</th><td class="n">4</td><td class="n">5</td><td>&nbsp;</td></tr>
+          <tr><th style="color:#d9a441">Riven</th><td class="n">5</td><td class="n">1</td><td>The best rolled item in the game.</td></tr>
+          <tr><th style="color:#e0563f">Mythic</th><td class="n">5</td><td class="n">never</td><td>Set pieces only. Never rolled &mdash; it drops off champions, the avatar and the invader, or nowhere.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Affixes</h3>
+    <p>An affix is a stat, a roll range, and how it is worded &mdash; and which affixes a slot can roll is fixed, so a blade keeps feeling like a blade. Blades roll damage, reach, sweep and cadence; mail rolls life, ward, mending and stride; rings roll nearly anything.</p>
+
+    <div class="tw">
+      <table>
+        <caption>The ten common affixes</caption>
+        <thead><tr><th>Name</th><th>Reads as</th><th class="n">Range</th></tr></thead>
+        <tbody>
+          <tr><th>Keen</th><td>+ damage</td><td class="n">2&ndash;7</td></tr>
+          <tr><th>Cruel</th><td>+ damage (share)</td><td class="n">6&ndash;20%</td></tr>
+          <tr><th>Stout</th><td>+ life</td><td class="n">8&ndash;26</td></tr>
+          <tr><th>Warded</th><td>harm turned</td><td class="n">3&ndash;9%</td></tr>
+          <tr><th>Fleet</th><td>+ stride</td><td class="n">3&ndash;9%</td></tr>
+          <tr><th>Far</th><td>+ reach</td><td class="n">4&ndash;13%</td></tr>
+          <tr><th>Broad</th><td>+ sweep</td><td class="n">5&ndash;16%</td></tr>
+          <tr><th>Quick</th><td>&minus; swing time</td><td class="n">4&ndash;12%</td></tr>
+          <tr><th>Drawing</th><td>+ draw</td><td class="n">10&ndash;35%</td></tr>
+          <tr><th>Mending</th><td>+ life a second</td><td class="n">0.2&ndash;0.9</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>Forged for one of them</h4>
+    <p>Four affixes suit one Vanguard far more than the other, and say so in their names. Worn by the hero they were made for, they are worth <strong>half again</strong> &mdash; which turns &ldquo;which is the bigger number&rdquo; into &ldquo;which is the bigger number <em>for me</em>&rdquo;, and gives the two heroes genuinely different best-in-slot.</p>
+
+    <div class="tw">
+      <table>
+        <thead><tr><th>Affix</th><th>Forged for</th><th>Grants</th><th>Slots</th></tr></thead>
+        <tbody>
+          <tr><th>Warden&rsquo;s</th><td>Isaac</td><td>4&ndash;10% harm turned</td><td>off-hand, mail, girdle, rings</td></tr>
+          <tr><th>Sun-Wide</th><td>Isaac</td><td>+10&ndash;26% sweep</td><td>blade, off-hand, amulet</td></tr>
+          <tr><th>Glaive-Cut</th><td>Zayd</td><td>+10&ndash;24% reach</td><td>blade, amulet, rings</td></tr>
+          <tr><th>Frost-Quick</th><td>Zayd</td><td>&minus;8&ndash;20% swing time</td><td>blade, boots, rings</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>The Sundered Regalia</h3>
+    <p>One set, eight pieces, one per slot. Pieces drop <strong>only</strong> from champions, from the Deceiver, and always from the invader. Each carries fixed, better-than-random affixes, and wearing several together pays on top &mdash; so a half-set is a real decision against eight good rolled items rather than an obvious upgrade.</p>
+
+    <div class="tw">
+      <table>
+        <caption>The eight pieces</caption>
+        <thead><tr><th>Slot</th><th>Piece</th></tr></thead>
+        <tbody>
+          <tr><th>Blade</th><td>Aegis-Shard Blade</td></tr>
+          <tr><th>Off-hand</th><td>Unbroken Ward</td></tr>
+          <tr><th>Mail</th><td>Hauberk of the Vigil</td></tr>
+          <tr><th>Girdle</th><td>Girdle of Held Light</td></tr>
+          <tr><th>Boots</th><td>Treads of the Last March</td></tr>
+          <tr><th>Amulet</th><td>Pendant of Dúath</td></tr>
+          <tr><th>Rings</th><td>Band of the Vigil &times;2</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tw">
+      <table>
+        <caption>What wearing them together is worth</caption>
+        <thead><tr><th class="n">Pieces</th><th>Bonus</th></tr></thead>
+        <tbody>
+          <tr><td class="n">2</td><td>+18 life, +5% ward</td></tr>
+          <tr><td class="n">4</td><td>+12% damage, +8% stride</td></tr>
+          <tr><td class="n">6</td><td>+10% reach and sweep, +1 life a second</td></tr>
+          <tr><td class="n">8</td><td><strong>A second crescent with every strike</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <h4>The names are doing fictional work</h4>
+      <p>The blade is an <strong>Aegis-Shard</strong> &mdash; a piece of the thing that broke. The mail and the rings belong to a <strong>Vigil</strong> nothing else in the game names. The boots are of the <strong>Last March</strong>. The girdle holds <strong>light</strong>, which is exactly what the Shaman takes. Read together, the Regalia is the kit of a specific failed defence, scattered across the realm and now worn by the people still going down there.</p>
+    </div>
+  </section>
+
+  <!-- ============ IX ============ -->
+  <section class="book" id="gatehouse">
+    <div class="book-head">
+      <span class="book-num">Book IX</span>
+      <h2>The Gate-House</h2>
+      <span class="kicker">Where the Vanguard come back to. Four stations, a vendor, and somewhere for the money to go.</span>
+    </div>
+
+    <p class="lede">Coin is the only thing in the delve that is not luck: whatever the drops do, coin accumulates. That is what makes it the right currency for buying your way past a bad streak.</p>
+
+    <h3>The vendor</h3>
+    <ul>
+      <li><strong>Commission a piece</strong> &mdash; a Spirit-wrought piece for a slot you have never filled. Three affixes, rolled at depth.</li>
+      <li><strong>Temper a piece</strong> &mdash; reroll every affix on something you are wearing, keeping its grade.</li>
+      <li><strong>Open a reliquary</strong> &mdash; a piece of the Sundered Regalia. It costs less the longer one has refused to drop.</li>
+    </ul>
+
+    <p>That last is bad-luck protection, stated as fiction: every delve that ends without a Regalia piece pushes a counter along and the reliquary gets cheaper, to a floor. Finding one resets it.</p>
+
+    <h3>The four stations</h3>
+    <p>Everything at the vendor is a consumable, so a good run bought a slightly better next run and nothing else &mdash; there was nowhere for money to <em>accumulate into</em>. The Hall is that place. Three tiers each, every tier paid for once and kept forever, and each one changes a number the player can already feel.</p>
+
+    <div class="tw">
+      <table>
+        <thead><tr><th>Station</th><th>Said as</th><th>What three tiers buy</th></tr></thead>
+        <tbody>
+          <tr><th>The Vault</th><td><em>Shelves, and the stone to hold them.</em></td><td>Up to +60 storage and three more kit presets.</td></tr>
+          <tr><th>The Forge</th><td><em>A fire hot enough to argue with.</em></td><td>Commissions and tempers up to 36% cheaper, and a wider bag.</td></tr>
+          <tr><th>The Reliquary</th><td><em>Somewhere to keep what the delve gives up.</em></td><td>Regalia falls up to 50% more often; reliquaries up to 30% cheaper.</td></tr>
+          <tr><th>The Wardstone</th><td><em>It remembers every Vanguard who came back.</em></td><td>Up to +38 life and +5% ward, permanently.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>What comes home</h3>
+    <p>Gear outlives a delve, but <strong>only what you carried out</strong>. Extract and the bag comes home; die and it stays on the floor where you fell. The bag holds twenty pieces, the vault sixty before the Hall widens it, and a corpse will hold on to ten of them for you.</p>
+  </section>
+
+  <!-- ============ X ============ -->
+  <section class="book" id="open">
+    <div class="book-head">
+      <span class="book-num">Book X</span>
+      <h2>Open Ground</h2>
+      <span class="kicker">Named in the game, unexplained by it. The most useful pages in the book, because nothing is standing on them yet.</span>
+    </div>
+
+    <p class="lede">Everything below is currently a proper noun with no story behind it. The game will not contradict you, whatever you decide.</p>
+
+    <div class="open">
+      <div>
+        <h5>The Aegis, and who held it</h5>
+        <p>The founding event is a shattering, and the game never says whose it was. The best blade in the game is a shard of it &mdash; so pieces are recoverable, which implies it could in principle be reassembled. That is a whole campaign sitting unclaimed.</p>
+      </div>
+      <div>
+        <h5>The Vigil</h5>
+        <p>Three of the eight Regalia pieces belong to it &mdash; the mail and both rings. It is the only organisation in the game named exclusively through loot. Who were they, what were they keeping vigil over, and is the Regalia scattered because they lost?</p>
+      </div>
+      <div>
+        <h5>Dúath</h5>
+        <p>A shroud, a threshold at the nineteenth delve, and a pendant. Place, boundary and relic. Nothing says which came first.</p>
+      </div>
+      <div>
+        <h5>The Clear-Sighted</h5>
+        <p>Isaac and Zayd are &ldquo;two of&rdquo; them, so there are more. They fight unhelmeted &mdash; is that a discipline, a vow, or a requirement of the sight itself? The hive-mind &ldquo;claims&rdquo; them on death, which suggests the Clear-Sighted are exactly what it wants.</p>
+      </div>
+      <div>
+        <h5>The Hearth-Wardens and the Frost-Scholars of Kael</h5>
+        <p>Two orders, two schools of magic (Sun-Gold and Azure), and a city or house called Kael that also names a redoubt in Vaelk. Two named traditions and one named place, with no relationship stated between them.</p>
+      </div>
+      <div>
+        <h5>Why the Deceiver is <em>Gilded</em></h5>
+        <p>He is gold; the Regalia is gold; the coin is gold; the rarest rolled grade is gold. The game colour-codes wealth and the antagonist identically and never comments on it. That is either a rich seam or a coincidence to make deliberate.</p>
+      </div>
+      <div>
+        <h5>The void-brand</h5>
+        <p>Stated to mark people <em>who gave up their will</em>. So every body in the delve consented to something. Nobody has written what was offered.</p>
+      </div>
+      <div>
+        <h5>The four empty names</h5>
+        <p><strong>Bonewright Yard</strong> &mdash; someone worked bone there, as a trade. <strong>The Silent Choir</strong> &mdash; the cantors are named for singing and there is a place named for singers who stopped. <strong>Hollow Processional</strong> &mdash; thralls are Hollow, and a processional is a route walked in ceremony. <strong>Drowned Barrows</strong> &mdash; graves under water, in a realm with a drained ocean.</p>
+      </div>
+      <div>
+        <h5>What the Shaman is burning</h5>
+        <p>It carries a caged, glowing heart on its staff and its two spells are fire and the theft of light. It has no melee at all. Whatever is in that cage is the source of both, and it is the only enemy in the game that is visibly <em>carrying</em> its power rather than being it.</p>
+      </div>
+      <div>
+        <h5>Where the gate goes</h5>
+        <p>A ley-gate is the way out and it must be held open against the delve. Held too long, it shuts and takes you with it &mdash; and that counts as escaping. Nothing says what is on the other side, or who is holding it from that end.</p>
+      </div>
+    </div>
+  </section>
+
+  </main>
+</div>
+
+<footer>
+  The Rivenmark &middot; Compendium of the Shattered Realm &middot; drawn from the game as it currently stands
+</footer>
+
+</div>

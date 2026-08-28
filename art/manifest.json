@@ -1,0 +1,135 @@
+{
+  "generated_from": "index.html",
+  "supersample": 2,
+  "gait_poses": 8,
+  "heroes": [
+    "isaac",
+    "zayd"
+  ],
+  "enemy_kinds": [
+    "thrall",
+    "eclipse",
+    "deceiver",
+    "mirage",
+    "breaker",
+    "husk",
+    "cantor",
+    "gorger",
+    "flayer",
+    "shaman",
+    "lieutenant"
+  ],
+  "sprite_count": 226,
+  "kinds": {
+    "thrall": {
+      "radius": 13,
+      "life": 34,
+      "damage": 8,
+      "stride": 96,
+      "slag": 1,
+      "role": "press",
+      "colour": "#9dbb5a",
+      "introduced_at_depth": 0
+    },
+    "eclipse": {
+      "radius": 11,
+      "life": 22,
+      "damage": 6,
+      "stride": 152,
+      "slag": 1,
+      "role": "flank",
+      "colour": "#b07cff",
+      "introduced_at_depth": 25
+    },
+    "deceiver": {
+      "radius": 24,
+      "life": 540,
+      "damage": 32,
+      "stride": 76,
+      "slag": 30,
+      "role": "press",
+      "colour": "#e8c060",
+      "introduced_at_depth": null
+    },
+    "mirage": {
+      "radius": 20,
+      "life": 1,
+      "damage": 0,
+      "stride": 92,
+      "slag": 0,
+      "role": "press",
+      "colour": "#e8c060",
+      "introduced_at_depth": null
+    },
+    "breaker": {
+      "radius": 23,
+      "life": 135,
+      "damage": 21,
+      "stride": 62,
+      "slag": 4,
+      "role": "anchor",
+      "colour": "#c85a24",
+      "introduced_at_depth": 55
+    },
+    "husk": {
+      "radius": 17,
+      "life": 40,
+      "damage": 0,
+      "stride": 112,
+      "slag": 1,
+      "role": "burst",
+      "colour": "#c8d63a",
+      "introduced_at_depth": 22
+    },
+    "cantor": {
+      "radius": 13,
+      "life": 28,
+      "damage": 12,
+      "stride": 78,
+      "slag": 1,
+      "role": "shade",
+      "colour": "#48d0c0",
+      "introduced_at_depth": 40
+    },
+    "gorger": {
+      "radius": 26,
+      "life": 240,
+      "damage": 24,
+      "stride": 52,
+      "slag": 3,
+      "role": "press",
+      "colour": "#e0402c",
+      "introduced_at_depth": 62
+    },
+    "flayer": {
+      "radius": 15,
+      "life": 46,
+      "damage": 9,
+      "stride": 172,
+      "slag": 1,
+      "role": "stalk",
+      "colour": "#c48a3a",
+      "introduced_at_depth": 30
+    },
+    "shaman": {
+      "radius": 16,
+      "life": 74,
+      "damage": 0,
+      "stride": 58,
+      "slag": 2,
+      "role": "chant",
+      "colour": "#ff7a2c",
+      "introduced_at_depth": 88
+    },
+    "lieutenant": {
+      "radius": 21,
+      "life": 300,
+      "damage": 26,
+      "stride": 80,
+      "slag": 12,
+      "role": "press",
+      "colour": "#c2352a",
+      "introduced_at_depth": null
+    }
+  }
+}
