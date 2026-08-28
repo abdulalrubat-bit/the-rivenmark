@@ -188,6 +188,40 @@ def strip_chests():
     return out
 
 
+# --- the UI plates ---------------------------------------------------------
+# Smooth high-resolution chrome rather than pixel art, so it is downscaled to
+# the size the layout actually asks for and left to CSS from there -- unlike
+# the sprites, upscaling these is fine and shipping them at source resolution
+# is 154kB of base64 for six ornaments.
+#
+# The vertical rule that came with them is not here: it is a thin bar with a
+# soft edge, and a CSS gradient is the same picture for nothing.
+UI = {
+    'plate':  ('ui-plate.png',  (440, 67)),
+    'swords': ('ui-swords.png', (64, 62)),
+    'rune':   ('ui-rune.png',   (110, 102)),
+    'ring':   ('ui-ring.png',   (80, 80)),
+}
+
+
+def quantise(im, n=32):
+    """These are dark and low-tone; a 32-colour palette is indistinguishable
+    and a little smaller. The alpha channel is kept whole -- quantising it is
+    what makes a soft edge look like a staircase."""
+    a = im.getchannel('A')
+    q = im.convert('RGB').quantize(colors=n, method=Image.MEDIANCUT).convert('RGB')
+    q.putalpha(a)
+    return q
+
+
+def strip_ui():
+    out = {}
+    for key, (name, size) in UI.items():
+        im = Image.open(A(name)).convert('RGBA').resize(size, Image.LANCZOS)
+        out[key] = quantise(grade(im, sat=0.72, floor=0.06, span=0.92))
+    return out
+
+
 def uri(im):
     buf = io.BytesIO()
     im.save(buf, 'PNG', optimize=True)
@@ -206,6 +240,7 @@ def main():
     icons, keys = strip_icons()
     chests = strip_chests()
     scenery = strip_props()
+    plates = strip_ui()
     iu, cu, pu = uri(icons), uri(chests), uri(scenery)
     print('icon strip   %dx%d, %d cells' % (icons.size[0], icons.size[1], len(keys)))
     print('chest strip  %dx%d' % chests.size)
@@ -219,6 +254,8 @@ def main():
     src = patch(src, r"(const CHEST_SHEET = ')([^']*)(')", cu, 'chests')
     # the strip width has to match the cell count or every icon is the wrong one
     src = patch(src, r"(const PROP_SHEET = ')([^']*)(')", pu, 'props')
+    for key in ('plate', 'swords', 'rune', 'ring'):
+        src = patch(src, r'(--' + key + r':url\()([^)]*)(\))', uri(plates[key]), key)
     src = patch(src, r'(calc\(var\(--sz,32px\) \* )(\d+)(\))', str(len(keys)), 'cell count')
     open(p, 'w', encoding='utf-8').write(src)
     print('index.html patched')
