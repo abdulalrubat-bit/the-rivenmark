@@ -22,7 +22,7 @@
        tools/build-icons.py. The game ships as one self-contained file, so they
        live in it as a data URI rather than beside it -- ten 16px cells in a
        160x16 strip, under two kilobytes. */
-    --icons:url(data:image/png;base64,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);
+    --icons:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAArwAAAAUCAYAAABvau7pAAAljklEQVR42u2deXxU1d3/3wGyJ5PJJJlMMhESdtGwSARJIARJ2KKIEWyL4IIbxbaKPNr2sa1PbX3aR2ut9qe1tY+tS2ktiBv7ImFJZJEtIAgIJJghySQzSWbJDvf3x517c2cyk1kD7fPK95/MXebm3jvnfL/v8znfcw70W7/1W7/1W7/1W7/1W7/9H7awYC8wteBOYW/phz5dp2DWfYL0eaS9HoA/lW0M+3d/idohiT32zcwcKbju21F5xuOzGqsavb+/okVC6bY1Yd72+fRbePheoNcDuP/WaU7P/NfP9gT82y66fbrg6diaT3f9SzxvqOuHN8vLLZHfSVn5upBcc86chwSAzZv/HLJ3kJdbIvhzf8rnUpq/zxhq/1JSkNfjvtaVlgX1nvKmFHf/hp9vCPhady542GP9+PCjN6+ZT509a4kAsGXre2H5ucU97nF3+YYw5TnX0m97ur//SwF+du5kj+VkS/l+n571asU3gNyC+UJ56SdB/wYlty0QANat/yhMuU+5fa0tlPFcaYtzi5x+m9Xl2/5l4qWrrw80js2ds8Rtud60uXefMiiYF7toXp5QvPJnAF6DesGs+4RxJfcAEK5PZdoXL5A5LBKYJwQalHLunN3job/4cMs1L9AzM0cKhYvTOLypCSORxMZriAgfyEwQenMK3qx025owZYELpvC5XiuY60mgu/SRkTTVdWFruEz1BZu831/wXXT7dGHlj/8TgBStTt5fb6yVPgr+Qm8on7cv6oc3+878eULckAkAnDx0JCT3VzRttpD7nXsp//s7IXvmQGC3YOGdAHRarKIT3Lo9INgNlX+RQPcHP73e3WEhEPCVQHfSjCIaTSZaLc3kIe7zB3wl0F34+PdI1amJiY+Uj7VY26mrbZLv0V/wDdafzp61RHjqleed7gEgKTUFU129fM69P36KVJ0aHke4VtA7b0K2MChJS5xaja2pSf47b0K2sPHI8X8p6JWg1VdAVX5Po4ojPjbaKwz7c+2+im+5BfOF+d9fBRAw9Eqgu/SRRyn/6E152xV+A7XCwqUCwPbt74YpP1/reK6E3UxdClFxnQC02cJlAPYHfPsiXkq+/sKxCuUvJvjr6+fOWSI8//ZvATCbW3nnxdfRDR5CuCoeQOgNegNX4OblCcNGpXLudB1rNvZ0/kq1BWBcyT3YjLXEOQDmuk3vMmL8FTKHRfLaH2udvustQEmOOUZzhSRTprzflFRJi3nAVQdf1xbwzMyRwo05GmKTBnL2gE12CrHWGsyNrW5bwr62gAGWF+UIAG9s+yLoZ1y8+Cn5d1q9+sWAYPe7P7oem/kyp8vtTscazW0AnL1kwlfwdQe7sTGx2FvsTtD78q/+OyClV9ky9NYaDBZ2e6sf/sJuUpKaseOHUHq4i6qz54JWeIumzRZGjxjOV2e/Ztue4OuK1HL3F3YXrniUg9u2i7+zSsXJQ0d8ukZf+ZeSgjxBAl3LpSt8+oFBPnb7XXpU6aJ/efUXp3yG3rwpxcLMRYuxNtTLsKu06spzPkHvnQseFh771U+oq23i5JEKj+eNmTCWVJ2a1378S5+gNxT+VAm7RoP4vvdt2oyloU4+R5Wcyi1z54g+U68jVafmxcef8ar0jp0/VwCIb+gJbtbkVgAqPtnk028xb0K2ADCnMJM9ew20J4+jva2FyKgYIhuOMW2qns3bKwG4FuC7qLDAqVxbWloZkpYCQFVNPaqYnu9gzfbSMHcwq4qOJlEdR8ns4fL+t9cdp6vzMg9+a7y8b92Wr6mqqfcIvVcjvuUWzBceePllvv5sH3s+fR8JeANRfEtuWyAsfeRRjmz/C622LrExaO+ixj6Ades/CvNX6ZXAFuDXxT9hW80hdhze5PQ5UOgNNp4vvXm+fG+Xw1tJTFCRmiLW2ejYCAD06fGcOGKhsrbeb7U3WD5whd1krZYGo5ELxyqIVamwWyx+xTMJdv/80HOUvPCUE+xmjhjGutde7zWue1V4pxbcKQAoFSpfg3nO958UlRtDHTYHqNiMtSROGCefc/yAjeJCsUJZTZ3sPmLrVQZvT7WTfPNAog/oie6Ig/ju8zI6bqRVsNE6yUAOs4XIutigpfNAbEflmTBT2PXC9IkJjJgUBwdsYK0hfVg05i9ag7r28qIcYcGiqaRkDgQQAoVeqSB/74VVPdQrXwu2K+yOyhXfd1Od6GRiEwZRfcHGpBv1xCYMAhB6g15PsKuE3hStjnpjLY7z/FJ6585ZIjzwzNNkZGmpvmD02hr0xYKpH+7Kt2s5/c78ecKMmeM4f95ExdEqhMYmysr9UyxdlfaiabOFdF1qSGH3dx+8wRN3LffbAR7ctp1YlUpWrt3VU0+qcaj8iyvsKkF3zBg9VRfNqOKj5X2336WX1F/BG/TmTSkW7ljxJDWnjnP08/09jqvVcWRkDiOPYsEX6JVgV4JagJj4SFqs7U7HmTDWp/IWSn8qwe6+TZsBGDgAbiyYi632EnG6dAwnD8vHJPD1ZkrYTdClkpCgko81N1ugtg5hXDhj588VvEFvfm6xECvUMG2qnnbrFebcNpjN648RCWCDObcNxvxNpwzD+bnFwtVMcVhUWCCU3HUjAPZmUaGzWjrZvf9rUtQqYqIjmV04itiE8B69Du6gNyNNQ3WNmaH54VgvXqHNeoX7SrIBnPaVzB7O2+tamZ07WfBF6Q11fJOUXQl2rSZzwIqvAmadoNfcFUNkpHNagy/gW1i4VFCC7baaQ2ii4gCcPgeq9gYTz5fePF94Ik9DY2MiHxovsmzlCN56ubIH7ALcOEEFR0QF2BfoDQUfuFqyVis2TnftwVzfwJARw4hVqXD08HlVepWwu2zSNN56+kVIiZWUXZ/Mp5SGh57p7pZdNC9P0Ok1PgfzxiPHulvjBgPxen3PVrqpk9pvIoFI0fO4sRXPP4vRUIuxqpJdpz6FSQaiT40iQdPd5d1srqV1kgHLqQEU5dyBdkgmWr2O15/5uU8v47Wn7veY7/TYi3/1+0cO196E3XgYc6PoBCRnMDNzZEBdP8uLcoT8/BzMdW2Y6yA/Pycg6F28+Cnhey+sotlkp9kkKqcJSbHKwi14K9SusDvxNjEQ2cyX5XPikgeSQRzVF2xAFDPyhniF3r4yJez+7olXGZF7PSWPrQgJ9AZTP/JyS4S8WYU0mkxoszKdKr6k7DY6yo/J1MTfPwks/ef2O4YCCIbOGNJ1qVyqrQsIdl3hMy+3RHjuL6/wxF3LfW5UKru2JNi1WyxulWJP+b2h9i+usBsbF40qvltNS0yMJjFRhN9PPzD4BL2SsivB7tAZc4nT6rAZa7EaRHiuP1OBWo1f0KsEzFSd2gl2fbVQ+tPZs5YIc+5dKsNuVmMNCVGRlNouk6ARYddWewlTXT0FcQNpbmtn36bN3DJ3DnPuXQq4T20YO3+ukJqdjN3cQVRnDO2tbSi18aZUM6SK8JeancxYvEOvZJrrwkW4vW0w0YkDaW28jPmbTjTXhWNvuhyQHwgmfuQVFQnRUTjBrieTjrsBX9nqI8De2kFGmoZnHjsIwIPfGi+D7vnd3f8jJXMgXZ3+P3Mo41tjZbX8+cacPOKTNLLi649JCi7A8cOH0Y2exZ4d27n7vvso/+hNqpuj3Ob39mZKsN1xeBMKsO2h/AKCr9AbTDxfevN84b4xw9hV1cG5tovk5aYQP1hUdtts4UTH9vzOjRNUVG6qvyp84Ml3a/U6zPUNDv8uxgHjhUrGTJzQK/TOnbNEcMRrJjyymLf+tJoJjyxmz4cfA/ik7voEvA7lSnjomZ+RFmMUdHoNtQazT8G801AnB6JgrKx8XRjPIPz8f1/mODCd20Unff1priSe7XaAjVewnBrA9NG3ox2SSfbE0Tz74Eq/1N3pd6b02Lfrw/qA7ru1pZ2vvjATinyn5UU5wo/fnUl70xUi1WLBbm+6Qs6iGfB936F38eKnhKU/XE6zyc67//NGdwX64XK5YDs+ey3UvcGuO+iNTYjDm7p77NBhAMZNvIkUrQ57i71HSoN0jq8qryvszhlzN5vL/ymCTpDQG0z9kOFu63byZhVivFApt3YHJ7chKbvfVBmDgl0AW8Nl8sZnUHa0GkOAsOsKvXm5JcKTr/yKnz3wuN89KFK+rhJ21QmxpA8fKecoS2BcuvbDPvUvSvv0AwNpaRos1lYSE7uBN14VjtUiQkJamkaGXm9mbah3gt1wfSpxCkBPGTmW+jMVaHXRPt2flC4gqbwS9EqwK6U6SOddLX+qVG7rVv8FgIK4gZSeOg6njsvbkt0yd478HU+W0qnDUm0hcWw0FlpEn+r4C5CUIzD1aAs7M9U0VrSQ0qnrVd2dfPu3qfzk5R7Qyzed8rbSJt/+bQC/VN5g44cn2G1t7yBFrWLDtlMUF10vn+sJelM6oKK1ibGoyUjTEBExiP99/yi87/7/ZqRpOHnecM3iG0CbqZG01HTOnDjEoh/9tIfi6w/05ubeKjQ1msm+6SZ5f3TcIDLoAAbQYu+SFV53Sq+LYutWvZW2CwuXCkoovlrxvMLSwbm2WpatzCR+8ADO7+7k8ZeH8srK8yQitp4Ml6yyymu4ZCVTl9KryhsqPpB8t/FCpZy2IKUxrXj+WXhGhlvBAbsMGTEMdzm9Euwe+dNqsoY/RdZwPTyymKzhevZ4gF1PqYtegTc/d56QXbCA0nWbKF75/9jw8veCykm0Ggxynp3VJFZuUX0B3XXtnGnw7KSffRBhxfPPYqyq5HrNFE6d+py27h4uOiwDuF4zRW5J9Aa7jy4sFlJTVD32N9d08cLLZfL20yvzAPjZd78jANTVW/jjWv+6uWrPtMtdP0arGeI1aBKjmYlvLeHlRTnCk7+fwalP2nmp3NkprcrV8+TvfaskUmGuMTSw/b21rl0TQuGSha4F3G2hvv/WacLSR0Y6pTFIsCulM7haoiaK6gu2XlXeY4cO8/4HewmPiOoBvUrYXffpF3R2tPlV7pqbbKx94h/MGXM3o5LTuTQ4j4rysqABKdD64aabXpCgN29WIV/u/zwkyq70W+3bKOZRS9AbjD33l1f42QMI9z69it8+/uOA0oWkbigJdpuNtaQPH8mlr8/I72fMxAlOYNxX/kWp7kpqrsXa6gS5TmU5MZqaGqhvaOf+B0e5VXnzphQLk2YUdTf8HLArQboMDRYRVDvaWn1SebV6HQ1GIzPm5rNz024ZeiXYlfb7IiKEyp9u2fpemKTybn7nXSY4okrmkIEUVHWflzlkIJVVop/Y/M67SOe7U3dnzn1AeOmt/+HoCQN/eO+XJI6NJlzdgSqpE4tJhLyXJmn58GgljRWtfHfJTxh/o55VyxB2bPqL2/dnq70kgoVV/J1j1QPRXBcuK7wA9qbL8nHp/L6OH3lFRUJSWjI0NmC1dBKvcobY/MnD2b3/a7/radaVSBl6JaiNiBhETFz39VtsnXR0dAXlD4KNbxLsVp87gbWp2a3iCwjHj+/1y89Yr8SyZ8d2rs/O5p9vv83d9z0gpzjExA4ijS48wa4/iq2r2nu14rkSdiPVAzDXtZFyUWxUNtYJJKaGyaArmTSYrS/5QBqb0WA0yrAL8PozP2fF88/yzz+sdW58gwzHnuzIn1bLaQwlLzzFxEliXvq0O+/gry++5FENrhT/tyxoDfIWzHPv+wHWmjo6WqxyUK9pec6nUefh+lQw1oZMfZGUidE3T0SrTebWBc/LeWxSl96J8n0YjQ28/szPvQbiunqL03ZqXIrP5/pq2rHj2HXoBIHmO0k5Pud3d/JSuYE5jyRjcjhkgJf+bmAVeh5+arpP3SEeCrO0LRQuWUiaPpkaQ0Ov96UEW2+w6xcIRUQRZqsGcrodyqaNFM6dJ2+H2aoJj8vw+ZqbNr8X1tEVJtyTu4pRyem8e3g1kwYXwOA8dm78Bzu2B6buBlM/3JXNcFU8mEw0mkzcMHkKu/d/jircFBTs3n7HUKq/bCdjSBzVVTY6uwTyxmcA0wJOLWmytDD65om888JLAefGd1qssiOUlN1LX58hQavjhslZNJpM2C0WKc3jqviXTz8wMPmWTLeQq7R4VThjxujZt8vALdOTez1XUneVinSPXhDdYJpqL/qk8krKbV1tkxP0SrDrT1pDqP2pBK+D828TEqIiZchVxUVgsXXI55lsNrbsXu8REmbOfUAAWLXshwB898mf8If3fik+PwOAy5So2vnwaCXrLJF8d8lPePe3r/Ku4vvuoDdOlw6TvsWBA+8zbaoee9NlYtXOsAtw4FgNyZO+JZ5/jeOH1Oi6HD9MTOdQpCt6Unel2RkGDRpIVpcz9AJ0mJ39tL21o9dBa30Z3yQ7WL6VuMhY4tUJmMz1TorviS8CEyaS9XoaDAZoFBViKcUhLUPsmampNlCzcb3b7/qr2IJvaQ2hiueXw1tZtnKEDLsNFV2MmhzL6f12lq3MFHN56yJl6AVotXd4fYZQ8QGIg2dL137olJ72zz+sJS5vBpRBXq6o8iqVXk8qb+KMyby1cw8lLzyFRhPNT5d1p1XNzVlGepweQFDFRFPy2AoJdHsIJoN8CeaNF74iMWs0AH9+/jmnnEVP3y/d+nYYIAybOrNnS9tDkNp9xOZ1hgbp5WiLZ8vOX+rSk7a/OnjI50B85NRZJlw/gr4wXUZSd3B25DulDxOD2okvzPjT5SNVDn1sGDAAk/UK5/YJpE9K5qVysZL4Yu4Ks7tCfeY3r1H4H4957boIFeg60hKEMFsbEeGD2LBWdERK0D126DAb1q4nInwQHbZqPtva4NdMDRLsAhy4WCpCbxDKbjD1w5tJ0Fu2dTtsEKDYt0tJ8+oCpMZc4sCuelRxESSqo9AmRwet7gI0GBqYt2Qhi1fcy88eQAgEeqWpx/JySwQl7MaqVDSaTE5gfDX9SyhN+Ryu96dMw4hWqbHVXvTr2sqBaak6NSfBafYGrV7nO/SGwJ8qVdo3d68Pezj/NiFziBZVnDh4RoLe8w0m3hRh1+PsDEpYzcstEd797avk5y8QA1+yOADxMtDY0Eh+Orz721dpa25G8+Agqj629pixQUpnsNVeotlcK6u8kfEDZOiVYFdSd6XzvKU1hDJ+NCUmc+T4N8ydN8optWHnSYGbbr1DBOA0PZ/87XXm3yK+13UfnHA7SwNAV9dl4mOjybKL6Q2AE/gqrT7i2sW38tJPwrKzpwqjpk7AYq5zUnxNdXWkpV9HzaVvAvBTBppMJpoAQ42RtAwxxeH44cMka1PZvnG921kbektj6M38geRg4vni3CLh3vtv4PR+OzmD42mo6GLNr8VGwqIfpThBb3MlJERHOk1TdjX4QKvX9UirEv09AmVQMH8qMBXpPWtSkrFbLPKYDlfLHDGMzBHDZNi9a+LDjEpO53TDJT449CZTRomc4Aq7tRervAOvMpjb6wwkZo0mPi2V8rdfZa84QlwIVVDwJZ3Bk5NeuOJRceCF4sXu3rDFJ9itrRULSFqiWv48NivF6/luVRfFlCuzCnIFgCWPLKTV3i47hdaWdqK1NzkUy51s3eVba9rRwhPQZzlagt2VQ2kfrdnrdVoTX0dXnvnNaywaO4A1v3kNdKnug3aDb6qudJ4vVm0cwL1LFrBh7XqiosSKKU1DJv2Nigqnra2TO7+zgHfe2+pXWdtZedBpe+tX64KG3VDUD2ngWrJW69St02gyiS3e5+8SynyYQnDOnIeE6d9/3CFnxXBi9d8YlVuA5eNfk6iOouxodVCLgdx9R7GQnJLAOy+81OP+/YXesvJ1YXffUSxkDU1n734xZzdBq1CdLBYysrICmpM3WP/SFyZNmaaEcSmdIRCTVN0xE8Y6qbzS395yePvCn/bwiR3VVFYlkTmkQ4bdyqrLGDv8a3BJjSK72UqsJp7GhkYSkxNpbBB9rt1spa25mcynBSymXt6/Y6YIgAbAYu5ERbgMvRLsWswiGCRodPJgu76OHwARUYPoaOtylNkWdNfFOEGvJYCeDGn+XQl642OjZfB1tZykFFI8zNLQl/FNaRLsJmlS2LvtI5I0KSSlpsppDr5Ybu6tAsD0+d/i64oKbM1m4hI0QHeKA0CTQ/UNRUqD3FBzHtDW5/EcwHrxCmt+Xc+T/5FExfuw5tf1TtALiODbKoJvb1OThZIPJB/iOgODDL1MJXviaLTPP8vJIxVU7Noj+31PljVc3wN2L9kMxMcm8fnpjfx+zR/43Y+dY9O0O+9g3Wuvewbe/Nx5wh3//TLnS/dhrzMQm6qXg/lux3RI/ihXcj6dQ9FotTSRNmGic0vxuna/KoaUI1J58iwR8QndXTXWZhaueNTpBV9Nm1WQKyx5ZKGj+0B8ptrqbi/c2tKO2ex/19Yb274Iy1+ULgAc2NYNkFEpA4nTdtFub/epckhTjXgr2KnL7mHNW38jddk9XNy43bOCZW4jdVhkSGBXsnWffkFYZxcdne5B2mJtlc+7Fhbq+uGkSBiNTttS5dfpdf5BpQJ2T5eXkgEcOGEIGnazhmZx4fwFyoKcqqkbdruvJw3gk57ZV9gNlX+xXLrC7Xfp+fSDSsaM6b23xGrp5ORJcdBafYPna7damhkycjjnd24iZWT3NGFWg0GG3WiV2jFTg3dlyDGnrpC/cCEnj1SQrNXKiq5yO1mrZffatT4vPBFqf/pw/m3C0OQkKppOUOHCV7ekj0ObnyFIKq8vFpWQQGNDFZNmfZsUnQZ9cjSGhlbqa81sWf0PohISgN4bDxK8SsqtShPuBL0S7Ko04fBNt8LrLa0h1BYxfiRHjp5hAtfJ0DtjTBg7T3RPaTf/lghiE8LZtPE0l8LcK3aDBnUPEIyNjiA2OgJ7awdjo9ViikO0s9IbG+1d4u2r+OZUtxxw29HWhn7oSBmCfYXd6fO/Jau76qQk1ElJVJ8XB2JKKQ5NJhO2ZjPNjRbKyz8LC1atdZ267GrFc3AA7tgBVLwvDmLTJsTL0PvZh7WO+p2CJjWKd/76Za/z8IaKD6QG9IrnnyV74mhpOjIn6AUErWOmmGStlrHTpwE4pUC4mkYjNuAu2Qzy3xPV+1HHaLDaTZjNrTzxK3EmiT8/9BwTHlksq71ugTc/d56w4q03OLrrpMdg7o956naUVA5JfQHfuxsl57xp7XuEN53vcfzUyaHXBHolZ+DqCJQOIFhnILUCo1IGOoK9/6kEN88r9NgNoUxaZ9k9HNy43W3hd4CTMCNvCF8dbGb0zQm9wq69uYtGcxsZWXHsLKvyCl5CXAaqBPddG/H6MViaLVwLC3X9UKq74ap4J3VXAr+qs+fQ+dg9LZkqRUz0O11eSnpmFseqLrL5sz8HfH8AN2ZnceL4V/zz4+DnJVXC7j8/FmE3b1ahs9P0AXZD5V8cA87kBSekwYKecnml4/UN7Wz4uNLtAhRln28Iy6NYGDH2JifQVSq70So18Xo99WcqiIiK9nkBCmngWoPR2EPZDeT37St/On/cODmlAZBVXn+trbmZ2U/+gNWvvNozSD/+A9589hfeFXYH7CZodJyPG8GBY2eZNlVPfVU7KkT4TRkSyZ69BixxIxiq0cnQe7XNFXqtlk4GWs8RFx2FrbWN2ISxbNp4mojxI2HfmV6vFRsdQUREd5j/3GyUoXeKprtLxd7acc3jmwy77W1Oiq+vsHvDxKlizq7DmhwpRXEJGpob62TY9Waug9AKC5d6VHml2RwCyfkNNJ47oFVY9V9jqdjZQmNjIhUW8fdLi47D2CymgWVPSMFc14bhkpWy8noGdnofIxAKPpDBWKfm+KGvKP1kr1sfIk1vuHDFoyRrtax9/Y9ufb5jwJkA4kC0E9X7OeE4po7RkKEZwTf1Z7nwtQHNpOHd8/Q6pi47vNUN8ErK1dFdJ6k9ehjd+JtIGZXFx/+5MuBg7kmF6QExSeF+qUOAoNUmMXz2crmrSjm5uacXp7SP9x7ocXzWlDECdI+s9Xa+0raWlvfalS11/QTqFHav+SQsn/lC1gy9U+U4/n4du9f4txKNY7SlU6F2KsxAgkbd6zUk6B2RnsRXB5vJyHJf2SXYTdRE+Q5sCSrqjXVsWCs6cymfd8Pa9VhIIEWbetWhty/qhwR6acOHcXL/AbewK3XperuWlM6gykql/JU3iFeriVcnEp8+JOBnzsstEe59ehUHdpay5bNDQSu7EuzemD1ahmfl1Gxu6vlV9S/dKq84D29jY/fUZEr4rakxe1V3XVXeqjMVxOkGy/sl2D2/c5NP6q7SpO5Cdwpvzdfn8CdzI1T+1NWUg9WOnW5h3KgYVHERZA7p4HwAqSWrX3mV5EQ1+jE3YTh5WP4rQfDxt9oAzzO3SLArQWz48Ons2buLObcNpvJYC5njYti8/iLhw6eDAo49QW8o40fZtm1heUVFQlqWDmOVGe0QjQy9HIcJ2dc5A4ADdmPU7nvXtpTvD5udO1kYkpYig6wSemWwjhhER0eXT4PW+iq+ZWdPFQDS0q/D0tSASp3sFoK9wa4+83q3MGuoPAW4T3HwBr3uUhtclxZ2VXZ9TX8IRTyvr7zMoh+lsObX9YzTpQFwrLaGRT9Kob7yMua6NkZNjqXs5XqmJg5nY8Opq8YH0iwwyRk3EJc3g9JPdsrQC2LOrm6wWK7Xvv5Hrz5/0+b3wiwtrcLcnGV8fnoj8bFJMux+fnojC5bfw8RJwzGbW+V5ekteeIqXVj7Tc1oypXJlrakLKewqVRh3OWsjxl9hw/ZGvwaTDKQd3ZDhsuNTOucEjY6B584EfL9H9zUG/F2HU3BqFYNzvlMwrWCxIswXImNFR9dub/cLdqWk85vnFcqFWlnIpcLcbG7y2npzteoLth7Qq4TdRnMbB06Y/O5W37F+C1FR4exYvyVoaE2P01Nt7p5n9MaMyew0X/BL2Q1F/ZAgzxfY9QX+JNgdnp3KR8+HBnYB9CntHNhZyqQZBXx18FDQ798Vdv0F2770L0qVV4Jeu62VxES9rOrW1Ih5fxLselJ3XVXejMxhaHUpGBUD02y1F+VUBn/UXWVaQ83X50gbPowGo1GG3XBVPCd37/Y5naGv/Gll1WUyh3Qruq7b/thA2klOVJOg0TnBrrRIRpvZKA9Uk1Zm6+Gfzp2h2vEc0bFxIswOn87m9bscK66JsJug0WGqveR0/tWKHyDm8iqhFxDB10UBjlFH0tLUe4PLam8lPja6h3obGx3BWNQy7F6r+JadPVXIcfTOSGqupamBqOg4t4qvJysv/yws1wOM95bi4Iu5rqamBGDX4/6ushZMPJdU3nvvv8EBvTUAFHxbI8NuzqJ4Xll5nkkDjdS0eu8lDDUfuA5S0+p1LFzxKNkTRzsNsPV1OXmAavNZrksRFV2r3cQ39WdZsPwesobrndIYJjyyuAfsysC74q03MNS2Yq2pIz4tNWSw6y4oGU99KSsygcCua4vd1QEG0w0VyGpq3rqAwDnfSaNRBXzN5UU5woKiofJqOfWVlxnTlOPXSmtuCrVciCXzFXb/+tmesPtvnSaMSE8iI0taUc3ZpP1nL/kPu40WO7j4z4GqhIDe3Q5HN9U9uas4cLGUDM0Idlb8Q9rfq4W6fkgpDIBX2PXFJGVXCbvHd+2Sj2/e7H86Q3faQTnvvHAoaDC9+45iYfr0m9m162BI0iL6wr9I0Hv/g6PkRSWk5YTttlYZdM9+ZaesrBpvywq7g14Q59wV4UZUj32FXVfoHZOfT83XYo5ajcUaEOz2hT893SWQ1NZOZVUkzW3tXJ5WTPOeDfL26S7/xzxL9yIBufIelWDqbqU11xkW8nOLBVnBdUCvBLvN5lpa7TYCWVI4mPihVHmV0BujjiSmIBvrxu4xCxLsntp3hrJt7nMyJZUX6AG99tYOOacXCGhKslDFty/27uixz97S6lHx7Q16XVXf3lIcDJWnPObvKlVeFLM1uC4wEehsDqGK567Qe3q/neNHxMGRt96pk2HXFD6WI9Xf8O5B7zAdSj5QQu/a1790gl2pl6q3nN0e19r9gfy+CxYscPbdT7/olMbgadW1MICXSk8L50v3MbTgFrH7JYSwq7SCWffJ+XYzjOuDmiYoP7fYo9e8muuf9+YMPOU7nTp+okdr2a9Ksmgq4PtITncmJag7cnbkgqwo9D7b/bdOEwBpUQkn21lWJcOxL9eaMnmGMHp8Dl8d/YLP9+8M8/e4N5tZuFSYMfbbPsNuX9SPh7//ix5lN1DYBfjVrnPCidV/c4LdQCC3J+xeCFnObl/Bbl/4l5KCPAGg+I5Mp/1NDV2UlVUr4dj3Rs4U0V9lZA7rVisqz8lQHMjz3rngYWFMfr68HSjshtqf5ucWCxnDRjLYVMPlacWyYjxwzwYuJqVRfe5MQNcM5f3dcHO+E0ArFe0vD+6+ZjEkr6jI7XPG2S1oNQkYzc3YYlUyJHu7njQnr2TSzA2SBQO7oY5vroqvtalZVnxNpnp8XXhCSnHwZOKAtTqvwOvOXFZgC9pCEc8X54pl5t77b8Bc1yYPUFPm7PoCu33FB3LZdpOaF6iQMnfOEuGmWbOdBbKd+0mcMZnDW7d4XGI4DOBHf9wsjJ8+BkNta5/BrjIoAYy011/VOTGvBfR6OhYo7CorCRAw7Lor2MEUZFfwdVWB/b3OlMkzhN5g1ttxX6B3hx8OK9T1wxV4g4FdgHsefU5UctRqKo9VBAW7AM/9ZJUQqgFqAK/99r+EvobdvvAvEvi6UYEDB5op3eAWKOi6Qq+L8vsvYf/KgsS/w/15gtdAFoeQlF53Fsj1+iq+Sfm87szfVdak6ck8WSCw21cWqngugS/Q62wM14oPQm3K5YOV5gl2+63f+q3f+q3f+q3f+q3f+q3f+q3f+q3f+q3f+q3f+u3f2f4/47LVVGEO9sEAAAAASUVORK5CYII=);
 
     --safe-t:env(safe-area-inset-top,0px);
     --safe-b:env(safe-area-inset-bottom,0px);
@@ -262,6 +262,14 @@
      flex content that overflows puts its first rows above the scroll origin,
      where nothing can reach them. */
   #delve, #gear, #vendor, #hall{justify-content:flex-start;}
+  /* And it must not shrink them either. A flex child defaults to shrinkable,
+     so on a screen taller than the phone every row is squeezed under its own
+     content -- the item card keeps its 96px floor while 200px of text carries
+     on past the border, over the Loadouts heading, and puts Equip underneath
+     the Back button where it cannot be tapped. Worse, the spilled part is
+     outside the flow, so the scroll box does not know it is there and
+     scrolling cannot reach it. Natural height, and let the screen scroll. */
+  #delve > *, #gear > *, #vendor > *, #hall > *{flex:0 0 auto;}
   /* Fifty-two rungs plus heroes plus difficulties overflows a short phone, and
      the one control you always need is at the bottom -- so it stays put rather
      than being something you have to go looking for. */
@@ -372,7 +380,7 @@
   .ico{display:inline-block; vertical-align:middle;
     width:var(--sz,32px); height:var(--sz,32px);
     background-image:var(--icons); background-repeat:no-repeat;
-    background-size:calc(var(--sz,32px) * 10) var(--sz,32px);
+    background-size:calc(var(--sz,32px) * 35) var(--sz,32px);
     background-position:calc(var(--i,0) * var(--sz,32px) * -1) 0;
     image-rendering:pixelated; image-rendering:crisp-edges;
     /* the cells and slot rows are flex containers, and without this the icon
@@ -703,7 +711,25 @@ const ENEMY_TYPES = {
               color: '#e8c060', halo: 'rgba(232,192,96,.18)', weight: 0, from: 1e9 },
   breaker: { r: 23, speed: 62,  hp: 135, dmg: 21, tech: 4, cd: 1.30, mass: 2.8,
               role: 'anchor',
-              color: '#e0552a', halo: 'rgba(224,85,42,.22)', weight: 4,  from: 55 },
+              color: '#c85a24', halo: 'rgba(200,90,36,.22)', weight: 4,  from: 55 },
+  // One slag each, not two. At two the pair of them were worth about twice a
+  // thrall's slag for about the same health, and the bot filled the quota
+  // nearly six seconds sooner across twenty-four runs -- new archetypes are
+  // meant to change what the fight is, not how long it lasts.
+  // Bloated with something that wants out. It does not strike: it closes,
+  // commits, and bursts -- and it bursts when it dies as well, so a husk broken
+  // across the room is a husk that cost you nothing, and one broken at your
+  // feet is the same blast either way. That is the whole of it, and it is
+  // learnable in one delve.
+  husk:    { r: 17, speed: 112, hp: 40,  dmg: 0,  tech: 1, cd: 9.00, mass: 1.3,
+              role: 'burst',
+              color: '#c8d63a', halo: 'rgba(200,214,58,.22)', weight: 5,  from: 22 },
+  // It never closes. It holds the range it likes and throws, and rock stops
+  // what it throws -- the first thing in the delve that makes a wall worth
+  // standing behind rather than walking round.
+  cantor:  { r: 13, speed: 78,  hp: 28,  dmg: 12, tech: 1, cd: 1.45, mass: 0.9,
+              role: 'shade',
+              color: '#48d0c0', halo: 'rgba(72,208,192,.22)', weight: 4,  from: 40 },
   // The Deceiver's own. They never appear in the horde roster -- they arrive
   // with him and they are the reason he is hard to reach.
   lieutenant: { r: 21, speed: 80, hp: 300, dmg: 26, tech: 12, cd: 1.15, mass: 4.4,
@@ -726,6 +752,28 @@ const ENEMY_TYPES = {
 const INVADE_EARLY = 34;   // never before this, so a run has started properly
 const INVADE_HUNT  = 78;   // and he leaves after this long without reaching you
 const INVADE_GIVEUP = 380; // "without reaching you" means staying this far off
+
+// --- the husk -------------------------------------------------------------
+const HUSK_NEAR  = 50;    // it commits to the burst this close
+const HUSK_FUSE  = 0.52;  // and this is how long you have to be somewhere else
+const HUSK_R     = 94;    // what the burst takes
+// Measured: blastAt passes 0.4 of this to the player, so at 34 a burst in your
+// face cost fifteen per cent of life and the lesson it is meant to teach --
+// break them before they arrive -- was not worth learning. At 72 it costs
+// nearer a quarter, and it is also finally enough to kill a neighbouring husk,
+// so a knot of them goes off in sequence. Each link has its own telegraphed
+// ring, so a cascade is something you walk out of rather than something that
+// happens to you.
+const HUSK_DMG   = 62;
+
+// --- the cantor -----------------------------------------------------------
+const SHADE_WANT = 240;   // the range it tries to hold
+const SHADE_NEAR = 150;   // inside this it gives ground
+const BOLT_WIND  = 0.55;  // the cast you can see coming
+const BOLT_SPEED = 296;
+const BOLT_R     = 7;
+const BOLT_RANGE = 420;
+const MAX_BOLTS  = 48;
 
 const SLAM_R     = 104;   // reach
 const SLAM_WIND  = 0.9;   // seconds of warning
@@ -954,7 +1002,13 @@ const RAMP = [
     lesson: 'Some of them will not come at you down the middle.' },
   { horde: ['thrall', 'eclipse', 'breaker'],
     elites: 0.11, pitch: 0.4, invade: 0, guard: 1, mutate: true,
-    lesson: 'Some ground is held. Some cannot be stood on.' }
+    lesson: 'Some ground is held. Some cannot be stood on.' },
+  { horde: ['thrall', 'eclipse', 'breaker', 'husk'],
+    elites: 0.13, pitch: 0.5, invade: 0, guard: 1, mutate: true,
+    lesson: 'Some of them are carrying it with them. Break those early.' },
+  { horde: ['thrall', 'eclipse', 'breaker', 'husk', 'cantor'],
+    elites: 0.15, pitch: 0.6, invade: 1, guard: 1, mutate: true,
+    lesson: 'Some of them never close at all. Put stone between you.' }
 ];
 
 function buildLevels() {
@@ -971,7 +1025,8 @@ function buildLevels() {
     const pool = i === 0 ? regions.slice()
                : regions.slice(0, Math.min(regions.length, 1 + Math.floor(d * 5)));
     const ramp = RAMP[i];
-    const horde = ramp ? ramp.horde.slice() : ['thrall', 'eclipse', 'breaker'];
+    const horde = ramp ? ramp.horde.slice()
+                       : ['thrall', 'eclipse', 'breaker', 'husk', 'cantor'];
     out.push({
       id: i === 0 ? 'test' : 'delve' + i,
       name: name,
@@ -1128,10 +1183,28 @@ const SLOTS = [
 ];
 // Cell index into the icon strip. Both rings share one -- they are the same
 // object worn twice -- and the last three are not slots at all.
+// Cell indices into the icon strip. The first ten are the slot fallbacks and
+// the loose glyphs; every base name after that has its own, so a Falchion and
+// a Glaive are no longer the same picture with a different word under it.
+// Built by tools/build-art.py, which owns both this order and the strip.
 const ICON = { blade:0, offhand:1, mail:2, girdle:3, boots:4, amulet:5,
-               ring1:6, ring2:6, coin:7, skull:8, gem:9 };
+               ring1:6, ring2:6, ring:6, coin:7, skull:8, gem:9,
+               'Longsword':10, 'Falchion':11, 'Warblade':12, 'Glaive':13,
+               'Cleaver':14,
+               'Kite Shield':15, 'Buckler':16, 'Warding Focus':17,
+               'Tower Shield':18,
+               'Ringmail':19, 'Scale Hauberk':20, 'Plated Coat':21,
+               'Padded Jack':22,
+               'Leather Girdle':23, 'Plated Belt':24, 'Sash of Cord':25,
+               'Marching Boots':26, 'Greaves':27, 'Soft Treads':28,
+               'Bone Amulet':29, 'Ley-Charm':30, 'Sun Pendant':31,
+               'Iron Band':32, 'Signet':33, 'Twisted Ring':34 };
 const icoTag = (key, px) =>
   '<i class="ico" style="--i:' + (ICON[key] || 0) + ';--sz:' + px + 'px"></i>';
+// What an item should be drawn as: its own base if the strip carries one,
+// otherwise whatever its slot uses.
+const icoKey = it => (it && ICON[it.base] !== undefined) ? it.base
+                   : (it ? it.slot : 'blade');
 
 const SLOT_BY_ID = {};
 for (const s of SLOTS) SLOT_BY_ID[s.id] = s;
@@ -1206,7 +1279,8 @@ const AFFIXES = [
   { id:'damage',  stat:'damage',    mul:false, lo:2,    hi:7,    dp:0, name:'Keen',      word:'+@ damage' },
   { id:'damageP', stat:'damage',    mul:true,  lo:0.06, hi:0.20, dp:0, name:'Cruel',     word:'+@ damage' },
   { id:'life',    stat:'maxHp',     mul:false, lo:8,    hi:26,   dp:0, name:'Stout',     word:'+@ life' },
-  { id:'ward',    stat:'ward',      mul:false, lo:0.03, hi:0.09, dp:0, name:'Warded',    word:'@ harm turned' },
+  { id:'ward',    stat:'ward',      mul:false, lo:0.03, hi:0.09, dp:0, pct:true,
+    name:'Warded',    word:'@ harm turned' },
   { id:'speed',   stat:'speed',     mul:true,  lo:0.03, hi:0.09, dp:0, name:'Fleet',     word:'+@ stride' },
   { id:'reach',   stat:'range',     mul:true,  lo:0.04, hi:0.13, dp:0, name:'Far',       word:'+@ reach' },
   { id:'sweep',   stat:'sweep',     mul:true,  lo:0.05, hi:0.16, dp:0, name:'Broad',     word:'+@ sweep' },
@@ -1224,7 +1298,7 @@ let AFFIX_SCALE = 1;
    turns "which is the bigger number" into "which is the bigger number for me"
    -- and gives the two heroes genuinely different best-in-slot. */
 const SYNERGY = [
-  { id:'isaacWard',  hero:'isaac', stat:'ward',   mul:false, lo:0.04, hi:0.10, dp:0,
+  { id:'isaacWard',  hero:'isaac', stat:'ward',   mul:false, lo:0.04, hi:0.10, dp:0, pct:true,
     name:"Warden's",  word:'@ harm turned',
     slots:['offhand','mail','girdle','ring1','ring2'] },
   { id:'isaacSweep', hero:'isaac', stat:'sweep',  mul:true,  lo:0.10, hi:0.26, dp:0,
@@ -1311,9 +1385,13 @@ function affixText(af, hero) {
   const a = AFFIX_BY_ID[af.id];
   if (!a) return '';
   let v;
-  if (a.mul) v = (af.v >= 0 ? '+' : '') + Math.round(af.v * 100) + '%';
-  else if (a.id === 'ward') v = Math.round(af.v * 100) + '%';
-  else v = (af.v >= 0 ? '+' : '') + (a.dp ? af.v.toFixed(a.dp) : af.v);
+  // An additive affix whose roll is a fraction has to say so, or it prints the
+  // float: the synergy ward is `isaacWard`, so keying the percentage off the
+  // id `ward` missed it and put "+0.03952737067873269 harm turned" on the
+  // card. `pct` is carried by the affix rather than inferred, so the next
+  // fractional stat added does not have to rediscover this.
+  if (a.mul || a.pct) v = (af.v >= 0 && !a.pct ? '+' : '') + Math.round(af.v * 100) + '%';
+  else v = (af.v >= 0 ? '+' : '') + (a.dp ? af.v.toFixed(a.dp) : Math.round(af.v));
   let out = a.word.replace('+@', v).replace('@', v);
   if (a.hero) {
     out += ' \u2014 ' + HEROES[a.hero].name +
@@ -2187,9 +2265,9 @@ function standPillars(spawn, portal) {
    somebody having been here rather than as more of the same scatter. */
 const KNOT_SETS = {
   store:   ['crate', 'barrel', 'urn', 'crate', 'coins'],
-  killed:  ['bones', 'sword', 'shield', 'hornskull', 'bones'],
+  killed:  ['bones', 'sword', 'shield', 'hornskull', 'bones', 'tomb'],
   spoil:   ['coins', 'scroll', 'urn', 'coins', 'bones'],
-  fallen:  ['rubble', 'rubble', 'crack', 'bones', 'rubble'],
+  fallen:  ['rubble', 'rubble', 'crack', 'bones', 'rubble', 'tomb'],
   damp:    ['moss', 'moss', 'rubble', 'grate', 'moss']
 };
 
@@ -2326,6 +2404,7 @@ function moveEntity(e, dx, dy) {
    ------------------------------------------------------------------------ */
 
 let player, enemies, arcs, loot, drops, particles, rings, portal;
+let floaters = [];
 let enemyGrid = new SpatialHash(ENEMY_CELL);
 const _near = [];
 // wakeEnemy runs from inside damageEnemy, which is itself called while
@@ -2346,8 +2425,9 @@ function makePlayer(x, y, heroId) {
   p.hp = p.maxHp;
   p.face = 1;
   p.fireTimer = 0; p.invuln = 0; p.hitFlash = 0;
-  p.swing = 0; p.swingA = 0; p.swingDir = 1;
+  p.swing = 0; p.swingA = 0;
   p.gait = 0; p.pace = 0;
+  p.strike = 0; p.recov = 0;
   p.upg = {};
   p.level = stash.level || 1;
   p.gear = {};
@@ -2447,6 +2527,24 @@ function wakeEnemy(e, chain) {
 // near the spawn pocket, biggest and meanest deepest in, plus a guard on the
 // ley-gate itself. Placement stops once enough slag is on the map to make the
 // quota with room to spare -- the level has to be completable by clearing it.
+// What a pack member is, by how deep in the delve its site sits. Deeper packs
+// lean on the heavier archetypes and the near ones are thralls. Written out
+// twice once -- in the main placement and in the top-up pass -- which meant
+// two copies of the same table to keep in step by hand.
+function packKind(roster, depth) {
+  const has = k => roster.indexOf(k) >= 0;
+  const r = Math.random();
+  // The bands are cumulative on one roll, so widening one narrows what comes
+  // after it. The breaker's share was quietly cut from 0.28 to 0.22 making
+  // room for the new pair, and fewer of the tanky body showed up as a faster
+  // delve rather than as anything anyone would notice happening.
+  if (depth > 0.62 && r < 0.28 && has('breaker')) return 'breaker';
+  if (depth > 0.45 && r < 0.40 && has('cantor'))  return 'cantor';
+  if (depth > 0.28 && r < 0.56 && has('husk'))    return 'husk';
+  if (depth > 0.30 && r < 0.68 && has('eclipse')) return 'eclipse';
+  return roster[0];
+}
+
 function placePacks(spawn) {
   if (!openCells.length) return;
   const far = Math.hypot(WORLD.w, WORLD.h) * 0.5;
@@ -2480,11 +2578,7 @@ function placePacks(spawn) {
     const n = 3 + ((Math.random() * 3) | 0) + (st.depth > 0.55 ? 1 : 0) +
               Math.round((LEVEL.depth || 0) * 2);
     for (let k = 0; k < n; k++) {
-      // Deeper packs lean on the heavier archetypes; near ones are thralls.
-      let kind = roster[0];
-      const r = Math.random();
-      if (st.depth > 0.62 && r < 0.28 && roster.indexOf('breaker') >= 0) kind = 'breaker';
-      else if (st.depth > 0.3 && r < 0.55 && roster.indexOf('eclipse') >= 0) kind = 'eclipse';
+      const kind = packKind(roster, st.depth);
       // The site is kept clear of the spawn pocket, but members scatter off
       // the site -- so the clearance has to be enforced on the body, not the
       // site, or one can drift back inside its own aggro radius of the player.
@@ -2510,10 +2604,7 @@ function placePacks(spawn) {
   for (let pass = 0; pass < 4 && slag < budget; pass++) {
     for (let i = 0; i < sites.length && slag < budget; i++) {
       const st = sites[i];
-      let kind = roster[0];
-      const r = Math.random();
-      if (st.depth > 0.62 && r < 0.28 && roster.indexOf('breaker') >= 0) kind = 'breaker';
-      else if (st.depth > 0.3 && r < 0.55 && roster.indexOf('eclipse') >= 0) kind = 'eclipse';
+      const kind = packKind(roster, st.depth);
       const pos = scatterNear(st.x, st.y, 110, ENEMY_TYPES[kind].r + 4, spawn);
       if (!pos) continue;
       const e = placeEnemy(kind, pos.x, pos.y, st.depth);
@@ -2618,7 +2709,9 @@ function newBody(kind, x, y, t) {
     slam: !!d.slam, slamCd: rand(1.2, SLAM_CD),
     postX: 0, postY: 0, posted: false, guard: rand(0, BRACE_UP), braced: false,
     // Started somewhere random in the cycle, or a pack arrives in lockstep.
-    gait: Math.random() * GAIT_STEP * GAIT_N, pace: 0
+    gait: Math.random() * GAIT_STEP * GAIT_N, pace: 0,
+    fuse: 0,                                   // husk: counting down to the burst
+    cast: rand(0, 1.2), casting: 0             // cantor: between throws, and mid-throw
   };
 }
 
@@ -2692,6 +2785,27 @@ function spawnAmbush(cx, cy, n) {
       }
       ok = true;
     }
+    // The ring is where it wants them, not where it will settle for them.
+    // Sampling one arc of the circle and giving up put three or four of the
+    // five asked for on the map -- measured, it came up short in twenty-three
+    // of thirty cuts and once put down only two. A partial ring is not the
+    // beat this is for, so a spot that will not take a body falls back to any
+    // reachable floor in the band around the corpse.
+    if (!ok) {
+      const lo = AMBUSH_R * 0.6, hi = AMBUSH_R * 1.9;
+      for (let tries = 0; tries < 90 && !ok; tries++) {
+        const c = openCells[(Math.random() * openCells.length) | 0];
+        const d = Math.hypot(c.x - cx, c.y - cy);
+        if (d < lo || d > hi) continue;
+        if (pointInWalls(c.x, c.y, rr0)) continue;
+        if (flowDist) {
+          const gx = clamp(Math.floor(c.x / CELL_W), 0, GW - 1);
+          const gy = clamp(Math.floor(c.y / CELL_W), 0, GH - 1);
+          if (flowDist[gi(gx, gy)] < 0) continue;
+        }
+        x = c.x; y = c.y; ok = true;
+      }
+    }
     if (!ok) continue;
     const e = newBody(kind, x, y, run.time);
     enemies.push(e);
@@ -2741,8 +2855,11 @@ function fire() {
     releaseCrescent(a, i * 0.055);
   }
   player.swing    = SWING_TIME;
+  player.recov    = 0;
   player.swingA   = base;
-  player.swingDir = player.swingDir < 0 ? 1 : -1;   // alternate shoulders
+  // Next form in the cycle. Slash, then rise, then chop, then round again --
+  // three swings before the picture repeats instead of one.
+  player.strike   = (player.strike + 1) % STRIKES.length;
   player.angle    = base;
   if (Math.abs(Math.cos(base)) > 0.25) player.face = Math.cos(base) < 0 ? -1 : 1;
   return true;
@@ -2837,6 +2954,267 @@ function maybeDropItem(e) {
   }
 }
 
+/* --- bolts ----------------------------------------------------------------
+   The first thing in the delve that comes at you through the air. A cantor
+   only throws when it has a clear line, and rock stops the bolt in flight, so
+   a wall is cover rather than scenery -- which is what the rooms were cut for.
+
+   Travel is substepped like the crescent's, so a bolt cannot skip a thin wall
+   or step over the player between one frame and the next.
+   -------------------------------------------------------------------- */
+let bolts = [];
+
+function fireBolt(e) {
+  if (bolts.length >= MAX_BOLTS) return;
+  const dx = player.x - e.x, dy = player.y - e.y;
+  const d = Math.hypot(dx, dy) || 1;
+  bolts.push({ x: e.x + (dx / d) * (e.r + 6), y: e.y + (dy / d) * (e.r + 6),
+               dx: dx / d, dy: dy / d, dmg: e.dmg, colour: e.color,
+               life: BOLT_RANGE / BOLT_SPEED, spin: Math.random() * TAU, dead: false });
+  burst(e.x, e.y, e.color, 5, 90);
+}
+
+function updateBolts(dt) {
+  let w = 0;
+  for (let i = 0; i < bolts.length; i++) {
+    const b = bolts[i];
+    b.life -= dt;
+    b.spin += dt * 9;
+    if (b.life <= 0) continue;
+    const travel = BOLT_SPEED * dt;
+    const steps = Math.min(6, Math.max(1, Math.ceil(travel / 8)));
+    const st = travel / steps;
+    for (let k = 0; k < steps && !b.dead; k++) {
+      b.x += b.dx * st;
+      b.y += b.dy * st;
+      if (b.x < 0 || b.y < 0 || b.x > WORLD.w || b.y > WORLD.h) { b.dead = true; break; }
+      if (pointInWalls(b.x, b.y, BOLT_R * 0.6)) {
+        b.dead = true;
+        burst(b.x, b.y, b.colour, 7, 130);
+        break;
+      }
+      if (dist2(b.x, b.y, player.x, player.y) < (player.r + BOLT_R) * (player.r + BOLT_R)) {
+        b.dead = true;
+        hurtPlayerBy(b.dmg, b.x, b.y);
+        burst(b.x, b.y, b.colour, 9, 160);
+        break;
+      }
+    }
+    if (!b.dead) bolts[w++] = b;
+  }
+  bolts.length = w;
+}
+
+function drawBolts(t) {
+  for (let i = 0; i < bolts.length; i++) {
+    const b = bolts[i];
+    if (lowFx) {
+      ctx.fillStyle = b.colour;
+      ctx.fillRect(b.x - BOLT_R, b.y - BOLT_R, BOLT_R * 2, BOLT_R * 2);
+      continue;
+    }
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    // A tail back along the line it came, so which way it is going is legible
+    // without having to watch it for a frame.
+    const g = ctx.createLinearGradient(b.x, b.y, b.x - b.dx * 26, b.y - b.dy * 26);
+    g.addColorStop(0, tint(b.colour, 1, 0.5));
+    g.addColorStop(1, tint(b.colour, 1, 0));
+    ctx.strokeStyle = g;
+    ctx.lineWidth = BOLT_R * 1.3;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(b.x, b.y);
+    ctx.lineTo(b.x - b.dx * 26, b.y - b.dy * 26);
+    ctx.stroke();
+    ctx.fillStyle = tint(b.colour, 1, 0.75);
+    ctx.beginPath(); ctx.arc(b.x, b.y, BOLT_R, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.85)';
+    ctx.beginPath(); ctx.arc(b.x, b.y, BOLT_R * 0.42, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+}
+
+// A husk coming apart. The blast is a slam, because a slam is already a
+// telegraphed circle of ground that is about to be taken and there is no
+// reason for this to be a second one of those.
+//
+// The ground is marked the moment it commits, not at the end of the fuse. The
+// swelling sprite alone is not a telegraph the way the rest of the game means
+// one: everything else that is about to take a piece of floor says so on the
+// floor, and with only the last quarter-second marked there was not room to
+// walk out of ninety-four units of blast.
+//
+// Arming is once. A husk that commits and is then broken still goes off, on
+// its own clock, where it committed -- killing it early moves nothing.
+function armHusk(e, wind) {
+  if (e.armed) return;
+  e.armed = true;
+  slams.push({ x: e.x, y: e.y, r: HUSK_R, wind: wind, t: 0,
+               dmg: HUSK_DMG * DIFF.threat, struck: false, husk: true });
+}
+
+function burstHusk(e) {
+  e.hp = 0;
+  e.burst = true;
+  armHusk(e, HUSK_FUSE * 0.45);
+  burst(e.x, e.y, e.color, 12, 150);
+}
+
+/* --- coffers --------------------------------------------------------------
+   Something to find. Everything in the delve up to now came off a body, which
+   makes the whole map one long corridor between fights; a coffer in a dead end
+   is a reason to take the turning you did not have to take.
+
+   They sit in penned-in ground by preference -- nooks, ends, the backs of
+   rooms -- so finding one is a small piece of exploring rather than something
+   you walk over on the way to the gate. Opening is walking onto it, like the
+   corpse: there is no free hand on a phone for an action button.
+   -------------------------------------------------------------------- */
+let chests = [];
+// Two coffers, four frames each of coming open, cut and graded from the sheet
+// in assets/ by tools/build-art.py. Row 0 is the plain one, row 1 the warded.
+const CHEST_SHEET = 'data:image/png;base64,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';
+const CHEST_C = 32, CHEST_FRAMES = 4;
+const CHEST_ROW = { coffer: 0, warded: 1 };
+const CHEST_OPEN = 0.45;        // seconds the lid takes to come up
+let chestImg = null;
+const CHEST_REACH = 30;
+const CHEST_SAFE  = 320;    // never this near the spawn pocket
+const CHEST_APART = 300;    // nor this near each other
+
+// Every coffer in a delve, opened, comes to about a third of what the whole
+// horde in it is worth in coin -- measured across five depths, and it holds at
+// each because both scale on the same depth term. That is meant to be plainly
+// worth the detour without making the player who walks straight at the gate
+// feel robbed, and the gear the warded ones carry is on top of it.
+const CHEST_KINDS = {
+  coffer: { coin: [34, 74],  gear: 0.34, floor: 0,    name: 'A coffer',
+            colour: '#c9a24a' },
+  warded: { coin: [112, 205], gear: 1,   floor: 0.62, name: 'A warded coffer',
+            colour: '#8fb8ff' }
+};
+
+function placeChests(spawn, portal) {
+  chests = [];
+  if (!openCells.length) return;
+  const depth = LEVEL.depth || 0;
+  const want = 3 + Math.round(depth * 3);
+  const warded = Math.random() < 0.45 + depth * 0.4 ? 1 : 0;
+
+  // Penned-in ground first. narrowGrid is 0 at a crossroads and 4 at a dead
+  // end, and it is already built by the time this runs.
+  const pool = [];
+  for (let i = 0; i < openCells.length; i++) {
+    const c = openCells[i];
+    if (pointInWalls(c.x, c.y, 20)) continue;
+    if (dist2(c.x, c.y, spawn.x, spawn.y) < CHEST_SAFE * CHEST_SAFE) continue;
+    if (portal && dist2(c.x, c.y, portal.x, portal.y) < 200 * 200) continue;
+    const cx = Math.floor(c.x / CELL_W), cy = Math.floor(c.y / CELL_W);
+    pool.push({ x: c.x, y: c.y, pen: narrowGrid[gi(cx, cy)] || 0 });
+  }
+  if (!pool.length) return;
+  // Shuffled, then sorted by how penned in -- so it is the tightest ground
+  // available rather than the first tight cell the scan happened to reach.
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = (Math.random() * (i + 1)) | 0;
+    const t = pool[i]; pool[i] = pool[j]; pool[j] = t;
+  }
+  pool.sort((a, b) => b.pen - a.pen);
+
+  const total = want + warded;
+  for (let i = 0; i < pool.length && chests.length < total; i++) {
+    const c = pool[i];
+    let ok = true;
+    for (let k = 0; k < chests.length && ok; k++) {
+      if (dist2(c.x, c.y, chests[k].x, chests[k].y) < CHEST_APART * CHEST_APART) ok = false;
+    }
+    if (!ok) continue;
+    const kind = (warded && chests.length === 0) ? 'warded' : 'coffer';
+    chests.push({ x: c.x, y: c.y, kind, open: false,
+                  q: (Math.random() * 4) | 0, pulse: Math.random() * TAU });
+  }
+}
+
+function openChest(ch) {
+  if (ch.open) return;
+  ch.open = true;
+  ch.t = 0;                      // the lid takes CHEST_OPEN to come up
+  const K = CHEST_KINDS[ch.kind];
+  const depth = LEVEL.depth || 0;
+  const coin = Math.round(rand(K.coin[0], K.coin[1]) * (1 + depth * 1.4) * DIFF.lootRate);
+  run.coins += coin;
+  run.chests = (run.chests || 0) + 1;
+
+  burst(ch.x, ch.y, K.colour, 18, 190);
+  ring(ch.x, ch.y, K.colour, 8, 46, 0.4);
+  floatDmg(ch.x, ch.y - 12, coin, 'coin');
+
+  // Gear lands on the floor as an ordinary drop, so a full bag behaves the
+  // same way here as it does everywhere else rather than silently eating it.
+  if (Math.random() < K.gear * DIFF.lootRate) {
+    const it = rollItem(Math.max(depth, K.floor));
+    drops.push({ x: ch.x + rand(-10, 10), y: ch.y + rand(-10, 10),
+                 vx: rand(-40, 40), vy: rand(-40, 40),
+                 item: it, r: 9, life: 0, pulled: false });
+    toast(K.name + ' — ' + it.name, rarityOf(it).colour);
+  } else {
+    toast(K.name + ' — ' + coin + ' coin', K.colour);
+  }
+}
+
+function updateChests(dt) {
+  for (let i = 0; i < chests.length; i++) {
+    const ch = chests[i];
+    ch.pulse += dt;
+    if (ch.open) { ch.t = Math.min(CHEST_OPEN, (ch.t || 0) + dt); continue; }
+    if (dist2(player.x, player.y, ch.x, ch.y) < CHEST_REACH * CHEST_REACH) openChest(ch);
+  }
+}
+
+// How wide a coffer is drawn. The sheet cells are 32, so this is a 1.5x blit
+// with smoothing off -- the same deal the bag icons already take.
+const CHEST_DRAW = 48;
+
+function drawChests(t) {
+  const sheet = chestImg && chestImg.complete && chestImg.naturalWidth ? chestImg : null;
+  for (let i = 0; i < chests.length; i++) {
+    const ch = chests[i];
+    if (ch.x < cam.x - 60 || ch.x > cam.x + view.w + 60 ||
+        ch.y < cam.y - 60 || ch.y > cam.y + view.h + 60) continue;
+    if (sheet) {
+      // The lid comes up over four frames rather than snapping open.
+      const f = ch.open
+        ? Math.min(CHEST_FRAMES - 1,
+                   Math.floor((ch.t || 0) / CHEST_OPEN * CHEST_FRAMES))
+        : 0;
+      const row = CHEST_ROW[ch.kind] || 0;
+      const d = CHEST_DRAW;
+      ctx.fillStyle = 'rgba(0,0,0,.42)';
+      ctx.beginPath();
+      ctx.ellipse(ch.x, ch.y + d * 0.34, d * 0.4, d * 0.13, 0, 0, TAU);
+      ctx.fill();
+      ctx.drawImage(sheet, f * CHEST_C, row * CHEST_C, CHEST_C, CHEST_C,
+                    ch.x - d / 2, ch.y - d / 2, d, d);
+    } else {
+      // Until the sheet has decoded -- and if it is ever missing -- the forged
+      // one stands in, so a coffer is never an invisible thing you walk onto.
+      const spr = SPR['ch_' + ch.kind + (ch.open ? '_open' : '')];
+      if (spr) blit(spr, ch.x, ch.y);
+    }
+    if (ch.open || lowFx) continue;
+    // A closed one breathes, so it catches the eye across a dark room without
+    // needing a marker drawn over the top of it.
+    const K = CHEST_KINDS[ch.kind];
+    const p = 0.5 + 0.5 * Math.sin(ch.pulse * 1.7);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = tint(K.colour, 1, 0.06 + p * 0.09);
+    ctx.beginPath(); ctx.arc(ch.x, ch.y - 2, 26 + p * 5, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+}
+
 /* --- hazards --------------------------------------------------------------
    Ground you cannot stand on. A slam is a moment; a hazard is a place, and
    the difference is what turns a room into terrain. The Riftborn leaves them
@@ -2869,7 +3247,14 @@ const PILLAR_R    = 78;
 const PILLAR_FUSE = 0.5;
 
 // Everything in reach, player included. Scenery does not take sides.
-function blastAt(x, y, r, dmg, hue) {
+// `pierce` forces the hit through the player's i-frames. A pitch barrel should
+// land whether or not you were just clipped by something -- one blast, one
+// blow. A husk cascade is a different thing: each link is its own blast, and
+// piercing every one of them meant three husks standing on you was a certain
+// death with no cap and no counterplay. Cascades respect i-frames, so a chain
+// costs one blow and then costs another only if you are still standing in it
+// when they run out.
+function blastAt(x, y, r, dmg, hue, pierce) {
   shake(8);
   burst(x, y, hue, 22, 300);
   ring(x, y, hue, r * 0.35, r, 0.34);
@@ -2882,10 +3267,14 @@ function blastAt(x, y, r, dmg, hue) {
     damageEnemy(e, dmg * (1 - Math.min(0.6, d / (r * 2))));
   }
   if (dist2(player.x, player.y, x, y) < r * r) {
-    const was = player.invuln;
-    player.invuln = 0;
-    hurtPlayerBy(dmg * 0.4, x, y);
-    player.invuln = Math.max(player.invuln, was);
+    if (pierce === false) {
+      hurtPlayerBy(dmg * 0.4, x, y);
+    } else {
+      const was = player.invuln;
+      player.invuln = 0;
+      hurtPlayerBy(dmg * 0.4, x, y);
+      player.invuln = Math.max(player.invuln, was);
+    }
   }
 }
 
@@ -2991,6 +3380,10 @@ function updateSlams(dt) {
         addHazard(s.x, s.y, s.r * 0.78, dmg * 0.22, 4.5, '#ff9a3c');
         // pitch spreads: a barrel takes its neighbours with it
         hurtPropsNear(s.x, s.y, s.r, 999);
+      } else if (s.husk) {
+        blastAt(s.x, s.y, s.r, s.dmg, '#c8d63a', false);
+        addHazard(s.x, s.y, s.r * 0.5, s.dmg * 0.18, 2.6, '#c8d63a');
+        hurtPropsNear(s.x, s.y, s.r, s.dmg);
       } else if (s.pillar) {
         blastAt(s.x, s.y, s.r, 88 * (1 + (LEVEL.depth || 0)), '#cbbfa4');
         for (let i = 0; i < 5; i++) {
@@ -3194,6 +3587,99 @@ function burst(x, y, color, n, spd) {
   }
 }
 
+/* --- floating combat text -------------------------------------------------
+   What a hit was worth, said in the place it landed. Without it the only
+   feedback a blow gives is a flash and a health bar creeping, and the two
+   things the player most needs to read -- that a braced anchor is eating the
+   swing, and that the Deceiver takes almost nothing while his Lieutenants
+   stand -- are invisible. Those come through as a dimmed number, so the
+   mechanic teaches itself.
+
+   Capped, and merged: a crescent sweeping eight bodies at once would
+   otherwise put eight numbers in the same square inch, and text is the most
+   expensive thing this renderer draws. A second hit on a body inside the
+   merge window adds to the number already rising off it instead.        */
+const MAX_FLOATERS = 22;
+const FLOAT_LIFE   = 0.85;
+const FLOAT_MERGE  = 0.22;   // a follow-up this soon joins the running total
+
+function floatDmg(x, y, amount, kind) {
+  if (lowFx) return;
+  const n = Math.max(1, Math.round(amount));
+  // Merge into a number already climbing off the same spot.
+  for (let i = 0; i < floaters.length; i++) {
+    const f = floaters[i];
+    if (f.kind !== kind || FLOAT_LIFE - f.life > FLOAT_MERGE) continue;
+    if (Math.abs(f.x0 - x) > 26 || Math.abs(f.y0 - y) > 26) continue;
+    f.n += n;
+    f.life = Math.min(FLOAT_LIFE, f.life + 0.12);
+    f.pop = 1;
+    return;
+  }
+  if (floaters.length >= MAX_FLOATERS) {
+    // Drop the oldest rather than the new one: the newest hit is the one the
+    // player is looking for.
+    let old = 0;
+    for (let i = 1; i < floaters.length; i++) if (floaters[i].life < floaters[old].life) old = i;
+    floaters.splice(old, 1);
+  }
+  floaters.push({ x0: x, y0: y, x, y, n, kind, life: FLOAT_LIFE, pop: 1,
+                  drift: rand(-26, 26), rise: rand(56, 74) });
+}
+
+function updateFloaters(dt) {
+  let w = 0;
+  for (let i = 0; i < floaters.length; i++) {
+    const f = floaters[i];
+    f.life -= dt;
+    if (f.life <= 0) continue;
+    const t = 1 - f.life / FLOAT_LIFE;
+    // Thrown up and falling back, the way a struck number reads best: fast
+    // out of the body, slowing at the top.
+    f.x = f.x0 + f.drift * t;
+    f.y = f.y0 - f.rise * (1 - (1 - t) * (1 - t)) + 26 * t * t;
+    f.pop = Math.max(0, f.pop - dt * 6);
+    floaters[w++] = f;
+  }
+  floaters.length = w;
+}
+
+// Colour and weight by what the hit was. Soaked hits are deliberately dull and
+// small -- they are meant to read as "this is not working".
+const FLOAT_STYLE = {
+  hit:    { c: '#f2e6c4', px: 15 },
+  heavy:  { c: '#ffd870', px: 20 },
+  soaked: { c: '#8c8168', px: 12 },
+  taken:  { c: '#e0563f', px: 18 },
+  coin:   { c: '#e8c060', px: 17 }
+};
+
+function drawFloaters() {
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.lineJoin = 'round';
+  for (let i = 0; i < floaters.length; i++) {
+    const f = floaters[i];
+    const st = FLOAT_STYLE[f.kind] || FLOAT_STYLE.hit;
+    const t = 1 - f.life / FLOAT_LIFE;
+    const a = t < 0.1 ? t / 0.1 : Math.min(1, (1 - t) / 0.45);
+    const px = st.px * (1 + f.pop * 0.22);
+    ctx.globalAlpha = a;
+    ctx.font = '700 ' + px.toFixed(1) + 'px ui-monospace, "SF Mono", monospace';
+    const txt = (f.kind === 'taken' ? '-' : '') + f.n;
+    // Struck out of the dark, so it needs its own edge to stay legible over
+    // a lit floor, a body, and a wall alike.
+    ctx.strokeStyle = 'rgba(6,4,3,.85)';
+    ctx.lineWidth = 3;
+    ctx.strokeText(txt, f.x, f.y);
+    ctx.fillStyle = st.c;
+    ctx.fillText(txt, f.x, f.y);
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+  ctx.textAlign = 'left';
+}
+
 /* ---------------------------------------------------------------------------
    7. INPUT — floating virtual joystick (+ keyboard on desktop)
    Pointer events unify mouse and touch. The stick locks to one pointer id, so
@@ -3288,6 +3774,7 @@ function hurtPlayerBy(dmg, fx, fy) {
   const oy = fy === undefined ? player.y : fy;
   burst(player.x + (ox - player.x) * 0.5, player.y + (oy - player.y) * 0.5,
         PAL.blood, 10, 180);
+  floatDmg(player.x, player.y - player.r * 1.2, taken, 'taken');
   if (player.hp <= 0) { player.hp = 0; endRun(false); }
 }
 
@@ -3297,8 +3784,10 @@ function damageEnemy(e, dmg) {
   // He is held up by his escort. Hitting him through it is not forbidden, just
   // close to pointless -- so the read is "kill the crimson ones" rather than a
   // rule the game refuses to let you break.
+  let soaked = false;
   if (e.kind === 'deceiver' && escortAlive()) {
     dmg *= 0.14;
+    soaked = true;
     burst(e.x, e.y, '#e8c060', 2, 120);
   }
   // A braced anchor eats most of it. It cannot move or swing while it does,
@@ -3306,10 +3795,19 @@ function damageEnemy(e, dmg) {
   // come back rather than to keep hitting the shield.
   if (e.braced) {
     dmg *= BRACE_SOAK;
+    soaked = true;
     burst(e.x, e.y, '#ffe6a8', 2, 130);
   }
   e.hp -= dmg;
   e.hitFlash = 0.12;
+  // Broken across the room or broken at your feet, it goes off either way --
+  // and that is the whole lesson, so it must hold however it died.
+  if (e.hp <= 0 && e.kind === 'husk' && !e.burst) burstHusk(e);
+  // "Heavy" is measured against the body being hit, not against a fixed
+  // number: forty off a thrall is a killing blow and forty off the avatar is
+  // a scratch, and the number should read like whichever it was.
+  floatDmg(e.x, e.y - e.r * 0.9, dmg,
+           soaked ? 'soaked' : dmg > e.maxHp * 0.34 ? 'heavy' : 'hit');
   if (e.hp <= 0) {
     if (e.kind === 'mirage') {
       burst(e.x, e.y, '#e8c060', 10, 150);
@@ -3378,7 +3876,15 @@ function updatePlayer(dt) {
   advanceGait(player, px0, py0, dt);
   player.invuln  = Math.max(0, player.invuln - dt);
   player.hitFlash = Math.max(0, player.hitFlash - dt);
-  player.swing   = Math.max(0, player.swing - dt);
+  // The blade does not teleport back to the guard when the strike ends: it is
+  // carried back over a short recovery, which is also the beat that makes the
+  // next swing read as a separate blow rather than a continuation.
+  if (player.swing > 0) {
+    player.swing -= dt;
+    if (player.swing <= 0) { player.swing = 0; player.recov = RECOVER_TIME; }
+  } else if (player.recov > 0) {
+    player.recov = Math.max(0, player.recov - dt);
+  }
   if (player.regen > 0) player.hp = Math.min(player.maxHp, player.hp + player.regen * dt);
 
   player.fireTimer -= dt;
@@ -3624,6 +4130,50 @@ function updateEnemies(dt) {
       leash = pd > ANCHOR_GUARD * ANCHOR_GUARD;
     }
 
+    // A husk commits once it is close enough that walking out is a decision
+    // rather than a formality, then it is a lit fuse and nothing else.
+    let planted = false;
+    if (e.role === 'burst') {
+      if (e.fuse > 0) {
+        e.fuse -= dt;
+        if (e.fuse <= 0) {
+          e.hp = 0; e.burst = true;
+          burst(e.x, e.y, e.color, 12, 150);
+          continue;
+        }
+        planted = true;
+      } else if (d < HUSK_NEAR) {
+        e.fuse = HUSK_FUSE;
+        armHusk(e, HUSK_FUSE);
+        ring(e.x, e.y, e.color, e.r, HUSK_R, HUSK_FUSE);
+        planted = true;
+      }
+    }
+
+    // A cantor holds its distance and throws. Giving ground when you close is
+    // the whole of its defence, and it will not throw through rock -- so it
+    // walks to find a line, and you break the line to stop it.
+    let shade = 0;    // -1 give ground, 1 close in, 2 planted to cast
+    if (e.role === 'shade') {
+      const clear = clearShot(e.x, e.y, player.x, player.y);
+      if (e.casting > 0) {
+        e.casting -= dt;
+        if (e.casting <= 0) {
+          if (clear) fireBolt(e);
+          e.cast = e.cd * rand(0.8, 1.35);
+        }
+        shade = 2;
+      } else {
+        e.cast -= dt;
+        if (e.cast <= 0 && clear && d < SHADE_WANT * 1.4 && d > SHADE_NEAR * 0.5) {
+          e.casting = BOLT_WIND;
+          shade = 2;
+        } else if (d < SHADE_NEAR) shade = -1;
+        else if (d > SHADE_WANT || !clear) shade = 1;
+        else shade = 2;
+      }
+    }
+
     // --- seek / melee -----------------------------------------------------
     let sx = 0, sy = 0;
     const touch = e.r + player.r + 3;
@@ -3634,7 +4184,18 @@ function updateEnemies(dt) {
       advanceGait(e, bx0, by0, dt);
       continue;
     }
-    if (leash) {
+    if (planted) {
+      // Swelling. It is going off wherever it is standing.
+      sx = 0; sy = 0;
+    } else if (shade === -1) {
+      // Straight back down the line it is being pressed along. Following the
+      // flow field away from the player walks it into the nearest wall, and a
+      // cornered cantor that cannot retreat is a cantor that stands and dies,
+      // which is the fight it is meant to avoid.
+      sx = -dx / d; sy = -dy / d;
+    } else if (shade === 2) {
+      sx = 0; sy = 0;
+    } else if (leash) {
       // Back to its post, and stand there once it arrives.
       const px = e.postX - e.x, py = e.postY - e.y;
       const pm = Math.hypot(px, py);
@@ -4161,6 +4722,9 @@ function update(dt) {
   updateDrops(dt);
   updateCorpse(dt);
   updateParticles(dt);
+  updateFloaters(dt);
+  updateBolts(dt);
+  updateChests(dt);
   updateRings(dt);
   updatePortal(dt);
   updateSpawning(dt);
@@ -4550,6 +5114,140 @@ function forgeEnemy(kind, r, color, P) {
       });
       g.shadowBlur = 0;
 
+    } else if (kind === 'husk') {
+      // A body that has kept growing after it stopped being one. Everything
+      // about it is the sack: the legs are too short for it, the arms are
+      // vestigial, the head has sunk into the shoulders, and the light in it
+      // is on the wrong side of the skin.
+      g.strokeStyle = 'rgb(58,60,34)'; g.lineWidth = u * 0.2;          // stub legs
+      g.beginPath();
+      g.moveTo(-u * 0.2, u * 0.5); g.lineTo(-u * 0.26 + swB, u * 0.98 + lfB);
+      g.moveTo(u * 0.2, u * 0.5);  g.lineTo(u * 0.28 + swA, u * 0.96 + lfA);
+      g.stroke();
+
+      const sg = g.createRadialGradient(-u * 0.1, -u * 0.12, u * 0.05,
+                                        0, 0, u * 0.82);              // the sack
+      sg.addColorStop(0, 'rgb(150,164,66)');
+      sg.addColorStop(0.55, 'rgb(96,106,42)');
+      sg.addColorStop(1, 'rgb(44,48,24)');
+      g.fillStyle = sg;
+      g.beginPath();
+      g.ellipse(0, u * 0.02, u * 0.72, u * 0.64, 0, 0, TAU);
+      g.fill(); outline(u * 0.13);
+
+      // What is inside it, showing through where the skin has gone thin.
+      g.fillStyle = color;
+      g.shadowColor = color; g.shadowBlur = u * 0.5;
+      g.beginPath(); g.ellipse(-u * 0.06, u * 0.06, u * 0.26, u * 0.22, 0.2, 0, TAU); g.fill();
+      g.shadowBlur = 0;
+      g.fillStyle = 'rgba(248,255,196,.7)';
+      g.beginPath(); g.ellipse(-u * 0.1, u * 0.0, u * 0.11, u * 0.09, 0.2, 0, TAU); g.fill();
+
+      // Seams under strain, running round the belly.
+      g.strokeStyle = 'rgba(206,222,96,.5)'; g.lineWidth = u * 0.045;
+      for (let i = 0; i < 3; i++) {
+        g.beginPath();
+        g.ellipse(0, u * 0.02, u * 0.66 - i * u * 0.02, u * 0.58 - i * u * 0.16,
+                  0, 0.5 + i * 0.15, Math.PI - 0.5 - i * 0.15);
+        g.stroke();
+      }
+      g.strokeStyle = 'rgba(12,14,6,.5)'; g.lineWidth = u * 0.05;
+      g.beginPath();
+      g.moveTo(-u * 0.5, -u * 0.3); g.lineTo(-u * 0.3, -u * 0.12);
+      g.moveTo(u * 0.44, -u * 0.34); g.lineTo(u * 0.26, -u * 0.16);
+      g.stroke();
+
+      g.strokeStyle = 'rgb(104,114,52)'; g.lineWidth = u * 0.12;        // little arms
+      g.beginPath();
+      g.moveTo(-u * 0.6, -u * 0.24);
+      g.quadraticCurveTo(-u * 0.86 + arB, -u * 0.02, -u * 0.74 + arB, u * 0.26);
+      g.moveTo(u * 0.6, -u * 0.26);
+      g.quadraticCurveTo(u * 0.86 + arA, -u * 0.04, u * 0.74 + arA, u * 0.24);
+      g.stroke();
+
+      const hh = g.createLinearGradient(0, -u * 0.92, 0, -u * 0.5);     // sunken head
+      hh.addColorStop(0, 'rgb(158,168,96)');
+      hh.addColorStop(1, 'rgb(62,68,36)');
+      g.fillStyle = hh;
+      g.beginPath(); g.ellipse(0, -u * 0.66, u * 0.26, u * 0.22, 0, 0, TAU); g.fill();
+      outline(u * 0.09);
+      g.fillStyle = 'rgba(8,10,5,.95)';                                  // and its open mouth
+      g.beginPath(); g.ellipse(0, -u * 0.58, u * 0.13, u * 0.1, 0, 0, TAU); g.fill();
+      g.fillStyle = color;
+      g.beginPath(); g.ellipse(-u * 0.1, -u * 0.74, u * 0.045, u * 0.04, 0, 0, TAU); g.fill();
+      g.beginPath(); g.ellipse(u * 0.1, -u * 0.74, u * 0.045, u * 0.04, 0, 0, TAU); g.fill();
+
+    } else if (kind === 'cantor') {
+      // Thin, and it keeps its distance. The lit thing in its hand is the
+      // whole tell: while that is up it is about to throw, and it is the part
+      // of the silhouette that carries across a room.
+      const rb = g.createLinearGradient(0, -u * 0.7, 0, u * 1.1);       // robe
+      rb.addColorStop(0, 'rgb(38,74,76)');
+      rb.addColorStop(0.6, 'rgb(20,42,46)');
+      rb.addColorStop(1, 'rgb(10,22,26)');
+      g.fillStyle = rb;
+      g.beginPath();
+      g.moveTo(-u * 0.34, -u * 0.5);
+      g.quadraticCurveTo(-u * 0.56, u * 0.3, -u * 0.44 + swB, u * 1.04 + lfB);
+      g.lineTo(u * 0.44 + swA, u * 1.02 + lfA);
+      g.quadraticCurveTo(u * 0.56, u * 0.3, u * 0.34, -u * 0.5);
+      g.closePath(); g.fill(); outline(u * 0.12);
+
+      g.strokeStyle = 'rgba(72,208,192,.35)'; g.lineWidth = u * 0.05;   // cold trim
+      g.beginPath();
+      g.moveTo(-u * 0.3, -u * 0.34); g.lineTo(u * 0.3, -u * 0.34);
+      g.moveTo(-u * 0.4, u * 0.86); g.lineTo(u * 0.4, u * 0.84);
+      g.stroke();
+
+      // The off hand hangs; the throwing hand is up with the focus in it.
+      g.strokeStyle = 'rgb(46,88,90)'; g.lineWidth = u * 0.13;
+      g.beginPath();
+      g.moveTo(-u * 0.3, -u * 0.3);
+      g.quadraticCurveTo(-u * 0.56 + arB, u * 0.1, -u * 0.46 + arB, u * 0.44);
+      g.stroke();
+      const fx = u * 0.68 + arA * 0.5, fy = -u * 0.72;
+      g.beginPath();
+      g.moveTo(u * 0.3, -u * 0.34);
+      g.quadraticCurveTo(u * 0.58 + arA * 0.4, -u * 0.6, fx, fy + u * 0.14);
+      g.stroke();
+      g.strokeStyle = 'rgba(190,236,232,.8)'; g.lineWidth = u * 0.04;   // bone fingers
+      g.beginPath();
+      for (let k = -1; k <= 1; k++) {
+        g.moveTo(-u * 0.46 + arB, u * 0.44);
+        g.lineTo(-u * 0.46 + arB + k * u * 0.06, u * 0.6 - Math.abs(k) * u * 0.03);
+      }
+      g.stroke();
+
+      // The focus.
+      g.fillStyle = color;
+      g.shadowColor = color; g.shadowBlur = u * 0.7;
+      g.beginPath();
+      g.moveTo(fx, fy - u * 0.2);
+      g.lineTo(fx + u * 0.13, fy);
+      g.lineTo(fx, fy + u * 0.2);
+      g.lineTo(fx - u * 0.13, fy);
+      g.closePath(); g.fill();
+      g.fillStyle = 'rgba(238,255,252,.9)';
+      g.beginPath(); g.ellipse(fx, fy, u * 0.05, u * 0.07, 0, 0, TAU); g.fill();
+      g.shadowBlur = 0;
+
+      const hd = g.createLinearGradient(0, -u * 1.0, 0, -u * 0.42);     // hood
+      hd.addColorStop(0, 'rgb(46,88,92)');
+      hd.addColorStop(1, 'rgb(16,34,38)');
+      g.fillStyle = hd;
+      g.beginPath();
+      g.moveTo(-u * 0.32, -u * 0.44);
+      g.quadraticCurveTo(-u * 0.36, -u * 0.98, 0, -u * 1.0);
+      g.quadraticCurveTo(u * 0.36, -u * 0.98, u * 0.32, -u * 0.44);
+      g.closePath(); g.fill(); outline(u * 0.1);
+      g.fillStyle = 'rgba(200,214,206,.92)';                             // a blank mask
+      g.beginPath(); g.ellipse(0, -u * 0.66, u * 0.2, u * 0.24, 0, 0, TAU); g.fill();
+      outline(u * 0.07);
+      g.fillStyle = color;
+      g.shadowColor = color; g.shadowBlur = u * 0.35;
+      g.fillRect(-u * 0.13, -u * 0.72, u * 0.26, u * 0.05);
+      g.shadowBlur = 0;
+
     } else {
       // Planted, over-armoured, bound together by seams that are burning
       // through from the inside.
@@ -4658,8 +5356,10 @@ function forgeEnemy(kind, r, color, P) {
     // people who gave up their will rather than monsters. It rides the body,
     // so it sits where the body is not moving much -- the shoulder on the
     // thrall, whose head now hangs, and the helm on the armoured ones.
-    const bx = kind === 'eclipse' ? -u * 0.09 : kind === 'thrall' ? -u * 0.3 : u * 0.1;
-    const by = kind === 'eclipse' ? -u * 0.9 : kind === 'thrall' ? -u * 0.3 : -u * 0.86;
+    const bx = kind === 'eclipse' ? -u * 0.09 : kind === 'thrall' ? -u * 0.3 :
+               kind === 'husk' ? -u * 0.38 : kind === 'cantor' ? -u * 0.2 : u * 0.1;
+    const by = kind === 'eclipse' ? -u * 0.9 : kind === 'thrall' ? -u * 0.3 :
+               kind === 'husk' ? -u * 0.3 : kind === 'cantor' ? -u * 0.88 : -u * 0.86;
     g.shadowColor = PAL.brand; g.shadowBlur = u * 0.3;
     g.strokeStyle = PAL.brand; g.lineWidth = u * 0.05;
     g.beginPath();
@@ -4787,6 +5487,196 @@ const PLATE = {
   leather: [ 96,  53,  45]
 };
 
+// A coffer, seen from above and a little in front: the lid is the face you
+// read, and an open one shows the empty box so a cleared room stays cleared
+// at a glance rather than tempting you back to it.
+function forgeChest(kind, open) {
+  const K = CHEST_KINDS[kind];
+  const u = 15;
+  const warded = kind === 'warded';
+  return forge(u * 3.4, g => {
+    g.lineJoin = 'round'; g.lineCap = 'round';
+    const outline = w => { g.strokeStyle = 'rgba(0,0,0,.82)'; g.lineWidth = w; g.stroke(); };
+
+    // the box
+    const bg = g.createLinearGradient(0, -u * 0.1, 0, u * 0.9);
+    bg.addColorStop(0, warded ? 'rgb(64,72,96)' : 'rgb(84,60,36)');
+    bg.addColorStop(1, warded ? 'rgb(24,28,42)' : 'rgb(34,24,14)');
+    g.fillStyle = bg;
+    g.beginPath();
+    g.roundRect ? g.roundRect(-u * 0.86, -u * 0.1, u * 1.72, u * 0.92, u * 0.08)
+                : g.rect(-u * 0.86, -u * 0.1, u * 1.72, u * 0.92);
+    g.fill(); outline(u * 0.11);
+
+    // staves down the front
+    g.strokeStyle = warded ? 'rgba(150,170,214,.3)' : 'rgba(150,116,72,.3)';
+    g.lineWidth = u * 0.05;
+    g.beginPath();
+    for (let i = -1; i <= 1; i++) { g.moveTo(i * u * 0.42, -u * 0.06); g.lineTo(i * u * 0.42, u * 0.78); }
+    g.stroke();
+
+    if (open) {
+      // Lid thrown back and standing behind it, so the silhouette still says
+      // "coffer" rather than "dark rectangle on the floor" -- an emptied one
+      // has to be recognisable at a glance or a cleared room keeps drawing
+      // you back to it.
+      const lg = g.createLinearGradient(0, -u * 1.02, 0, -u * 0.24);
+      lg.addColorStop(0, warded ? 'rgb(78,90,124)' : 'rgb(98,72,44)');
+      lg.addColorStop(1, warded ? 'rgb(34,40,60)' : 'rgb(48,34,20)');
+      g.fillStyle = lg;
+      g.beginPath();
+      g.moveTo(-u * 0.9, -u * 0.22);
+      g.quadraticCurveTo(-u * 0.86, -u * 0.98, 0, -u * 1.0);
+      g.quadraticCurveTo(u * 0.86, -u * 0.98, u * 0.9, -u * 0.22);
+      g.closePath(); g.fill(); outline(u * 0.11);
+      g.strokeStyle = warded ? 'rgba(52,62,90,.9)' : 'rgba(46,32,18,.9)';
+      g.lineWidth = u * 0.1;
+      g.beginPath();
+      g.moveTo(-u * 0.42, -u * 0.92); g.lineTo(-u * 0.42, -u * 0.24);
+      g.moveTo(u * 0.42, -u * 0.92);  g.lineTo(u * 0.42, -u * 0.24);
+      g.stroke();
+      // the empty inside, with a lip catching the light so it reads as depth
+      g.fillStyle = 'rgba(10,8,6,.95)';
+      g.beginPath();
+      g.roundRect ? g.roundRect(-u * 0.74, -u * 0.18, u * 1.48, u * 0.44, u * 0.06)
+                  : g.rect(-u * 0.74, -u * 0.18, u * 1.48, u * 0.44);
+      g.fill();
+      g.strokeStyle = warded ? 'rgba(140,164,214,.4)' : 'rgba(168,132,84,.4)';
+      g.lineWidth = u * 0.05;
+      g.beginPath();
+      g.moveTo(-u * 0.74, -u * 0.16); g.lineTo(u * 0.74, -u * 0.16);
+      g.stroke();
+    } else {
+      // the lid, banded, with a lock
+      const lg = g.createLinearGradient(0, -u * 0.62, 0, -u * 0.02);
+      lg.addColorStop(0, warded ? 'rgb(96,112,152)' : 'rgb(122,88,52)');
+      lg.addColorStop(1, warded ? 'rgb(40,48,70)' : 'rgb(56,40,24)');
+      g.fillStyle = lg;
+      g.beginPath();
+      g.moveTo(-u * 0.9, -u * 0.08);
+      g.quadraticCurveTo(-u * 0.86, -u * 0.62, 0, -u * 0.64);
+      g.quadraticCurveTo(u * 0.86, -u * 0.62, u * 0.9, -u * 0.08);
+      g.closePath(); g.fill(); outline(u * 0.11);
+      g.strokeStyle = warded ? 'rgba(60,70,98,.9)' : 'rgba(52,38,22,.9)';
+      g.lineWidth = u * 0.11;
+      g.beginPath();
+      g.moveTo(-u * 0.42, -u * 0.56); g.lineTo(-u * 0.42, -u * 0.06);
+      g.moveTo(u * 0.42, -u * 0.56);  g.lineTo(u * 0.42, -u * 0.06);
+      g.stroke();
+      // lock plate, lit in the colour the thing is worth
+      g.fillStyle = K.colour;
+      g.shadowColor = K.colour; g.shadowBlur = u * 0.45;
+      g.beginPath();
+      g.roundRect ? g.roundRect(-u * 0.16, -u * 0.24, u * 0.32, u * 0.36, u * 0.05)
+                  : g.rect(-u * 0.16, -u * 0.24, u * 0.32, u * 0.36);
+      g.fill();
+      g.shadowBlur = 0;
+      g.fillStyle = 'rgba(8,6,4,.85)';
+      g.beginPath(); g.arc(0, -u * 0.08, u * 0.06, 0, TAU); g.fill();
+      if (warded) {
+        // a ward cut into the lid: the tell that this one is worth the walk
+        g.strokeStyle = 'rgba(180,206,255,.75)'; g.lineWidth = u * 0.05;
+        g.beginPath();
+        g.moveTo(-u * 0.62, -u * 0.34); g.lineTo(-u * 0.5, -u * 0.2);
+        g.lineTo(-u * 0.6, -u * 0.12); g.lineTo(-u * 0.46, -u * 0.3);
+        g.moveTo(u * 0.62, -u * 0.34); g.lineTo(u * 0.5, -u * 0.2);
+        g.lineTo(u * 0.6, -u * 0.12); g.lineTo(u * 0.46, -u * 0.3);
+        g.stroke();
+      }
+    }
+
+    g.globalCompositeOperation = 'destination-over';
+    g.fillStyle = 'rgba(0,0,0,.42)';
+    g.beginPath(); g.ellipse(0, u * 0.86, u * 0.9, u * 0.24, 0, 0, TAU); g.fill();
+    g.globalCompositeOperation = 'source-over';
+  });
+}
+
+/* --- the weapon -----------------------------------------------------------
+   Forged on its own, grip at the centre of the sprite, blade running along
+   +x. Rotating it about its own centre therefore rotates it about the hand,
+   which is what lets the hero swing rather than hold a still blade with a
+   streak painted over it. One sprite per hero, one extra blit per frame, and
+   the arc is continuous instead of stepped through baked poses.
+   ------------------------------------------------------------------------ */
+function forgeWeapon(id) {
+  const H = HEROES[id];
+  const u = BASE_PLAYER.r * 1.28;
+  const magic = H.magic;
+  // How far the edge is from the hand. The streak is struck at this radius --
+  // guessed at from the body's radius instead, it floats off the blade and
+  // reads as a ring hanging in the air beside him.
+  const reach = (id === 'isaac' ? 1.52 : 1.66) * u;
+  const c = forge(u * 3.6, g => {
+    g.lineJoin = 'round'; g.lineCap = 'round';
+    if (id === 'isaac') {
+      // A hand-and-a-half sword: grip, cross, and a blade lit along its edge.
+      g.strokeStyle = '#6a5432'; g.lineWidth = u * 0.15;             // grip
+      g.beginPath(); g.moveTo(-u * 0.34, 0); g.lineTo(-u * 0.02, 0); g.stroke();
+      g.fillStyle = '#8a6a3a';                                        // pommel
+      g.beginPath(); g.arc(-u * 0.4, 0, u * 0.09, 0, TAU); g.fill();
+      g.strokeStyle = 'rgb(96,88,74)'; g.lineWidth = u * 0.11;        // cross-guard
+      g.beginPath(); g.moveTo(0, -u * 0.26); g.lineTo(0, u * 0.26); g.stroke();
+      g.shadowColor = magic; g.shadowBlur = u * 0.55;                 // the blade
+      g.fillStyle = magic;
+      g.beginPath();
+      g.moveTo(u * 0.06, -u * 0.11);
+      g.lineTo(u * 1.42, -u * 0.035);
+      g.lineTo(u * 1.6, 0);
+      g.lineTo(u * 1.42, u * 0.035);
+      g.lineTo(u * 0.06, u * 0.11);
+      g.closePath(); g.fill();
+      g.shadowBlur = 0;
+      g.strokeStyle = 'rgba(255,250,232,.95)'; g.lineWidth = u * 0.045;
+      g.beginPath(); g.moveTo(u * 0.12, 0); g.lineTo(u * 1.5, 0); g.stroke();
+    } else {
+      // A glaive: a long haft with the edge out at the end of it.
+      g.strokeStyle = '#4a3c28'; g.lineWidth = u * 0.12;              // haft
+      g.beginPath(); g.moveTo(-u * 0.62, 0); g.lineTo(u * 0.86, 0); g.stroke();
+      g.strokeStyle = 'rgb(90,84,72)'; g.lineWidth = u * 0.15;        // ferrule
+      g.beginPath(); g.moveTo(u * 0.78, 0); g.lineTo(u * 0.94, 0); g.stroke();
+      g.strokeStyle = 'rgb(74,68,58)'; g.lineWidth = u * 0.13;        // butt-cap
+      g.beginPath(); g.moveTo(-u * 0.72, 0); g.lineTo(u * -0.6, 0); g.stroke();
+      g.shadowColor = magic; g.shadowBlur = u * 0.6;                  // the edge
+      g.fillStyle = magic;
+      g.beginPath();
+      g.moveTo(u * 0.92, -u * 0.09);
+      g.quadraticCurveTo(u * 1.42, -u * 0.34, u * 1.72, -u * 0.1);
+      g.quadraticCurveTo(u * 1.36, u * 0.02, u * 0.94, u * 0.1);
+      g.closePath(); g.fill();
+      g.shadowBlur = 0;
+      g.strokeStyle = 'rgba(232,248,255,.95)'; g.lineWidth = u * 0.045;
+      g.beginPath();
+      g.moveTo(u * 0.96, -u * 0.06);
+      g.quadraticCurveTo(u * 1.4, -u * 0.26, u * 1.68, -u * 0.09);
+      g.stroke();
+    }
+  });
+  c.reach = reach;
+  return c;
+}
+
+/* --- strikes --------------------------------------------------------------
+   One crescent thrown the same way every time is the whole of the fight seen
+   from the outside, so the strike is a shape now rather than only a timer.
+   Three cycle in order: the blade comes across level, then up from low, then
+   down the centre. `from` and `to` are the weapon's angle through the swing,
+   in the hero's own space so it mirrors with his facing; `lunge` is how far he
+   is drawn into it; `span` and `wide` shape the streak it leaves.
+
+   The forms are drawing only. Damage, reach and the crescent's hit geometry
+   are untouched by which one is playing -- a strike that hit differently
+   depending on where you were in the cycle would be a balance change wearing
+   an animation's clothes.
+   ------------------------------------------------------------------------ */
+const STRIKES = [
+  { id: 'slash', from: -1.75, to:  1.15, lunge:  5, span: 1.7,  wide: 1.0,  R: 1.0 },
+  { id: 'rise',  from:  1.30, to: -1.55, lunge:  4, span: 1.45, wide: 0.78, R: 0.94 },
+  { id: 'chop',  from: -2.45, to:  0.30, lunge: 12, span: 1.0,  wide: 1.5,  R: 1.12 }
+];
+const REST_ANGLE = -0.95;      // blade carried up and forward at the guard
+const RECOVER_TIME = 0.13;     // and how long it takes to come back to it
+
 // The hero in one pose. `P` is a gait pose -- GAIT_REST for standing still.
 function forgeHero(id, P) {
   const H = HEROES[id];
@@ -4884,36 +5774,11 @@ function forgeHero(id, P) {
         g.lineTo(-u * 0.8 + Math.cos(a) * u * 0.21, u * 0.3 + Math.sin(a) * u * 0.29);
         g.stroke();
       }
-      // Sun-Gold sword
-      g.strokeStyle = lit(70, 66, 59); g.lineWidth = u * 0.22;
-      g.beginPath(); g.moveTo(u * 0.46, u * 0.08); g.lineTo(u * 0.74, u * 0.3); g.stroke();
-      g.strokeStyle = '#6a5432'; g.lineWidth = u * 0.14;
-      g.beginPath(); g.moveTo(u * 0.62, u * 0.4); g.lineTo(u * 0.84, u * 0.08); g.stroke();
-      g.shadowColor = magic; g.shadowBlur = u * 0.7;
-      g.strokeStyle = magic; g.lineWidth = u * 0.16;
-      g.beginPath(); g.moveTo(u * 0.82, u * 0.04); g.lineTo(u * 1.26, -u * 1.06); g.stroke();
-      g.shadowBlur = 0;
-      g.strokeStyle = 'rgba(255,248,224,.95)'; g.lineWidth = u * 0.06;
-      g.beginPath(); g.moveTo(u * 0.8, u * 0.0); g.lineTo(u * 1.22, -u * 1.02); g.stroke();
-    } else {
-      // Sapphire Glaive, held two-handed across the body
-      g.strokeStyle = '#4a3c28'; g.lineWidth = u * 0.13;
-      g.beginPath(); g.moveTo(-u * 0.62, u * 0.86); g.lineTo(u * 0.9, -u * 0.5); g.stroke();
-      g.strokeStyle = lit(70, 66, 59); g.lineWidth = u * 0.2;
-      g.beginPath(); g.moveTo(-u * 0.36, u * 0.36); g.lineTo(-u * 0.1, u * 0.16); g.stroke();
-      g.beginPath(); g.moveTo(u * 0.38, u * 0.06); g.lineTo(u * 0.6, -u * 0.14); g.stroke();
-      g.shadowColor = magic; g.shadowBlur = u * 0.75;
-      g.fillStyle = magic;
-      g.beginPath();
-      g.moveTo(u * 0.88, -u * 0.48);
-      g.quadraticCurveTo(u * 1.34, -u * 0.96, u * 1.18, -u * 1.3);
-      g.quadraticCurveTo(u * 0.98, -u * 0.92, u * 0.74, -u * 0.66);
-      g.closePath(); g.fill();
-      g.shadowBlur = 0;
-      g.strokeStyle = 'rgba(226,246,255,.95)'; g.lineWidth = u * 0.05;
-      g.beginPath(); g.moveTo(u * 0.9, -u * 0.5); g.lineTo(u * 1.16, -u * 1.24); g.stroke();
+      // The weapon is not in here. It is forged on its own and drawn over the
+      // body so it can actually swing -- see forgeWeapon and drawWeapon. A
+      // blade baked into the sprite can only ever be a streak painted over a
+      // still arm.
     }
-
     // Pauldrons
     [-1, 1].forEach(sx => {
       const pg = g.createLinearGradient(0, -u * 0.5, 0, u * 0.06);
@@ -5053,6 +5918,7 @@ function forgeAll() {
   // the run only -- a dormant body does not move at all and a woken one comes
   // at you flat out.
   for (const hid in HEROES) {
+    SPR['w_' + hid] = forgeWeapon(hid);
     SPR['h_' + hid] = forgeHero(hid, GAIT_REST);
     for (let i = 0; i < GAIT_N; i++) {
       SPR['h_' + hid + 'w' + i] = forgeHero(hid, gaitPose(i, 0.30));
@@ -5068,6 +5934,12 @@ function forgeAll() {
     }
   }
 
+  if (!chestImg && CHEST_SHEET) { chestImg = new Image(); chestImg.src = CHEST_SHEET; }
+  if (!propImg && PROP_SHEET) { propImg = new Image(); propImg.src = PROP_SHEET; }
+  for (const ck in CHEST_KINDS) {
+    SPR['ch_' + ck] = forgeChest(ck, false);
+    SPR['ch_' + ck + '_open'] = forgeChest(ck, true);
+  }
   SPR.loot = forgeLoot(false);
   SPR.lootBig = forgeLoot(true);
   forgeProps();
@@ -6101,6 +6973,33 @@ function forgeProps() {
     g.beginPath(); g.moveTo(-4, 8.6); g.lineTo(4, 8.6); g.stroke();
     g.lineCap = 'butt';
   });
+  // A stone tomb. The sheet supplies the real ones; this is what shows if it
+  // ever fails to decode, on the same rule the coffers follow -- nothing in
+  // the world may render as nothing.
+  P('tomb', 56, g => {
+    g.fillStyle = '#3a352c';                                    // the chest
+    g.beginPath();
+    g.roundRect ? g.roundRect(-13, -20, 26, 40, 3) : g.rect(-13, -20, 26, 40);
+    g.fill();
+    g.strokeStyle = 'rgba(0,0,0,.7)'; g.lineWidth = 2; g.stroke();
+    const lg = g.createLinearGradient(0, -20, 0, 14);            // the lid
+    lg.addColorStop(0, '#6a6355');
+    lg.addColorStop(1, '#403a31');
+    g.fillStyle = lg;
+    g.beginPath();
+    g.roundRect ? g.roundRect(-12, -22, 24, 34, 3) : g.rect(-12, -22, 24, 34);
+    g.fill();
+    g.strokeStyle = 'rgba(0,0,0,.7)'; g.lineWidth = 1.6; g.stroke();
+    g.strokeStyle = 'rgba(150,138,112,.35)'; g.lineWidth = 1;    // a carved figure
+    g.beginPath();
+    g.ellipse(0, -14, 4, 5, 0, 0, TAU);
+    g.moveTo(-5, -6); g.lineTo(5, -6);
+    g.moveTo(0, -6); g.lineTo(0, 7);
+    g.stroke();
+    g.fillStyle = 'rgba(12,10,7,.5)';                            // the seam
+    g.fillRect(-12, 11, 24, 2);
+  });
+
   P('grate', 34, g => {
     g.fillStyle = 'rgba(8,6,5,.85)';
     g.fillRect(-11, -11, 22, 22);
@@ -6139,7 +7038,30 @@ function indexBreakables() {
 // Scenery that stands up rather than lying flat. These are drawn with the
 // bodies, sorted by depth, so a thrall can pass behind a pillar and be hidden
 // by it -- which is the cheapest verticality a flat view can buy.
-const STANDING = { pillar: 26, barrel: 12, crate: 11, urn: 10, banner: 16, chain: 14 };
+// Scenery drawn from the sheet rather than forged. Four variants a kind,
+// picked by the prop's own random q -- which is what used to choose a quarter
+// turn, and a quarter turn is wrong for a bitmap that has an up. `d` is how
+// wide it is drawn in world units. Built by tools/build-art.py.
+const PROP_SHEET = 'data:image/png;base64,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';
+const PROP_CELL = 48, PROP_VARIANTS = 4;
+const PROP_ART = { bones: { row: 0, d: 40 }, coins: { row: 1, d: 34 },
+                   hornskull: { row: 2, d: 42 }, tomb: { row: 3, d: 62 } };
+let propImg = null;
+
+const STANDING = { pillar: 26, barrel: 12, crate: 11, urn: 10, banner: 16, chain: 14,
+                   tomb: 22 };
+
+// Draws one sheet-backed prop, or returns false if the sheet has nothing for
+// it -- in which case the forged sprite stands in, as it does before the sheet
+// has decoded.
+function drawSheetProp(p) {
+  const A = PROP_ART[p.kind];
+  if (!A || !propImg || !propImg.complete || !propImg.naturalWidth) return false;
+  const d = A.d;
+  ctx.drawImage(propImg, (p.q % PROP_VARIANTS) * PROP_CELL, A.row * PROP_CELL,
+                PROP_CELL, PROP_CELL, p.x - d / 2, p.y - d / 2, d, d);
+  return true;
+}
 
 function drawProps(x0, y0, x1, y1) {
   if (lowFx) return;
@@ -6147,6 +7069,7 @@ function drawProps(x0, y0, x1, y1) {
     const p = props[i];
     if (STANDING[p.kind]) continue;            // drawn later, with the bodies
     if (p.x < x0 || p.x > x1 || p.y < y0 || p.y > y1) continue;
+    if (drawSheetProp(p)) continue;
     const spr = SPR['p_' + p.kind + '_' + p.q];
     if (spr) blit(spr, p.x, p.y);
   }
@@ -6186,12 +7109,15 @@ function drawStanding(t, x0, y0, x1, y1) {
     const o = _sortable[i];
     if (o === player) { drawPlayer(t); continue; }
     if (o.kind && STANDING[o.kind]) {
-      const spr = SPR['p_' + o.kind + '_' + o.q];
       // A struck barrel rocks on its base, so a room tells you it is about to
       // be a worse room.
-      if (spr && o.shake > 0) {
-        blit(spr, o.x + Math.sin(o.shake * 90) * 2.4, o.y);
-      } else if (spr) blit(spr, o.x, o.y);
+      const wob = o.shake > 0 ? Math.sin(o.shake * 90) * 2.4 : 0;
+      if (wob) { ctx.save(); ctx.translate(wob, 0); }
+      if (!drawSheetProp(o)) {
+        const spr = SPR['p_' + o.kind + '_' + o.q];
+        if (spr) blit(spr, o.x, o.y);
+      }
+      if (wob) ctx.restore();
     } else {
       drawEnemy(o);
     }
@@ -6509,10 +7435,41 @@ function drawEnemy(e) {
     ctx.beginPath(); ctx.arc(e.x, e.y + e.r * 0.55, e.r * 1.15, 0, TAU); ctx.stroke();
     ctx.restore();
   }
+  // A husk that has committed swells, and goes on swelling until it goes.
+  // The ring it threw when it committed marks the ground; this is the part
+  // that says which body the ring belongs to.
+  const swell = e.fuse > 0 ? 1 - e.fuse / HUSK_FUSE : 0;
   // A dormant body is not walking, but it is not a statue either: it sways
   // where it stands, off the drowse clock it already keeps.
-  blit(spr, e.x, e.y, e.awake ? 0 : Math.sin(e.drowse) * 0.035, 1, 1, flip);
+  blit(spr, e.x, e.y, e.awake ? 0 : Math.sin(e.drowse) * 0.035,
+       1, 1 + swell * 0.3, flip);
   if (e.hitFlash > 0) blitFlash(spr, e.x, e.y, flip);
+  if (swell > 0) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = tint(e.color, 1, 0.1 + swell * 0.4);
+    ctx.beginPath(); ctx.arc(e.x, e.y, e.r * (1.1 + swell * 0.7), 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+  // A cantor mid-cast draws a line to where it is throwing. Breaking that
+  // line is the answer to it, so the line has to be the thing you see.
+  if (e.casting > 0) {
+    const c = 1 - e.casting / BOLT_WIND;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = tint(e.color, 1, 0.12 + c * 0.3);
+    ctx.lineWidth = 1 + c * 1.6;
+    ctx.setLineDash([5, 7]);
+    ctx.lineDashOffset = -e.wob * 12;
+    ctx.beginPath();
+    ctx.moveTo(e.x, e.y - e.r * 0.4);
+    ctx.lineTo(player.x, player.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = tint(e.color, 1, 0.2 + c * 0.55);
+    ctx.beginPath(); ctx.arc(e.x, e.y - e.r * 0.55, 3 + c * 7, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
   if (e.elite) {
     // scaled up a touch so the champion reads as bodily bigger, not just lit
     ctx.save();
@@ -6557,38 +7514,79 @@ function drawPlayer(t) {
 
   const hurt = blink || p.hitFlash > 0;
   const spr = heroFrame(p);
-  blit(spr, p.x, p.y, 0, 1, 1, p.face < 0);
-  if (hurt) blitFlash(spr, p.x, p.y, p.face < 0);
-
-  // The forged hero sprites hold a still blade, so the swing is drawn over the
-  // top as a streak sweeping through the strike -- far cheaper than re-forging
-  // a sprite per frame, and it reads at a glance which way the edge went.
+  const dir = p.face < 0 ? -1 : 1;
+  // How far through the strike, and where that puts the blade. The ease is
+  // slow-fast-slow: a swing accelerates through the middle, and a linear
+  // sweep reads like a windscreen wiper.
+  const S = STRIKES[p.strike] || STRIKES[0];
+  let ang = REST_ANGLE, lunge = 0, f = -1;
   if (p.swing > 0) {
-    const f = 1 - p.swing / SWING_TIME;            // 0 at the wind-up, 1 done
-    const arcSpan = 1.55;
-    const a = p.swingA + p.swingDir * (arcSpan * (0.5 - f));
-    const R = p.r + 13;
+    f = 1 - p.swing / SWING_TIME;
+    const e = f < 0.5 ? 2 * f * f : 1 - Math.pow(2 - 2 * f, 2) / 2;
+    ang = S.from + (S.to - S.from) * e;
+    lunge = Math.sin(f * Math.PI) * S.lunge;
+  } else if (p.recov > 0) {
+    const r = 1 - p.recov / RECOVER_TIME;
+    ang = S.to + (REST_ANGLE - S.to) * (r * r * (3 - 2 * r));
+    lunge = (1 - r) * S.lunge * 0.35;
+  }
+  const bx = p.x + dir * lunge;
+  blit(spr, bx, p.y, 0, 1, 1, p.face < 0);
+  if (hurt) blitFlash(spr, bx, p.y, p.face < 0);
+  drawWeapon(p, bx, dir, ang, f, S);
+
+}
+
+// The blade itself, rotated about the hand. The swing happens in the hero's
+// own space and mirrors with his facing rather than pointing at the target:
+// the body is a front-facing figure, and a weapon free to rotate the whole way
+// round it spends half the arc pointing into the floor behind him. The
+// crescent it throws is the part that goes at the target.
+function drawWeapon(p, bx, dir, ang, f, S) {
+  const spr = SPR['w_' + p.hero];
+  if (!spr) return;
+  const hy = p.y - p.r * 0.18;
+  const hx = bx + dir * p.r * 0.30;
+  const sz = spr.span;
+
+  // The streak the edge leaves, drawn first so the blade sits over its own
+  // trail. Its width and reach come from the form, so a chop reads heavier
+  // than a level slash even though both do the same damage.
+  if (f >= 0) {
     const colour = HEROES[p.hero].magic;
-    const trail = 0.62 * (1 - f);
+    const R = (spr.reach || p.r + 15) * 0.88 * S.R;
+    const trail = S.span * 0.42 * (1 - f);
+    const way = S.to > S.from ? 1 : -1;
     ctx.save();
+    ctx.translate(hx, hy);
+    ctx.scale(dir, 1);
     ctx.globalCompositeOperation = 'lighter';
     ctx.lineCap = 'round';
-    // ctx.arc sweeps clockwise from start to end, so the ends must be ordered
-    // low-to-high: handed the other way round it wraps the long way and rings
-    // the player instead of trailing the blade.
+    // ctx.arc sweeps clockwise, so the ends must be ordered low-to-high or it
+    // wraps the long way and rings the player instead of trailing the blade.
     const span = (t0, t1) => {
       ctx.beginPath();
-      ctx.arc(p.x, p.y, R, Math.min(t0, t1), Math.max(t0, t1));
+      ctx.arc(0, 0, R, Math.min(t0, t1), Math.max(t0, t1));
       ctx.stroke();
     };
-    ctx.strokeStyle = tint(colour, 1.2, 0.42 * (1 - f * 0.7));
-    ctx.lineWidth = 5.5;
-    span(a - p.swingDir * trail, a);
+    ctx.strokeStyle = tint(colour, 0.8, 0.16 * (1 - f * 0.6));
+    ctx.lineWidth = 13 * S.wide;
+    span(ang - way * trail, ang);
+    ctx.strokeStyle = tint(colour, 1.2, 0.44 * (1 - f * 0.7));
+    ctx.lineWidth = 5.5 * S.wide;
+    span(ang - way * trail, ang);
     ctx.strokeStyle = 'rgba(255,255,255,' + (0.5 * (1 - f)).toFixed(3) + ')';
     ctx.lineWidth = 1.8;
-    span(a - p.swingDir * trail * 0.6, a);
+    span(ang - way * trail * 0.6, ang);
     ctx.restore();
   }
+
+  ctx.save();
+  ctx.translate(hx, hy);
+  ctx.scale(dir, 1);
+  ctx.rotate(ang);
+  ctx.drawImage(spr, -sz / 2, -sz / 2, sz, sz);
+  ctx.restore();
 }
 
 function drawParticles() {
@@ -6736,6 +7734,135 @@ function drawViewFrame() {
   ctx.strokeRect(6.5, 6.5, view.w - 13, view.h - 13);
 }
 
+/* --- the boss frame -------------------------------------------------------
+   It used to sit at a hardcoded y of 84 with a fixed 320px width, centred.
+   On a notched phone HUD_H plus the safe inset is more than 84, so the whole
+   thing -- name included -- was drawn behind the HUD panel, and its right half
+   ran under the minimap. It owns the top of the screen now: it is the thing
+   the fight is about, and the minimap steps down rather than the frame being
+   squeezed into the 230px left beside it, which cannot carry a name, a bar
+   and a count.
+   ------------------------------------------------------------------------ */
+const BOSS_BAR_H = 44;
+
+function bossShown() {
+  if (!run) return null;
+  // An invader is the nearer problem: while one is standing he owns the frame,
+  // because he is the thing about to kill you.
+  if (run.invader && run.invader.hp > 0) return run.invader;
+  if (run.boss && run.boss.hp > 0) return run.boss;
+  return null;
+}
+function bossBarDrop() { return bossShown() ? BOSS_BAR_H + 8 : 0; }
+
+// Shrink to fit, then clip with an ellipsis if it still will not. Boss titles
+// run to "The Deceiver, the Unbroken and the Unblinking", which at a fixed
+// size overhangs both edges of a phone and reads as neither.
+// Leaves ctx.font set to the size it settled on, so the caller draws at it.
+function fitText(text, maxW, px, family, floorPx, style) {
+  const st = style || '400 ';
+  const fl = floorPx || 9;
+  for (let size = px; size > fl; size--) {
+    ctx.font = st + size + 'px ' + family;
+    if (ctx.measureText(text).width <= maxW) return text;
+  }
+  ctx.font = st + fl + 'px ' + family;
+  if (ctx.measureText(text).width <= maxW) return text;
+  let t = text;
+  while (t.length > 1 && ctx.measureText(t + '\u2026').width > maxW) t = t.slice(0, -1);
+  return t + '\u2026';
+}
+
+function drawBossBar() {
+  const bs = bossShown();
+  if (!bs) return;
+  const pad = 12;
+  // Only safeT and safeR exist on `view` -- the canvas UI has never tracked a
+  // left inset. Reading a safeL that was never defined made x0 NaN, and every
+  // draw call in here silently did nothing.
+  const x0 = pad;
+  const w = view.w - x0 - pad - view.safeR;
+  const y0 = HUD_H + view.safeT + 8;
+  const f = clamp(bs.hp / bs.maxHp, 0, 1);
+  // While a Lieutenant stands he takes fourteen per cent. Without saying so
+  // the bar simply looks broken, and the player keeps hitting the wrong thing.
+  const held = !bs.invader && escortAlive();
+  const hue = bs.invader ? [226, 120, 44] : [232, 192, 96];
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(10,7,4,.72)';
+  ctx.fillRect(x0 - 4, y0 - 3, w + 8, BOSS_BAR_H);
+  ctx.strokeStyle = 'rgba(120,100,72,.5)'; ctx.lineWidth = 1;
+  ctx.strokeRect(x0 - 3.5, y0 - 2.5, w + 7, BOSS_BAR_H - 1);
+
+  // Name left, the count right, both on the same line.
+  ctx.textAlign = 'right';
+  ctx.font = '600 11px ui-monospace, Menlo, monospace';
+  const count = Math.max(0, Math.ceil(bs.hp)) + ' / ' + Math.round(bs.maxHp);
+  ctx.fillStyle = 'rgba(206,190,158,.9)';
+  ctx.fillText(count, x0 + w, y0 + 11);
+  const countW = ctx.measureText(count).width + 10;
+
+  ctx.textAlign = 'left';
+  const title = bs.title || (bs.invader ? 'The Uninvited' : 'The Gilded Deceiver');
+  const shown = fitText(title, w - countW, 14, 'Georgia, "Times New Roman", serif', 10);
+  ctx.fillStyle = 'rgba(238,224,192,.95)';
+  ctx.fillText(shown, x0, y0 + 11);
+
+  // The bar.
+  const by = y0 + 17, bh = 11;
+  ctx.fillStyle = 'rgba(24,17,11,.9)';
+  ctx.fillRect(x0, by, w, bh);
+  const g = ctx.createLinearGradient(0, by, 0, by + bh);
+  g.addColorStop(0, 'rgba(' + hue.join(',') + ',1)');
+  g.addColorStop(1, 'rgba(' + hue.map(c => (c * 0.55) | 0).join(',') + ',1)');
+  ctx.fillStyle = g;
+  ctx.fillRect(x0, by, w * f, bh);
+  // Quarter ticks, so a bar that moves slowly still shows that it moved.
+  ctx.strokeStyle = 'rgba(10,7,4,.55)'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 1; i < 4; i++) {
+    const tx = Math.round(x0 + w * (i / 4)) + 0.5;
+    ctx.moveTo(tx, by); ctx.lineTo(tx, by + bh);
+  }
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(206,180,140,.55)';
+  ctx.strokeRect(x0 - 0.5, by - 0.5, w + 1, bh + 1);
+
+  if (held) {
+    // Hatched over the bar, and named: the fight has an order to it and this
+    // is where the player is told what the order is.
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x0, by, w * f, bh); ctx.clip();
+    ctx.strokeStyle = 'rgba(20,14,8,.5)'; ctx.lineWidth = 3;
+    ctx.beginPath();
+    for (let hx = -bh; hx < w * f + bh; hx += 8) {
+      ctx.moveTo(x0 + hx, by + bh); ctx.lineTo(x0 + hx + bh, by);
+    }
+    ctx.stroke();
+    ctx.restore();
+    let live = 0;
+    for (let i = 0; i < enemies.length; i++)
+      if (enemies[i].kind === 'lieutenant' && enemies[i].hp > 0) live++;
+    ctx.textAlign = 'left';
+    ctx.font = '600 9px ui-monospace, Menlo, monospace';
+    ctx.fillStyle = 'rgba(232,192,96,.9)';
+    ctx.fillText('HELD \u2014 BREAK THE LIEUTENANTS', x0, y0 + BOSS_BAR_H - 5);
+    // one pip per Lieutenant still standing
+    ctx.textAlign = 'right';
+    for (let i = 0; i < live; i++) {
+      ctx.fillStyle = 'rgba(194,53,42,.95)';
+      ctx.beginPath();
+      ctx.arc(x0 + w - 5 - i * 11, y0 + BOSS_BAR_H - 8, 3.4, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(232,192,96,.8)'; ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+  ctx.textAlign = 'left';
+}
+
 function drawMinimap() {
   // Top-right, tucked under the HUD bar. The bottom corners are where the
   // thumbs live on a phone -- a map there is under a hand for most of a run --
@@ -6744,7 +7871,7 @@ function drawMinimap() {
   const S = Math.round(Math.min(132, Math.max(96, view.w * 0.30)));
   const pad = 14;   // the stone surround overhangs the panel by 7px each side
   const x = view.w - S - pad - view.safeR;
-  const y = HUD_H + pad + view.safeT;
+  const y = HUD_H + pad + view.safeT + bossBarDrop();
   const k = S / WORLD.w;
   const mk = S / 108;              // marker scale, so dots grow with the frame
 
@@ -6794,6 +7921,19 @@ function drawMinimap() {
     ctx.beginPath(); ctx.arc(ix, iy, 3.4 * mk, 0, TAU); ctx.fill();
     ctx.strokeStyle = 'rgba(226,120,44,.8)'; ctx.lineWidth = 1.4 * mk;
     ctx.beginPath(); ctx.arc(ix, iy, 6.4 * mk, 0, TAU); ctx.stroke();
+  }
+  // Unopened coffers are plotted, and opened ones stop being. A coffer you
+  // cannot find is not a reason to explore, it is a reason to be annoyed; a
+  // coffer you can see but have to reach is the decision the map is for.
+  for (let i = 0; i < chests.length; i++) {
+    const ch = chests[i];
+    if (ch.open) continue;
+    const K = CHEST_KINDS[ch.kind];
+    const bx = x + ch.x * k, by = y + ch.y * k, r = 2.6 * mk;
+    ctx.fillStyle = K.colour;
+    ctx.fillRect(bx - r, by - r * 0.8, r * 2, r * 1.6);
+    ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.lineWidth = 1;
+    ctx.strokeRect(bx - r, by - r * 0.8, r * 2, r * 1.6);
   }
   // Your own corpse is always plotted. Finding it is not meant to be the
   // challenge -- getting to it and back out is.
@@ -7117,6 +8257,7 @@ function draw(t) {
   ctx.translate(-cam.x + shx, -cam.y + shy);
   drawWalls(x0, y0, x1, y1);
   drawProps(x0, y0, x1, y1);
+  drawChests(t);
   drawLoot(t);
   drawHazards(t);
   drawSlams(t);
@@ -7124,8 +8265,12 @@ function draw(t) {
   drawDrops(t);
   drawStanding(t, x0, y0, x1, y1);
   drawArcs();
+  drawBolts(t);
   drawParticles();
   if (!lowFx) drawLightPass(t);
+  // Over the light pass, not under it: a number a glow has washed out is
+  // worse than no number, and this is the layer the player reads fastest.
+  drawFloaters();
   ctx.restore();
 
   drawMotes(t);
@@ -7147,15 +8292,19 @@ function draw(t) {
       ctx.letterSpacing = '0px';
       ctx.fillStyle = 'rgba(238,224,192,.95)';
     }
-    ctx.font = '400 21px Georgia, "Times New Roman", serif';
-    ctx.fillText(run.bannerText || LEVEL.name, view.w / 2, view.h * 0.42);
+    // Fitted, not fixed: "The Deceiver, the Unbroken and the Unblinking" at a
+    // flat 21px overhangs both edges of a phone and reads as neither end.
+    const bw = view.w - 36;
+    const serif = 'Georgia, "Times New Roman", serif';
+    const bt = fitText(run.bannerText || LEVEL.name, bw, 21, serif, 13);
+    ctx.fillText(bt, view.w / 2, view.h * 0.42);
     ctx.fillStyle = 'rgba(186,164,128,.85)';
-    ctx.font = 'italic 400 13px Georgia, "Times New Roman", serif';
     // On a ramp rung the opening line is the one thing this delve is for. It
     // is phrased as an instruction to a Vanguard rather than a tutorial hint,
     // and it only ever appears on the first three.
-    ctx.fillText(run.bannerNote || LEVEL.lesson || REGION.name,
-                 view.w / 2, view.h * 0.42 + 24);
+    const bn = fitText(run.bannerNote || LEVEL.lesson || REGION.name,
+                       bw, 13, serif, 10, 'italic 400 ');
+    ctx.fillText(bn, view.w / 2, view.h * 0.42 + 24);
     ctx.strokeStyle = 'rgba(196,164,116,.4)';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -7171,40 +8320,27 @@ function draw(t) {
     const a = Math.min(1, t0.life / 0.5);
     ctx.save();
     ctx.globalAlpha = Math.max(0, a);
-    ctx.textAlign = 'center';
-    ctx.font = '400 13px Georgia, "Times New Roman", serif';
-    const w = ctx.measureText(t0.text).width + 26;
-    const bx = view.w / 2 - w / 2, by = HUD_H + 8 + view.safeT;
+    // Left-aligned and fitted rather than centred at its natural width. A
+    // centred box grows into the minimap, and an item name is long enough
+    // that it did: "A warded coffer -- Warden's Sa" and then a map.
+    ctx.textAlign = 'left';
+    const S = Math.round(Math.min(132, Math.max(96, view.w * 0.30)));
+    const room = view.w - S - 14 - view.safeR - 24;
+    const txt = fitText(t0.text, room - 20, 13,
+                        'Georgia, "Times New Roman", serif', 10);
+    const w = ctx.measureText(txt).width + 22;
+    const bx = 12, by = HUD_H + 8 + view.safeT + bossBarDrop();
     ctx.fillStyle = 'rgba(10,8,5,.82)';
     ctx.fillRect(bx, by, w, 24);
     ctx.strokeStyle = tint(t0.colour, 1, 0.55);
     ctx.lineWidth = 1;
     ctx.strokeRect(bx + 0.5, by + 0.5, w - 1, 23);
     ctx.fillStyle = t0.colour;
-    ctx.fillText(t0.text, view.w / 2, by + 16);
+    ctx.fillText(txt, bx + 11, by + 16);
     ctx.restore();
     ctx.textAlign = 'left';
   }
-  // An invader is the nearer problem: while one is standing he owns the bar,
-  // because he is the thing about to kill you.
-  const shown = run && ((run.invader && run.invader.hp > 0) ? run.invader :
-                        (run.boss && run.boss.hp > 0) ? run.boss : null);
-  if (shown) {
-    const bs = shown, f = clamp(bs.hp / bs.maxHp, 0, 1);
-    const w = Math.min(320, view.w - 96), x0 = (view.w - w) / 2, y0 = 84;
-    ctx.fillStyle = 'rgba(10,7,4,.8)';
-    ctx.fillRect(x0 - 2, y0 - 2, w + 4, 12);
-    ctx.fillStyle = bs.invader ? 'rgba(226,120,44,.95)' : 'rgba(232,192,96,.9)';
-    ctx.fillRect(x0, y0, w * f, 8);
-    ctx.strokeStyle = 'rgba(206,180,140,.6)'; ctx.lineWidth = 1;
-    ctx.strokeRect(x0 - 2.5, y0 - 2.5, w + 5, 13);
-    ctx.save();
-    ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(238,224,192,.9)';
-    ctx.font = '400 12px Georgia, "Times New Roman", serif';
-    ctx.fillText(bs.title || 'The Gilded Deceiver', view.w / 2, y0 - 7);
-    ctx.restore();
-  }
+  drawBossBar();
   drawPortalArrow(t);
   drawMinimap();
   drawStick();
@@ -7555,6 +8691,7 @@ function resetRun(heroId, levelId, diffId) {
   portal  = { x: pt.x, y: pt.y, pulse: 0, channel: 0, active: false, inside: false };
   player  = makePlayer(spawn.x, spawn.y, hero);
   enemies = []; arcs = []; loot = []; drops = []; particles = []; rings = [];
+  floaters = []; bolts = []; chests = [];
   slams = []; hazards = [];
   enemyGrid = new SpatialHash(ENEMY_CELL);
 
@@ -7579,6 +8716,7 @@ function resetRun(heroId, levelId, diffId) {
 
   recomputeStats();
   placePacks(spawn);
+  placeChests(spawn, portal);
   flowFrom = -1;
   rebuildFlow();
   hudCache.hp = hudCache.tech = hudCache.time = hudCache.lvl = -1;
@@ -7950,7 +9088,7 @@ function renderGear() {
     b.className = 'slot' + (!it ? ' empty' : '') +
       (gearSel && gearSel.from === 'worn' && gearSel.slot === sl.id ? ' sel' : '');
     if (it) b.style.borderLeftColor = rarityOf(it).colour;
-    b.innerHTML = icoTag(sl.id, 20) +
+    b.innerHTML = icoTag(it ? icoKey(it) : sl.id, 20) +
                   '<span class="sname">' + sl.name + '</span>' +
                   '<span class="iname">' + (it ? it.name : 'empty') + '</span>';
     if (!it) b.style.opacity = '';
@@ -8003,7 +9141,7 @@ function renderGear() {
     seen[key] = 1;
     chip('', bagFilter === key, sl.name,
          () => { bagFilter = bagFilter === key ? 'all' : key; renderGear(); })
-      .innerHTML = icoTag(sl.id, 14);
+      .innerHTML = icoTag(sl.id, 18);
   }
 
   el.bagGrid.innerHTML = '';
@@ -8021,7 +9159,7 @@ function renderGear() {
       const col = rarityOf(it).colour;
       // The icon says what it is; the border and the wash behind it say how
       // good it is. A glyph could only ever do one of those two jobs.
-      b.innerHTML = icoTag(it.slot, 28) +
+      b.innerHTML = icoTag(icoKey(it), 28) +
                     (isUpgrade(it, C.gear) ? '<span class="cup">\u25b2</span>' : '');
       b.style.borderColor = col + '55';
       b.style.background =
