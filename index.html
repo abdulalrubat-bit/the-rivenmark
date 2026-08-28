@@ -51,11 +51,15 @@
     position:absolute; top:calc(12px + var(--safe-t)); left:calc(52px + var(--safe-l));
     right:calc(50px + var(--safe-r));
     display:flex; align-items:flex-start; gap:10px; pointer-events:none;
-    padding:5px 10px 6px; border-radius:3px;
-    background:linear-gradient(180deg,rgba(46,34,22,.82),rgba(18,12,7,.86));
-    border:1px solid rgba(122,100,66,.42);
-    box-shadow:inset 0 1px 0 rgba(214,182,124,.16),
-               0 4px 18px rgba(0,0,0,.85), 0 1px 3px rgba(0,0,0,.9);
+    padding:6px 11px 7px; border-radius:6px; border:0;
+    background:
+      linear-gradient(180deg,rgba(30,22,13,.94),rgba(12,9,5,.95)) padding-box,
+      linear-gradient(180deg,var(--br-lit),var(--br-mid) 32%,#5b4020 72%,
+                      var(--br-dk)) border-box;
+    border:2px solid transparent;
+    box-shadow:0 0 0 1px rgba(0,0,0,.8),
+               inset 0 1px 0 rgba(214,182,124,.14),
+               0 5px 20px rgba(0,0,0,.85);
     z-index:7;                       /* above the frame chrome, below screens */
   }
   .hud[hidden]{display:none;}
@@ -64,20 +68,15 @@
      reading as part of the picture. */
   .hud, #bagBtn, .iconbtn{text-shadow:0 1px 2px rgba(0,0,0,.95);}
 
-  .bar{
-    position:relative; height:14px; border:1px solid var(--line);
-    background:#0c0a08; border-radius:1px; overflow:hidden;
-    box-shadow:inset 0 1px 0 rgba(255,220,160,.06);
-  }
-  .bar i{
-    display:block; height:100%; width:100%; transform-origin:left center;
-    transition:transform .12s linear;
-  }
+  /* The fills are still scaled by transform from syncHud; only the housing
+     around them changed. See .rbar in the chrome section for the shape. */
   #hpFill{background:linear-gradient(90deg,#7d1d16,#c2352a 60%,#e0644a);}
   #hpBar.low #hpFill{background:linear-gradient(90deg,#5e1109,#e0342a);}
-  #techBar{margin-top:6px; height:9px;}
   #techFill{background:linear-gradient(90deg,#8a5a12,var(--gold));}
-  #techBar.done{border-color:var(--gold); box-shadow:0 0 12px rgba(255,194,77,.4);}
+  #techBar{margin-top:5px;}
+  #techBar.done .track{
+    box-shadow:0 0 0 1px var(--gold), 0 0 14px rgba(255,194,77,.45);
+  }
 
   .readout{
     display:flex; justify-content:space-between; gap:10px;
@@ -94,12 +93,9 @@
     pointer-events:none;
   }
   .clock{
-    font-family:var(--font-display); font-size:20px; letter-spacing:1px;
+    font-family:var(--font-display); font-size:19px; letter-spacing:1px;
     color:var(--ink); text-shadow:0 0 14px rgba(255,154,60,.35);
-  }
-  .lvl{
-    font-family:var(--font-ui); font-size:11px; letter-spacing:2.4px;
-    color:var(--gold); text-transform:uppercase;
+    padding-top:5px;
   }
 
   /* The in-delve controls are struck bronze discs rather than panels: a
@@ -166,7 +162,7 @@
   /* The one screen that shows the room it is about. The cards sit in the lower
      two thirds and the gate-house itself is visible above them, so a stone
      laid is a thing you can see rather than a number that went up. */
-  #hall{padding-top:calc(30vh + var(--safe-t));
+  #hall{padding-top:calc(30vh + var(--safe-t));  /* overridden inside the hub */
     background:linear-gradient(180deg,
       rgba(6,5,4,.10) 0%, rgba(6,5,4,.10) 22%,
       rgba(7,5,4,.74) 34%, rgba(7,5,4,.95) 46%, rgba(7,5,4,.97) 100%);}
@@ -481,6 +477,280 @@
     background:radial-gradient(ellipse at center,transparent 40%,rgba(150,20,12,.6));
     transition:opacity .16s ease-out;
   }
+
+  /* =========================================================================
+     CARVED CHROME
+     The reference is a physical UI: bronze that catches a light, dark panels
+     recessed behind it, and a ring around anything that matters. All of it is
+     built from gradients and box-shadows rather than images -- the game is one
+     file and stays that way.
+
+     Everything below is derived from three tokens. Change --br-lit, --br-mid
+     and --br-dk and the whole interface changes metal.
+     ====================================================================== */
+  :root{
+    --br-lit:#e2b96a;      /* the edge the light hits */
+    --br-mid:#a67c3a;      /* the body of the metal */
+    --br-dk:#4a3418;       /* where it turns away */
+    --br-shadow:rgba(0,0,0,.72);
+    --well:#171208;        /* what sits inside a frame */
+    --well-lo:#0d0a05;
+    --rail:34px;           /* tab bar height */
+  }
+
+  /* A bevelled bronze edge. The four stops are a top light, a body, a lower
+     body and a shaded underside, which is what makes it read as a rounded
+     moulding rather than a coloured border. */
+  .chrome{
+    background:linear-gradient(180deg,var(--br-lit),var(--br-mid) 34%,
+                               #6d4d22 68%,var(--br-dk));
+    box-shadow:0 1px 0 rgba(255,226,170,.28) inset,
+               0 -1px 0 rgba(0,0,0,.5) inset,
+               0 2px 6px var(--br-shadow);
+  }
+
+  /* A framed well: bronze moulding with a dark recess inside it. Padding is
+     the moulding's thickness, so the frame and its content are one box. */
+  .framed{
+    position:relative; border-radius:5px; padding:3px;
+    background:linear-gradient(180deg,var(--br-lit),var(--br-mid) 30%,
+                               #61441e 70%,var(--br-dk));
+    box-shadow:0 2px 8px rgba(0,0,0,.65), 0 0 0 1px rgba(0,0,0,.8);
+  }
+  .framed > .well{
+    border-radius:3px;
+    background:linear-gradient(180deg,var(--well),var(--well-lo));
+    box-shadow:0 2px 7px rgba(0,0,0,.85) inset,
+               0 0 0 1px rgba(0,0,0,.7) inset;
+  }
+
+  /* The corner brackets the reference sets behind its square icon frames --
+     four short rules that stop short of the corners, so a plain square reads
+     as mounted rather than floating. */
+  .brackets::before, .brackets::after{
+    content:""; position:absolute; inset:-4px; pointer-events:none;
+    border:2px solid var(--br-mid); border-radius:2px;
+  }
+  .brackets::before{clip-path:polygon(0 0,38% 0,38% 2px,2px 2px,2px 38%,0 38%,
+                                      0 100%,38% 100%,38% calc(100% - 2px),
+                                      2px calc(100% - 2px),2px 62%,0 62%);}
+  .brackets::after{clip-path:polygon(100% 0,62% 0,62% 2px,calc(100% - 2px) 2px,
+                                     calc(100% - 2px) 38%,100% 38%,
+                                     100% 100%,62% 100%,62% calc(100% - 2px),
+                                     calc(100% - 2px) calc(100% - 2px),
+                                     calc(100% - 2px) 62%,100% 62%);}
+
+  /* A ringed disc. Anything round and important -- a portrait, an ability, the
+     pause control -- is one of these. */
+  .medal{
+    position:relative; border-radius:50%; padding:3px; display:grid;
+    place-items:center; flex:0 0 auto;
+    background:conic-gradient(from 210deg,var(--br-dk),var(--br-lit) 22%,
+                              var(--br-mid) 42%,var(--br-dk) 62%,
+                              var(--br-mid) 80%,var(--br-lit));
+    box-shadow:0 2px 7px rgba(0,0,0,.7), 0 0 0 1px rgba(0,0,0,.75);
+  }
+  .medal > *{
+    border-radius:50%; width:100%; height:100%; display:grid; place-items:center;
+    background:radial-gradient(circle at 50% 34%,#2b2318,#120d07 72%);
+    box-shadow:0 0 10px rgba(0,0,0,.9) inset;
+  }
+
+  /* A count worn on the rim of something, the way the reference hangs a stack
+     size off the bottom of an icon. */
+  .pip{
+    position:absolute; min-width:19px; height:19px; padding:0 4px;
+    border-radius:10px; display:grid; place-items:center;
+    font:600 10px/1 ui-monospace,monospace; color:#f4e6c4;
+    background:radial-gradient(circle at 50% 30%,#3a2d1a,#150f07);
+    box-shadow:0 0 0 2px var(--br-mid), 0 1px 4px rgba(0,0,0,.8);
+  }
+  .pip.bottom{left:50%; bottom:-8px; transform:translateX(-50%);}
+  .pip.top{right:-6px; top:-6px;}
+
+  /* A resource bar with a rank worn on its left end and the far end cut away,
+     which is the shape the reference uses and the thing that stops a bar
+     reading as a progress meter. */
+  .rbar{position:relative; display:flex; align-items:center; gap:0;}
+  .rbar .rank{
+    position:relative; z-index:2; width:26px; height:26px; margin-right:-9px;
+    font:600 11px/1 ui-monospace,monospace; color:#f4e6c4;
+  }
+  .rbar .rank > *{background:radial-gradient(circle at 50% 32%,#3a2d1a,#120d07);}
+  .rbar .track{
+    flex:1; min-width:0; height:17px; position:relative; overflow:hidden;
+    padding:2px 2px 2px 11px;
+    clip-path:polygon(0 0,100% 0,100% calc(100% - 11px),calc(100% - 13px) 100%,0 100%);
+    background:linear-gradient(180deg,#3a2c18,#1a1309);
+    box-shadow:0 0 0 1px rgba(0,0,0,.8), 0 1px 4px rgba(0,0,0,.6);
+  }
+  .rbar .track i{
+    display:block; height:100%; width:100%; border-radius:1px;
+    transform-origin:left center; transition:transform .14s linear;
+    box-shadow:0 1px 0 rgba(255,255,255,.16) inset,
+               0 -2px 4px rgba(0,0,0,.45) inset;
+  }
+  .rbar .lab{
+    position:absolute; inset:0 12px 0 14px; display:flex; align-items:center;
+    justify-content:space-between; pointer-events:none;
+    font:600 9.5px/1 ui-monospace,monospace; letter-spacing:1px;
+    color:#f0e0bc; text-shadow:0 1px 2px rgba(0,0,0,.95);
+  }
+  /* Clear the rank disc when there is one on the left end. */
+  .rbar .lab.wide{left:46px;}
+  .rbar .lab b{font-weight:600; color:#fff2d8;}
+  .rbar.slim .track{height:12px; padding-left:6px;}
+  .rbar.slim .lab{left:12px;}
+  .rbar .lab .go{color:var(--gold);}
+
+  /* An ornate button: a bronze plate with flared wings, the reference's OK.
+     The wings are drawn on the pseudo-elements so the label stays centred in
+     the plate rather than in the plate-plus-wings. */
+  .orn-btn{
+    position:relative; margin:0 16px; padding:11px 22px; border:0; cursor:pointer;
+    border-radius:3px; font-family:var(--font-display); font-size:16px;
+    letter-spacing:3px; text-transform:uppercase; color:#f6ead0;
+    text-shadow:0 1px 3px rgba(0,0,0,.9);
+    background:linear-gradient(180deg,#4a3a24,#2a2013 55%,#1b1309);
+    box-shadow:0 0 0 2px var(--br-mid), 0 0 0 3px rgba(0,0,0,.7),
+               0 1px 0 rgba(255,226,170,.2) inset, 0 4px 12px rgba(0,0,0,.7);
+  }
+  .orn-btn::before, .orn-btn::after{
+    content:""; position:absolute; top:50%; width:16px; height:26px;
+    transform:translateY(-50%);
+    background:linear-gradient(180deg,var(--br-lit),var(--br-mid) 45%,var(--br-dk));
+  }
+  .orn-btn::before{left:-15px;
+    clip-path:polygon(100% 0,100% 100%,0 76%,42% 50%,0 24%);}
+  .orn-btn::after{right:-15px;
+    clip-path:polygon(0 0,0 100%,100% 76%,58% 50%,100% 24%);}
+  .orn-btn:active{
+    background:linear-gradient(180deg,#5d4a2e,#33261a 55%,#221809);
+    color:#fff6e2;
+  }
+
+  /* =========================================================================
+     THE GATE-HOUSE, AS TABS
+     Four stations behind one bar, so moving between the kit and the vendor is
+     a tap rather than a round trip through a menu. The bar is one element for
+     all four screens: four copies would be four things to keep in step.
+     ====================================================================== */
+  #hubtabs{
+    position:fixed; z-index:9; left:0; right:0;
+    top:calc(var(--safe-t) + 6px);
+    display:flex; gap:0; padding:0 10px;
+    justify-content:center; pointer-events:auto;
+  }
+  #hubtabs[hidden]{display:none;}
+  #hubtabs .tabs{
+    display:flex; width:100%; max-width:460px; border-radius:6px; padding:3px;
+    gap:3px;
+    background:linear-gradient(180deg,#3a2c18,#1a1309);
+    box-shadow:0 0 0 2px var(--br-mid), 0 0 0 3px rgba(0,0,0,.75),
+               0 4px 14px rgba(0,0,0,.7);
+  }
+  .tab{
+    flex:1 1 0; min-width:0; border:0; cursor:pointer; border-radius:4px;
+    padding:7px 2px 6px; background:transparent; color:#8a7c60;
+    font:600 9.5px/1.15 ui-monospace,monospace; letter-spacing:1.4px;
+    text-transform:uppercase; display:grid; gap:3px; justify-items:center;
+  }
+  .tab .tmark{font-size:15px; line-height:1; color:#6f6249;}
+  .tab .tsub{
+    font:400 8px/1 ui-monospace,monospace; letter-spacing:.6px;
+    color:#5f5540; text-transform:none;
+  }
+  .tab[aria-selected="true"]{
+    color:#f4e6c4;
+    background:linear-gradient(180deg,#5a4526,#2e2213);
+    box-shadow:0 1px 0 rgba(255,226,170,.25) inset,
+               0 0 0 1px rgba(0,0,0,.6), 0 2px 7px rgba(0,0,0,.6);
+  }
+  .tab[aria-selected="true"] .tmark{color:var(--gold);}
+  .tab[aria-selected="true"] .tsub{color:#9d8b68;}
+  .tab:active{color:#f4e6c4;}
+
+  /* The hub screens start below the bar rather than at the top of the page. */
+  body.hub #delve, body.hub #gear, body.hub #vendor, body.hub #hall{
+    padding-top:calc(var(--safe-t) + var(--rail) + 22px);
+  }
+  /* The hall is drawn behind its own screen -- an arch, lit -- and its content
+     has always started below that. It still has to, with the bar above it. */
+  body.hub #hall{padding-top:calc(var(--safe-t) + var(--rail) + 15vh);}
+  /* One compact way out, bottom of every station. The tab bar is the
+     navigation now, so a full-width slab saying "back to the gate-house" on a
+     screen that IS the gate-house was both wrong and the largest thing on it. */
+  body.hub #delveBack, body.hub #gearClose,
+  body.hub #vendorBack, body.hub #hallBack{
+    width:auto; align-self:center; padding:7px 20px; margin-top:4px;
+    font-size:10px; letter-spacing:2px; color:#8a7c60;
+    background:transparent; border-color:#33291d;
+  }
+
+  /* =========================================================================
+     THE SPLASH
+     A title card and one way in. It used to carry the four stations as a menu,
+     which made the first thing anyone saw a list of chores.
+     ====================================================================== */
+  #splash{gap:0; justify-content:center;}
+  #splash .sigil{
+    width:96px; height:96px; margin-bottom:18px; position:relative;
+  }
+  #splash .sigil .medal{width:100%; height:100%;}
+  #splash .sigil .mark{
+    font-size:38px; color:var(--gold); line-height:1;
+    text-shadow:0 0 22px rgba(255,194,77,.55);
+  }
+  #splash .title{margin:0;}
+  #splash .sub{margin-top:10px;}
+  #splash .blurb{margin-top:14px; max-width:33ch;}
+  #splash .enter{margin-top:26px;}
+  #splash .fine{margin-top:20px;}
+
+
+  /* =========================================================================
+     DIALOGS
+     ====================================================================== */
+  .dialog{
+    position:relative; width:min(88vw,380px); margin-top:34px;
+    padding:44px 20px 20px; border-radius:7px;
+    display:flex; flex-direction:column; align-items:center; gap:11px;
+    background:
+      linear-gradient(180deg,rgba(26,20,12,.97),rgba(11,8,5,.98)) padding-box,
+      linear-gradient(180deg,var(--br-lit),var(--br-mid) 30%,#5b4020 70%,
+                      var(--br-dk)) border-box;
+    border:2px solid transparent;
+    box-shadow:0 0 0 1px rgba(0,0,0,.85), 0 14px 44px rgba(0,0,0,.8);
+  }
+  /* The seal overhangs the top edge, so the plate reads as something sealed
+     rather than as a box with a picture in it. */
+  .dialog-seal{
+    position:absolute; top:-32px; left:50%; transform:translateX(-50%);
+    width:64px; height:64px;
+  }
+  .dialog-seal span{font-size:26px; color:var(--gold);
+    text-shadow:0 0 16px rgba(255,194,77,.5);}
+  .dialog .title{font-size:clamp(24px,8vw,40px); margin:0;}
+  .dialog-note{
+    margin:0; font-family:var(--font-ui); font-style:italic; font-size:13px;
+    color:var(--dim); text-align:center; max-width:30ch; line-height:1.6;
+  }
+  .dialog .orn-btn{margin-top:5px;}
+  #over .orn-btn{margin-top:14px;}
+  .dialog .btn.ghost{width:auto; padding:7px 18px; font-size:10px;}
+
+  /* Descend carries its terms under the label -- which hero, which rung, how
+     hard, and whether it is above your weight -- so the plate has to stack. */
+  #beginRun{
+    display:flex; flex-direction:column; align-items:center; gap:3px;
+    padding:10px 26px 9px; width:auto; align-self:center;
+  }
+  #beginRun i{
+    font:400 10px/1.35 ui-monospace,monospace; font-style:normal;
+    letter-spacing:.3px; text-transform:none; color:#c6b389;
+    text-shadow:0 1px 2px rgba(0,0,0,.9);
+  }
+  #delve .menu{align-items:center;}
 </style>
 </head>
 <body>
@@ -492,24 +762,30 @@
 
   <div class="hud" id="hud" hidden>
     <div class="hud-left">
-      <div class="bar" id="hpBar"><i id="hpFill"></i></div>
-      <div class="bar" id="techBar"><i id="techFill"></i></div>
-      <div class="readout">
-        <span>Life <b id="hpText">100</b></span>
-        <span id="techText">Slag 0/70</span>
+      <!-- Rank is worn on the end of the life bar rather than kept in a
+           corner: it is a property of the hero, and the reference puts it
+           exactly there. The readout rides on top of the track, so the two
+           bars carry their own labels instead of a third line under them. -->
+      <div class="rbar" id="hpBar">
+        <span class="medal rank"><span id="lvlText">1</span></span>
+        <div class="track"><i id="hpFill"></i></div>
+        <div class="lab wide"><span>Life</span><b id="hpText">100</b></div>
+      </div>
+      <div class="rbar slim" id="techBar">
+        <div class="track"><i id="techFill"></i></div>
+        <div class="lab"><span id="techText">Slag 0/70</span></div>
       </div>
     </div>
     <div class="hud-right">
       <div class="clock" id="clock">0:00</div>
-      <div class="lvl" id="lvlText">LV 1</div>
     </div>
     <button class="disc iconbtn" id="pauseBtn" aria-label="Pause"><span
       class="skull" aria-hidden="true">☠</span><span>II</span></button>
   </div>
 
-  <div class="screen on" id="start">
-    <div class="crest" aria-hidden="true">
-      <span class="crest-rule"></span><span class="crest-mark">✦</span><span class="crest-rule"></span>
+  <div class="screen on" id="splash">
+    <div class="sigil" aria-hidden="true">
+      <span class="medal"><span class="mark">✦</span></span>
     </div>
     <h1 class="title">The<br><em>Rivenmark</em></h1>
     <p class="sub">The Aegis is shattered</p>
@@ -519,17 +795,25 @@
       and hold it open long enough to carry the haul out from under the
       Shroud of Dúath.
     </p>
-    <div class="menu">
-      <button class="mbtn prime" id="toDelve">
-        <b>Descend</b><i>choose a delve and how hard it bites</i></button>
-      <button class="mbtn" id="toKit">
-        <b>The Kit</b><i><span id="kitLine">nothing recovered</span></i></button>
-      <button class="mbtn" id="toVendor">
-        <b>The Vendor</b><i><span id="vendorLine">no coin</span></i></button>
-      <button class="mbtn" id="toHall">
-        <b>The Hall</b><i><span id="hallLine">four stations, all of them cold</span></i></button>
-    </div>
+    <button class="orn-btn enter" id="toGatehouse">Enter</button>
     <p class="fine" id="bestLine"></p>
+  </div>
+
+  <!-- One bar for all four stations. It sits outside the screens so there is
+       a single copy to keep in step, and it is hidden for the kit opened
+       mid-delve, which is an overlay on a run rather than a room you walk
+       into. -->
+  <div id="hubtabs" hidden>
+    <div class="tabs" role="tablist" aria-label="The gate-house">
+      <button class="tab" role="tab" id="toDelve" aria-selected="false"
+        ><span class="tmark" aria-hidden="true">☠</span>Delve<span class="tsub" id="delveLine">&nbsp;</span></button>
+      <button class="tab" role="tab" id="toKit" aria-selected="false"
+        ><span class="tmark" aria-hidden="true">▓</span>Kit<span class="tsub" id="kitLine">nothing</span></button>
+      <button class="tab" role="tab" id="toVendor" aria-selected="false"
+        ><span class="tmark" aria-hidden="true">⚒</span>Vendor<span class="tsub" id="vendorLine">no coin</span></button>
+      <button class="tab" role="tab" id="toHall" aria-selected="false"
+        ><span class="tmark" aria-hidden="true">◈</span>Hall<span class="tsub" id="hallLine">cold</span></button>
+    </div>
   </div>
 
   <div class="screen" id="hall">
@@ -537,7 +821,7 @@
     <p class="fine" id="hallPurse"></p>
     <div class="cards" id="hallList"></div>
     <div class="gear-detail" id="hallDetail"></div>
-    <button class="btn" id="hallBack">Back to the gate-house</button>
+    <button class="btn" id="hallBack">Leave the gate-house</button>
   </div>
 
   <div class="screen" id="vendor">
@@ -545,7 +829,7 @@
     <p class="fine" id="purseLine"></p>
     <div class="cards" id="vendorList"></div>
     <div class="gear-detail" id="vendorDetail"></div>
-    <button class="btn" id="vendorBack">Back to the gate-house</button>
+    <button class="btn" id="vendorBack">Leave the gate-house</button>
   </div>
 
   <div class="screen" id="delve">
@@ -557,8 +841,8 @@
     <h5 class="gear-h">How hard it bites</h5>
     <div class="cards" id="diffPick"></div>
     <div class="menu">
-      <button class="mbtn prime" id="beginRun"><b>Descend</b><i id="beginLine"></i></button>
-      <button class="mbtn" id="delveBack"><b>Back</b><i>to the gate-house</i></button>
+      <button class="orn-btn prime" id="beginRun">Descend<i id="beginLine"></i></button>
+      <button class="btn" id="delveBack">Leave the gate-house</button>
     </div>
   </div>
 
@@ -596,9 +880,15 @@
 
 
   <div class="screen" id="paused">
-    <h1 class="title" style="font-size:clamp(24px,8vw,44px)">Held</h1>
-    <button class="btn" id="resumeBtn">Press on</button>
-    <button class="btn ghost" id="abortBtn">Abandon the delve</button>
+    <!-- A framed plate with a medallion notched into its head, which is the
+         shape the reference uses for anything that stops the game. -->
+    <div class="dialog">
+      <span class="medal dialog-seal" aria-hidden="true"><span>☠</span></span>
+      <h1 class="title">Held</h1>
+      <p class="dialog-note">The delve waits. It does not wait kindly.</p>
+      <button class="orn-btn" id="resumeBtn">Press on</button>
+      <button class="btn ghost" id="abortBtn">Abandon the delve</button>
+    </div>
   </div>
 
   <div class="screen" id="over">
@@ -610,7 +900,7 @@
       <div class="brandmark"></div>
       <div class="stats" id="overStats"></div>
     </div>
-    <button class="btn" id="againBtn">Descend again</button>
+    <button class="orn-btn" id="againBtn">Descend again</button>
   </div>
 </div>
 
@@ -9013,7 +9303,8 @@ const el = {
   hud: $('hud'), hpBar: $('hpBar'), hpFill: $('hpFill'), hpText: $('hpText'),
   techBar: $('techBar'), techFill: $('techFill'), techText: $('techText'),
   clock: $('clock'), lvlText: $('lvlText'), flash: $('flash'),
-  start: $('start'), paused: $('paused'), over: $('over'),
+  splash: $('splash'), paused: $('paused'), over: $('over'),
+  hubtabs: $('hubtabs'),
   bestLine: $('bestLine'),
   overTitle: $('overTitle'), overSub: $('overSub'), overStats: $('overStats'),
   delve: $('delve'), kitLine: $('kitLine'), gearSub: $('gearSub'), setLine: $('setLine'),
@@ -9031,9 +9322,31 @@ const el = {
 
 let state = 'menu';   // menu | play | levelup | pause | over
 
+// Which screens are stations of the gate-house, and which tab lights up for
+// each. The kit is in here, but only when it was opened from the gate-house:
+// the same screen reached from the bag button mid-delve is an overlay on a
+// run, and putting a tab bar over that would offer to walk you out of a fight.
+const HUB_TAB = { delve: 'toDelve', gear: 'toKit', vendor: 'toVendor', hall: 'toHall' };
+
 function showScreen(name) {
-  for (const s of ['start', 'delve', 'vendor', 'hall', 'paused', 'over', 'gear']) {
+  for (const s of ['splash', 'delve', 'vendor', 'hall', 'paused', 'over', 'gear']) {
     el[s].classList.toggle('on', s === name);
+  }
+  // The bar shows for a station, and the kit only counts as one when it was
+  // entered from the gate-house rather than from a delve.
+  const inHub = !!HUB_TAB[name] && (name !== 'gear' || gearReturn === 'splash');
+  el.hubtabs.hidden = !inHub;
+  document.body.classList.toggle('hub', inHub);
+  // Measure the bar rather than hardcoding its height: it carries a caption
+  // per tab whose text changes, and a guessed --rail put the first heading of
+  // every station underneath it.
+  if (inHub) {
+    document.documentElement.style.setProperty(
+      '--rail', Math.ceil(el.hubtabs.getBoundingClientRect().height) + 'px');
+  }
+  for (const scr in HUB_TAB) {
+    const t = $(HUB_TAB[scr]);
+    if (t) t.setAttribute('aria-selected', String(inHub && scr === name));
   }
   // The HUD belongs to a delve. It was hidden only on two of the hub screens,
   // so the vendor, the kit and the hall all showed a life bar and a slag
@@ -9276,7 +9589,7 @@ function syncHud() {
   // no per-run rank any more.
   if (player.level !== hudCache.lvl) {
     hudCache.lvl = player.level;
-    el.lvlText.textContent = 'Lv ' + player.level;
+    el.lvlText.textContent = player.level;
   }
   syncGateBtn();
 }
@@ -9663,7 +9976,7 @@ function runCtx() {
 }
 function stashCtx() {
   return { gear: stash.gear, bag: stash.vault, cap: vaultCap(), live: false,
-           sub: 'What you carried home', back: 'Back to the gate-house',
+           sub: 'What you carried home', back: 'Leave the gate-house',
            bagName: 'Vault' };
 }
 
@@ -9676,7 +9989,7 @@ function openGear(which) {
     stickEnd();
     keys.clear();
   }
-  gearReturn = which === 'stash' ? 'start' : null;
+  gearReturn = which === 'stash' ? 'splash' : null;
   state = 'gear';
   gearSel = null;
   renderGear();
@@ -9687,11 +10000,11 @@ let gearReturn = null;
 
 function closeGear() {
   if (state !== 'gear') return;
-  if (gearReturn === 'start') {
+  if (gearReturn === 'splash') {
     if (!gearCtx.live) saveStash();
     state = 'menu';
     refreshKitLine();
-    showScreen('start');
+    showScreen('splash');
     return;
   }
   state = 'play';
@@ -10173,7 +10486,7 @@ window.addEventListener('orientationchange', () => setTimeout(resize, 120));
   window.__pick = pick;
   syncPick();
 
-  $('toDelve').addEventListener('click', () => {
+  function openDelve() {
     pick.hero = stash.hero || pick.hero;
     buildLadder();
     pick.level = defaultLevel();
@@ -10195,15 +10508,19 @@ window.addEventListener('orientationchange', () => setTimeout(resize, 120));
         lvlWrap.clientHeight / 2 + sel.offsetHeight / 2;
     }
     el.delve.scrollTop = 0;
-  });
-  $('delveBack').addEventListener('click', () => { showScreen('start'); });
+  }
+  $('toDelve').addEventListener('click', openDelve);
+  // Enter drops you at the delve, because that is what the gate-house is for.
+  // The other three stations are one tap away from there.
+  $('toGatehouse').addEventListener('click', () => { refreshHubLines(); openDelve(); });
+  $('delveBack').addEventListener('click', () => { showScreen('splash'); });
   $('beginRun').addEventListener('click', () => startRun(pick.hero, pick.level, pick.diff));
-  $('toKit').addEventListener('click', () => openGear('stash'));
-  $('toVendor').addEventListener('click', openVendor);
-  $('toHall').addEventListener('click', openHall);
-  $('hallBack').addEventListener('click', () => { showScreen('start'); });
+  $('toKit').addEventListener('click', () => { refreshHubLines(); openGear('stash'); });
+  $('toVendor').addEventListener('click', () => { refreshHubLines(); openVendor(); });
+  $('toHall').addEventListener('click', () => { refreshHubLines(); openHall(); });
+  $('hallBack').addEventListener('click', () => { showScreen('splash'); });
   $('vendorBack').addEventListener('click', () => {
-    refreshKitLine(); refreshVendorLine(); refreshHallLine(); showScreen('start');
+    refreshHubLines(); showScreen('splash');
   });
 })();
 
@@ -10279,9 +10596,21 @@ function renderHallDetail() {
 
 function refreshHallLine() {
   const built = hallTotal();
-  el.hallLine.textContent = built
-    ? built + ' of ' + (HALL.length * HALL_MAX) + ' stones laid'
-    : 'four stations, all of them cold';
+  el.hallLine.textContent = built ? built + '/' + (HALL.length * HALL_MAX) : 'cold';
+}
+
+// The delve tab carries the power you would take in, which is the number the
+// whole ladder is read against.
+function refreshDelveLine() {
+  const t = $('delveLine');
+  if (t) t.textContent = 'power ' + stashPower();
+}
+
+// All four at once. Every station can change what another one says -- buying
+// at the vendor moves the purse and the kit both -- so they are refreshed
+// together rather than each caller remembering which ones it touched.
+function refreshHubLines() {
+  refreshKitLine(); refreshVendorLine(); refreshHallLine(); refreshDelveLine();
 }
 
 function openVendor() {
@@ -10348,20 +10677,15 @@ function renderVendorDetail() {
 }
 
 function refreshVendorLine() {
-  el.vendorLine.textContent = (stash.coins || 0)
-    ? (stash.coins || 0) + ' coin to spend'
-    : 'no coin';
+  el.vendorLine.textContent = (stash.coins || 0) ? (stash.coins || 0) + ' coin' : 'no coin';
 }
 
 function refreshKitLine() {
   const worn = SLOTS.filter(sl => stash.gear[sl.id]).length;
   const n = stash.vault.length;
-  const setN = SLOTS.reduce((a, sl) =>
-    a + (stash.gear[sl.id] && stash.gear[sl.id].set === SET_ID ? 1 : 0), 0);
-  el.kitLine.textContent = worn || n
-    ? worn + '/8 worn, ' + n + ' in the vault' +
-      (setN ? '  \u00b7  Regalia ' + setN + '/8' : '')
-    : 'nothing recovered';
+  // This reads in an eight-pixel caption under a tab now, not a menu row, so
+  // it is the one number that decides whether the station is worth opening.
+  el.kitLine.textContent = (worn || n) ? worn + '/8 \u00b7 ' + n : 'empty';
 }
 $('againBtn').addEventListener('click', () => startRun(run && run.hero));
 $('pauseBtn').addEventListener('click', pauseRun);
@@ -10372,7 +10696,7 @@ $('resumeBtn').addEventListener('click', resumeRun);
 $('abortBtn').addEventListener('click', () => {
   state = 'menu';
   resetRun();
-  showScreen('start');
+  showScreen('splash');
 });
 
 /* --- main loop ---------------------------------------------------------- */
@@ -10419,7 +10743,7 @@ refreshBestLine();
 refreshKitLine();
 refreshVendorLine();
 refreshHallLine();
-showScreen('start');
+showScreen('splash');
 requestAnimationFrame(frame);
 </script>
 </body>
