@@ -86,6 +86,10 @@
     z-index:7;                       /* above the frame chrome, below screens */
   }
   .hud[hidden]{display:none;}
+  /* `hidden` is an attribute, not a declaration: any rule that sets display
+     overrides it. The bag disc has its own display, so it kept drawing over
+     every menu screen while the code believed it was hidden. */
+  [hidden]{display:none !important;}
   .hud-left{flex:1; min-width:0; max-width:340px;}
   /* Everything in the HUD is DOM over a canvas; a drop shadow is what stops it
      reading as part of the picture. */
@@ -699,15 +703,6 @@
   /* The hall is drawn behind its own screen -- an arch, lit -- and its content
      has always started below that. It still has to, with the bar above it. */
   body.hub #hall{padding-top:calc(var(--safe-t) + var(--rail) + 15vh);}
-  /* One compact way out, bottom of every station. The tab bar is the
-     navigation now, so a full-width slab saying "back to the gate-house" on a
-     screen that IS the gate-house was both wrong and the largest thing on it. */
-  body.hub #delveBack, body.hub #gearClose,
-  body.hub #vendorBack, body.hub #hallBack{
-    width:auto; align-self:center; padding:7px 20px; margin-top:4px;
-    font-size:10px; letter-spacing:2px; color:#8a7c60;
-    background:transparent; border-color:#33291d;
-  }
 
   /* =========================================================================
      THE SPLASH
@@ -1030,7 +1025,7 @@
   /* Hide over the top of whatever the canvas is drawing, not instead of it --
      the hall has a lit arch behind it and the delve has a room, and an opaque
      ground threw both away. */
-  body.hub #delve, body.hub #gear, body.hub #vendor, body.hub #hall, #splash{
+  body.hub #delve, body.hub #gear, body.hub #vendor, body.hub #hall{
     background-image:
       radial-gradient(ellipse 120% 70% at 50% 0%, rgba(78,52,26,.42), transparent 62%),
       linear-gradient(180deg,rgba(20,15,9,.80),rgba(6,5,3,.88)),
@@ -1137,6 +1132,159 @@
 
   /* Rivets where a panel is meant to be bolted down. */
   #hubtabs .tabs, .dialog, .hud{position:relative;}
+
+  /* =========================================================================
+     THE TABLET
+     The gate-house is cut into slate: a bevelled block of cold stone with a
+     channel of runes round the edge, cracks through it, and what the last
+     Vanguard left on it. One construct, used by the splash and by every
+     station, so the whole interface is the same object seen from different
+     sides.
+
+     Layer order matters and is the whole trick: stone at the bottom, then the
+     blood (which soaked in), then the cracks (which are the stone itself, so
+     they sit over the blood), then the rune channel, then the content.
+     ====================================================================== */
+  .tablet{
+    /* No position here on purpose: .screen is already absolute, and
+       redeclaring it as relative beat that on source order and shrank the
+       screen to its content instead of filling the viewport. */
+    background-image:
+      var(--spatter),
+      var(--cracks),
+      radial-gradient(ellipse 130% 80% at 50% -6%, rgba(126,146,178,.30), transparent 64%),
+      linear-gradient(180deg,rgba(46,56,72,.55),rgba(14,18,26,.82)),
+      var(--tex-slate);
+    background-repeat:no-repeat, no-repeat, no-repeat, no-repeat, repeat;
+    background-size:cover, cover, auto, auto, 96px 96px;
+    background-position:center, center, center, center, center;
+    box-shadow:
+      inset 0 0 0 3px rgba(120,140,168,.35),
+      inset 0 0 0 5px rgba(8,12,18,.75),
+      inset 0 3px 0 rgba(178,198,224,.22),
+      inset 0 0 90px rgba(0,0,0,.7);
+  }
+
+  /* The channel: a sunk track round the inside edge with the inscription in
+     it. Four bands, one per side, each tiling its own axis. */
+  .tablet::before{
+    content:""; position:absolute; inset:14px; pointer-events:none; z-index:0;
+    background-image:
+      var(--runes-h), var(--runes-h), var(--runes-v), var(--runes-v);
+    background-repeat:repeat-x, repeat-x, repeat-y, repeat-y;
+    background-position:left top, left bottom, left top, right top;
+    background-size:auto 26px, auto 26px, 26px auto, 26px auto;
+    box-shadow:
+      inset 0 0 0 1px rgba(8,12,18,.6),
+      inset 0 1px 0 rgba(150,172,200,.22);
+    opacity:.85;
+  }
+  /* Content clears the channel and sits above it. */
+  .tablet > *{position:relative; z-index:1;}
+
+  /* =========================================================================
+     THE TITLE CARD
+     ====================================================================== */
+  #splash{
+    padding:calc(var(--safe-t) + 54px) 34px calc(var(--safe-b) + 40px);
+    justify-content:flex-start; gap:0;
+  }
+  #splash .sigil{
+    width:min(46vw,188px); height:min(46vw,188px);
+    margin:6px auto 22px; position:relative;
+  }
+  /* The sigil is one forged sprite -- ring, glass, star and the break through
+     it -- rather than a stack of elements, because it is a picture and not a
+     component. */
+  #splash .sigil .medal{
+    width:100%; height:100%; padding:0; background:none; box-shadow:none;
+    background-image:var(--sigil);
+    background-size:contain; background-repeat:no-repeat; background-position:center;
+    filter:drop-shadow(0 10px 26px rgba(0,0,0,.8))
+           drop-shadow(0 0 30px rgba(178,54,160,.32));
+  }
+  #splash .sigil .medal > *{display:none;}
+  #splash .title{margin:0; line-height:.94;}
+  #splash .title em{color:#9ec8ea;}
+  #splash .sub{margin-top:12px; color:#c6b48c;}
+  #splash .blurb{
+    margin-top:16px; max-width:30ch; color:#cfc09c;
+    text-shadow:0 1px 0 rgba(0,0,0,.9), 0 0 6px rgba(0,0,0,.7);
+  }
+  #splash .blurb b{color:var(--gold);}
+  #splash .enter{margin-top:26px;}
+  #splash .fine{margin-top:16px; color:#7c8798;}
+
+  /* The stations are the same stone. */
+  body.hub #delve, body.hub #gear, body.hub #vendor, body.hub #hall{
+    background-image:
+      var(--cracks),
+      radial-gradient(ellipse 130% 70% at 50% -4%, rgba(120,142,176,.24), transparent 62%),
+      linear-gradient(180deg,rgba(40,50,66,.5),rgba(12,16,24,.86)),
+      var(--tex-slate) !important;
+    background-repeat:no-repeat, no-repeat, no-repeat, repeat !important;
+    background-size:cover, auto, auto, 96px 96px !important;
+    background-attachment:scroll !important;
+  }
+
+
+  /* =========================================================================
+     ON SLATE
+     The controls were cut for a leather-and-wood interface. On cold stone the
+     warm wood plate reads as a different object dropped onto the tablet, so
+     inside the gate-house they are bronze set into the slate instead.
+     ====================================================================== */
+  #splash .orn-btn, body.hub .orn-btn, body.hub .btn{
+    background-image:linear-gradient(180deg,rgba(150,116,60,.6),rgba(24,28,36,.9)),
+                     var(--tex-bronze);
+    background-size:auto, 96px 96px;
+    color:#f6ead0;
+  }
+  #splash .fine, body.hub .fine{color:#8a94a6;}
+  #splash .sub, body.hub .sub{color:#b6c2d4;}
+  body.hub .gear-h{color:#93a1b6;}
+  /* The station's name is centred and the boss is pinned right, so the name
+     needs room on both sides or it runs underneath it. */
+  body.hub .sub{padding:0 54px;}
+
+  /* The way out is the corner of the tablet, the way the reference puts it:
+     a bracket over the top-right with a boss set into it. These are the same
+     controls as before -- same ids, same handlers -- wearing the right shape
+     for the room they are in. The kit opened from inside a delve keeps its
+     plain button, because there it means "back to the fight", not "close". */
+  body.hub #delveBack, body.hub #gearClose,
+  body.hub #vendorBack, body.hub #hallBack{
+    position:fixed; z-index:10;
+    top:calc(var(--safe-t) + var(--rail) + 12px);
+    right:calc(var(--safe-r) + 12px);
+    width:42px; height:42px; min-width:0; padding:0; margin:0; overflow:hidden;
+    border-radius:50%; align-self:auto;
+    font-size:0; letter-spacing:0; color:transparent;
+    background-image:linear-gradient(180deg,rgba(126,42,34,.9),rgba(38,14,12,.95)),
+                     var(--tex-bronze);
+    background-size:auto, 96px 96px;
+    box-shadow:0 0 0 3px var(--br-mid), 0 0 0 4px rgba(0,0,0,.8),
+               inset 0 2px 0 rgba(255,210,170,.28),
+               inset 0 -3px 6px rgba(0,0,0,.6), 0 4px 12px rgba(0,0,0,.7);
+  }
+  /* The X is drawn rather than typed: the label is the accessible name and
+     must not change, and two crossed rules always sit dead centre. */
+  body.hub #delveBack::after, body.hub #gearClose::after,
+  body.hub #vendorBack::after, body.hub #hallBack::after{
+    content:""; position:absolute; inset:0;
+    background:
+      linear-gradient(45deg,transparent 45%,#f0dcc0 45% 55%,transparent 55%),
+      linear-gradient(-45deg,transparent 45%,#f0dcc0 45% 55%,transparent 55%);
+    background-size:19px 19px; background-repeat:no-repeat;
+    background-position:center, center;
+    filter:drop-shadow(0 1px 1px rgba(0,0,0,.9));
+  }
+  body.hub #delveBack:active, body.hub #gearClose:active,
+  body.hub #vendorBack:active, body.hub #hallBack:active{
+    transform:translateY(2px);
+    box-shadow:0 0 0 3px var(--br-mid), 0 0 0 4px rgba(0,0,0,.8),
+               inset 0 3px 7px rgba(0,0,0,.75);
+  }
 </style>
 </head>
 <body>
@@ -1169,7 +1317,7 @@
       class="skull" aria-hidden="true">☠</span><span>II</span></button>
   </div>
 
-  <div class="screen on" id="splash">
+  <div class="screen on tablet" id="splash">
     <div class="sigil" aria-hidden="true">
       <span class="medal"><span class="mark">✦</span></span>
     </div>
@@ -7309,6 +7457,12 @@ function forgeTexture(kind) {
       } else if (kind === 'stone') {
         mul = 0.62 + b * 0.3 + e * 0.4 + a * 0.12;
         r = 62 * mul; gg = 58 * mul; bb = 52 * mul;
+      } else if (kind === 'slate') {
+        // Colder and bluer than the quarried stone the HUD is cut from: this
+        // is the tablet, and it has to read as a different rock in the same
+        // room rather than as the same rock lit differently.
+        mul = 0.66 + b * 0.26 + e * 0.34 + a * 0.14;
+        r = 78 * mul; gg = 88 * mul; bb = 104 * mul;
       } else if (kind === 'parchment') {
         // Warm, foxed, and light enough to read dark text on.
         mul = 0.82 + b * 0.16 + e * 0.1 + a * 0.06;
@@ -7332,12 +7486,246 @@ function forgeTexture(kind) {
 
 // Handed to CSS rather than drawn: the panels are DOM, so the material has to
 // reach them as a background-image.
+/* --- the tablet ------------------------------------------------------------
+   The gate-house is cut into slate rather than bound in leather: cold
+   blue-grey stone, a channel of runes round the edge, cracks through it, and
+   what the last Vanguard left on it.
+
+   All of it is forged, like everything else here. The rune band tiles, the
+   cracks and the spatter are transparent overlays laid over the stone, and
+   the sigil is one sprite.
+   -------------------------------------------------------------------- */
+
+// A rune alphabet. Angular strokes on a 2x3 lattice, which is what makes a
+// mark read as carved rather than written -- no curves, and every stroke ends
+// on a lattice point.
+const RUNES = [
+  [[0,0,0,2]], [[0,0,0,2],[0,0,1,1]], [[0,0,0,2],[0,1,1,0]],
+  [[0,0,1,1],[1,1,0,2]], [[0,0,0,2],[0,0,1,1],[1,1,0,2]],
+  [[0,0,1,0],[0,0,0,2],[0,2,1,2]], [[0,0,0,2],[0,0,1,0],[0,1,1,1]],
+  [[1,0,0,1],[0,1,1,2]], [[0,0,1,2],[1,0,0,2]],
+  [[0,0,0,2],[0,0,1,1],[0,2,1,1]], [[0,0,1,0],[1,0,1,2],[0,2,1,2]],
+  [[0,1,1,0],[0,1,1,2]], [[0,0,0,2],[1,0,1,2],[0,1,1,1]],
+  [[0,0,1,1],[0,2,1,1],[1,1,1,2]]
+];
+
+// One tileable strip of them. Long enough that the eye does not catch the
+// repeat, and drawn twice -- a dark cut, then a lit edge below it -- so the
+// marks read as chiselled into the stone rather than painted on.
+function forgeRuneBand(vertical) {
+  const CELL = 21, N = 26, W = CELL * N, H = 26;
+  const c = document.createElement('canvas');
+  c.width = vertical ? H : W;
+  c.height = vertical ? W : H;
+  const g = c.getContext('2d');
+  g.save();
+  if (vertical) { g.translate(H, 0); g.rotate(Math.PI / 2); }
+
+  let s = vertical ? 20749 : 91193;
+  const rnd = () => (s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296;
+
+  for (let i = 0; i < N; i++) {
+    const r = RUNES[(rnd() * RUNES.length) | 0];
+    const ox = i * CELL + CELL / 2, oy = H / 2;
+    const sx = CELL * 0.26, sy = H * 0.22;
+    for (const pass of [0, 1]) {
+      g.strokeStyle = pass ? 'rgba(168,188,212,.42)' : 'rgba(8,12,18,.85)';
+      g.lineWidth = pass ? 1.3 : 2.6;
+      g.lineCap = 'square';
+      g.translate(0, pass ? -1 : 0);
+      g.beginPath();
+      for (const [x0, y0, x1, y1] of r) {
+        g.moveTo(ox + (x0 - 0.5) * sx * 2, oy + (y0 - 1) * sy);
+        g.lineTo(ox + (x1 - 0.5) * sx * 2, oy + (y1 - 1) * sy);
+      }
+      g.stroke();
+      g.translate(0, pass ? 1 : 0);
+    }
+  }
+  g.restore();
+  return c.toDataURL('image/png');
+}
+
+// Cracks: a walk that starts at an edge, wanders across, and throws off a
+// branch or two. Drawn as a dark line with a lit lower lip, because a crack in
+// stone is a shadow with a highlight under it and a plain dark line is a
+// scratch on glass.
+function forgeCracks(seed) {
+  const W = 420, H = 760;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  let s = seed >>> 0;
+  const rnd = () => (s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296;
+
+  const walk = (x, y, ang, len, depth) => {
+    const pts = [[x, y]];
+    let a = ang;
+    for (let i = 0; i < len; i++) {
+      // Long straight runs with the occasional sharp turn, not a smooth
+      // wander: rock splits along a line and then jumps to a new one. A
+      // continuously curving crack reads as a hair on the lens.
+      if (rnd() < 0.34) a += (rnd() - 0.5) * 1.5;
+      const step = 22 + rnd() * 30;
+      x += Math.cos(a) * step; y += Math.sin(a) * step;
+      pts.push([x, y]);
+      if (depth < 2 && rnd() < 0.2)
+        walk(x, y, a + (rnd() < 0.5 ? 1.1 : -1.1), Math.max(2, len * 0.45), depth + 1);
+    }
+    for (const pass of [0, 1]) {
+      g.strokeStyle = pass ? 'rgba(176,196,222,.3)' : 'rgba(4,8,14,.8)';
+      g.lineWidth = pass ? 1.4 : (depth ? 2.4 : 4.2);
+      g.lineJoin = 'miter'; g.lineCap = 'butt';
+      g.beginPath();
+      pts.forEach((p, i) => i ? g.lineTo(p[0], p[1] + (pass ? 1.8 : 0))
+                              : g.moveTo(p[0], p[1] + (pass ? 1.8 : 0)));
+      g.stroke();
+    }
+  };
+  // From the edges inward, which is where stone actually fails.
+  walk(W * 0.78, -10, 1.9, 16, 0);
+  walk(-10, H * 0.62, 0.25, 14, 0);
+  walk(W + 10, H * 0.34, 2.7, 12, 0);
+  walk(W * 0.3, H + 10, -1.4, 10, 0);
+  return c.toDataURL('image/png');
+}
+
+// What the last one left on it.
+function forgeSpatter(seed) {
+  const W = 420, H = 760;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  let s = seed >>> 0;
+  const rnd = () => (s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296;
+
+  // A few throws, each a heavy mark with a spray of droplets and a run or two
+  // where it was thick enough to move.
+  const throwAt = (cx, cy, scale) => {
+    g.fillStyle = 'rgba(96,14,12,.62)';
+    for (let i = 0; i < 14; i++) {
+      const a = rnd() * TAU, d = rnd() * 34 * scale;
+      const x = cx + Math.cos(a) * d, y = cy + Math.sin(a) * d;
+      const r = (1 + rnd() * 5) * scale;
+      g.beginPath(); g.ellipse(x, y, r, r * (0.7 + rnd() * 0.9), rnd() * TAU, 0, TAU); g.fill();
+      if (rnd() < 0.3) {                        // a run
+        g.fillRect(x - r * 0.28, y, r * 0.56, 12 + rnd() * 34 * scale);
+      }
+    }
+    g.beginPath();
+    g.ellipse(cx, cy, 13 * scale, 17 * scale, rnd() * TAU, 0, TAU); g.fill();
+  };
+  throwAt(W * 0.13, H * 0.26, 1.25);
+  throwAt(W * 0.89, H * 0.19, 1.0);
+  throwAt(W * 0.15, H * 0.70, 0.85);
+  throwAt(W * 0.78, H * 0.86, 1.1);
+  return c.toDataURL('image/png');
+}
+
+/* The sigil: the Aegis, and the break through it. Bronze ring, faceted glass
+   in the violets and crimsons the Shroud is lit by, and a six-pointed star
+   over the middle. The crack across it is the whole point -- this is the thing
+   that shattered, and the title card should say so before a word is read. */
+function forgeSigil() {
+  const N = 320, R = N / 2;
+  const c = document.createElement('canvas');
+  c.width = c.height = N;
+  const g = c.getContext('2d');
+  const cx = R, cy = R;
+  let s = 4242;
+  const rnd = () => (s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296;
+
+  // The glass: two rings of facets, cut on alternating spokes so the panes
+  // read as leaded rather than as a pie chart.
+  const glass = ['#8e2fa8', '#b8286f', '#7b2ea6', '#d0246a', '#a02a94', '#c62a58'];
+  const inner = R * 0.80, mid = R * 0.46;
+  const SPOKES = 12;
+  for (let ring = 0; ring < 2; ring++) {
+    const r0 = ring ? 0 : mid, r1 = ring ? mid : inner;
+    for (let i = 0; i < SPOKES; i++) {
+      const a0 = (i / SPOKES) * TAU + (ring ? Math.PI / SPOKES : 0);
+      const a1 = a0 + TAU / SPOKES;
+      const col = glass[(i + ring * 3) % glass.length];
+      const gr = g.createLinearGradient(cx + Math.cos(a0) * r0, cy + Math.sin(a0) * r0,
+                                        cx + Math.cos(a1) * r1, cy + Math.sin(a1) * r1);
+      gr.addColorStop(0, col);
+      gr.addColorStop(1, 'rgba(30,8,40,.92)');
+      g.fillStyle = gr;
+      g.beginPath();
+      g.moveTo(cx + Math.cos(a0) * r0, cy + Math.sin(a0) * r0);
+      g.lineTo(cx + Math.cos(a0) * r1, cy + Math.sin(a0) * r1);
+      g.lineTo(cx + Math.cos(a1) * r1, cy + Math.sin(a1) * r1);
+      g.lineTo(cx + Math.cos(a1) * r0, cy + Math.sin(a1) * r0);
+      g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(16,6,22,.75)'; g.lineWidth = 2; g.stroke();
+    }
+  }
+
+  // The star, drawn as two overlaid triangles the way a real one is leaded.
+  const star = (rad, fill, line, lw) => {
+    for (const off of [0, Math.PI / 3]) {
+      g.beginPath();
+      for (let i = 0; i < 3; i++) {
+        const a = off + (i / 3) * TAU - Math.PI / 2;
+        const x = cx + Math.cos(a) * rad, y = cy + Math.sin(a) * rad;
+        i ? g.lineTo(x, y) : g.moveTo(x, y);
+      }
+      g.closePath();
+      if (fill) { g.fillStyle = fill; g.fill(); }
+      if (line) { g.strokeStyle = line; g.lineWidth = lw; g.stroke(); }
+    }
+  };
+  star(R * 0.60, 'rgba(214,120,196,.30)', null, 0);
+  star(R * 0.60, null, 'rgba(20,8,26,.85)', 9);
+  star(R * 0.60, null, '#e6c27e', 5.5);
+  g.fillStyle = 'rgba(255,226,178,.9)';
+  g.beginPath(); g.arc(cx, cy, R * 0.10, 0, TAU); g.fill();
+
+  // The break. It runs the whole disc, off-centre, and the glass on one side
+  // of it is a shade darker for having shifted.
+  g.save();
+  g.beginPath(); g.arc(cx, cy, inner, 0, TAU); g.clip();
+  const seg = [];
+  let x = cx - R, y = cy - R * 0.5;
+  seg.push([x, y]);
+  for (let i = 0; i < 7; i++) { x += N / 7; y += (rnd() - 0.38) * 44; seg.push([x, y]); }
+  for (const pass of [0, 1]) {
+    g.strokeStyle = pass ? 'rgba(226,196,246,.5)' : 'rgba(4,2,8,.95)';
+    g.lineWidth = pass ? 2 : 7;
+    g.beginPath();
+    seg.forEach((q, i) => i ? g.lineTo(q[0], q[1] + (pass ? 3 : 0))
+                            : g.moveTo(q[0], q[1] + (pass ? 3 : 0)));
+    g.stroke();
+  }
+  g.restore();
+
+  // The ring: a bronze moulding with a lit top and a shaded underside.
+  const ring = g.createLinearGradient(0, 0, 0, N);
+  ring.addColorStop(0, '#e8c78c');
+  ring.addColorStop(0.35, '#b9832f');
+  ring.addColorStop(0.7, '#6d4a1e');
+  ring.addColorStop(1, '#3a2610');
+  g.strokeStyle = ring; g.lineWidth = R * 0.20;
+  g.beginPath(); g.arc(cx, cy, R * 0.90, 0, TAU); g.stroke();
+  g.strokeStyle = 'rgba(0,0,0,.7)'; g.lineWidth = 2.5;
+  g.beginPath(); g.arc(cx, cy, R * 0.99, 0, TAU); g.stroke();
+  g.beginPath(); g.arc(cx, cy, R * 0.805, 0, TAU); g.stroke();
+  g.strokeStyle = 'rgba(255,236,196,.4)'; g.lineWidth = 1.6;
+  g.beginPath(); g.arc(cx, cy, R * 0.955, Math.PI * 1.05, Math.PI * 1.95); g.stroke();
+  return c.toDataURL('image/png');
+}
+
 let surfacesForged = false;
 function forgeSurfaces() {
   const root = document.documentElement.style;
-  for (const k of ['wood', 'leather', 'stone', 'parchment', 'bronze']) {
+  for (const k of ['wood', 'leather', 'stone', 'slate', 'parchment', 'bronze']) {
     root.setProperty('--tex-' + k, 'url(' + forgeTexture(k) + ')');
   }
+  root.setProperty('--runes-h', 'url(' + forgeRuneBand(false) + ')');
+  root.setProperty('--runes-v', 'url(' + forgeRuneBand(true) + ')');
+  root.setProperty('--cracks',  'url(' + forgeCracks(20260828) + ')');
+  root.setProperty('--spatter', 'url(' + forgeSpatter(77341) + ')');
+  root.setProperty('--sigil',   'url(' + forgeSigil() + ')');
 }
 
 function forgeAll() {
