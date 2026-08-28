@@ -104,6 +104,59 @@ ICONS = [
     ('Iron Band', 'i', 2, 5), ('Signet', 'i', 8, 4), ('Twisted Ring', 'i', 9, 4),
 ]
 
+# Scenery, cut from the dungeon sheets. Each entry is a generous source rect;
+# it is trimmed to its own content and centred in the cell, so the rects only
+# have to contain the object rather than fit it. Four variants a kind, picked
+# by the prop's existing random q -- variety without rotating a bitmap that has
+# an up.
+PROP_CELL = 48
+# Every rect below came out of a connected-component scan of the sheet, not
+# off a grid: the objects sit on a 16px grid but most of them are two or three
+# cells across and none is centred in its cell, so rects guessed off the grid
+# caught half of one object and a corner of the next.
+PROPS = {
+    # bone-and-skull piles, all 32x16
+    'bones': ('relics', 1.0, [(105, 167, 32, 16), (64, 176, 32, 16),
+                              (41, 211, 32, 16), (0, 212, 32, 16)]),
+    # spoil heaps. Graded gently: at the scenery grade they came out sand-
+    # coloured, and a heap of coin that is not gold is a heap of gravel.
+    # Picked by hue, not by region: selecting on the gold band by position
+    # caught the open chests sitting in it and only one heap of the four.
+    'coins': ('relics', 0.78, [(117, 54, 22, 17), (5, 98, 22, 17),
+                               (87, 103, 19, 17), (144, 55, 16, 12)]),
+    # single skulls, small -- drawn larger than they are cut
+    'hornskull': ('relics', 1.0, [(58, 322, 13, 12), (139, 321, 11, 14),
+                                  (33, 330, 13, 12), (115, 328, 11, 14)]),
+    # sarcophagi: an ornate upright, one with the occupant showing, a lidded
+    # slab and a big open altar
+    'tomb': ('tombs', 1.0, [(7, 6, 25, 55), (103, 9, 25, 52),
+                            (81, 79, 46, 33), (15, 77, 49, 35)]),
+}
+PROP_ORDER = ['bones', 'coins', 'hornskull', 'tomb']
+
+
+def strip_props():
+    src = {'relics': Image.open(A('sheet-relics.png')).convert('RGBA'),
+           'tombs':  Image.open(A('sheet-tombs.png')).convert('RGBA')}
+    out = Image.new('RGBA', (PROP_CELL * 4, PROP_CELL * len(PROP_ORDER)), (0, 0, 0, 0))
+    for r, kind in enumerate(PROP_ORDER):
+        which, satmul, rects = PROPS[kind]
+        for c, (x, y, w, h) in enumerate(rects):
+            cut = src[which].crop((x, y, x + w, y + h))
+            bb = cut.getbbox()
+            if bb:
+                cut = cut.crop(bb)
+            if cut.size[0] > PROP_CELL or cut.size[1] > PROP_CELL:
+                k = min(PROP_CELL / cut.size[0], PROP_CELL / cut.size[1])
+                cut = cut.resize((max(1, int(cut.size[0] * k)),
+                                  max(1, int(cut.size[1] * k))), Image.NEAREST)
+            # centred across, sitting on the floor of the cell
+            out.paste(grade(cut.copy(), sat=0.46 / satmul, floor=0.10, span=0.70),
+                      (c * PROP_CELL + (PROP_CELL - cut.size[0]) // 2,
+                       r * PROP_CELL + PROP_CELL - cut.size[1]))
+    return out
+
+
 # The two coffers, and the four frames each takes to come open.
 CHESTS = [('coffer', 5), ('warded', 7)]
 CHEST_C, CHEST_FRAMES = 32, 4
@@ -152,9 +205,12 @@ def patch(src, pattern, value, label):
 def main():
     icons, keys = strip_icons()
     chests = strip_chests()
-    iu, cu = uri(icons), uri(chests)
+    scenery = strip_props()
+    iu, cu, pu = uri(icons), uri(chests), uri(scenery)
     print('icon strip   %dx%d, %d cells' % (icons.size[0], icons.size[1], len(keys)))
     print('chest strip  %dx%d' % chests.size)
+    print('prop strip   %dx%d, %s' % (scenery.size[0], scenery.size[1],
+                                      ', '.join(PROP_ORDER)))
 
     p = os.path.join(ROOT, 'index.html')
     src = open(p, encoding='utf-8').read()
@@ -162,6 +218,7 @@ def main():
                 iu, 'icons')
     src = patch(src, r"(const CHEST_SHEET = ')([^']*)(')", cu, 'chests')
     # the strip width has to match the cell count or every icon is the wrong one
+    src = patch(src, r"(const PROP_SHEET = ')([^']*)(')", pu, 'props')
     src = patch(src, r'(calc\(var\(--sz,32px\) \* )(\d+)(\))', str(len(keys)), 'cell count')
     open(p, 'w', encoding='utf-8').write(src)
     print('index.html patched')

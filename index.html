@@ -2265,9 +2265,9 @@ function standPillars(spawn, portal) {
    somebody having been here rather than as more of the same scatter. */
 const KNOT_SETS = {
   store:   ['crate', 'barrel', 'urn', 'crate', 'coins'],
-  killed:  ['bones', 'sword', 'shield', 'hornskull', 'bones'],
+  killed:  ['bones', 'sword', 'shield', 'hornskull', 'bones', 'tomb'],
   spoil:   ['coins', 'scroll', 'urn', 'coins', 'bones'],
-  fallen:  ['rubble', 'rubble', 'crack', 'bones', 'rubble'],
+  fallen:  ['rubble', 'rubble', 'crack', 'bones', 'rubble', 'tomb'],
   damp:    ['moss', 'moss', 'rubble', 'grate', 'moss']
 };
 
@@ -5935,6 +5935,7 @@ function forgeAll() {
   }
 
   if (!chestImg && CHEST_SHEET) { chestImg = new Image(); chestImg.src = CHEST_SHEET; }
+  if (!propImg && PROP_SHEET) { propImg = new Image(); propImg.src = PROP_SHEET; }
   for (const ck in CHEST_KINDS) {
     SPR['ch_' + ck] = forgeChest(ck, false);
     SPR['ch_' + ck + '_open'] = forgeChest(ck, true);
@@ -6972,6 +6973,33 @@ function forgeProps() {
     g.beginPath(); g.moveTo(-4, 8.6); g.lineTo(4, 8.6); g.stroke();
     g.lineCap = 'butt';
   });
+  // A stone tomb. The sheet supplies the real ones; this is what shows if it
+  // ever fails to decode, on the same rule the coffers follow -- nothing in
+  // the world may render as nothing.
+  P('tomb', 56, g => {
+    g.fillStyle = '#3a352c';                                    // the chest
+    g.beginPath();
+    g.roundRect ? g.roundRect(-13, -20, 26, 40, 3) : g.rect(-13, -20, 26, 40);
+    g.fill();
+    g.strokeStyle = 'rgba(0,0,0,.7)'; g.lineWidth = 2; g.stroke();
+    const lg = g.createLinearGradient(0, -20, 0, 14);            // the lid
+    lg.addColorStop(0, '#6a6355');
+    lg.addColorStop(1, '#403a31');
+    g.fillStyle = lg;
+    g.beginPath();
+    g.roundRect ? g.roundRect(-12, -22, 24, 34, 3) : g.rect(-12, -22, 24, 34);
+    g.fill();
+    g.strokeStyle = 'rgba(0,0,0,.7)'; g.lineWidth = 1.6; g.stroke();
+    g.strokeStyle = 'rgba(150,138,112,.35)'; g.lineWidth = 1;    // a carved figure
+    g.beginPath();
+    g.ellipse(0, -14, 4, 5, 0, 0, TAU);
+    g.moveTo(-5, -6); g.lineTo(5, -6);
+    g.moveTo(0, -6); g.lineTo(0, 7);
+    g.stroke();
+    g.fillStyle = 'rgba(12,10,7,.5)';                            // the seam
+    g.fillRect(-12, 11, 24, 2);
+  });
+
   P('grate', 34, g => {
     g.fillStyle = 'rgba(8,6,5,.85)';
     g.fillRect(-11, -11, 22, 22);
@@ -7010,7 +7038,30 @@ function indexBreakables() {
 // Scenery that stands up rather than lying flat. These are drawn with the
 // bodies, sorted by depth, so a thrall can pass behind a pillar and be hidden
 // by it -- which is the cheapest verticality a flat view can buy.
-const STANDING = { pillar: 26, barrel: 12, crate: 11, urn: 10, banner: 16, chain: 14 };
+// Scenery drawn from the sheet rather than forged. Four variants a kind,
+// picked by the prop's own random q -- which is what used to choose a quarter
+// turn, and a quarter turn is wrong for a bitmap that has an up. `d` is how
+// wide it is drawn in world units. Built by tools/build-art.py.
+const PROP_SHEET = 'data:image/png;base64,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';
+const PROP_CELL = 48, PROP_VARIANTS = 4;
+const PROP_ART = { bones: { row: 0, d: 40 }, coins: { row: 1, d: 34 },
+                   hornskull: { row: 2, d: 42 }, tomb: { row: 3, d: 62 } };
+let propImg = null;
+
+const STANDING = { pillar: 26, barrel: 12, crate: 11, urn: 10, banner: 16, chain: 14,
+                   tomb: 22 };
+
+// Draws one sheet-backed prop, or returns false if the sheet has nothing for
+// it -- in which case the forged sprite stands in, as it does before the sheet
+// has decoded.
+function drawSheetProp(p) {
+  const A = PROP_ART[p.kind];
+  if (!A || !propImg || !propImg.complete || !propImg.naturalWidth) return false;
+  const d = A.d;
+  ctx.drawImage(propImg, (p.q % PROP_VARIANTS) * PROP_CELL, A.row * PROP_CELL,
+                PROP_CELL, PROP_CELL, p.x - d / 2, p.y - d / 2, d, d);
+  return true;
+}
 
 function drawProps(x0, y0, x1, y1) {
   if (lowFx) return;
@@ -7018,6 +7069,7 @@ function drawProps(x0, y0, x1, y1) {
     const p = props[i];
     if (STANDING[p.kind]) continue;            // drawn later, with the bodies
     if (p.x < x0 || p.x > x1 || p.y < y0 || p.y > y1) continue;
+    if (drawSheetProp(p)) continue;
     const spr = SPR['p_' + p.kind + '_' + p.q];
     if (spr) blit(spr, p.x, p.y);
   }
@@ -7057,12 +7109,15 @@ function drawStanding(t, x0, y0, x1, y1) {
     const o = _sortable[i];
     if (o === player) { drawPlayer(t); continue; }
     if (o.kind && STANDING[o.kind]) {
-      const spr = SPR['p_' + o.kind + '_' + o.q];
       // A struck barrel rocks on its base, so a room tells you it is about to
       // be a worse room.
-      if (spr && o.shake > 0) {
-        blit(spr, o.x + Math.sin(o.shake * 90) * 2.4, o.y);
-      } else if (spr) blit(spr, o.x, o.y);
+      const wob = o.shake > 0 ? Math.sin(o.shake * 90) * 2.4 : 0;
+      if (wob) { ctx.save(); ctx.translate(wob, 0); }
+      if (!drawSheetProp(o)) {
+        const spr = SPR['p_' + o.kind + '_' + o.q];
+        if (spr) blit(spr, o.x, o.y);
+      }
+      if (wob) ctx.restore();
     } else {
       drawEnemy(o);
     }
