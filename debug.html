@@ -770,6 +770,25 @@ const ENEMY_TYPES = {
   cantor:  { r: 13, speed: 78,  hp: 28,  dmg: 12, tech: 1, cd: 1.45, mass: 0.9,
               role: 'shade',
               color: '#48d0c0', halo: 'rgba(72,208,192,.22)', weight: 4,  from: 40 },
+  // Ash and bolted iron, and slow enough that it is never the thing that
+  // kills you -- it is the thing that decides where the fight happens. Its
+  // slam leaves the floor broken and burning, so a corridor it has come down
+  // in is a corridor you have to go round.
+  gorger:  { r: 26, speed: 52,  hp: 240, dmg: 24, tech: 3, cd: 1.5,  mass: 5.4,
+              role: 'press', slam: true, slamR: 1.4, fracture: true,
+              color: '#e0402c', halo: 'rgba(224,64,44,.24)', weight: 3,  from: 62 },
+  // It does not fight you, it visits. Waits off in the dark, crosses the room
+  // in one run, opens you up, and is gone before the blade comes round -- the
+  // damage arrives afterwards, which is the whole of it.
+  flayer:  { r: 15, speed: 172, hp: 46,  dmg: 9,  tech: 1, cd: 1.1,  mass: 0.8,
+              role: 'stalk',
+              color: '#c48a3a', halo: 'rgba(196,138,58,.22)', weight: 5,  from: 30 },
+  // A back rank that never closes and never throws anything you can dodge in
+  // flight. It puts fire on the floor you are standing on, or it takes the
+  // light away, and the only answer to either is to reach it.
+  shaman:  { r: 16, speed: 58,  hp: 74,  dmg: 0,  tech: 2, cd: 2.6,  mass: 1.2,
+              role: 'chant',
+              color: '#ff7a2c', halo: 'rgba(255,122,44,.24)', weight: 3,  from: 88 },
   // The Deceiver's own. They never appear in the horde roster -- they arrive
   // with him and they are the reason he is hard to reach.
   lieutenant: { r: 21, speed: 80, hp: 300, dmg: 26, tech: 12, cd: 1.15, mass: 4.4,
@@ -792,6 +811,27 @@ const ENEMY_TYPES = {
 const INVADE_EARLY = 34;   // never before this, so a run has started properly
 const INVADE_HUNT  = 78;   // and he leaves after this long without reaching you
 const INVADE_GIVEUP = 380; // "without reaching you" means staying this far off
+
+// --- the gorger -----------------------------------------------------------
+const FRACTURE_LIFE = 6.5;   // how long broken ground stays broken
+const FRACTURE_DPS  = 9;     // and what standing in it costs a second
+
+// --- the flayer -----------------------------------------------------------
+const STALK_HOLD  = 220;   // the distance it waits at between runs
+const STALK_RUN   = 0.85;  // how long a run at you lasts before it turns
+const STALK_BACK  = 0.9;   // and how long it stays away afterwards
+const BLEED_TIME  = 3.2;   // the wound it opens, and what it costs a second
+const BLEED_DPS   = 7;
+const BLEED_TICK  = 0.55;
+
+// --- the shaman -----------------------------------------------------------
+const CHANT_WIND  = 1.15;  // a cast you can see coming and reach it during
+const CHANT_WANT  = 260;   // the range it tries to hold
+const GLOOM_TIME  = 4.2;   // how long the light stays taken
+const GLOOM_DEPTH = 0.62;  // and how far in the dark closes
+const EMBER_R     = 74;
+const EMBER_DPS   = 16;
+const EMBER_LIFE  = 5.0;
 
 // --- the husk -------------------------------------------------------------
 const HUSK_NEAR  = 50;    // it commits to the burst this close
@@ -1028,10 +1068,16 @@ function rollMutators(index, depth) {
                  met while nothing else is complicating the room.
      the third   breakers and pitch. Ground that has to be taken, and ground
                  that cannot be stood on.
+     the fourth  husks, carrying their own detonation.
+     the fifth   cantors, which never close.
+     the sixth   flayers, which wait out of the fight and take your back.
+     the seventh gorgers, heavy enough to break the ground they land on.
+     the eighth  shamans, which never come forward at all.
 
-   From the fourth the delve is the whole game. Nothing here is announced --
+   From the ninth the delve is the whole game. Nothing here is announced --
    the player is not told a lesson is happening, only handed one thing at a
-   time until they are not being handed things any more.
+   time until they are not being handed things any more. Past the eighth rung
+   the roster does not grow again; what changes is how much of it turns up.
    -------------------------------------------------------------------- */
 const RAMP = [
   { horde: ['thrall'],
@@ -1048,8 +1094,20 @@ const RAMP = [
     lesson: 'Some of them are carrying it with them. Break those early.' },
   { horde: ['thrall', 'eclipse', 'breaker', 'husk', 'cantor'],
     elites: 0.15, pitch: 0.6, invade: 1, guard: 1, mutate: true,
-    lesson: 'Some of them never close at all. Put stone between you.' }
+    lesson: 'Some of them never close at all. Put stone between you.' },
+  { horde: ['thrall', 'eclipse', 'breaker', 'husk', 'cantor', 'flayer'],
+    elites: 0.16, pitch: 0.6, invade: 1, guard: -1, mutate: true,
+    lesson: 'Something is waiting in the dark for your back to turn.' },
+  { horde: ['thrall', 'eclipse', 'breaker', 'husk', 'cantor', 'flayer', 'gorger'],
+    elites: 0.17, pitch: 0.65, invade: 1, guard: -1, mutate: true,
+    lesson: 'One of them breaks the floor it lands on. Do not be on it.' },
+  { horde: ['thrall', 'eclipse', 'breaker', 'husk', 'cantor', 'flayer', 'gorger', 'shaman'],
+    elites: 0.18, pitch: 0.7, invade: 1, guard: -1, mutate: true,
+    lesson: 'One of them fights from the back. Reach it or fight in its fire.' }
 ];
+
+// The roster once the ramp has finished teaching: everything.
+const FULL_HORDE = RAMP[RAMP.length - 1].horde.slice();
 
 function buildLevels() {
   const out = [];
@@ -1065,8 +1123,7 @@ function buildLevels() {
     const pool = i === 0 ? regions.slice()
                : regions.slice(0, Math.min(regions.length, 1 + Math.floor(d * 5)));
     const ramp = RAMP[i];
-    const horde = ramp ? ramp.horde.slice()
-                       : ['thrall', 'eclipse', 'breaker', 'husk', 'cantor'];
+    const horde = ramp ? ramp.horde.slice() : FULL_HORDE.slice();
     out.push({
       id: i === 0 ? 'test' : 'delve' + i,
       name: name,
@@ -2468,6 +2525,7 @@ function makePlayer(x, y, heroId) {
   p.swing = 0; p.swingA = 0;
   p.gait = 0; p.pace = 0;
   p.strike = 0; p.recov = 0;
+  p.bleed = 0; p.bleedDps = 0; p.bleedTick = 0;
   p.upg = {};
   p.level = stash.level || 1;
   p.gear = {};
@@ -2571,17 +2629,42 @@ function wakeEnemy(e, chain) {
 // lean on the heavier archetypes and the near ones are thralls. Written out
 // twice once -- in the main placement and in the top-up pass -- which meant
 // two copies of the same table to keep in step by hand.
+// What a pack is made of, as a weight per kind and the depth it starts
+// appearing at. This was cumulative bands on a single roll, which is a trap:
+// widening one band silently narrowed every kind after it, and the breaker's
+// share was cut from 0.28 to 0.22 that way without anyone noticing until a
+// delve got shorter. A weight is only ever relative to the kinds actually in
+// the roster, so adding one here cannot quietly rewrite another.
+// A weight here is NOT the share that ends up on the map. `from` gates a kind
+// to pack sites at least that far out from the spawn, and the far band holds a
+// minority of sites, so a late kind has to carry a much larger weight to land
+// the same number of bodies -- that is why the breaker's 44 sits beside the
+// thrall's 12 and both come out near an eighth of the delve. The shares these
+// produce were measured on the map, not reasoned about; kindcensus.js prints
+// them, and changing a number here without re-running it is guessing.
+const PACK_MIX = [
+  { kind: 'breaker', from: 0.62, w: 44 },
+  { kind: 'gorger',  from: 0.52, w: 11 },   // rare: three of them is a wall
+  { kind: 'cantor',  from: 0.45, w: 12 },
+  { kind: 'shaman',  from: 0.56, w: 10 },   // rarest: two chanters stack fire
+  { kind: 'husk',    from: 0.28, w: 13 },
+  { kind: 'flayer',  from: 0.22, w: 11 },
+  { kind: 'eclipse', from: 0.30, w: 11 },
+  { kind: 'thrall',  from: 0,    w: 12 }
+];
+
 function packKind(roster, depth) {
-  const has = k => roster.indexOf(k) >= 0;
-  const r = Math.random();
-  // The bands are cumulative on one roll, so widening one narrows what comes
-  // after it. The breaker's share was quietly cut from 0.28 to 0.22 making
-  // room for the new pair, and fewer of the tanky body showed up as a faster
-  // delve rather than as anything anyone would notice happening.
-  if (depth > 0.62 && r < 0.28 && has('breaker')) return 'breaker';
-  if (depth > 0.45 && r < 0.40 && has('cantor'))  return 'cantor';
-  if (depth > 0.28 && r < 0.56 && has('husk'))    return 'husk';
-  if (depth > 0.30 && r < 0.68 && has('eclipse')) return 'eclipse';
+  let total = 0;
+  for (const e of PACK_MIX) {
+    if (depth >= e.from && roster.indexOf(e.kind) >= 0) total += e.w;
+  }
+  if (total <= 0) return roster[0];
+  let r = Math.random() * total;
+  for (const e of PACK_MIX) {
+    if (depth < e.from || roster.indexOf(e.kind) < 0) continue;
+    r -= e.w;
+    if (r < 0) return e.kind;
+  }
   return roster[0];
 }
 
@@ -2746,12 +2829,15 @@ function newBody(kind, x, y, t) {
     awake: true, alert: 0, drowse: Math.random() * TAU, aggro: AGGRO_NEAR,
     role: d.role || 'press', spin: Math.random() < 0.5 ? -1 : 1,
     markX: 0, markY: 0, markT: 0, markCd: 0,
-    slam: !!d.slam, slamCd: rand(1.2, SLAM_CD),
+    slam: !!d.slam, slamCd: rand(1.2, SLAM_CD), slamR: d.slamR || 1,
+    fracture: !!d.fracture,
     postX: 0, postY: 0, posted: false, guard: rand(0, BRACE_UP), braced: false,
     // Started somewhere random in the cycle, or a pack arrives in lockstep.
     gait: Math.random() * GAIT_STEP * GAIT_N, pace: 0,
     fuse: 0,                                   // husk: counting down to the burst
-    cast: rand(0, 1.2), casting: 0             // cantor: between throws, and mid-throw
+    cast: rand(0, 1.2), casting: 0,            // cantor: between throws, and mid-throw
+    lurk: rand(0, STALK_BACK), run: 0, struck: false,  // flayer: waiting, running, spent
+    chant: rand(0, 2), chanting: 0, spell: 0   // shaman: between, mid-cast, and which
   };
 }
 
@@ -2992,6 +3078,67 @@ function maybeDropItem(e) {
     const floor = e.kind === 'deceiver' ? 0.85 : e.elite ? 0.7 : 0;
     push(rollItem(Math.max(depth, floor)));
   }
+}
+
+/* --- what the Flayer leaves, and what the Shaman takes --------------------
+   A bleed is damage that arrives after the thing that caused it has gone. It
+   is the whole point of the Flayer: the run is survivable and the wound is
+   what costs you, so the answer is to break it rather than to out-trade it.
+   It does not stack -- a second cut refreshes the clock instead of doubling
+   the rate, or a pack of them is an execution.
+
+   The gloom is the Shaman taking the light. Nothing is hidden that was not
+   already off-screen; the reach of what the Vanguard carries simply closes,
+   which is enough to make a room you had read stop being read.
+   -------------------------------------------------------------------- */
+function openWound(dps, life) {
+  player.bleed = Math.max(player.bleed || 0, life);
+  player.bleedDps = dps;
+  player.bleedTick = Math.min(player.bleedTick || BLEED_TICK, BLEED_TICK);
+}
+
+function updateBleed(dt) {
+  if (!player.bleed || player.bleed <= 0) return;
+  player.bleed -= dt;
+  player.bleedTick -= dt;
+  if (player.bleedTick <= 0) {
+    player.bleedTick = BLEED_TICK;
+    // Through the i-frames: a wound does not care that you were just hit, and
+    // a bleed the player can outrun by taking another blow is not a bleed.
+    const was = player.invuln;
+    player.invuln = 0;
+    hurtPlayerBy(player.bleedDps * BLEED_TICK, player.x, player.y);
+    player.invuln = was;
+    floatDmg(player.x, player.y - player.r * 1.4, player.bleedDps * BLEED_TICK, 'bleed');
+    if (player.hp > 0) burst(player.x, player.y, PAL.blood, 4, 90);
+  }
+  if (player.bleed <= 0) { player.bleed = 0; player.bleedDps = 0; }
+}
+
+function castGloom() {
+  run.gloom = GLOOM_TIME;
+  shake(4);
+}
+
+function updateGloom(dt) {
+  if (run.gloom > 0) run.gloom = Math.max(0, run.gloom - dt);
+}
+
+// Drawn over the vignette: the same shape, pulled in and taken darker, faded
+// up and down so the light closing and returning is something you watch
+// happen rather than a frame where the screen changed.
+function drawGloom() {
+  if (!run || !run.gloom || run.gloom <= 0 || lowFx) return;
+  const t = run.gloom / GLOOM_TIME;
+  const a = Math.min(1, t < 0.18 ? t / 0.18 : Math.min(1, (1 - t) / 0.22 + 0.35));
+  const w = view.w, h = view.h;
+  const g = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.05,
+                                     w / 2, h / 2, Math.max(w, h) * 0.42);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(0.5, 'rgba(4,2,1,' + (0.45 * GLOOM_DEPTH * a).toFixed(3) + ')');
+  g.addColorStop(1, 'rgba(2,1,0,' + (0.96 * GLOOM_DEPTH * a).toFixed(3) + ')');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
 }
 
 /* --- bolts ----------------------------------------------------------------
@@ -3431,9 +3578,20 @@ function updateSlams(dt) {
                        q: (Math.random() * 4) | 0, kind: 'rubble' });
         }
       } else {
-        shake(7);
-        burst(s.x, s.y, '#ffce70', 20, 260);
-        ring(s.x, s.y, '#ffce70', s.r * 0.5, s.r, 0.32);
+        shake(s.fracture ? 12 : 7);
+        burst(s.x, s.y, s.fracture ? '#e0402c' : '#ffce70', s.fracture ? 30 : 20, 300);
+        ring(s.x, s.y, s.fracture ? '#e0402c' : '#ffce70', s.r * 0.5, s.r, 0.32);
+        // A gorger does not just hit the floor, it opens it: the ground it
+        // came down on stays broken and burning, so the corridor it chose is
+        // a corridor you now have to go round.
+        if (s.fracture) {
+          addHazard(s.x, s.y, s.r * 0.72, FRACTURE_DPS, FRACTURE_LIFE, '#e0402c');
+          for (let k = 0; k < 6; k++) {
+            props.push({ x: s.x + rand(-s.r * 0.7, s.r * 0.7),
+                         y: s.y + rand(-s.r * 0.5, s.r * 0.5),
+                         q: (Math.random() * 4) | 0, kind: 'rubble' });
+          }
+        }
         // and a slam brings scenery down with it
         hurtPropsNear(s.x, s.y, s.r, s.dmg);
         if (dist2(player.x, player.y, s.x, s.y) < s.r * s.r) {
@@ -3691,6 +3849,7 @@ const FLOAT_STYLE = {
   heavy:  { c: '#ffd870', px: 20 },
   soaked: { c: '#8c8168', px: 12 },
   taken:  { c: '#e0563f', px: 18 },
+  bleed:  { c: '#a8242a', px: 14 },
   coin:   { c: '#e8c060', px: 17 }
 };
 
@@ -4127,7 +4286,8 @@ function updateEnemies(dt) {
         if (!clash) {
           e.slamCd = SLAM_CD * rand(0.85, 1.2);
           slams.push({ x: player.x, y: player.y, r: SLAM_R * (e.slamR || 1),
-                       wind: SLAM_WIND, t: 0, dmg: e.dmg * 1.3, struck: false });
+                       wind: SLAM_WIND, t: 0, dmg: e.dmg * 1.3, struck: false,
+                       fracture: !!e.fracture });
         } else {
           e.slamCd = 0.5;
         }
@@ -4214,6 +4374,67 @@ function updateEnemies(dt) {
       }
     }
 
+    // A flayer is not in the fight; it visits it. It holds off in the dark
+    // until its own clock lets it go, crosses the ground in one run, opens
+    // you and turns -- and it will not come again until it has been away.
+    // The run has a fixed length rather than ending on contact, so it goes
+    // past you and out the other side instead of settling into melee.
+    let stalk = 0;    // 1 running in, -1 pulling back
+    if (e.role === 'stalk') {
+      if (e.run > 0) {
+        e.run -= dt;
+        stalk = 1;
+        if (!e.struck && d < e.r + player.r + 8) {
+          e.struck = true;
+          hurtPlayer(e);
+          openWound(BLEED_DPS, BLEED_TIME);
+          burst(player.x, player.y, PAL.blood, 12, 200);
+        }
+        if (e.run <= 0) { e.lurk = STALK_BACK * rand(0.8, 1.35); e.struck = false; }
+      } else {
+        e.lurk -= dt;
+        // It will not start a run it cannot finish: no line, no run.
+        if (e.lurk <= 0 && d < STALK_HOLD * 1.5 &&
+            clearShot(e.x, e.y, player.x, player.y)) {
+          e.run = STALK_RUN;
+          stalk = 1;
+        } else {
+          stalk = d < STALK_HOLD * 0.7 ? -1 : d > STALK_HOLD * 1.25 ? 1 : 0;
+        }
+      }
+    }
+
+    // A shaman holds the back and does one of two things: it puts fire on the
+    // ground you are standing on, or it takes the light. Neither can be
+    // dodged in flight the way a bolt can -- the fire is dodged by moving off
+    // it and the gloom is stopped only by reaching him, which is the point.
+    let chant = 0;    // -1 give ground, 1 close in, 2 planted to cast
+    if (e.role === 'chant') {
+      const clear = clearShot(e.x, e.y, player.x, player.y);
+      if (e.chanting > 0) {
+        e.chanting -= dt;
+        if (e.chanting <= 0) {
+          if (clear) {
+            if (e.spell === 0) {
+              addHazard(player.x, player.y, EMBER_R, EMBER_DPS, EMBER_LIFE, '#ff7a2c');
+              ring(player.x, player.y, '#ff7a2c', EMBER_R * 0.3, EMBER_R, 0.4);
+            } else {
+              castGloom();
+            }
+          }
+          e.chant = e.cd * rand(0.85, 1.3);
+          e.spell = e.spell ? 0 : 1;      // it alternates, so neither is a surprise twice
+        }
+        chant = 2;
+      } else {
+        e.chant -= dt;
+        if (e.chant <= 0 && clear && d < CHANT_WANT * 1.3) { e.chanting = CHANT_WIND; chant = 2; }
+        else if (d < CHANT_WANT * 0.55) chant = -1;
+        else if (d > CHANT_WANT || !clear) chant = 1;
+        else chant = 2;
+      }
+    }
+
     // --- seek / melee -----------------------------------------------------
     let sx = 0, sy = 0;
     const touch = e.r + player.r + 3;
@@ -4227,6 +4448,12 @@ function updateEnemies(dt) {
     if (planted) {
       // Swelling. It is going off wherever it is standing.
       sx = 0; sy = 0;
+    } else if (stalk === 1) {
+      sx = dx / d; sy = dy / d;                 // straight at you, through you
+    } else if (stalk === -1 || chant === -1) {
+      sx = -dx / d; sy = -dy / d;               // straight back down the line
+    } else if (chant === 2) {
+      sx = 0; sy = 0;
     } else if (shade === -1) {
       // Straight back down the line it is being pressed along. Following the
       // flow field away from the player walks it into the nearest wall, and a
@@ -4235,6 +4462,8 @@ function updateEnemies(dt) {
       sx = -dx / d; sy = -dy / d;
     } else if (shade === 2) {
       sx = 0; sy = 0;
+    } else if (stalk === 0 && e.role === 'stalk') {
+      sx = 0; sy = 0;                           // holding, out in the dark
     } else if (leash) {
       // Back to its post, and stand there once it arrives.
       const px = e.postX - e.x, py = e.postY - e.y;
@@ -4765,6 +4994,8 @@ function update(dt) {
   updateFloaters(dt);
   updateBolts(dt);
   updateChests(dt);
+  updateBleed(dt);
+  updateGloom(dt);
   updateRings(dt);
   updatePortal(dt);
   updateSpawning(dt);
@@ -5288,6 +5519,389 @@ function forgeEnemy(kind, r, color, P) {
       g.fillRect(-u * 0.13, -u * 0.72, u * 0.26, u * 0.05);
       g.shadowBlur = 0;
 
+    } else if (kind === 'gorger') {
+      // The biggest thing that walks, and it has to say so from across a room
+      // on a phone. Three reads, in order: a wide low body, a head that sits
+      // clear of it, and an open molten mouth. The light lives in the mouth --
+      // cracks scattered over the body turned into a graphic symbol at size
+      // and stopped looking like a creature at all.
+      g.strokeStyle = 'rgb(44,39,37)'; g.lineWidth = u * 0.32;           // stump legs
+      g.beginPath();
+      g.moveTo(-u * 0.26, u * 0.4); g.lineTo(-u * 0.32 + swB * 0.5, u * 0.86 + lfB);
+      g.moveTo(u * 0.26, u * 0.4);  g.lineTo(u * 0.34 + swA * 0.5, u * 0.84 + lfA);
+      g.stroke();
+      g.fillStyle = 'rgb(66,59,56)';                                     // and its feet
+      [[-u * 0.32 + swB * 0.5, u * 0.9 + lfB], [u * 0.34 + swA * 0.5, u * 0.88 + lfA]]
+        .forEach(f => {
+          g.beginPath(); g.ellipse(f[0], f[1], u * 0.26, u * 0.14, 0, 0, TAU);
+          g.fill(); outline(u * 0.08);
+          g.fillStyle = 'rgba(184,176,166,.5)';                          // toe claws
+          for (let k = -1; k <= 1; k++) {
+            g.beginPath();
+            g.ellipse(f[0] + k * u * 0.13, f[1] + u * 0.08, u * 0.04, u * 0.05, 0, 0, TAU);
+            g.fill();
+          }
+          g.fillStyle = 'rgb(66,59,56)';
+        });
+
+      // Arms first so the shoulder covers the joint at any swing. They are a
+      // full tone lighter than the body -- matched to it they disappeared and
+      // the fists read as a second pair of feet.
+      [[-1, arB], [1, arA]].forEach(([sx, ar]) => {
+        const ex = sx * u * 0.78 + ar * 0.6, ey = -u * 0.02;             // elbow
+        const hx = sx * u * 0.72 + ar * 1.1, hy = u * 0.44;              // fist
+        g.strokeStyle = 'rgb(84,76,72)'; g.lineWidth = u * 0.24;
+        g.beginPath(); g.moveTo(sx * u * 0.48, -u * 0.3); g.lineTo(ex, ey); g.stroke();
+        g.strokeStyle = 'rgb(70,63,60)'; g.lineWidth = u * 0.2;
+        g.beginPath(); g.moveTo(ex, ey); g.lineTo(hx, hy); g.stroke();
+        g.fillStyle = 'rgb(58,52,50)';
+        g.beginPath(); g.arc(hx, hy, u * 0.18, 0, TAU); g.fill(); outline(u * 0.08);
+        g.strokeStyle = 'rgba(186,178,168,.5)'; g.lineWidth = u * 0.045;
+        g.beginPath();
+        for (let k = -1; k <= 1; k++) {
+          g.moveTo(hx + k * u * 0.08, hy + u * 0.09);
+          g.lineTo(hx + k * u * 0.11, hy + u * 0.2 - Math.abs(k) * u * 0.03);
+        }
+        g.stroke();
+      });
+
+      // The body: wide at the shoulder, tucked at the waist, and it stops well
+      // below the head so the two shapes never merge into one blob.
+      const bg = g.createLinearGradient(0, -u * 0.6, 0, u * 0.46);
+      bg.addColorStop(0, 'rgb(92,85,82)');
+      bg.addColorStop(0.55, 'rgb(54,49,47)');
+      bg.addColorStop(1, 'rgb(24,21,20)');
+      g.fillStyle = bg;
+      g.beginPath();
+      g.moveTo(-u * 0.5, u * 0.46);
+      g.bezierCurveTo(-u * 0.74, u * 0.1, -u * 0.78, -u * 0.3, -u * 0.56, -u * 0.5);
+      g.bezierCurveTo(-u * 0.2, -u * 0.66, u * 0.2, -u * 0.66, u * 0.56, -u * 0.5);
+      g.bezierCurveTo(u * 0.78, -u * 0.3, u * 0.74, u * 0.1, u * 0.5, u * 0.46);
+      g.closePath(); g.fill(); outline(u * 0.15);
+
+      // Iron bolted low across the chest, out of the head's way.
+      [-1, 1].forEach(sx => {
+        const pg = g.createLinearGradient(0, -u * 0.54, 0, -u * 0.02);
+        pg.addColorStop(0, 'rgb(80,74,72)');
+        pg.addColorStop(1, 'rgb(20,18,17)');
+        g.fillStyle = pg;
+        g.beginPath();
+        g.moveTo(sx * u * 0.14, -u * 0.44);
+        g.lineTo(sx * u * 0.66, -u * 0.4);
+        g.lineTo(sx * u * 0.6, -u * 0.02);
+        g.lineTo(sx * u * 0.16, -u * 0.08);
+        g.closePath(); g.fill(); outline(u * 0.09);
+        g.fillStyle = 'rgba(160,152,146,.5)';
+        for (let k = 0; k < 3; k++) {
+          g.beginPath();
+          g.arc(sx * (u * 0.26 + k * u * 0.16), -u * 0.36 + k * u * 0.12, u * 0.035, 0, TAU);
+          g.fill();
+        }
+      });
+
+      // Two short cracks under the plates, low enough that the mouth stays the
+      // brightest thing on it.
+      const crack = () => {
+        g.beginPath();
+        g.moveTo(-u * 0.3, u * 0.06); g.lineTo(-u * 0.12, u * 0.3);
+        g.moveTo(u * 0.26, u * 0.02); g.lineTo(u * 0.1, u * 0.26);
+        g.stroke();
+      };
+      g.strokeStyle = 'rgba(6,4,3,.9)'; g.lineWidth = u * 0.11; crack();
+      g.strokeStyle = color; g.lineWidth = u * 0.045;
+      g.shadowColor = color; g.shadowBlur = u * 0.26; crack();
+      g.shadowBlur = 0;
+
+      // The head: big, low-browed, and set forward of the shoulders. Its mouth
+      // is open and lit from inside -- that glow is the whole silhouette.
+      const hg3 = g.createLinearGradient(0, -u * 1.02, 0, -u * 0.4);
+      hg3.addColorStop(0, 'rgb(104,96,92)');
+      hg3.addColorStop(1, 'rgb(40,36,34)');
+      g.fillStyle = hg3;
+      g.beginPath();
+      g.moveTo(-u * 0.42, -u * 0.52);
+      g.quadraticCurveTo(-u * 0.5, -u * 1.0, 0, -u * 1.04);
+      g.quadraticCurveTo(u * 0.5, -u * 1.0, u * 0.42, -u * 0.52);
+      g.quadraticCurveTo(0, -u * 0.34, -u * 0.42, -u * 0.52);
+      g.closePath(); g.fill(); outline(u * 0.11);
+
+      g.fillStyle = 'rgba(8,5,4,.95)';                                   // the open maw
+      g.beginPath();
+      g.moveTo(-u * 0.3, -u * 0.62);
+      g.quadraticCurveTo(0, -u * 0.72, u * 0.3, -u * 0.62);
+      g.quadraticCurveTo(u * 0.24, -u * 0.34, 0, -u * 0.32);
+      g.quadraticCurveTo(-u * 0.24, -u * 0.34, -u * 0.3, -u * 0.62);
+      g.closePath(); g.fill();
+      g.save(); g.clip();
+      const mg = g.createRadialGradient(0, -u * 0.44, 0, 0, -u * 0.44, u * 0.34);
+      mg.addColorStop(0, color);
+      mg.addColorStop(0.5, 'rgba(224,64,44,.55)');
+      mg.addColorStop(1, 'rgba(120,20,10,0)');
+      g.fillStyle = mg;
+      g.fillRect(-u * 0.34, -u * 0.74, u * 0.68, u * 0.46);
+      g.restore();
+      g.fillStyle = 'rgba(222,214,198,.92)';                             // teeth in it
+      for (let k = -2; k <= 2; k++) {
+        const tx = k * u * 0.11;
+        g.beginPath();
+        g.moveTo(tx - u * 0.045, -u * 0.63);
+        g.lineTo(tx + u * 0.045, -u * 0.63);
+        g.lineTo(tx, -u * 0.47 + Math.abs(k) * u * 0.03);
+        g.closePath(); g.fill();
+        g.beginPath();
+        g.moveTo(tx - u * 0.04, -u * 0.34 + Math.abs(k) * u * 0.02);
+        g.lineTo(tx + u * 0.04, -u * 0.34 + Math.abs(k) * u * 0.02);
+        g.lineTo(tx, -u * 0.48);
+        g.closePath(); g.fill();
+      }
+      g.fillStyle = 'rgba(228,220,204,.95)';                             // outer tusks
+      [-1, 1].forEach(sx => {
+        g.beginPath();
+        g.moveTo(sx * u * 0.34, -u * 0.6);
+        g.quadraticCurveTo(sx * u * 0.42, -u * 0.42, sx * u * 0.26, -u * 0.26);
+        g.quadraticCurveTo(sx * u * 0.3, -u * 0.46, sx * u * 0.24, -u * 0.58);
+        g.closePath(); g.fill(); outline(u * 0.05);
+      });
+
+      g.fillStyle = 'rgba(6,4,3,.85)';                                   // a heavy brow
+      g.beginPath();
+      g.moveTo(-u * 0.4, -u * 0.86);
+      g.quadraticCurveTo(0, -u * 0.96, u * 0.4, -u * 0.86);
+      g.quadraticCurveTo(0, -u * 0.74, -u * 0.4, -u * 0.86);
+      g.closePath(); g.fill();
+      g.fillStyle = color;                                               // eyes under it
+      g.shadowColor = color; g.shadowBlur = u * 0.4;
+      [-1, 1].forEach(sx => {
+        g.beginPath();
+        g.moveTo(sx * u * 0.08, -u * 0.82);
+        g.lineTo(sx * u * 0.3, -u * 0.78);
+        g.lineTo(sx * u * 0.27, -u * 0.7);
+        g.lineTo(sx * u * 0.09, -u * 0.73);
+        g.closePath(); g.fill();
+      });
+      g.shadowBlur = 0;
+
+    } else if (kind === 'flayer') {
+      // Lean and angular, leaning into where it is going even when it is
+      // standing still. The cleaver is strapped along the forearm, so the arm
+      // and the blade are one shape.
+      // Digitigrade: the thigh drops back, the shin swings forward off it, and
+      // the weight is on the toes. Drawn as three joints rather than one line
+      // because a single stroke at this swing reads as doing the splits.
+      [[-1, swB * 0.62, lfB], [1, swA * 0.62, lfA]].forEach(([sx, sw2, lf]) => {
+        const kx = sx * u * 0.26 - sw2 * 0.5, ky = u * 0.7 + lf * 0.4;   // knee
+        const fx2 = sx * u * 0.18 + sw2, fy2 = u * 1.02 + lf;            // foot
+        g.strokeStyle = 'rgb(74,52,86)'; g.lineWidth = u * 0.17;
+        g.beginPath(); g.moveTo(sx * u * 0.17, u * 0.34); g.lineTo(kx, ky); g.stroke();
+        g.strokeStyle = 'rgb(62,42,74)'; g.lineWidth = u * 0.12;
+        g.beginPath(); g.moveTo(kx, ky); g.lineTo(fx2, fy2); g.stroke();
+        g.fillStyle = 'rgb(40,28,48)';                                   // splayed toes
+        g.beginPath();
+        g.moveTo(fx2 - u * 0.13, fy2 - u * 0.04);
+        g.lineTo(fx2 + u * 0.17, fy2 + u * 0.02);
+        g.lineTo(fx2 + u * 0.1, fy2 + u * 0.1);
+        g.lineTo(fx2 - u * 0.14, fy2 + u * 0.07);
+        g.closePath(); g.fill(); outline(u * 0.05);
+      });
+
+      const tb = g.createLinearGradient(0, -u * 0.56, 0, u * 0.44);     // sinew
+      tb.addColorStop(0, 'rgb(126,86,142)');
+      tb.addColorStop(1, 'rgb(52,34,62)');
+      g.fillStyle = tb;
+      g.beginPath();
+      g.moveTo(-u * 0.4, u * 0.38);
+      g.quadraticCurveTo(-u * 0.52, -u * 0.2, -u * 0.2, -u * 0.5);
+      g.quadraticCurveTo(u * 0.36, -u * 0.56, u * 0.42, u * 0.34);
+      g.closePath(); g.fill(); outline(u * 0.12);
+      g.strokeStyle = 'rgba(20,12,24,.55)'; g.lineWidth = u * 0.05;     // ribs showing
+      for (let i = 0; i < 3; i++) {
+        g.beginPath();
+        g.ellipse(u * 0.02, -u * 0.24 + i * u * 0.16, u * 0.26 - i * u * 0.02,
+                  u * 0.07, 0, 0.3, Math.PI - 0.3);
+        g.stroke();
+      }
+      g.fillStyle = 'rgba(36,26,20,.9)';                                 // leather rags
+      g.beginPath();
+      g.moveTo(-u * 0.4, u * 0.24); g.lineTo(u * 0.42, u * 0.18);
+      g.lineTo(u * 0.3, u * 0.6); g.lineTo(u * 0.04, u * 0.42);
+      g.lineTo(-u * 0.28, u * 0.58);
+      g.closePath(); g.fill();
+
+      // Both arms break at the elbow and end in a hand. The swing is damped to
+      // just over half: at full amplitude a straight tube swept out past the
+      // horns and stopped reading as an arm at all.
+      [[-1, arB * 0.55], [1, arA * 0.55]].forEach(([sx, ar]) => {
+        const ex = sx * u * 0.52 + ar, ey = u * 0.02;                    // elbow
+        const wx = sx * u * 0.5 + ar * 1.5, wy = u * 0.44;               // wrist
+        g.strokeStyle = 'rgb(112,78,128)'; g.lineWidth = u * 0.14;
+        g.beginPath(); g.moveTo(sx * u * 0.37, -u * 0.31); g.lineTo(ex, ey); g.stroke();
+        g.strokeStyle = 'rgb(96,66,112)'; g.lineWidth = u * 0.11;
+        g.beginPath(); g.moveTo(ex, ey); g.lineTo(wx, wy); g.stroke();
+        g.fillStyle = 'rgb(84,58,98)';
+        g.beginPath(); g.arc(wx, wy, u * 0.1, 0, TAU); g.fill();
+        if (sx < 0) {                                                    // bare hand
+          g.strokeStyle = 'rgba(196,186,196,.6)'; g.lineWidth = u * 0.035;
+          g.beginPath();
+          for (let k = -1; k <= 1; k++) {
+            g.moveTo(wx, wy + u * 0.06);
+            g.lineTo(wx + k * u * 0.08, wy + u * 0.24 - Math.abs(k) * u * 0.05);
+          }
+          g.stroke();
+        } else {
+          // The cleaver is strapped along the forearm, so the arm and the
+          // blade are one shape: it runs back past the elbow and forward to a
+          // point well clear of the fist.
+          const ang = Math.atan2(wy - ey, wx - ex);
+          g.save(); g.translate(wx, wy); g.rotate(ang);
+          const bl = g.createLinearGradient(0, -u * 0.12, 0, u * 0.1);
+          bl.addColorStop(0, 'rgb(186,182,172)');
+          bl.addColorStop(1, 'rgb(96,92,86)');
+          g.fillStyle = bl;
+          g.beginPath();
+          g.moveTo(-u * 0.34, -u * 0.06);
+          g.lineTo(u * 0.24, -u * 0.14);
+          g.lineTo(u * 0.62, u * 0.02);                                  // the point
+          g.lineTo(u * 0.2, u * 0.12);
+          g.lineTo(-u * 0.34, u * 0.08);
+          g.closePath(); g.fill(); outline(u * 0.06);
+          g.strokeStyle = 'rgba(168,32,34,.85)'; g.lineWidth = u * 0.045; // what is on it
+          g.beginPath();
+          g.moveTo(u * 0.5, u * 0.03); g.lineTo(u * 0.06, u * 0.09);
+          g.stroke();
+          g.restore();
+        }
+      });
+
+      // The head: swept horns over the skull, and the eyes are the read.
+      const fh = g.createLinearGradient(0, -u * 0.9, 0, -u * 0.42);
+      fh.addColorStop(0, 'rgb(140,98,156)');
+      fh.addColorStop(1, 'rgb(54,36,64)');
+      g.fillStyle = fh;
+      g.beginPath(); g.ellipse(0, -u * 0.62, u * 0.28, u * 0.26, 0, 0, TAU); g.fill();
+      outline(u * 0.09);
+      g.strokeStyle = 'rgb(206,196,176)'; g.lineWidth = u * 0.09;       // horns
+      g.lineCap = 'round';
+      [-1, 1].forEach(sx => {
+        g.beginPath();
+        g.moveTo(sx * u * 0.2, -u * 0.76);
+        g.quadraticCurveTo(sx * u * 0.56, -u * 0.98, sx * u * 0.44, -u * 1.24);
+        g.stroke();
+      });
+      g.fillStyle = 'rgba(8,6,10,.95)';                                  // jaw
+      g.beginPath();
+      g.moveTo(-u * 0.14, -u * 0.5); g.lineTo(u * 0.16, -u * 0.52);
+      g.lineTo(u * 0.11, -u * 0.34); g.lineTo(-u * 0.1, -u * 0.34);
+      g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(206,198,150,.85)'; g.lineWidth = u * 0.03;
+      g.beginPath();
+      for (let k = 0; k < 4; k++) {
+        const tx = -u * 0.1 + k * u * 0.07;
+        g.moveTo(tx, -u * 0.49); g.lineTo(tx, -u * 0.42);
+      }
+      g.stroke();
+      g.fillStyle = color;                                               // amber eyes
+      g.shadowColor = color; g.shadowBlur = u * 0.42;
+      [-1, 1].forEach(sx => {
+        g.beginPath();
+        g.moveTo(sx * u * 0.04, -u * 0.7);
+        g.lineTo(sx * u * 0.22, -u * 0.66);
+        g.lineTo(sx * u * 0.2, -u * 0.58);
+        g.lineTo(sx * u * 0.05, -u * 0.61);
+        g.closePath(); g.fill();
+      });
+      g.shadowBlur = 0;
+
+    } else if (kind === 'shaman') {
+      // Hunched over the staff rather than holding it. The caged heart is the
+      // whole silhouette -- it is what you pick out across a room and what
+      // tells you which body to reach first.
+      const rb2 = g.createLinearGradient(0, -u * 0.6, 0, u * 1.05);     // cowl and robe
+      rb2.addColorStop(0, 'rgb(74,62,52)');
+      rb2.addColorStop(0.6, 'rgb(40,32,26)');
+      rb2.addColorStop(1, 'rgb(18,14,11)');
+      g.fillStyle = rb2;
+      g.beginPath();
+      // The hem swings at just over half amplitude. At full swing the two
+      // corners crossed over each other and the robe collapsed to a point.
+      g.moveTo(-u * 0.36, -u * 0.44);
+      g.quadraticCurveTo(-u * 0.62, u * 0.3, -u * 0.48 + swB * 0.55, u * 1.02 + lfB * 0.6);
+      g.lineTo(u * 0.46 + swA * 0.55, u * 1.0 + lfA * 0.6);
+      g.quadraticCurveTo(u * 0.6, u * 0.3, u * 0.34, -u * 0.44);
+      g.closePath(); g.fill(); outline(u * 0.12);
+
+      // Heat coming through the cracks in it.
+      g.strokeStyle = 'rgba(255,122,44,.4)'; g.lineWidth = u * 0.04;
+      g.beginPath();
+      g.moveTo(-u * 0.24, u * 0.1); g.lineTo(-u * 0.1, u * 0.34);
+      g.moveTo(u * 0.2, u * 0.06); g.lineTo(u * 0.08, u * 0.3);
+      g.stroke();
+
+      // Small skulls hung round the cowl.
+      [[-0.3, 0.04], [0.34, 0.1]].forEach(o => {
+        const sk = [u * o[0], u * o[1]];
+        g.strokeStyle = 'rgba(30,24,18,.8)'; g.lineWidth = u * 0.03;     // the cord
+        g.beginPath(); g.moveTo(sk[0], sk[1] - u * 0.3); g.lineTo(sk[0], sk[1]); g.stroke();
+        g.fillStyle = 'rgba(212,204,184,.9)';
+        g.beginPath(); g.ellipse(sk[0], sk[1], u * 0.11, u * 0.12, 0, 0, TAU); g.fill();
+        outline(u * 0.045);
+        g.fillStyle = 'rgba(10,8,6,.92)';
+        g.beginPath(); g.ellipse(sk[0] - u * 0.045, sk[1] - u * 0.01, u * 0.032, u * 0.04, 0, 0, TAU); g.fill();
+        g.beginPath(); g.ellipse(sk[0] + u * 0.045, sk[1] - u * 0.01, u * 0.032, u * 0.04, 0, 0, TAU); g.fill();
+        g.fillRect(sk[0] - u * 0.03, sk[1] + u * 0.06, u * 0.06, u * 0.04);
+      });
+
+      // The staff, and the heart caged at the top of it. It is held rather
+      // than carried alongside: the grip is a fixed point on the robe, the
+      // shaft only leans with the gait, and a sleeve runs out to meet it. Left
+      // to drift on the arm swing it detached from the body entirely.
+      const gx = -u * 0.42, gy = u * 0.08, lean2 = arB * 0.16;
+      g.strokeStyle = 'rgb(56,46,38)'; g.lineWidth = u * 0.15;           // the sleeve
+      g.beginPath();
+      g.moveTo(-u * 0.16, -u * 0.32);
+      g.quadraticCurveTo(-u * 0.4, -u * 0.16, gx, gy);
+      g.stroke();
+      g.strokeStyle = '#4a3a28'; g.lineWidth = u * 0.09;                 // the shaft
+      g.beginPath();
+      g.moveTo(gx + lean2 * -0.6, u * 0.86);
+      g.lineTo(gx + lean2, -u * 0.86);
+      g.stroke();
+      g.fillStyle = 'rgba(30,24,18,.9)';                                 // hand on the grip
+      g.beginPath(); g.ellipse(gx, gy, u * 0.09, u * 0.08, 0, 0, TAU); g.fill();
+      const hx = gx + lean2, hy = -u * 0.98;
+      g.fillStyle = color;
+      g.shadowColor = color; g.shadowBlur = u * 0.8;
+      g.beginPath(); g.ellipse(hx, hy, u * 0.15, u * 0.17, 0, 0, TAU); g.fill();
+      g.shadowBlur = 0;
+      g.fillStyle = 'rgba(255,238,200,.85)';
+      g.beginPath(); g.ellipse(hx, hy - u * 0.02, u * 0.06, u * 0.07, 0, 0, TAU); g.fill();
+      g.strokeStyle = 'rgba(58,48,38,.95)'; g.lineWidth = u * 0.035;    // its cage
+      g.beginPath();
+      for (let k = -1; k <= 1; k++) {
+        g.moveTo(hx + k * u * 0.1, hy - u * 0.19);
+        g.lineTo(hx + k * u * 0.13, hy + u * 0.18);
+      }
+      g.moveTo(hx - u * 0.16, hy); g.lineTo(hx + u * 0.16, hy);
+      g.stroke();
+
+      // A face inside the cowl, lit from below by what it is carrying.
+      g.fillStyle = 'rgba(6,5,4,.96)';
+      g.beginPath(); g.ellipse(u * 0.02, -u * 0.6, u * 0.24, u * 0.24, 0, 0, TAU); g.fill();
+      const hd2 = g.createLinearGradient(0, -u * 1.0, 0, -u * 0.42);
+      hd2.addColorStop(0, 'rgb(70,58,48)');
+      hd2.addColorStop(1, 'rgb(24,19,15)');
+      g.fillStyle = hd2;
+      g.beginPath();
+      g.moveTo(-u * 0.34, -u * 0.42);
+      g.quadraticCurveTo(-u * 0.4, -u * 1.0, u * 0.02, -u * 1.02);
+      g.quadraticCurveTo(u * 0.42, -u * 1.0, u * 0.34, -u * 0.42);
+      g.quadraticCurveTo(u * 0.02, -u * 0.5, -u * 0.34, -u * 0.42);
+      g.closePath(); g.fill(); outline(u * 0.1);
+      g.fillStyle = color;
+      g.shadowColor = color; g.shadowBlur = u * 0.3;
+      g.beginPath(); g.ellipse(-u * 0.08, -u * 0.62, u * 0.05, u * 0.04, 0, 0, TAU); g.fill();
+      g.beginPath(); g.ellipse(u * 0.11, -u * 0.62, u * 0.05, u * 0.04, 0, 0, TAU); g.fill();
+      g.shadowBlur = 0;
+
     } else {
       // Planted, over-armoured, bound together by seams that are burning
       // through from the inside.
@@ -5396,10 +6010,12 @@ function forgeEnemy(kind, r, color, P) {
     // people who gave up their will rather than monsters. It rides the body,
     // so it sits where the body is not moving much -- the shoulder on the
     // thrall, whose head now hangs, and the helm on the armoured ones.
-    const bx = kind === 'eclipse' ? -u * 0.09 : kind === 'thrall' ? -u * 0.3 :
-               kind === 'husk' ? -u * 0.38 : kind === 'cantor' ? -u * 0.2 : u * 0.1;
-    const by = kind === 'eclipse' ? -u * 0.9 : kind === 'thrall' ? -u * 0.3 :
-               kind === 'husk' ? -u * 0.3 : kind === 'cantor' ? -u * 0.88 : -u * 0.86;
+    const BRAND = { eclipse: [-0.09, -0.9], thrall: [-0.3, -0.3],
+                    husk: [-0.38, -0.3], cantor: [-0.2, -0.88],
+                    gorger: [-0.5, -0.36], flayer: [-0.3, -0.06],
+                    shaman: [0.24, -0.3] };
+    const bm = BRAND[kind] || [0.1, -0.86];
+    const bx = u * bm[0], by = u * bm[1];
     g.shadowColor = PAL.brand; g.shadowBlur = u * 0.3;
     g.strokeStyle = PAL.brand; g.lineWidth = u * 0.05;
     g.beginPath();
@@ -8315,6 +8931,7 @@ function draw(t) {
 
   drawMotes(t);
   if (vignette && !lowFx) ctx.drawImage(vignette, 0, 0, view.w, view.h);
+  drawGloom();
   if (run && run.banner > 0 && state !== 'menu') {
     const a = Math.min(1, run.banner / 1.1) * Math.min(1, (4.2 - run.banner) / 0.5);
     ctx.save();
@@ -8740,7 +9357,7 @@ function resetRun(heroId, levelId, diffId) {
           diff_id: DIFF.id,
           banner: 4.2,
           bannerText: null, bannerNote: null,
-          bossCalled: false, bossDown: false, boss: null,
+          bossCalled: false, bossDown: false, boss: null, gloom: 0,
           spawnX: spawn.x, spawnY: spawn.y, found: 0, toast: null, bagWarned: 0,
           coins: 0, gateOpen: false, holdTime: 0, holdTicks: 0, holdSpawn: 1.5,
           forcedOpen: false, corpse: null,
@@ -9806,7 +10423,7 @@ showScreen('start');
 requestAnimationFrame(frame);
 </script>
 <script>
-/* generated from index.html 2f8df7dc78b6 + overlay c49f1ecc083e by tools/build-debug.js — do not edit */
+/* generated from index.html cf512b4cba73 + overlay c49f1ecc083e by tools/build-debug.js — do not edit */
 /* =============================================================================
    THE RIVENMARK — debug overlay
    Injected into debug.html by tools/build-debug.js. Never shipped in the
