@@ -1358,6 +1358,87 @@
     background-size:auto, 96px 96px;
   }
 
+
+  /* =========================================================================
+     THE KIT BAR
+     Five abilities and a row of Charges, under the right thumb. The stick is
+     the left thumb's and floats wherever it lands, so nothing here may drift
+     into the left half of the glass.
+     ====================================================================== */
+  #kitBar{
+    position:fixed; z-index:7; pointer-events:none;
+    right:calc(var(--safe-r) + 10px);
+    bottom:calc(var(--safe-b) + 84px);
+    display:flex; flex-direction:column; align-items:flex-end; gap:7px;
+  }
+  #kitBar[hidden]{display:none;}
+  .pips{display:flex; gap:5px; padding-right:4px;}
+  .pips i{
+    width:13px; height:13px; border-radius:50%; display:block;
+    background:radial-gradient(circle at 50% 34%,rgba(60,72,92,.9),rgba(10,14,20,.95));
+    box-shadow:0 0 0 2px rgba(120,96,48,.7), 0 1px 3px rgba(0,0,0,.8);
+    transition:transform .12s ease-out, box-shadow .12s ease-out;
+  }
+  .pips i.lit{
+    background:radial-gradient(circle at 50% 34%,#ffe9a8,#c8901e);
+    box-shadow:0 0 0 2px rgba(226,185,106,.95), 0 0 12px rgba(255,200,90,.7);
+    transform:scale(1.16);
+  }
+  .keys{
+    display:grid; grid-template-columns:repeat(3,auto); gap:8px;
+    justify-items:end; pointer-events:auto;
+  }
+  .key{
+    position:relative; width:56px; height:56px; border:0; padding:0;
+    border-radius:50%; cursor:pointer; touch-action:manipulation;
+    display:grid; place-items:center; overflow:hidden;
+    font-family:var(--font-ui); color:#e8dcc0;
+    background-image:linear-gradient(180deg,rgba(56,68,88,.92),rgba(10,14,21,.96)),
+                     var(--tex-slate);
+    background-size:auto, 96px 96px;
+    box-shadow:0 0 0 3px var(--br-mid), 0 0 0 4px rgba(0,0,0,.8),
+               inset 0 2px 0 rgba(190,214,244,.18),
+               inset 0 -3px 7px rgba(0,0,0,.6), 0 4px 12px rgba(0,0,0,.75);
+    transition:transform .07s ease-out, box-shadow .07s ease-out;
+  }
+  .key .km{font-size:22px; line-height:1; text-shadow:0 1px 3px rgba(0,0,0,.95);}
+  .key:active{transform:translateY(2px);}
+  /* The sweep: a conic wedge that unwinds as the cooldown runs down, which is
+     the one readout a player checks without looking away from the fight. */
+  .key .sweep{
+    position:absolute; inset:0; pointer-events:none; border-radius:50%;
+    background:conic-gradient(rgba(6,9,14,.78) var(--sw,0turn), transparent 0);
+  }
+  .key .cdn{
+    position:absolute; inset:0; display:grid; place-items:center;
+    font:600 15px/1 ui-monospace,monospace; color:#f0e2c2;
+    text-shadow:0 1px 3px rgba(0,0,0,.95);
+  }
+  /* Not enough Charges reads differently from still cooling: one is a
+     resource problem and one is a time problem, and they have different
+     answers. */
+  .key.cost{box-shadow:0 0 0 3px rgba(120,60,44,.85), 0 0 0 4px rgba(0,0,0,.8),
+                       inset 0 -3px 7px rgba(0,0,0,.6);}
+  .key.cost .km{opacity:.4;}
+  .key.gcd .km{opacity:.55;}
+  .key.ready{
+    box-shadow:0 0 0 3px rgba(232,196,120,.95), 0 0 0 4px rgba(0,0,0,.8),
+               inset 0 2px 0 rgba(214,232,255,.24),
+               0 0 14px rgba(226,185,106,.45), 0 4px 12px rgba(0,0,0,.75);
+  }
+  /* The channel, drawn where the eye already is. */
+  #channelBar{
+    position:fixed; z-index:8; left:50%; transform:translateX(-50%);
+    bottom:calc(var(--safe-b) + 168px); width:min(58vw,240px); height:9px;
+    border-radius:2px; pointer-events:none; overflow:hidden;
+    background:linear-gradient(180deg,rgba(30,38,50,.95),rgba(8,11,16,.98));
+    box-shadow:0 0 0 2px rgba(126,96,44,.7), 0 2px 8px rgba(0,0,0,.8);
+  }
+  #channelBar[hidden]{display:none;}
+  #channelBar i{
+    display:block; height:100%; width:100%; transform-origin:left center;
+    background:linear-gradient(90deg,#4f7a3a,#9dbb5a);
+  }
 </style>
 </head>
 <body>
@@ -1464,6 +1545,15 @@
   <button class="disc" id="bagBtn" aria-label="Bag"><span class="skull"
     aria-hidden="true">☠</span><span><b>▣</b><span
     id="bagBadge">0</span></span></button>
+
+  <!-- The kit. Fixed under the right thumb, because the stick floats under
+       the left one and the two must never want the same patch of glass. -->
+  <div id="channelBar" hidden><i id="channelFill"></i></div>
+
+  <div id="kitBar" hidden>
+    <div class="pips" id="chargePips" aria-hidden="true"></div>
+    <div class="keys" id="kitKeys"></div>
+  </div>
 
   <div class="screen" id="gear">
     <p class="sub" id="gearSub">The Vanguard's kit</p>
@@ -3438,6 +3528,10 @@ function makePlayer(x, y, heroId) {
   for (const sl of SLOTS) p.gear[sl.id] = (stash.gear && stash.gear[sl.id]) || null;
   p.bag = [];
   p.ward = 0;
+  p.gcd = 0; p.gcdMax = GCD_TIME;   // the beat, and what it was set from
+  p.charges = 0; p.chargePop = 0;   // Isaac's Sun-Gold
+  p.cds = {}; p.channel = null;
+  p.mitigate = 0; p.rooted = 0;
   return p;
 }
 
@@ -4706,6 +4800,254 @@ const MAX_FLOATERS = 22;
 const FLOAT_LIFE   = 0.85;
 const FLOAT_MERGE  = 0.22;   // a follow-up this soon joins the running total
 
+/* --- the kit ---------------------------------------------------------------
+   Until now the Vanguard had a blade that aimed itself and nothing else, and
+   the whole interface was built on there being no free thumb for a button. So
+   the bar is a real reversal, and it is placed accordingly: the stick floats
+   under the left thumb wherever it lands, and the kit sits in a fixed arc
+   under the right, where nothing else has ever been.
+
+   An ability is data. `cost` is spent from the hero's resource, `build` puts
+   it back, `cd` is its own cooldown, and `gcd` is whether it takes the beat --
+   an interrupt does not, because an interrupt you have to wait for is not an
+   interrupt.
+   -------------------------------------------------------------------- */
+const CHARGE_MAX = 3;      // Isaac's Sun-Gold Charges
+const VULN_TIME  = 10;     // how long Metaphysical Vulnerability lasts
+const VULN_MULT  = 5;      // and what the Guillotine does to a body under it
+
+const ABILITIES = {
+  isaac: [
+    { id: 'anchor', name: 'Anchoring Strike', mark: '✦',
+      note: 'A shield bash, close enough to touch. Builds a Charge.',
+      cd: 0, gcd: 1, build: 1, reach: 62, dmg: 2.4 },
+    { id: 'aegis', name: 'Aegis of Tor-Varden', mark: '◉',
+      note: 'Spends three. A ring of Sun-Gold, and a moment behind the guard.',
+      cd: 0, gcd: 1, cost: CHARGE_MAX, radius: 150, dmg: 3.2, mitigate: 2 },
+    { id: 'mass', name: 'Unyielding Mass', mark: '▣',
+      note: 'Rooted, unmovable, and half the harm for four seconds.',
+      cd: 12, gcd: 1, root: 4 },
+    { id: 'purge', name: 'Grounding Purge', mark: '✚',
+      note: 'Channelled. Breaks the moment you are struck or move.',
+      cd: 14, gcd: 1, channel: 3, healPct: 0.15 },
+    { id: 'guillotine', name: 'Star-Forged Guillotine', mark: '⚔',
+      note: 'Spends three. Comes down on one body, and on the Vulnerable it ends things.',
+      cd: 0, gcd: 1.25, cost: CHARGE_MAX, reach: 96, dmg: 7 }
+  ]
+};
+
+const ABILITY_BY_ID = {};
+for (const h in ABILITIES) for (const a of ABILITIES[h]) ABILITY_BY_ID[a.id] = a;
+
+const heroKit = () => ABILITIES[player.hero] || [];
+
+// What stops a button working, said in the order the player would ask it.
+function abilityBlock(a) {
+  if (state !== 'play') return 'no';
+  if (player.channel) return a.id === player.channel.id ? 'no' : 'busy';
+  if ((player.cds && player.cds[a.id] > 0)) return 'cd';
+  if (a.gcd && onGCD()) return 'gcd';
+  if (a.cost && (player.charges || 0) < a.cost) return 'cost';
+  return null;
+}
+
+function castAbility(id) {
+  const a = ABILITY_BY_ID[id];
+  if (!a || abilityBlock(a)) return false;
+  if (a.cost) spendCharges(a.cost);
+  if (a.cd) { player.cds = player.cds || {}; player.cds[a.id] = a.cd; }
+  if (a.gcd) startGCD(a.gcd);
+  ABILITY_DO[a.id](a);
+  return true;
+}
+
+// Charges are shown as pips, so gaining one has to be visible: a number that
+// changes with nothing happening around it is a number nobody reads.
+function gainCharge(n) {
+  const was = player.charges || 0;
+  player.charges = Math.min(CHARGE_MAX, was + (n || 1));
+  if (player.charges !== was) {
+    player.chargePop = 1;
+    if (player.charges === CHARGE_MAX) shake(3);
+  }
+}
+function spendCharges(n) {
+  player.charges = Math.max(0, (player.charges || 0) - n);
+  player.chargePop = 1;
+}
+
+/* --- what each one does --------------------------------------------------
+   Kept apart from the table so the table stays readable as a list of terms.
+   -------------------------------------------------------------------- */
+const ABILITY_DO = {
+
+  // A bash. It has to be delivered from inside touching distance, which is
+  // what makes it a decision rather than a second auto-attack.
+  anchor(a) {
+    const t = nearestBody(a.reach);
+    player.swing = SWING_TIME;
+    player.strike = 2;                       // the overhead form
+    if (!t) { toast('Nothing in reach', '#8c8168'); return; }
+    player.angle = Math.atan2(t.y - player.y, t.x - player.x);
+    if (Math.abs(Math.cos(player.angle)) > 0.25)
+      player.face = Math.cos(player.angle) < 0 ? -1 : 1;
+    damageEnemy(t, player.damage * a.dmg);
+    knock(t, player.angle, 200);
+    freeze(0.03);
+    shake(5);
+    burst(t.x, t.y, '#ffd870', 10, 190);
+    ring(t.x, t.y, '#ffd870', 6, 44, 0.26);
+    gainCharge(a.build);
+  },
+
+  // The ring. Everything in reach, and a moment of the guard afterwards.
+  aegis(a) {
+    ring(player.x, player.y, '#ffd870', 12, a.radius, 0.42);
+    burst(player.x, player.y, '#ffe9b0', 26, 320);
+    shake(9);
+    freeze(0.05);
+    enemyGrid.query(player.x, player.y, a.radius, _near);
+    for (let i = 0; i < _near.length; i++) {
+      const e = _near[i];
+      if (e.hp <= 0) continue;
+      if (dist2(player.x, player.y, e.x, e.y) > a.radius * a.radius) continue;
+      damageEnemy(e, player.damage * a.dmg);
+      knock(e, Math.atan2(e.y - player.y, e.x - player.x), 240);
+    }
+    player.mitigate = a.mitigate;
+  },
+
+  // Rooted. The trade is plain: you cannot leave, and almost nothing moves you.
+  mass(a) {
+    player.rooted = a.root;
+    player.mitigate = Math.max(player.mitigate || 0, a.root);
+    ring(player.x, player.y, '#e2b96a', 10, 60, 0.5);
+    toast('Rooted — unmovable', '#e2b96a');
+  },
+
+  // A channel, and the most fragile thing in the kit.
+  purge(a) {
+    player.channel = { id: a.id, left: a.channel, total: a.channel };
+    stickEnd();
+  },
+
+  // The execution. Everything about it is weight: the longest beat, the
+  // hardest freeze, and on a Vulnerable body it is meant to end the fight.
+  guillotine(a) {
+    const t = nearestBody(a.reach);
+    player.swing = SWING_TIME * 1.6;
+    player.strike = 2;
+    if (!t) { toast('Nothing in reach', '#8c8168'); return; }
+    player.angle = Math.atan2(t.y - player.y, t.x - player.x);
+    const vuln = (t.vuln || 0) > 0;
+    freeze(0.08);
+    shake(vuln ? 16 : 11);
+    ring(t.x, t.y, vuln ? '#fff2c8' : '#ffd870', 8, vuln ? 190 : 120, 0.5);
+    burst(t.x, t.y, '#fff2c8', vuln ? 40 : 22, 380);
+    damageEnemy(t, player.damage * a.dmg * (vuln ? VULN_MULT : 1));
+    if (vuln) toast('The guard is broken', '#fff2c8');
+  }
+};
+
+// Nearest body inside a radius that is actually reachable. Shares the rule the
+// blade uses: rock stops everything, and Isaac does not see mirages.
+function nearestBody(R) {
+  enemyGrid.query(player.x, player.y, R, _near);
+  const blind = player.hero === 'isaac';
+  let best = null, bestD = R * R;
+  for (let i = 0; i < _near.length; i++) {
+    const e = _near[i];
+    if (e.hp <= 0) continue;
+    if (blind && e.kind === 'mirage') continue;
+    if (!clearShot(player.x, player.y, e.x, e.y)) continue;
+    const d = dist2(player.x, player.y, e.x, e.y);
+    if (d < bestD) { bestD = d; best = e; }
+  }
+  return best;
+}
+
+// Shove a body. Heavier things move less, and an anchor at its post does not
+// move at all -- it is the whole of what an anchor is.
+function knock(e, ang, force) {
+  if (!e || e.hp <= 0) return;
+  const f = force / Math.max(0.6, e.mass || 1);
+  moveEntity(e, Math.cos(ang) * f * 0.05, Math.sin(ang) * f * 0.05);
+}
+
+// Cooldowns, the channel, and the timed states the kit puts on the hero.
+function updateAbilities(dt) {
+  if (player.cds) {
+    for (const k in player.cds) {
+      if (player.cds[k] > 0) player.cds[k] = Math.max(0, player.cds[k] - dt);
+    }
+  }
+  if (player.chargePop > 0) player.chargePop = Math.max(0, player.chargePop - dt * 3);
+  if (player.mitigate > 0) player.mitigate = Math.max(0, player.mitigate - dt);
+  if (player.rooted > 0) player.rooted = Math.max(0, player.rooted - dt);
+
+  const c = player.channel;
+  if (c) {
+    const a = ABILITY_BY_ID[c.id];
+    c.left -= dt;
+    if (a.healPct) {
+      player.hp = Math.min(player.maxHp, player.hp + player.maxHp * a.healPct * dt);
+    }
+    if (c.left <= 0) { player.channel = null; toast('Grounded', '#9dbb5a'); }
+  }
+}
+
+// Any of these ends a channel. Being struck is the obvious one; moving is the
+// one that matters, because it is what stops the channel being a free heal
+// you press whenever the floor is quiet.
+function breakChannel(why) {
+  if (!player.channel) return;
+  const a = ABILITY_BY_ID[player.channel.id];
+  player.channel = null;
+  // A broken channel still costs its cooldown -- otherwise the answer to
+  // being interrupted is to press it again immediately.
+  if (a && a.cd) { player.cds = player.cds || {}; player.cds[a.id] = a.cd; }
+  toast(why === 'hurt' ? 'The channel breaks' : 'You move, and it lapses', '#8c8168');
+}
+
+/* --- the beat of a fight ----------------------------------------------------
+   Three things below, and all of them exist to make a blow feel like it landed
+   rather than like a number changed.
+
+   The GLOBAL COOLDOWN is the pacing rule the whole kit is written against: an
+   ability locks every other ability for a beat, so a fight is a sequence of
+   decisions rather than a fistful of buttons pressed at once. It is a lock on
+   the ability bar only -- moving, swinging the blade and drinking are not on
+   it, because a game you play with one thumb cannot afford to take movement
+   away.
+
+   The HIT-STOP freezes the simulation for a few frames on a heavy landing.
+   Drawing continues, so the screen does not blink; the world simply stops for
+   40ms and the blow reads as weight. It is capped and it is spent in real
+   time, or a chain of heavy hits would stall the game rather than punctuate it.
+
+   The SHAKE is bound to what actually happened -- a share of the life it cost
+   you, not a constant -- so a scratch and a near-death do not shake alike.
+   -------------------------------------------------------------------- */
+const GCD_TIME   = 1.2;    // the beat every ability is written against
+const HITSTOP_MAX = 0.09;  // never freeze longer than this, however heavy
+
+let hitStop = 0;
+
+// Freeze the simulation for a moment. Called at the point of impact, not at
+// the point of the swing: the pause has to land with the blow.
+function freeze(seconds) {
+  hitStop = Math.min(HITSTOP_MAX, Math.max(hitStop, seconds));
+}
+
+// Is the bar locked? Everything on the global cooldown asks this first.
+const onGCD = () => (player.gcd || 0) > 0;
+
+// Start the beat. `mul` lets a heavier ability cost a longer one.
+function startGCD(mul) {
+  player.gcd = GCD_TIME * (mul === undefined ? 1 : mul);
+  player.gcdMax = player.gcd;
+}
+
 function floatDmg(x, y, amount, kind) {
   if (lowFx) return;
   const n = Math.max(1, Math.round(amount));
@@ -4749,13 +5091,17 @@ function updateFloaters(dt) {
 
 // Colour and weight by what the hit was. Soaked hits are deliberately dull and
 // small -- they are meant to read as "this is not working".
+// A hierarchy, not a palette. Size, colour and edge all move together, so the
+// number that matters is the one the eye goes to: a heavy landing is large,
+// bright and ringed; damage the target soaked is small, grey and edgeless and
+// stays out of the way of the reading.
 const FLOAT_STYLE = {
-  hit:    { c: '#f2e6c4', px: 15 },
-  heavy:  { c: '#ffd870', px: 20 },
-  soaked: { c: '#8c8168', px: 12 },
-  taken:  { c: '#e0563f', px: 18 },
-  bleed:  { c: '#a8242a', px: 14 },
-  coin:   { c: '#e8c060', px: 17 }
+  hit:    { c: '#f2e6c4', px: 15, rim: 'rgba(6,4,3,.85)',    w: 3, pop: 0.22 },
+  heavy:  { c: '#ffe07a', px: 24, rim: 'rgba(255,214,120,.9)', w: 4.5, pop: 0.5, glow: 14 },
+  soaked: { c: '#7c7566', px: 11, rim: 'rgba(6,4,3,.4)',    w: 2, pop: 0.06 },
+  taken:  { c: '#e0563f', px: 19, rim: 'rgba(6,4,3,.9)',     w: 3.5, pop: 0.34 },
+  bleed:  { c: '#a8242a', px: 14, rim: 'rgba(6,4,3,.8)',     w: 2.5, pop: 0.12 },
+  coin:   { c: '#e8c060', px: 17, rim: 'rgba(6,4,3,.85)',    w: 3, pop: 0.22 }
 };
 
 function drawFloaters() {
@@ -4767,15 +5113,22 @@ function drawFloaters() {
     const st = FLOAT_STYLE[f.kind] || FLOAT_STYLE.hit;
     const t = 1 - f.life / FLOAT_LIFE;
     const a = t < 0.1 ? t / 0.1 : Math.min(1, (1 - t) / 0.45);
-    const px = st.px * (1 + f.pop * 0.22);
+    // Elastic: the number overshoots its size and settles back, which is what
+    // makes it read as struck rather than as faded in.
+    const e = f.pop <= 0 ? 0
+            : Math.pow(2, -7 * (1 - f.pop)) * Math.sin((1 - f.pop) * 18 - 1.6);
+    const px = st.px * (1 + st.pop * (f.pop * 0.5 + e));
     ctx.globalAlpha = a;
     ctx.font = '700 ' + px.toFixed(1) + 'px ui-monospace, "SF Mono", monospace';
     const txt = (f.kind === 'taken' ? '-' : '') + f.n;
     // Struck out of the dark, so it needs its own edge to stay legible over
-    // a lit floor, a body, and a wall alike.
-    ctx.strokeStyle = 'rgba(6,4,3,.85)';
-    ctx.lineWidth = 3;
+    // a lit floor, a body, and a wall alike. A heavy landing rims itself in
+    // its own colour instead of black, which is what makes it glow.
+    if (st.glow) { ctx.shadowColor = st.c; ctx.shadowBlur = st.glow; }
+    ctx.strokeStyle = st.rim;
+    ctx.lineWidth = st.w;
     ctx.strokeText(txt, f.x, f.y);
+    ctx.shadowBlur = 0;
     ctx.fillStyle = st.c;
     ctx.fillText(txt, f.x, f.y);
   }
@@ -4820,6 +5173,7 @@ function stickMove(x, y) {
   const norm = Math.min(d, STICK_MAX) / STICK_MAX;
   stick.dx = ux; stick.dy = uy;
   stick.mag = norm <= STICK_DEAD ? 0 : (norm - STICK_DEAD) / (1 - STICK_DEAD);
+  if (stick.mag > 0.12) breakChannel('move');
 }
 
 function stickEnd() {
@@ -4868,11 +5222,16 @@ function hurtPlayer(e) { hurtPlayerBy(e.dmg, e.x, e.y); }
 function hurtPlayerBy(dmg, fx, fy) {
   if (player.invuln > 0) return;
   // Ward is flat damage reduction off gear, capped well short of immunity.
-  const taken = dmg * (1 - (player.ward || 0));
+  // Mitigation is the kit's own, on top of it and for a few seconds only.
+  const mit = (player.mitigate || 0) > 0 ? 0.5 : 0;
+  const taken = dmg * (1 - (player.ward || 0)) * (1 - mit);
+  breakChannel('hurt');
   player.hp -= taken;
   player.invuln = player.iframe;
   player.hitFlash = 0.3;
-  shake(6 + taken * 0.25);
+  // Bound to the share of your life it took, not to a constant: a scratch and
+  // a blow that nearly ends the run should not shake the same.
+  shake(4 + 22 * clamp(taken / Math.max(1, player.maxHp), 0, 1));
   hitFlashUI();
   const ox = fx === undefined ? player.x : fx;
   const oy = fy === undefined ? player.y : fy;
@@ -4967,13 +5326,23 @@ function collectTech(v) {
 }
 
 function updatePlayer(dt) {
+  // The beat. It locks the ability bar and nothing else -- movement and the
+  // blade are never taken away, because a game played with one thumb cannot
+  // afford to stop answering the stick.
+  if (player.gcd > 0) player.gcd = Math.max(0, player.gcd - dt);
+  updateAbilities(dt);
+
   const mv = moveVector();
   const px0 = player.x, py0 = player.y;
   if (mv.x !== 0 || mv.y !== 0) {
     const target = Math.atan2(mv.y, mv.x);
     player.angle += angleDelta(player.angle, target) * Math.min(1, dt * 15);
     if (Math.abs(mv.x) > 0.12) player.face = mv.x < 0 ? -1 : 1;
-    moveEntity(player, mv.x * player.speed * dt, mv.y * player.speed * dt);
+    // Rooted, and channelling, both mean the boots stay where they are. The
+    // stick still reads -- it is what lapses the channel -- but it moves
+    // nothing, which is the trade Unyielding Mass is asking you to make.
+    if (!(player.rooted > 0) && !player.channel)
+      moveEntity(player, mv.x * player.speed * dt, mv.y * player.speed * dt);
   }
   // The gait is driven by ground actually covered, not by a clock, so the
   // feet cannot skate: walk into a wall and the stride stops with him.
@@ -10608,6 +10977,7 @@ function syncHud() {
     el.lvlText.textContent = player.level;
   }
   syncGateBtn();
+  syncKit();
 }
 
 /* The way out. It only exists once the gate actually stands open and you are
@@ -10647,6 +11017,82 @@ function hitFlashUI() {
   el.flash.style.opacity = '1';
   clearTimeout(flashTimer);
   flashTimer = setTimeout(() => { el.flash.style.opacity = '0'; }, 90);
+}
+
+/* --- the kit, on the glass -------------------------------------------------
+   Built once when a run starts, then only the state that changed is written
+   each frame. The HUD next door already works this way and for the same
+   reason: writing five buttons' worth of DOM sixty times a second is the one
+   thing that will cost more than the whole simulation.
+   -------------------------------------------------------------------- */
+let kitCache = {};
+
+function buildKit() {
+  const keys = $('kitKeys'), pips = $('chargePips');
+  if (!keys) return;
+  keys.innerHTML = '';
+  kitCache = {};
+  for (const a of heroKit()) {
+    const b = document.createElement('button');
+    b.className = 'key';
+    b.id = 'key_' + a.id;
+    b.setAttribute('aria-label', a.name);
+    b.innerHTML = '<span class="km" aria-hidden="true">' + a.mark + '</span>' +
+                  '<span class="sweep"></span><span class="cdn"></span>';
+    // Pointer, not click: a click waits for the release and the whole kit is
+    // written against a beat you are meant to hit on the press.
+    b.addEventListener('pointerdown', ev => {
+      ev.preventDefault(); ev.stopPropagation();
+      castAbility(a.id);
+    });
+    keys.appendChild(b);
+  }
+  if (pips) {
+    pips.innerHTML = '';
+    for (let i = 0; i < CHARGE_MAX; i++) pips.appendChild(document.createElement('i'));
+  }
+  syncKit(true);
+}
+
+function syncKit(force) {
+  const bar = $('kitBar');
+  if (!bar) return;
+  const live = state === 'play' && heroKit().length > 0;
+  bar.hidden = !live;
+  if (!live) { const cb = $('channelBar'); if (cb) cb.hidden = true; return; }
+
+  for (const a of heroKit()) {
+    const b = $('key_' + a.id);
+    if (!b) continue;
+    const cd = (player.cds && player.cds[a.id]) || 0;
+    const block = abilityBlock(a);
+    // One string per button standing for everything drawn on it. Compared
+    // against the last frame's, so a button that has not changed is not
+    // touched at all.
+    const sig = block + '|' + Math.ceil(cd) + '|' + (cd > 0 ? (cd / a.cd).toFixed(2) : 0);
+    if (!force && kitCache[a.id] === sig) continue;
+    kitCache[a.id] = sig;
+    b.className = 'key' + (block ? ' ' + block : ' ready');
+    b.querySelector('.sweep').style.setProperty('--sw', (cd > 0 ? cd / a.cd : 0) + 'turn');
+    b.querySelector('.cdn').textContent = cd > 0 ? Math.ceil(cd) : '';
+  }
+
+  const pips = $('chargePips');
+  if (pips) {
+    const n = player.charges || 0;
+    if (force || kitCache._ch !== n) {
+      kitCache._ch = n;
+      const kids = pips.children;
+      for (let i = 0; i < kids.length; i++) kids[i].className = i < n ? 'lit' : '';
+    }
+  }
+
+  const cb = $('channelBar');
+  if (cb) {
+    const c = player.channel;
+    cb.hidden = !c;
+    if (c) $('channelFill').style.transform = 'scaleX(' + (c.left / c.total) + ')';
+  }
 }
 
 /* --- run lifecycle ------------------------------------------------------ */
@@ -10715,6 +11161,7 @@ function resetRun(heroId, levelId, diffId) {
 function startRun(heroId, levelId, diffId) {
   resetRun(heroId, levelId, diffId);
   state = 'play';
+  buildKit();
   showScreen(null);
 }
 
@@ -11748,7 +12195,11 @@ function frame(now) {
   }
 
   if (state === 'play') {
-    update(dt);
+    // A hit-stop stops the world, not the picture. The freeze is spent in real
+    // time so a run of heavy landings punctuates the fight instead of stalling
+    // it, and the frame is still drawn -- otherwise the screen blinks.
+    if (hitStop > 0) hitStop = Math.max(0, hitStop - dt);
+    else update(dt);
     syncHud();
   } else if (state === 'pause' || state === 'gear') {
     updateCamera(dt);
@@ -11768,7 +12219,7 @@ showScreen('splash');
 requestAnimationFrame(frame);
 </script>
 <script>
-/* generated from index.html e8430f70e089 + overlay c49f1ecc083e by tools/build-debug.js — do not edit */
+/* generated from index.html 9c99e53fbe48 + overlay c49f1ecc083e by tools/build-debug.js — do not edit */
 /* =============================================================================
    THE RIVENMARK — debug overlay
    Injected into debug.html by tools/build-debug.js. Never shipped in the
