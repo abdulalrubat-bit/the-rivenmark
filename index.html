@@ -351,7 +351,6 @@
     border-radius:2px; display:flex; align-items:center; justify-content:center;
     cursor:pointer; touch-action:manipulation; padding:0;}
   .cellbtn.sel{border-color:var(--gold) !important; background:#2a2115;}
-  .cellbtn.mythic{box-shadow:inset 0 0 0 1px rgba(224,86,63,.55);}
   .cellbtn{position:relative;}
   .slot .ico{flex:0 0 auto;}
   .slot.empty .ico{opacity:.34; filter:grayscale(.7);}
@@ -751,6 +750,364 @@
     text-shadow:0 1px 2px rgba(0,0,0,.9);
   }
   #delve .menu{align-items:center;}
+
+  /* =========================================================================
+     MATERIALS
+     The panels are made of something now. --tex-* are forged at boot by
+     forgeSurfaces() and handed here as data URIs, because a single-file game
+     cannot fetch an image and a flat fill reads as a web page rather than as
+     an object.
+
+     Every material is the texture with a gradient over it: the texture gives
+     the grain, the gradient gives the light. Texture alone is flat noise.
+     ====================================================================== */
+  .mat-leather{
+    background-image:linear-gradient(165deg,rgba(60,44,28,.5),rgba(8,6,4,.86)),
+                     var(--tex-leather);
+    background-size:auto, 96px 96px;
+  }
+  .mat-wood{
+    background-image:linear-gradient(180deg,rgba(70,38,20,.34),rgba(10,6,3,.8)),
+                     var(--tex-wood);
+    background-size:auto, 96px 96px;
+  }
+  .mat-stone{
+    background-image:linear-gradient(180deg,rgba(58,54,48,.42),rgba(8,7,6,.85)),
+                     var(--tex-stone);
+    background-size:auto, 96px 96px;
+  }
+  /* Light enough to carry dark text. Used where there is something to read. */
+  .mat-parchment{
+    background-image:linear-gradient(170deg,rgba(255,238,200,.10),rgba(46,32,18,.40)),
+                     var(--tex-parchment);
+    background-size:auto, 96px 96px;
+  }
+
+  /* Cast bronze for anything that is meant to be metal. */
+  .mat-bronze{
+    background-image:linear-gradient(180deg,rgba(255,226,170,.5),rgba(0,0,0,.5)),
+                     var(--tex-bronze);
+    background-size:auto, 96px 96px;
+  }
+
+  /* =========================================================================
+     HEAVY FRAMES
+     A one-pixel gold line reads as a website. These are mouldings: an outer
+     bronze band with a lit top and a shaded underside, a black seam, and a
+     recess inside.
+     ====================================================================== */
+  .heavy{
+    position:relative; border-radius:6px;
+    padding:5px;
+    background-image:linear-gradient(180deg,rgba(255,232,180,.55),rgba(0,0,0,.55)),
+                     var(--tex-bronze);
+    background-size:auto, 96px 96px;
+    box-shadow:0 0 0 1px #0a0805, 0 0 0 2px rgba(120,92,44,.5),
+               inset 0 1px 0 rgba(255,238,200,.42),
+               inset 0 -2px 3px rgba(0,0,0,.6),
+               0 6px 20px rgba(0,0,0,.75);
+  }
+  .heavy > .in{
+    position:relative; border-radius:3px; overflow:hidden;
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.85),
+               inset 0 3px 10px rgba(0,0,0,.7);
+  }
+
+  /* Rivets. Four of them, one per corner, struck into the moulding. Drawn on
+     the frame's own box with a repeating radial rather than as four elements,
+     so a frame stays one node however many panels there are. */
+  .riveted::after{
+    content:""; position:absolute; inset:3px; pointer-events:none;
+    border-radius:4px;
+    background:
+      radial-gradient(circle 3.5px at 5px 5px, #e8c88a 0 40%, #6b4c22 62%, transparent 66%),
+      radial-gradient(circle 3.5px at calc(100% - 5px) 5px, #e8c88a 0 40%, #6b4c22 62%, transparent 66%),
+      radial-gradient(circle 3.5px at 5px calc(100% - 5px), #e8c88a 0 40%, #6b4c22 62%, transparent 66%),
+      radial-gradient(circle 3.5px at calc(100% - 5px) calc(100% - 5px), #e8c88a 0 40%, #6b4c22 62%, transparent 66%);
+  }
+
+  /* =========================================================================
+     TYPE
+     Headings are cut into the metal: a dark bevel under the glyph and a light
+     one over it. Body copy is carried on a black rim so it holds against a
+     texture instead of dissolving into it.
+     ====================================================================== */
+  .title, .card h4, .dialog .title, .gear-h, .sub{
+    text-shadow:0 -1px 0 rgba(0,0,0,.9), 0 1px 0 rgba(0,0,0,.95),
+                -1px 0 0 rgba(0,0,0,.7), 1px 0 0 rgba(0,0,0,.7),
+                0 2px 5px rgba(0,0,0,.85);
+  }
+  .title{
+    font-weight:700; letter-spacing:5px;
+  }
+  .card p, .card .tier, .blurb, .hint, .fine, .slot .iname, .slot .sname,
+  .gear-stats, .setline, .lnote, .dialog-note{
+    text-shadow:0 1px 0 rgba(0,0,0,.95), 0 0 3px rgba(0,0,0,.8);
+  }
+
+  /* =========================================================================
+     RARITY
+     Classic and strict, so a colour means the same thing here as it does in
+     every other game the player has met. The tier is on the name, on the
+     frame of the icon, and on the wash behind it.
+     ====================================================================== */
+  :root{
+    --r-common:#e8e2d4; --r-uncommon:#3fc44a; --r-rare:#3a7ffb;
+    --r-epic:#a238e6;   --r-legend:#ff8000;  --r-set:#e0563f;
+  }
+
+  /* =========================================================================
+     TACTILE CONTROLS
+     A button is a block that stands off the panel and goes down when pressed.
+     The travel is real -- the whole plate moves a pixel and its shadow closes
+     up -- because a colour change alone does not read as a press on a phone.
+     ====================================================================== */
+  .btn, .mbtn, .orn-btn, .tab, .chip, .lrow button, .vslots button{
+    transition:transform .06s ease-out, box-shadow .06s ease-out,
+               background-color .12s ease-out;
+  }
+  .btn{
+    border-radius:4px; border:0; color:var(--ink);
+    background-image:linear-gradient(180deg,rgba(96,72,44,.55),rgba(10,7,4,.8)),
+                     var(--tex-wood);
+    background-size:auto, 96px 96px;
+    box-shadow:0 0 0 1px #0a0805, 0 0 0 2px rgba(122,94,50,.55),
+               inset 0 1px 0 rgba(255,228,178,.28),
+               inset 0 -2px 4px rgba(0,0,0,.55),
+               0 3px 0 #1a1209, 0 5px 12px rgba(0,0,0,.7);
+  }
+  .btn:active{
+    transform:translateY(3px);
+    box-shadow:0 0 0 1px #0a0805, 0 0 0 2px rgba(122,94,50,.55),
+               inset 0 2px 6px rgba(0,0,0,.7), 0 0 0 rgba(0,0,0,0);
+  }
+  .btn.ghost{
+    background-image:none; background:rgba(12,9,5,.6);
+    box-shadow:0 0 0 1px rgba(80,64,40,.6); color:var(--dim);
+  }
+  .btn.ghost:active{transform:translateY(1px); box-shadow:0 0 0 1px rgba(120,96,56,.8);}
+  .orn-btn{
+    background-image:linear-gradient(180deg,rgba(108,82,50,.6),rgba(14,10,6,.86)),
+                     var(--tex-wood);
+    background-size:auto, 96px 96px;
+    box-shadow:0 0 0 2px var(--br-mid), 0 0 0 3px rgba(0,0,0,.75),
+               inset 0 1px 0 rgba(255,230,180,.3),
+               inset 0 -2px 5px rgba(0,0,0,.5),
+               0 4px 0 #1a1209, 0 7px 16px rgba(0,0,0,.72);
+  }
+  .orn-btn:active{
+    transform:translateY(4px);
+    box-shadow:0 0 0 2px var(--br-mid), 0 0 0 3px rgba(0,0,0,.75),
+               inset 0 2px 7px rgba(0,0,0,.7);
+  }
+
+
+  /* =========================================================================
+     THE PANELS, IN THEIR MATERIALS
+     ====================================================================== */
+
+  /* The tab bar is a strap of wood banded in bronze, and the tabs are leaves
+     fixed to it rather than outlines floating over the page. */
+  #hubtabs .tabs{
+    background-image:linear-gradient(180deg,rgba(74,44,22,.55),rgba(10,6,3,.86)),
+                     var(--tex-wood);
+    background-size:auto, 96px 96px;
+    box-shadow:0 0 0 1px #0a0805, 0 0 0 3px rgba(132,100,52,.75),
+               0 0 0 4px rgba(0,0,0,.7),
+               inset 0 1px 0 rgba(255,228,178,.2),
+               0 6px 18px rgba(0,0,0,.75);
+  }
+  .tab{border-radius:3px;}
+  .tab[aria-selected="true"]{
+    background-image:
+      radial-gradient(ellipse 70% 130% at 50% 118%, rgba(255,178,60,.42), transparent 70%),
+      linear-gradient(180deg,rgba(150,110,58,.72),rgba(30,20,10,.7)),
+      var(--tex-bronze);
+    background-size:auto, auto, 96px 96px;
+    box-shadow:inset 0 1px 0 rgba(255,238,200,.4),
+               inset 0 -3px 6px rgba(0,0,0,.5),
+               0 0 0 1px rgba(0,0,0,.7),
+               0 0 14px rgba(255,168,52,.28);
+  }
+  .tab:active{transform:translateY(1px);}
+
+  /* Cards are the thing there is most of, and most of the reading happens on
+     them, so they are the parchment. */
+  .card{
+    border:0; border-radius:4px; border-left:3px solid var(--line);
+    background-image:linear-gradient(100deg,rgba(56,40,22,.72),rgba(12,9,5,.9)),
+                     var(--tex-leather);
+    background-size:auto, 96px 96px;
+    box-shadow:0 0 0 1px rgba(0,0,0,.8), inset 0 1px 0 rgba(255,222,166,.12),
+               0 3px 10px rgba(0,0,0,.6);
+  }
+  .card.sel{
+    border-left-color:var(--gold);
+    background-image:
+      radial-gradient(ellipse 90% 140% at 4% 50%, rgba(255,178,60,.26), transparent 62%),
+      linear-gradient(100deg,rgba(92,66,32,.75),rgba(18,13,7,.9)),
+      var(--tex-leather);
+    background-size:auto, auto, 96px 96px;
+    box-shadow:0 0 0 1px rgba(0,0,0,.85), 0 0 0 2px rgba(160,124,58,.5),
+               inset 0 1px 0 rgba(255,232,180,.2), 0 4px 14px rgba(0,0,0,.7);
+  }
+  /* The two places with real prose on them are scroll rather than box. A light
+     ground needs the whole text palette inverted with it -- gold on parchment
+     is a smudge -- so the inks are declared here as a set rather than left to
+     inherit whatever the dark screens use. */
+  #heroPick .card, #levelPick .card{
+    background-image:linear-gradient(158deg,rgba(255,242,214,.13),rgba(52,36,20,.5)),
+                     var(--tex-parchment);
+    background-size:auto, 96px 96px;
+    box-shadow:0 0 0 1px rgba(0,0,0,.85),
+               inset 0 1px 0 rgba(255,248,224,.3),
+               inset 0 -8px 18px rgba(64,42,20,.28),
+               0 3px 10px rgba(0,0,0,.65);
+  }
+  #heroPick .card.sel, #levelPick .card.sel{
+    background-image:
+      radial-gradient(ellipse 90% 140% at 2% 50%, rgba(255,196,88,.3), transparent 62%),
+      linear-gradient(158deg,rgba(255,246,222,.2),rgba(58,40,22,.46)),
+      var(--tex-parchment);
+    background-size:auto, auto, 96px 96px;
+    box-shadow:0 0 0 1px rgba(0,0,0,.85), 0 0 0 2px rgba(176,136,62,.75),
+               inset 0 1px 0 rgba(255,250,232,.42), 0 4px 14px rgba(0,0,0,.7);
+  }
+  /* Inks. Everything that sits on the scroll is written in one of these. */
+  #heroPick .card h4, #levelPick .card h4{
+    color:#2b1c0d; text-shadow:0 1px 0 rgba(255,246,222,.5);
+  }
+  #heroPick .card p, #levelPick .card p{
+    color:#4a3620; text-shadow:0 1px 0 rgba(255,246,222,.4);
+  }
+  #heroPick .card .tier, #levelPick .card .tier{
+    color:#7a3f12; text-shadow:0 1px 0 rgba(255,246,222,.4);
+  }
+  #levelPick .card .standing{
+    color:#6d3a12 !important; text-shadow:0 1px 0 rgba(255,246,222,.45);
+  }
+  /* The rung carries three more voices -- who holds the gate, what the rung
+     teaches, and what it owes you -- and every one of them was written for a
+     dark ground. They are inks on the scroll too. */
+  #levelPick .card .ward{color:#5c3a1c; text-shadow:0 1px 0 rgba(255,246,222,.4);}
+  #levelPick .card .teach{color:#3d2a14; font-weight:600;
+    text-shadow:0 1px 0 rgba(255,246,222,.5);}
+  #levelPick .card .owed{color:#8c2418; text-shadow:0 1px 0 rgba(255,246,222,.4);}
+  #levelPick .card .glyph, #heroPick .card .glyph{
+    color:#7a3f12; text-shadow:0 1px 0 rgba(255,246,222,.4);}
+  #heroPick .card .ico, #levelPick .card .ico{filter:brightness(.55) saturate(1.5);}
+
+  /* The screens themselves sit on hide rather than on nothing. */
+  /* Hide over the top of whatever the canvas is drawing, not instead of it --
+     the hall has a lit arch behind it and the delve has a room, and an opaque
+     ground threw both away. */
+  body.hub #delve, body.hub #gear, body.hub #vendor, body.hub #hall, #splash{
+    background-image:
+      radial-gradient(ellipse 120% 70% at 50% 0%, rgba(78,52,26,.42), transparent 62%),
+      linear-gradient(180deg,rgba(20,15,9,.80),rgba(6,5,3,.88)),
+      var(--tex-leather);
+    background-size:auto, auto, 96px 96px;
+    background-blend-mode:normal, normal, overlay;
+    background-attachment:local;
+  }
+
+  /* The HUD is quarried stone banded in bronze. */
+  .hud{
+    background-image:linear-gradient(180deg,rgba(58,50,40,.5),rgba(8,7,5,.9)),
+                     var(--tex-stone) !important;
+    background-size:auto, 96px 96px !important;
+  }
+
+  /* Dialogs: stone plate, bronze band, rivets in the corners. */
+  .dialog{
+    background-image:linear-gradient(180deg,rgba(56,48,38,.5),rgba(8,6,4,.94)),
+                     var(--tex-stone);
+    background-size:auto, 96px 96px;
+  }
+
+  /* =========================================================================
+     THE KIT
+     ====================================================================== */
+
+  /* Slots recessed into the panel rather than drawn on it. */
+  .cellbtn, .slot{
+    border:0; border-radius:3px;
+    background-image:linear-gradient(180deg,rgba(40,30,18,.6),rgba(6,5,3,.9)),
+                     var(--tex-leather);
+    background-size:auto, 96px 96px;
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.9),
+               inset 0 3px 7px rgba(0,0,0,.8),
+               inset 0 -1px 0 rgba(255,220,160,.09);
+  }
+  .slot{border-left:3px solid var(--line); border-radius:0 3px 3px 0;}
+  .cellbtn{box-shadow:inset 0 0 0 1px rgba(0,0,0,.9),
+                      inset 0 3px 8px rgba(0,0,0,.85),
+                      inset 0 -1px 0 rgba(255,220,160,.08),
+                      0 0 0 1px rgba(96,76,44,.35);}
+  .cellbtn:active, .slot:active{transform:translateY(1px);}
+
+  /* The ghost in an empty slot: what goes here, said without a word. It was
+     already the right icon at a third opacity, which read as a smudge. */
+  .slot.empty .ico{opacity:.5; filter:grayscale(1) brightness(1.5);}
+  .slot.empty .iname{color:#6a6152;}
+
+  /* The tier of a thing, everywhere it appears. */
+  .cellbtn.r-common  {box-shadow:inset 0 0 0 1px rgba(0,0,0,.9), inset 0 3px 8px rgba(0,0,0,.85), 0 0 0 2px var(--r-common);}
+  .cellbtn.r-uncommon{box-shadow:inset 0 0 0 1px rgba(0,0,0,.9), inset 0 3px 8px rgba(0,0,0,.85), 0 0 0 2px var(--r-uncommon);}
+  .cellbtn.r-rare    {box-shadow:inset 0 0 0 1px rgba(0,0,0,.9), inset 0 3px 8px rgba(0,0,0,.85), 0 0 0 2px var(--r-rare);}
+  .cellbtn.r-epic    {box-shadow:inset 0 0 0 1px rgba(0,0,0,.9), inset 0 3px 8px rgba(0,0,0,.85), 0 0 0 2px var(--r-epic);}
+  .cellbtn.r-legend  {box-shadow:inset 0 0 0 1px rgba(0,0,0,.9), inset 0 3px 8px rgba(0,0,0,.85), 0 0 0 2px var(--r-legend), 0 0 12px rgba(255,128,0,.45);}
+  .cellbtn.r-set     {box-shadow:inset 0 0 0 1px rgba(0,0,0,.9), inset 0 3px 8px rgba(0,0,0,.85), 0 0 0 2px var(--r-set), 0 0 14px rgba(224,86,63,.5);}
+  .cellbtn.sel{box-shadow:inset 0 0 0 1px rgba(0,0,0,.9), 0 0 0 3px var(--gold),
+                          0 0 16px rgba(255,194,77,.55) !important;}
+
+  /* What is worn glows faintly, so the equipped piece is obvious without
+     reading a single label. */
+  .slot:not(.empty){
+    background-image:
+      radial-gradient(ellipse 60% 150% at 0% 50%, rgba(120,160,255,.16), transparent 66%),
+      linear-gradient(180deg,rgba(46,36,22,.6),rgba(8,6,4,.9)),
+      var(--tex-leather);
+    background-size:auto, auto, 96px 96px;
+  }
+
+  /* Chips and the little row buttons get the same physicality. */
+  .chip, .lrow button, .vslots button{
+    border:0; border-radius:3px;
+    background-image:linear-gradient(180deg,rgba(70,54,32,.6),rgba(10,7,4,.85)),
+                     var(--tex-wood);
+    background-size:auto, 96px 96px;
+    box-shadow:0 0 0 1px rgba(0,0,0,.8), inset 0 1px 0 rgba(255,224,170,.18),
+               0 2px 0 #17100a;
+  }
+  .chip.on{box-shadow:0 0 0 1px rgba(0,0,0,.8), 0 0 0 2px var(--gold),
+                      inset 0 1px 0 rgba(255,232,180,.3), 0 0 10px rgba(255,194,77,.3);}
+  .chip:active, .lrow button:active, .vslots button:active{
+    transform:translateY(2px); box-shadow:0 0 0 1px rgba(0,0,0,.8),
+      inset 0 2px 5px rgba(0,0,0,.6);
+  }
+
+  /* The detail plates stay dark. They carry item names in rarity colours and
+     the common tier is near-white -- on parchment it would be invisible, and
+     a rarity ladder that cannot be read is worse than a plain box. They get
+     the frame and the grain instead, in hide. */
+  .gear-detail, #vendorDetail, #hallDetail{
+    border:0; border-radius:4px;
+    background-image:linear-gradient(180deg,rgba(48,36,22,.6),rgba(8,6,4,.9)),
+                     var(--tex-leather);
+    background-size:auto, 96px 96px;
+    box-shadow:0 0 0 1px #0a0805, 0 0 0 2px rgba(120,92,44,.45),
+               inset 0 1px 0 rgba(255,228,178,.14),
+               inset 0 3px 9px rgba(0,0,0,.6), 0 4px 12px rgba(0,0,0,.6);
+  }
+
+
+  /* Prices read as a stack of coin and a number, not as the word "coin". */
+  .coinN{margin-left:3px; font-variant-numeric:tabular-nums;}
+  .tier .ico, .stats .ico{vertical-align:-2px;}
+
+  /* Rivets where a panel is meant to be bolted down. */
+  #hubtabs .tabs, .dialog, .hud{position:relative;}
 </style>
 </head>
 <body>
@@ -760,7 +1117,7 @@
 <div id="ui">
   <div id="flash"></div>
 
-  <div class="hud" id="hud" hidden>
+  <div class="hud riveted" id="hud" hidden>
     <div class="hud-left">
       <!-- Rank is worn on the end of the life bar rather than kept in a
            corner: it is a property of the hero, and the reference puts it
@@ -804,7 +1161,7 @@
        mid-delve, which is an overlay on a run rather than a room you walk
        into. -->
   <div id="hubtabs" hidden>
-    <div class="tabs" role="tablist" aria-label="The gate-house">
+    <div class="tabs riveted" role="tablist" aria-label="The gate-house">
       <button class="tab" role="tab" id="toDelve" aria-selected="false"
         ><span class="tmark" aria-hidden="true">☠</span>Delve<span class="tsub" id="delveLine">&nbsp;</span></button>
       <button class="tab" role="tab" id="toKit" aria-selected="false"
@@ -882,7 +1239,7 @@
   <div class="screen" id="paused">
     <!-- A framed plate with a medallion notched into its head, which is the
          shape the reference uses for anything that stops the game. -->
-    <div class="dialog">
+    <div class="dialog riveted">
       <span class="medal dialog-seal" aria-hidden="true"><span>☠</span></span>
       <h1 class="title">Held</h1>
       <p class="dialog-note">The delve waits. It does not wait kindly.</p>
@@ -1593,18 +1950,26 @@ const icoTag = (key, px) =>
 const icoKey = it => (it && ICON[it.base] !== undefined) ? it.base
                    : (it ? it.slot : 'blade');
 
+// A price, with the coin drawn rather than spelled. The icon comes off the
+// same strip as everything else, so it is graded into the palette already.
+const coinTag = n => icoTag('coin', 13) + '<span class="coinN">' + n + '</span>';
+
 const SLOT_BY_ID = {};
 for (const s of SLOTS) SLOT_BY_ID[s.id] = s;
 
+// Colours are the classic ladder -- white, green, blue, purple, orange -- so a
+// tier means here what it means in every other game the player has met. `tier`
+// is the class the interface hangs off it, and lives beside the colour so the
+// two can never drift apart.
 const RARITY = [
-  { id:'worn',    name:'Worn',           colour:'#8d8676', affixes:1, weight:52 },
-  { id:'tempered',name:'Tempered',       colour:'#7fa869', affixes:2, weight:28 },
-  { id:'wrought', name:'Spirit-wrought', colour:'#5f9fd0', affixes:3, weight:14 },
-  { id:'hallowed',name:'Hallowed',       colour:'#a98fd8', affixes:4, weight:5  },
-  { id:'riven',   name:'Riven',          colour:'#d9a441', affixes:5, weight:1  },
+  { id:'worn',    name:'Worn',           colour:'#e8e2d4', tier:'common',   affixes:1, weight:52 },
+  { id:'tempered',name:'Tempered',       colour:'#3fc44a', tier:'uncommon', affixes:2, weight:28 },
+  { id:'wrought', name:'Spirit-wrought', colour:'#3a7ffb', tier:'rare',     affixes:3, weight:14 },
+  { id:'hallowed',name:'Hallowed',       colour:'#a238e6', tier:'epic',     affixes:4, weight:5  },
+  { id:'riven',   name:'Riven',          colour:'#ff8000', tier:'legend',   affixes:5, weight:1  },
   // Never rolled by rollRarity -- set pieces are the only mythics, and they
   // come off elites and the avatar rather than out of the ordinary drop table.
-  { id:'mythic',  name:'Mythic',         colour:'#e0563f', affixes:5, weight:0  }
+  { id:'mythic',  name:'Mythic',         colour:'#e0563f', tier:'set',      affixes:5, weight:0  }
 ];
 
 /* --- The Sundered Regalia -------------------------------------------------
@@ -6852,6 +7217,100 @@ function forgeVignette() {
   return c;
 }
 
+/* --- surfaces the interface is made of -------------------------------------
+   The panels used to be flat dark fills, which reads as a website rather than
+   as a thing you could pick up. These are the materials: mahogany, distressed
+   leather, quarried stone, weathered parchment and cast bronze.
+
+   Generated once at boot and handed to CSS as data URIs on custom properties,
+   because the game ships as one file and cannot fetch an image. Each is
+   tileable -- the noise wraps on both axes -- so a 96px square dresses a panel
+   of any size without a seam.
+   -------------------------------------------------------------------- */
+const TEX_N = 96;
+
+// Value noise on a wrapping lattice. Wrapping is the whole point: a texture
+// that does not tile shows a grid of seams the moment it dresses anything
+// bigger than itself.
+function makeNoise(period, seed) {
+  const g = new Float32Array(period * period);
+  let s = seed >>> 0;
+  const rnd = () => (s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296;
+  for (let i = 0; i < g.length; i++) g[i] = rnd();
+  const smooth = t => t * t * (3 - 2 * t);
+  return (x, y) => {
+    const xi = Math.floor(x), yi = Math.floor(y);
+    const tx = smooth(x - xi), ty = smooth(y - yi);
+    const x0 = ((xi % period) + period) % period, x1 = (x0 + 1) % period;
+    const y0 = ((yi % period) + period) % period, y1 = (y0 + 1) % period;
+    const a = g[y0 * period + x0], b = g[y0 * period + x1];
+    const c = g[y1 * period + x0], d = g[y1 * period + x1];
+    return (a + (b - a) * tx) + ((c + (d - c) * tx) - (a + (b - a) * tx)) * ty;
+  };
+}
+
+function forgeTexture(kind) {
+  const c = document.createElement('canvas');
+  c.width = c.height = TEX_N;
+  const g = c.getContext('2d');
+  const img = g.createImageData(TEX_N, TEX_N);
+  const d = img.data;
+
+  // One lattice per scale, all wrapping over the tile.
+  const n1 = makeNoise(4,  kind.length * 131 + 17);
+  const n2 = makeNoise(12, kind.length * 977 + 53);
+  const n3 = makeNoise(32, kind.length * 613 + 91);
+
+  for (let y = 0; y < TEX_N; y++) {
+    for (let x = 0; x < TEX_N; x++) {
+      const u = x / TEX_N, v = y / TEX_N;
+      const a = n1(u * 4, v * 4), b = n2(u * 12, v * 12), e = n3(u * 32, v * 32);
+      let r, gg, bb, mul;
+
+      if (kind === 'wood') {
+        // Mahogany: rings running the long way, warped a little so the grain
+        // is not a set of stripes.
+        const rings = Math.sin((v * 9 + a * 1.9 + b * 0.5) * Math.PI * 2);
+        mul = 0.74 + rings * 0.11 + b * 0.14 + e * 0.1;
+        r = 96 * mul; gg = 52 * mul; bb = 33 * mul;
+      } else if (kind === 'leather') {
+        // Distressed hide: broad mottling with a fine pebble over it.
+        mul = 0.6 + b * 0.42 + e * 0.24 + a * 0.16;
+        r = 62 * mul; gg = 45 * mul; bb = 33 * mul;
+      } else if (kind === 'stone') {
+        mul = 0.62 + b * 0.3 + e * 0.4 + a * 0.12;
+        r = 62 * mul; gg = 58 * mul; bb = 52 * mul;
+      } else if (kind === 'parchment') {
+        // Warm, foxed, and light enough to read dark text on.
+        mul = 0.82 + b * 0.16 + e * 0.1 + a * 0.06;
+        const stain = Math.max(0, a - 0.62) * 0.9;
+        r = (176 - stain * 70) * mul; gg = (148 - stain * 76) * mul;
+        bb = (108 - stain * 62) * mul;
+      } else {                                   // bronze
+        mul = 0.66 + b * 0.24 + e * 0.3 + a * 0.14;
+        r = 150 * mul; gg = 112 * mul; bb = 56 * mul;
+      }
+      const i = (y * TEX_N + x) * 4;
+      d[i] = Math.max(0, Math.min(255, r));
+      d[i + 1] = Math.max(0, Math.min(255, gg));
+      d[i + 2] = Math.max(0, Math.min(255, bb));
+      d[i + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  return c.toDataURL('image/png');
+}
+
+// Handed to CSS rather than drawn: the panels are DOM, so the material has to
+// reach them as a background-image.
+let surfacesForged = false;
+function forgeSurfaces() {
+  const root = document.documentElement.style;
+  for (const k of ['wood', 'leather', 'stone', 'parchment', 'bronze']) {
+    root.setProperty('--tex-' + k, 'url(' + forgeTexture(k) + ')');
+  }
+}
+
 function forgeAll() {
   SS = Math.min(3, Math.max(2, view.dpr));
   LIGHTS.clear();
@@ -6914,6 +7373,9 @@ function resize() {
   canvas.style.height = view.h + 'px';
   ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
   if (forgedAt !== view.dpr) { forgeAll(); forgedAt = view.dpr; }
+  // The interface materials do not depend on the pixel ratio -- they are
+  // tiled by CSS, not blitted -- so they are forged once and never again.
+  if (!surfacesForged) { surfacesForged = true; forgeSurfaces(); }
   else vignette = forgeVignette();
   // Fog and ash are screen-space, so they are rebuilt whenever the viewport
   // changes rather than baked with the sprites.
@@ -10057,12 +10519,15 @@ function renderGear() {
     const b = document.createElement('button');
     b.className = 'slot' + (!it ? ' empty' : '') +
       (gearSel && gearSel.from === 'worn' && gearSel.slot === sl.id ? ' sel' : '');
-    if (it) b.style.borderLeftColor = rarityOf(it).colour;
+    const col = it ? (it.set === SET_ID ? '#e0563f' : rarityOf(it).colour) : null;
+    if (col) b.style.borderLeftColor = col;
     b.innerHTML = icoTag(it ? icoKey(it) : sl.id, 20) +
                   '<span class="sname">' + sl.name + '</span>' +
-                  '<span class="iname">' + (it ? it.name : 'empty') + '</span>';
+                  // The name carries the tier too. An edge alone is easy to
+                  // miss on a slot that is mostly text.
+                  '<span class="iname"' + (col ? ' style="color:' + col + '"' : '') + '>' +
+                  (it ? it.name : 'empty') + '</span>';
     if (!it) b.style.opacity = '';
-    if (it && it.set === SET_ID) b.style.borderLeftColor = '#e0563f';
     b.onclick = () => { gearSel = it ? { from: 'worn', slot: sl.id } : null; renderGear(); };
     el.gearSlots.appendChild(b);
   }
@@ -10122,18 +10587,20 @@ function renderGear() {
     const o = shown[n];
     const it = o && o.it;
     const b = document.createElement('button');
+    const R = it && rarityOf(it);
     b.className = 'cellbtn' +
       (it && gearSel && gearSel.from === 'bag' && gearSel.index === o.i ? ' sel' : '') +
-      (it && it.set === SET_ID ? ' mythic' : '');
+      (it ? ' r-' + (it.set === SET_ID ? 'set' : R.tier) : '');
     if (it) {
-      const col = rarityOf(it).colour;
-      // The icon says what it is; the border and the wash behind it say how
-      // good it is. A glyph could only ever do one of those two jobs.
+      // The icon says what it is; the frame round it and the wash behind it
+      // say how good it is. A glyph could only ever do one of those two jobs.
       b.innerHTML = icoTag(icoKey(it), 28) +
                     (isUpgrade(it, C.gear) ? '<span class="cup">\u25b2</span>' : '');
-      b.style.borderColor = col + '55';
-      b.style.background =
-        'radial-gradient(circle at 50% 58%, ' + col + '1f, #17120900 70%), #171209';
+      b.style.backgroundImage =
+        'radial-gradient(circle at 50% 58%, ' + R.colour + '2e, transparent 68%),' +
+        'linear-gradient(180deg,rgba(40,30,18,.6),rgba(6,5,3,.9)),' +
+        getComputedStyle(document.documentElement).getPropertyValue('--tex-leather');
+      b.style.backgroundSize = 'auto, auto, 96px 96px';
     }
     b.onclick = () => {
       gearSel = it ? { from: 'bag', index: o.i, uid: it.uid } : null;
@@ -10553,7 +11020,7 @@ function renderHall() {
     card.innerHTML = '<span class="glyph">' + h.mark + '</span><span><h4>' + h.name +
       ' <span class="pips">' + '\u25c6'.repeat(t) + '\u25c7'.repeat(HALL_MAX - t) +
       '</span></h4><p>' + h.note +
-      ' <span class="tier">' + (done ? 'whole' : cost + ' coin') + '</span></p></span>';
+      ' <span class="tier">' + (done ? 'whole' : coinTag(cost)) + '</span></p></span>';
     card.addEventListener('click', () => { hallSel = h.id; renderHall(); });
     el.hallList.appendChild(card);
   }
@@ -10575,7 +11042,7 @@ function renderHallDetail() {
     rows += '<div class="hrow' + (have ? ' have' : '') + '">' +
             '<span>' + (have ? '\u25c6' : '\u25c7') + '</span>' +
             '<span>' + h.tiers[i].text + '</span>' +
-            '<b>' + (have ? 'laid' : h.tiers[i].cost + ' coin') + '</b></div>';
+            '<b>' + (have ? 'laid' : coinTag(h.tiers[i].cost)) + '</b></div>';
   }
   const done = t >= HALL_MAX;
   el.hallDetail.innerHTML = '<h4>' + h.name + '</h4>' + rows +
@@ -10632,7 +11099,7 @@ function renderVendor() {
     card.className = 'card' + (vendorSel === v.id ? ' sel' : '') + (ok ? '' : ' poor');
     card.type = 'button';
     card.innerHTML = '<span class="glyph">\u2724</span><span><h4>' + v.name +
-      '</h4><p>' + v.note + ' <span class="tier">' + cost + ' coin</span></p></span>';
+      '</h4><p>' + v.note + ' <span class="tier">' + coinTag(cost) + '</span></p></span>';
     card.addEventListener('click', () => { vendorSel = v.id; renderVendor(); });
     el.vendorList.appendChild(card);
   }
