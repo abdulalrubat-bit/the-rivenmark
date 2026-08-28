@@ -46,6 +46,15 @@ The frames are numbered in cycle order, so `thrall-run-0` through
 `thrall-run-7` loop cleanly. The `-rest` frame is the standing pose and is not
 part of the loop — it is what a body shows when it is not moving.
 
+## A rebuild is not byte-identical
+
+Two props -- `pillar` and `rubble` -- scatter their detail with `Math.random()`
+at forge time, so they come out slightly different on every export and show as
+modified in `git status` even when nothing changed. Everything else is stable.
+It is noise in the diff, not a change; seeding the forge would fix it and would
+mean putting a seedable generator into the game for the benefit of this script,
+which is not a trade worth making yet.
+
 ## Provenance, and what is deliberately missing
 
 Everything here is **drawn in code**. There is no source art behind any of it,
