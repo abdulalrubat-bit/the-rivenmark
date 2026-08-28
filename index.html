@@ -1285,6 +1285,79 @@
     box-shadow:0 0 0 3px var(--br-mid), 0 0 0 4px rgba(0,0,0,.8),
                inset 0 3px 7px rgba(0,0,0,.75);
   }
+
+  /* =========================================================================
+     THE HUD, IN SLATE
+     The delve and the gate-house are the same game, so they are cut from the
+     same rock. The panel is slate with the runic channel round it, the discs
+     are stone set in bronze, and the corner chrome is cold.
+     ====================================================================== */
+  .hud{
+    background-image:
+      var(--cracks),
+      linear-gradient(180deg,rgba(52,64,82,.62),rgba(10,14,21,.94)),
+      var(--tex-slate) !important;
+    background-repeat:no-repeat, no-repeat, repeat !important;
+    background-size:cover, auto, 96px 96px !important;
+    background-position:center, center, center !important;
+  }
+  /* No rune channel here. The tablet is a title card with room to carry an
+     inscription; the HUD is instrumentation, and the bars cover all of it
+     except the gap beside them -- where the marks read as stray text rather
+     than as a border. The slate and the bronze band tie it to the gate-house
+     without it. */
+  .hud > *{position:relative; z-index:1;}
+
+  /* Bars: a slate trough with the bronze band round it, rather than a brown
+     one. The fills are unchanged -- they are the reading, not the housing. */
+  .rbar .track{
+    background-image:linear-gradient(180deg,rgba(30,38,50,.95),rgba(8,11,16,.98)),
+                     var(--tex-slate);
+    background-size:auto, 96px 96px;
+    box-shadow:0 0 0 1px rgba(0,0,0,.85), inset 0 1px 3px rgba(0,0,0,.8),
+               0 0 0 2px rgba(126,96,44,.5);
+  }
+  .rbar .rank > *{
+    background-image:radial-gradient(circle at 50% 32%,rgba(70,86,110,.9),rgba(10,14,20,.95)),
+                     var(--tex-slate);
+    background-size:auto, 96px 96px;
+  }
+  .clock{color:#dfe6f0; text-shadow:0 0 14px rgba(150,180,230,.3);}
+
+  /* The discs are stone bosses now, matching the corner boss in the hub. */
+  .disc{
+    background-image:linear-gradient(180deg,rgba(56,68,88,.85),rgba(10,14,21,.95)),
+                     var(--tex-slate);
+    background-size:auto, 96px 96px;
+    border-color:rgba(126,96,44,.7);
+  }
+  .disc::before{
+    background:radial-gradient(circle at 50% 62%,rgba(48,60,78,.7),rgba(10,14,20,.85));
+  }
+  .disc:active::before{
+    background:radial-gradient(circle at 50% 62%,rgba(72,88,112,.8),rgba(16,21,30,.9));
+  }
+
+  /* The chrome round the view. It was warm brass on a warm interface. */
+  #frame .fr{
+    background:linear-gradient(180deg,rgba(38,48,64,.9),rgba(8,11,17,.6)) !important;
+  }
+  #frame .corner{
+    color:rgba(186,206,232,.5);
+    background-image:linear-gradient(180deg,rgba(52,64,84,.9),rgba(10,14,21,.95)),
+                     var(--tex-slate);
+    background-size:auto, 96px 96px;
+    border-color:rgba(126,96,44,.6);
+  }
+
+  /* The gate, when it opens, stays gold: it is the one warm thing in the
+     delve and it is what the whole run is for. */
+  #gateBtn{
+    background-image:linear-gradient(180deg,rgba(150,116,60,.7),rgba(28,20,10,.92)),
+                     var(--tex-bronze);
+    background-size:auto, 96px 96px;
+  }
+
 </style>
 </head>
 <body>
@@ -7481,7 +7554,7 @@ function forgeTexture(kind) {
     }
   }
   g.putImageData(img, 0, 0);
-  return c.toDataURL('image/png');
+  return c;
 }
 
 // Handed to CSS rather than drawn: the panels are DOM, so the material has to
@@ -7716,16 +7789,73 @@ function forgeSigil() {
 }
 
 let surfacesForged = false;
+// The canvas UI is cut from the same stone as the menus, so it needs the
+// pixels rather than the data URI: patterns made from a canvas are ready the
+// moment they are made, where an Image from a data URI is not.
+const TEX = {};
+const PAT = {};
+function texPattern(kind) {
+  if (!PAT[kind] && TEX[kind]) PAT[kind] = ctx.createPattern(TEX[kind], 'repeat');
+  return PAT[kind];
+}
+
 function forgeSurfaces() {
   const root = document.documentElement.style;
   for (const k of ['wood', 'leather', 'stone', 'slate', 'parchment', 'bronze']) {
-    root.setProperty('--tex-' + k, 'url(' + forgeTexture(k) + ')');
+    TEX[k] = forgeTexture(k);
+    root.setProperty('--tex-' + k, 'url(' + TEX[k].toDataURL('image/png') + ')');
   }
+  for (const k in PAT) delete PAT[k];
   root.setProperty('--runes-h', 'url(' + forgeRuneBand(false) + ')');
   root.setProperty('--runes-v', 'url(' + forgeRuneBand(true) + ')');
   root.setProperty('--cracks',  'url(' + forgeCracks(20260828) + ')');
   root.setProperty('--spatter', 'url(' + forgeSpatter(77341) + ')');
   root.setProperty('--sigil',   'url(' + forgeSigil() + ')');
+}
+
+/* One framed plate, used by every boxed thing the canvas draws: the minimap,
+   the avatar's bar, anything else that has to sit on the world without being
+   part of it. Named framePlate rather than stonePlate because stonePlate
+   already exists and draws the flat strip behind the HUD -- two declarations
+   of one name and the later wins, silently. Slate face, bronze band round it, rivets in the corners --
+   the same object as the menus, so the delve and the gate-house are plainly
+   the same game. */
+function framePlate(x, y, w, h, band) {
+  const b = band === undefined ? 4 : band;
+  ctx.save();
+  // The band, drawn as a filled rect the face is then cut out of.
+  const bg = ctx.createLinearGradient(0, y - b, 0, y + h + b);
+  bg.addColorStop(0, '#e2b96a'); bg.addColorStop(0.34, '#a67c3a');
+  bg.addColorStop(0.7, '#6d4d22'); bg.addColorStop(1, '#3a2610');
+  ctx.fillStyle = bg;
+  ctx.fillRect(x - b, y - b, w + b * 2, h + b * 2);
+  ctx.strokeStyle = 'rgba(0,0,0,.8)'; ctx.lineWidth = 1;
+  ctx.strokeRect(x - b + 0.5, y - b + 0.5, w + b * 2 - 1, h + b * 2 - 1);
+
+  // The face: slate, darkened, with the light coming from the north-west the
+  // way it does everywhere else in this game.
+  const pat = texPattern('slate');
+  if (pat) { ctx.fillStyle = pat; ctx.fillRect(x, y, w, h); }
+  const fg = ctx.createLinearGradient(0, y, 0, y + h);
+  fg.addColorStop(0, 'rgba(44,54,70,.72)');
+  fg.addColorStop(1, 'rgba(10,14,22,.88)');
+  ctx.fillStyle = fg;
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = 'rgba(0,0,0,.85)'; ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  ctx.strokeStyle = 'rgba(150,172,200,.22)';
+  ctx.beginPath();
+  ctx.moveTo(x + 1, y + 1.5); ctx.lineTo(x + w - 1, y + 1.5);
+  ctx.stroke();
+
+  // Rivets.
+  ctx.fillStyle = 'rgba(232,200,138,.85)';
+  const rr = Math.min(2.4, b * 0.6);
+  for (const [rx, ry] of [[x - b / 2, y - b / 2], [x + w + b / 2, y - b / 2],
+                          [x - b / 2, y + h + b / 2], [x + w + b / 2, y + h + b / 2]]) {
+    ctx.beginPath(); ctx.arc(rx, ry, rr, 0, TAU); ctx.fill();
+  }
+  ctx.restore();
 }
 
 function forgeAll() {
@@ -9469,20 +9599,33 @@ function drawLightPass(t) {
 function drawStick() {
   if (!stick.active) return;
   ctx.save();
-  ctx.fillStyle = 'rgba(18,13,9,.42)';
+  // A ring cut into the floor with a bronze rim, and a stone knob in it.
+  ctx.fillStyle = 'rgba(12,16,24,.44)';
   ctx.beginPath(); ctx.arc(stick.ox, stick.oy, STICK_MAX, 0, TAU); ctx.fill();
-  ctx.strokeStyle = 'rgba(150,128,94,.5)';
-  ctx.lineWidth = 2;
+  const rg = ctx.createLinearGradient(0, stick.oy - STICK_MAX, 0, stick.oy + STICK_MAX);
+  rg.addColorStop(0, 'rgba(226,185,106,.75)');
+  rg.addColorStop(0.5, 'rgba(140,104,48,.6)');
+  rg.addColorStop(1, 'rgba(58,38,16,.7)');
+  ctx.strokeStyle = rg; ctx.lineWidth = 3.5;
   ctx.beginPath(); ctx.arc(stick.ox, stick.oy, STICK_MAX, 0, TAU); ctx.stroke();
+  ctx.strokeStyle = 'rgba(4,7,12,.7)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(stick.ox, stick.oy, STICK_MAX - 2.4, 0, TAU); ctx.stroke();
 
   const kx = stick.ox + stick.dx * stick.mag * STICK_MAX;
   const ky = stick.oy + stick.dy * stick.mag * STICK_MAX;
-  const kg = ctx.createRadialGradient(kx - 5, ky - 5, 2, kx, ky, 20);
-  kg.addColorStop(0, '#6a5a44'); kg.addColorStop(1, '#241c12');
+  const pat = texPattern('slate');
+  if (pat) {
+    ctx.save();
+    ctx.beginPath(); ctx.arc(kx, ky, 20, 0, TAU); ctx.clip();
+    ctx.fillStyle = pat; ctx.fillRect(kx - 20, ky - 20, 40, 40);
+    ctx.restore();
+  }
+  const kg = ctx.createRadialGradient(kx - 6, ky - 7, 2, kx, ky, 22);
+  kg.addColorStop(0, 'rgba(112,130,158,.7)'); kg.addColorStop(1, 'rgba(14,18,26,.9)');
   ctx.fillStyle = kg;
   ctx.beginPath(); ctx.arc(kx, ky, 20, 0, TAU); ctx.fill();
-  ctx.strokeStyle = 'rgba(176,152,112,.75)';
-  ctx.lineWidth = 1.6;
+  ctx.strokeStyle = 'rgba(226,185,106,.8)';
+  ctx.lineWidth = 2;
   ctx.beginPath(); ctx.arc(kx, ky, 20, 0, TAU); ctx.stroke();
   ctx.restore();
 }
@@ -9518,19 +9661,24 @@ function drawPortalArrow(t) {
 // Carved stonework around the readouts. Drawn in screen space under the DOM
 // text, so the numbers stay crisp while the frame around them is scenery.
 function stonePlate(x, y, w, h) {
+  const pat = texPattern('slate');
+  if (pat) { ctx.save(); ctx.fillStyle = pat; ctx.fillRect(x, y, w, h); ctx.restore(); }
   const g = ctx.createLinearGradient(0, y, 0, y + h);
-  g.addColorStop(0, '#332a1a');
-  g.addColorStop(0.5, '#1e1810');
-  g.addColorStop(1, '#100c07');
+  g.addColorStop(0, 'rgba(52,64,82,.82)');
+  g.addColorStop(0.5, 'rgba(22,28,38,.9)');
+  g.addColorStop(1, 'rgba(8,11,16,.95)');
   ctx.fillStyle = g;
   ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = 'rgba(186,170,138,.5)';
+  ctx.strokeStyle = 'rgba(170,192,220,.5)';
   ctx.lineWidth = 1.4;
   ctx.beginPath(); ctx.moveTo(x, y + 0.7); ctx.lineTo(x + w, y + 0.7); ctx.stroke();
-  ctx.strokeStyle = 'rgba(120,104,78,.4)';
-  ctx.lineWidth = 2.4;
-  ctx.beginPath(); ctx.moveTo(x, y + h - 1.2); ctx.lineTo(x + w, y + h - 1.2); ctx.stroke();
-  ctx.strokeStyle = 'rgba(6,10,11,.85)';
+  // The bronze band along the bottom edge, which is the one edge of this
+  // strip the player ever sees against the world.
+  const bg = ctx.createLinearGradient(0, y + h - 4, 0, y + h + 1);
+  bg.addColorStop(0, '#d8b068'); bg.addColorStop(1, '#5c4020');
+  ctx.strokeStyle = bg; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(x, y + h - 1.5); ctx.lineTo(x + w, y + h - 1.5); ctx.stroke();
+  ctx.strokeStyle = 'rgba(4,7,10,.9)';
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(x, y + h + 1); ctx.lineTo(x + w, y + h + 1); ctx.stroke();
 }
@@ -9615,54 +9763,54 @@ function drawBossBar() {
   const hue = bs.invader ? [226, 120, 44] : [232, 192, 96];
 
   ctx.save();
-  ctx.fillStyle = 'rgba(10,7,4,.72)';
-  ctx.fillRect(x0 - 4, y0 - 3, w + 8, BOSS_BAR_H);
-  ctx.strokeStyle = 'rgba(120,100,72,.5)'; ctx.lineWidth = 1;
-  ctx.strokeRect(x0 - 3.5, y0 - 2.5, w + 7, BOSS_BAR_H - 1);
+  framePlate(x0, y0 - 4, w, BOSS_BAR_H, 4);
+  // Everything inside the plate is inset from it. Drawn edge to edge the name
+  // ran under the band and the bar touched it on both sides.
+  const ix = x0 + 8, iw = w - 16;
 
   // Name left, the count right, both on the same line.
   ctx.textAlign = 'right';
   ctx.font = '600 11px ui-monospace, Menlo, monospace';
   const count = Math.max(0, Math.ceil(bs.hp)) + ' / ' + Math.round(bs.maxHp);
   ctx.fillStyle = 'rgba(206,190,158,.9)';
-  ctx.fillText(count, x0 + w, y0 + 11);
+  ctx.fillText(count, ix + iw, y0 + 11);
   const countW = ctx.measureText(count).width + 10;
 
   ctx.textAlign = 'left';
   const title = bs.title || (bs.invader ? 'The Uninvited' : 'The Gilded Deceiver');
-  const shown = fitText(title, w - countW, 14, 'Georgia, "Times New Roman", serif', 10);
+  const shown = fitText(title, iw - countW, 14, 'Georgia, "Times New Roman", serif', 10);
   ctx.fillStyle = 'rgba(238,224,192,.95)';
-  ctx.fillText(shown, x0, y0 + 11);
+  ctx.fillText(shown, ix, y0 + 11);
 
   // The bar.
-  const by = y0 + 17, bh = 11;
-  ctx.fillStyle = 'rgba(24,17,11,.9)';
-  ctx.fillRect(x0, by, w, bh);
+  const by = y0 + 16, bh = 11;
+  ctx.fillStyle = 'rgba(8,11,17,.92)';
+  ctx.fillRect(ix, by, iw, bh);
   const g = ctx.createLinearGradient(0, by, 0, by + bh);
   g.addColorStop(0, 'rgba(' + hue.join(',') + ',1)');
   g.addColorStop(1, 'rgba(' + hue.map(c => (c * 0.55) | 0).join(',') + ',1)');
   ctx.fillStyle = g;
-  ctx.fillRect(x0, by, w * f, bh);
+  ctx.fillRect(ix, by, iw * f, bh);
   // Quarter ticks, so a bar that moves slowly still shows that it moved.
   ctx.strokeStyle = 'rgba(10,7,4,.55)'; ctx.lineWidth = 1;
   ctx.beginPath();
   for (let i = 1; i < 4; i++) {
-    const tx = Math.round(x0 + w * (i / 4)) + 0.5;
+    const tx = Math.round(ix + iw * (i / 4)) + 0.5;
     ctx.moveTo(tx, by); ctx.lineTo(tx, by + bh);
   }
   ctx.stroke();
-  ctx.strokeStyle = 'rgba(206,180,140,.55)';
-  ctx.strokeRect(x0 - 0.5, by - 0.5, w + 1, bh + 1);
+  ctx.strokeStyle = 'rgba(214,178,110,.6)';
+  ctx.strokeRect(ix - 0.5, by - 0.5, iw + 1, bh + 1);
 
   if (held) {
     // Hatched over the bar, and named: the fight has an order to it and this
     // is where the player is told what the order is.
     ctx.save();
-    ctx.beginPath(); ctx.rect(x0, by, w * f, bh); ctx.clip();
+    ctx.beginPath(); ctx.rect(ix, by, iw * f, bh); ctx.clip();
     ctx.strokeStyle = 'rgba(20,14,8,.5)'; ctx.lineWidth = 3;
     ctx.beginPath();
-    for (let hx = -bh; hx < w * f + bh; hx += 8) {
-      ctx.moveTo(x0 + hx, by + bh); ctx.lineTo(x0 + hx + bh, by);
+    for (let hx = -bh; hx < iw * f + bh; hx += 8) {
+      ctx.moveTo(ix + hx, by + bh); ctx.lineTo(ix + hx + bh, by);
     }
     ctx.stroke();
     ctx.restore();
@@ -9672,13 +9820,13 @@ function drawBossBar() {
     ctx.textAlign = 'left';
     ctx.font = '600 9px ui-monospace, Menlo, monospace';
     ctx.fillStyle = 'rgba(232,192,96,.9)';
-    ctx.fillText('HELD \u2014 BREAK THE LIEUTENANTS', x0, y0 + BOSS_BAR_H - 5);
+    ctx.fillText('HELD \u2014 BREAK THE LIEUTENANTS', ix, y0 + BOSS_BAR_H - 7);
     // one pip per Lieutenant still standing
     ctx.textAlign = 'right';
     for (let i = 0; i < live; i++) {
       ctx.fillStyle = 'rgba(194,53,42,.95)';
       ctx.beginPath();
-      ctx.arc(x0 + w - 5 - i * 11, y0 + BOSS_BAR_H - 8, 3.4, 0, TAU);
+      ctx.arc(ix + iw - 5 - i * 11, y0 + BOSS_BAR_H - 10, 3.4, 0, TAU);
       ctx.fill();
       ctx.strokeStyle = 'rgba(232,192,96,.8)'; ctx.lineWidth = 1;
       ctx.stroke();
@@ -9701,23 +9849,12 @@ function drawMinimap() {
   const mk = S / 108;              // marker scale, so dots grow with the frame
 
   ctx.save();
-  // Stone surround with corner fittings
-  const fg = ctx.createLinearGradient(0, y - 7, 0, y + S + 7);
-  fg.addColorStop(0, '#2e3a3c'); fg.addColorStop(1, '#111a1b');
-  ctx.fillStyle = fg;
-  ctx.fillRect(x - 7, y - 7, S + 14, S + 14);
-  ctx.strokeStyle = 'rgba(186,170,138,.4)';
-  ctx.lineWidth = 1.2;
-  ctx.strokeRect(x - 6.5, y - 6.5, S + 13, S + 13);
-  ctx.fillStyle = 'rgba(14,10,6,.92)';
+  // The same plate the gate-house is cut from: slate face, bronze band,
+  // rivets. The map itself is drawn over a near-black field so the corridors
+  // read, but the surround is stone.
+  framePlate(x, y, S, S, 6);
+  ctx.fillStyle = 'rgba(9,12,17,.88)';
   ctx.fillRect(x, y, S, S);
-  ctx.strokeStyle = 'rgba(120,104,78,.5)';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x + 0.5, y + 0.5, S - 1, S - 1);
-  ctx.fillStyle = 'rgba(186,170,138,.55)';
-  for (const c of [[x - 7, y - 7], [x + S - 1, y - 7], [x - 7, y + S - 1], [x + S - 1, y + S - 1]]) {
-    ctx.fillRect(c[0], c[1], 8, 8);
-  }
 
   // Rock was too dim against the panel to read the shape of a corridor.
   ctx.fillStyle = 'rgba(150,132,98,.42)';
