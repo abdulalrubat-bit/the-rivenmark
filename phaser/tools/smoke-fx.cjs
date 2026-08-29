@@ -161,6 +161,116 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
          withArc.n + ' with, ' + without.n + ' without), brightest rgb(' +
          (withArc.best || []).join(',') + ') against ' + arc.magic);
 
+  /* The Deceiver's tells, in pixels.
+   *
+   * The encounter is telegraph and answer all the way down: a Lieutenant winds
+   * a cone you step out of, or opens a beam to his master you have three
+   * seconds to break. Neither shows on the body, so with these missing the
+   * fight is damage arriving from nowhere -- and it looked completely fine.
+   *
+   * Measured as differences against a frozen frame, like the crescent above,
+   * for the same reason: an absolute count of red near a Lieutenant is also a
+   * count of the Lieutenant.
+   */
+  const tellShot = async at => PNG.sync.read(await p.screenshot({ clip: {
+    x: Math.max(0, at[0] - 110), y: Math.max(0, at[1] - 110), width: 220, height: 220 } }));
+  const tellMoved = (a, b2) => {
+    let n = 0;
+    for (let i = 0; i < a.data.length; i += 4) {
+      if (Math.abs(a.data[i] - b2.data[i]) +
+          Math.abs(a.data[i + 1] - b2.data[i + 1]) +
+          Math.abs(a.data[i + 2] - b2.data[i + 2]) > 24) n++;
+    }
+    return n;
+  };
+  const tell = await p.evaluate(async () => {
+    const sc = window.__game.scene.getScene('delve');
+    state = 'over';                              // freeze; the layer redraws
+    enemies.length = 0; arcs.length = 0; particles.length = 0;
+    rings.length = 0; floaters.length = 0; beams.length = 0;
+    run.agonyT = 0; run.boss = null;
+    const boss = { kind: 'deceiver', x: player.x + 40, y: player.y - 170, hp: 620,
+                   maxHp: 900, r: 30, awake: true, gait: 0, pace: 0, face: 1 };
+    const L1 = { kind: 'lieutenant', x: player.x - 130, y: player.y + 40, hp: 200,
+                 maxHp: 200, r: 18, awake: true, gait: 0, pace: 0, face: 1 };
+    const L2 = { kind: 'lieutenant', x: player.x + 140, y: player.y + 40, hp: 200,
+                 maxHp: 200, r: 18, awake: true, gait: 0, pace: 0, face: -1 };
+    enemies.push(boss, L1, L2);
+    run.boss = boss;
+    for (let i = 0; i < 20; i++) await new Promise(r => requestAnimationFrame(r));
+    const c = sc.cameras.main;
+    return { cone: [Math.round(L1.x - c.scrollX), Math.round(L1.y - c.scrollY)],
+             beam: [Math.round(L2.x - c.scrollX), Math.round(L2.y - c.scrollY)] };
+  });
+
+  const coneOff = await tellShot(tell.cone);
+  await p.evaluate(() => {
+    run.agonyT = AGONY_WIND * 0.5;
+    enemies.find(e => e.kind === 'lieutenant').agonyA = 0.4;
+  });
+  await sleep(450);
+  const coneOn = await tellShot(tell.cone);
+  const coneDelta = tellMoved(coneOff, coneOn);
+  ck('a Lieutenant telegraphs his agony', coneDelta > 1500,
+     coneDelta + ' pixels of floor that are there only while the cone is winding');
+
+  const beamOff = await tellShot(tell.beam);
+  await p.evaluate(() => {
+    run.agonyT = 0;
+    const L = enemies.filter(e => e.kind === 'lieutenant')[1];
+    L.siphonOn = true; L.casting = SIPHON_TIME * 0.55;
+  });
+  await sleep(450);
+  const beamOn = await tellShot(tell.beam);
+  const beamDelta = tellMoved(beamOff, beamOn);
+  ck('and a siphon shows where it is going', beamDelta > 300,
+     beamDelta + ' pixels for the beam to his master and the bar over his head');
+
+  // The bar is the seconds you have. A beam drawn without one says a thing is
+  // happening but not that it is nearly over.
+  const bar = await p.evaluate(async () => {
+    const L = enemies.filter(e => e.kind === 'lieutenant')[1];
+    L.casting = SIPHON_TIME * 0.9;               // just begun
+    for (let i = 0; i < 6; i++) await new Promise(r => requestAnimationFrame(r));
+    return { early: 1 - L.casting / SIPHON_TIME };
+  });
+  const barEarly = await tellShot(tell.beam);
+  await p.evaluate(async () => {
+    const L = enemies.filter(e => e.kind === 'lieutenant')[1];
+    L.casting = SIPHON_TIME * 0.05;              // nearly done
+    for (let i = 0; i < 6; i++) await new Promise(r => requestAnimationFrame(r));
+  });
+  await sleep(400);
+  const barLate = await tellShot(tell.beam);
+  ck('and the bar over him is the seconds left',
+     tellMoved(barEarly, barLate) > 60,
+     tellMoved(barEarly, barLate) + ' pixels between ' +
+     (bar.early * 100).toFixed(0) + '% and 95% filled');
+
+  /* Zayd's lance. A line, not a target -- it rewards putting a corridor
+   * between you and the horde, which is the whole of how he is meant to be
+   * played, and a line you cannot see is a line you cannot aim. */
+  const lance = await p.evaluate(async () => {
+    const sc = window.__game.scene.getScene('delve');
+    const c = sc.cameras.main;
+    beams.length = 0; enemies.length = 0; run.boss = null; run.agonyT = 0;
+    for (let i = 0; i < 8; i++) await new Promise(r => requestAnimationFrame(r));
+    return { mid: [Math.round(player.x - c.scrollX + 90),
+                   Math.round(player.y - c.scrollY)] };
+  });
+  const lanceOff = await tellShot(lance.mid);
+  await p.evaluate(() => {
+    // Parked rather than cast: a beam lives 0.24s and expires before a
+    // screenshot, which is the same trap the crescent set three times.
+    beams.push({ x: player.x, y: player.y, ex: player.x + 220, ey: player.y,
+                 life: 1e9, max: 1e9, hue: '#b07cff' });
+  });
+  await sleep(450);
+  const lanceOn = await tellShot(lance.mid);
+  ck('a lance draws the line it cut', tellMoved(lanceOff, lanceOn) > 200,
+     tellMoved(lanceOff, lanceOn) + ' pixels along the beam’s path');
+  await p.evaluate(() => { beams.length = 0; });
+
   const perf = await p.evaluate(() => {
     const s = window.__game.scene.getScene('delve').log.stats();
     return s ? s.p50 : null;

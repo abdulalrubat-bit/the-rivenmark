@@ -57,9 +57,9 @@ the hero, the kit casts, the HUD reads the run.
 |---|---|
 | `npm run smoke:delve` | 14 checks — the world draws and is dressed, the gait is distance-driven |
 | `npm run smoke:world` | 18 checks — the waygate, the coffers, the slag, the beacons |
-| `npm run smoke:overlay` | 17 checks — the map, the arrow out, the boss bar, the toast |
+| `npm run smoke:overlay` | 22 checks — the map, the arrow out, the boss bar, the crystal |
 | `npm run smoke:play` | 16 checks — the stick, the kit, and the HUD's layout |
-| `npm run smoke:fx` | 11 checks — the fight reads, the crescent counted in pixels |
+| `npm run smoke:fx` | 15 checks — the fight reads, the crescent and the tells in pixels |
 | `npm run smoke:loop` | 15 checks — dying, the outcome, the gate-house, descending again |
 | `npm run smoke:forge` | 13 checks — equipping, and that worn gear reaches the hero |
 | `npm run smoke:spend` | 13 checks — the vendor and the hall, and that coin buys what it says |
@@ -96,6 +96,20 @@ a damage affix takes him from 43.8 to 55.8 before he descends.
 The Vendor and the Hall spend it: commissions, tempers, reliquaries, and four
 stations of three tiers that outlast every delve. Prices come from the core,
 so the number on the button is the number that will be taken.
+
+The Deceiver's encounter reads. A Lieutenant's agony winds as a cone on the
+floor that brightens as it comes, and his siphon runs to his master as a
+crawling dashed line with its own bar over his head, because that is the one
+you are meant to reach in time. The False Dawn hangs under the map as a column
+of light in a flawed crystal — placed by the core's own `dawnCrystalRect()`,
+which reads `minimapBox()`, so the two cannot drift apart the way they did once
+in the canvas build — restless at the surface, and past four fifths the rim
+stops being trim and starts flashing. Zayd's lance draws the line it cut.
+
+Phaser's Graphics has no gradients, so every gradient in the port is banded:
+the crystal's glass, the beacons' shafts, the agony cone. That is what a
+gradient is once it is rasterised, and at these sizes the banding is invisible
+while the cost is a handful of quads instead of a texture upload a frame.
 
 You can tell where you are. The map plots the rock, whatever has noticed you
 — and nothing that has not, because plotting every dormant body hands over the

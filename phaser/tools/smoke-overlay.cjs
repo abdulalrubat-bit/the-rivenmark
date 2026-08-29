@@ -173,6 +173,54 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
      boss.droppedBox.y > m0.box.y + 40,
      'map at y ' + m0.box.y + ' with no boss, ' + boss.droppedBox.y + ' with one');
 
+  // --- the False Dawn crystal ----------------------------------------------
+  // The fight's second clock, and the only one that matters: full is a wipe.
+  // It is placed by the CORE's dawnCrystalRect(), which reads minimapBox() --
+  // in the canvas build the arithmetic was written out twice and the crystal
+  // was drawn straight through the map, so where it lands is asserted too.
+  const crystal = await p.evaluate(async () => {
+    const sc = window.__game.scene.getScene('delve');
+    run.dawn = 0; run.breath = 0; run.dawnPop = 0;
+    for (let i = 0; i < 6; i++) await new Promise(r => requestAnimationFrame(r));
+    const empty = sc.overlay.dawnPct.visible;
+    run.dawn = 62;
+    for (let i = 0; i < 6; i++) await new Promise(r => requestAnimationFrame(r));
+    return { empty, rect: dawnCrystalRect(), map: window.minimapBox(),
+             pct: sc.overlay.dawnPct.text, shown: sc.overlay.dawnPct.visible,
+             label: sc.overlay.dawnLabel.text, vh: innerHeight };
+  });
+  ck('an empty crystal is not drawn at all', crystal.empty === false,
+     'the meter reads 0 and nothing is on screen');
+  ck('and a climbing one says how far it has come',
+     crystal.shown && crystal.pct === '62%' && /FALSE DAWN/.test(crystal.label),
+     crystal.label + '  ' + crystal.pct);
+  ck('it hangs under the map, not through it',
+     crystal.rect.y >= crystal.map.y + crystal.map.s + crystal.map.over &&
+     crystal.rect.y + crystal.rect.h < crystal.vh,
+     'crystal ' + crystal.rect.y + '-' + (crystal.rect.y + crystal.rect.h) +
+     ' under a map ending at ' + (crystal.map.y + crystal.map.s + crystal.map.over));
+
+  const cClip = { x: crystal.rect.x - 4, y: crystal.rect.y,
+                  width: crystal.rect.w + 8, height: crystal.rect.h };
+  const cLow = await box(cClip);
+  await p.evaluate(async () => {
+    run.dawn = 96;                                // past the alarm threshold
+    for (let i = 0; i < 6; i++) await new Promise(r => requestAnimationFrame(r));
+  });
+  await sleep(400);
+  const cHigh = await box(cClip);
+  ck('and it fills as the meter climbs', moved(cLow, cHigh) > 400,
+     moved(cLow, cHigh) + ' pixels of glass changed between 62% and 96%');
+
+  const hot = await p.evaluate(() => {
+    const sc = window.__game.scene.getScene('delve');
+    return { colour: sc.overlay.dawnPct.style.color, pct: sc.overlay.dawnPct.text };
+  });
+  ck('past four fifths it stops being trim and starts warning',
+     hot.colour.toLowerCase() === '#ffbe8c' && hot.pct === '96%',
+     'the readout turns ' + hot.colour + ' at ' + hot.pct);
+  await p.evaluate(() => { run.dawn = 0; });
+
   // --- the toast -----------------------------------------------------------
   const toast = await p.evaluate(async () => {
     run.toast = { text: "A warded coffer — Warden's Sash", colour: '#8fb8ff', life: 3 };

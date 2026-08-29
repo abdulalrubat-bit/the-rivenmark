@@ -17,12 +17,22 @@
  */
 
 /* global walls, enemies, player, run, view, portal, chests, WORLD, TAU, PAL,
-          HUD_H, CHEST_KINDS, CORPSE_HUE */
+          HUD_H, CHEST_KINDS, CORPSE_HUE, DAWN_MAX, dawnCrystalRect */
 
 const hex = (css, fallback) => {
   if (typeof css !== 'string') return fallback === undefined ? 0xffffff : fallback;
   const n = parseInt(css.replace('#', ''), 16);
   return Number.isFinite(n) ? n : (fallback === undefined ? 0xffffff : fallback);
+};
+
+/* Blend two packed colours. Phaser's Graphics takes one colour per fill, so
+ * every gradient in here is banded, and this is what picks each band. */
+const mix = (a, b2, f) => {
+  const t = Math.max(0, Math.min(1, f));
+  const r = ((a >> 16 & 255) * (1 - t) + (b2 >> 16 & 255) * t) | 0;
+  const g = ((a >> 8 & 255) * (1 - t) + (b2 >> 8 & 255) * t) | 0;
+  const b = ((a & 255) * (1 - t) + (b2 & 255) * t) | 0;
+  return (r << 16) | (g << 8) | b;
 };
 
 const BOSS_BAR_H = 44;    // the canvas build's, so the map drops by the same
@@ -57,6 +67,12 @@ export class Overlay {
       fontFamily: 'ui-monospace, Menlo, monospace', fontStyle: '600',
       fontSize: '9px', color: '#e2c48c'
     }).setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(8.81e5);
+    const label = (x, y, txt, size, ox) => scene.add.text(x, y, txt, {
+      fontFamily: 'ui-monospace, Menlo, monospace', fontStyle: '600',
+      fontSize: size, color: '#cebe9e'
+    }).setOrigin(ox, 0.5).setScrollFactor(0).setDepth(8.81e5).setVisible(false);
+    this.dawnLabel = label(0, 0, 'FALSE DAWN', '8px', 1);
+    this.dawnPct = label(0, 0, '', '9px', 0.5);
     // The core places the False Dawn crystal by asking where the map is.
     window.minimapBox = minimapBox;
   }
@@ -65,7 +81,93 @@ export class Overlay {
     const g = this.g;
     g.clear();
     this.map(g);
+    this.crystal(g, t);
     this.arrow(g, t);
+  }
+
+  /* The False Dawn.
+   *
+   * A column of light in a flawed crystal, under the map -- placed by the
+   * CORE's dawnCrystalRect(), which reads minimapBox(). The canvas build wrote
+   * that arithmetic out a second time here once and drew the crystal straight
+   * through the map, with its label clipped by the screen edge on top of that.
+   *
+   * It is the fight's second clock and the only one that matters: full is a
+   * wipe. So it pops when it climbs, its surface is restless so a meter that
+   * is moving looks like it is moving, and past four-fifths the rim stops
+   * being trim and starts flashing.
+   */
+  crystal(g, t) {
+    const hide = () => { this.dawnLabel.setVisible(false); this.dawnPct.setVisible(false); };
+    const bs = bossShown();
+    if (!bs || bs.invader || !run || run.dawn === undefined) return hide();
+    const f = Math.max(0, Math.min(1, (run.dawn || 0) / DAWN_MAX));
+    if (f <= 0 && !((run.breath || 0) > 0)) return hide();
+
+    const r = dawnCrystalRect();
+    // The pop is a scale about the crystal's own centre.
+    const k = 1 + (run.dawnPop || 0) * 0.06;
+    const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+    const P = (px, py) => [cx + (px - cx) * k, cy + (py - cy) * k];
+    // One outline, used for the body and the rim, so the two can never
+    // disagree about where the edge is.
+    const face = [[0.5, 0], [1, 0.17], [0.82, 0.55], [1, 0.78],
+                  [0.5, 1], [0, 0.78], [0.18, 0.55], [0, 0.17]]
+      .map(([u, v]) => P(r.x + r.w * u, r.y + r.h * v));
+    const trace = () => {
+      g.beginPath();
+      face.forEach(([px, py], i) => (i ? g.lineTo(px, py) : g.moveTo(px, py)));
+      g.closePath();
+    };
+    trace(); g.fillStyle(0x08070a, 0.86); g.fillPath();
+
+    // The light in it, rising from the bottom. Clipped to the crystal by
+    // drawing it as bands inside the body's own width at each height -- a
+    // Graphics mask for one shape every frame costs more than the shape does.
+    const fy = r.y + r.h * (1 - f);
+    const BANDS = 14;
+    const halfAt = v => {                       // the body's half-width at 0..1
+      // The tip is a POINT, not a half-width bar: the outline runs from
+      // (0.5w, 0) to (w, 0.17h), so the body is zero wide at the very top.
+      const u = v < 0.17 ? v / 0.17
+              : v < 0.55 ? 1 - ((v - 0.17) / 0.38) * 0.18
+              : v < 0.78 ? 0.82 + ((v - 0.55) / 0.23) * 0.18
+              : 1 - ((v - 0.78) / 0.22);
+        return u * (r.w / 2);
+    };
+    for (let i = 0; i < BANDS; i++) {
+      const y0 = fy + (r.y + r.h - fy) * (i / BANDS);
+      const y1 = fy + (r.y + r.h - fy) * ((i + 1) / BANDS);
+      const v = (y0 - r.y) / r.h;
+      const q = (y0 - fy) / Math.max(1, r.h - (fy - r.y));   // 0 at the surface
+      // Pale at the surface, gold in the body, dark at the base: the canvas
+      // build's three gradient stops, banded.
+      const col = q < 0.45 ? mix(0xfff2c8, 0xe8c060, q / 0.45)
+                           : mix(0xe8c060, 0xa0681c, (q - 0.45) / 0.55);
+      const hw = halfAt(Math.max(0, Math.min(1, v))) * k;
+      const [ax, ay] = P(cx, y0), [, by2] = P(cx, y1);
+      g.fillStyle(col, 0.92);
+      g.fillRect(ax - hw, ay, hw * 2, Math.max(1, by2 - ay) + 1);
+    }
+    // A restless surface, so a meter that is climbing looks like it is.
+    const sy = fy + Math.sin(t * 5) * 1.6;
+    const shw = halfAt(Math.max(0, Math.min(1, (sy - r.y) / r.h))) * k;
+    const [sx, syp] = P(cx, sy);
+    g.fillStyle(0xfff8dc, 0.75); g.fillRect(sx - shw, syp, shw * 2, 2);
+
+    const hot = f > 0.8;
+    g.lineStyle(hot ? 2.4 : 1.6,
+                hot ? mix(0xff9670, 0xffd870, 0.5 + 0.5 * Math.sin(t * 12)) : 0xd6b26e,
+                hot ? 0.95 : 0.85);
+    trace(); g.strokePath();
+
+    // Right-aligned to the crystal's own edge: centred on a 34px column the
+    // words ran off the side of the phone.
+    this.dawnLabel.setPosition(r.x + r.w, r.y - 9)
+                  .setColor(hot ? '#ffbe8c' : '#cebe9e').setVisible(true);
+    this.dawnPct.setPosition(r.x + r.w / 2, r.y + r.h + 9)
+                .setText(Math.round(run.dawn || 0) + '%')
+                .setColor(hot ? '#ffbe8c' : '#cebe9e').setVisible(true);
   }
 
   /* The stone plate everything on this layer is cut from: a slate face inside

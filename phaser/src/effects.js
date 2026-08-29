@@ -17,7 +17,8 @@ import Phaser from 'phaser';
 /* global arcs, particles, rings, floaters, bolts, slams, hazards, nulls,
           totems, ruptures, player, cam, FLOAT_STYLE, FLOAT_LIFE, BOLT_R,
           TAU, HEROES, run, portal, drops, PORTAL_R, PAL, LEVEL, rarityOf,
-          CORPSE_HUE */
+          CORPSE_HUE, enemies, beams, AGONY_WIND, AGONY_ARC, AGONY_REACH,
+          SIPHON_TIME */
 
 const RIM = '#060403';   // the dark edge every ordinary number carries
 
@@ -67,8 +68,10 @@ export class Effects {
     b.clear(); a.clear(); gt.clear(); li.clear();
     this.gate(gt, t);
     this.ground(b, t);
+    this.tells(b, t);
     this.beacons(b, li, t);
     this.crescents(b, t);
+    this.beamwork(li);
     this.spark(a);
     this.numbers();
   }
@@ -112,6 +115,95 @@ export class Effects {
       g.strokeCircle(s.x, s.y, s.r);
       g.fillStyle(s.husk ? 0xc8d63a : 0xe0402c, 0.10 + 0.18 * f);
       g.fillCircle(s.x, s.y, s.r * f);         // the fill IS the timer
+    }
+  }
+
+  /* The Deceiver's tells.
+   *
+   * The whole encounter is telegraph and answer: a Lieutenant winds up a cone
+   * you step out of, or opens a beam to his master that you have that long to
+   * break. Neither of them does anything you can see on the body itself, so
+   * without these the fight is damage arriving from nowhere.
+   *
+   * The cone is on the FLOOR and the timer is its brightness -- the canvas
+   * build fades a radial gradient in over AGONY_WIND, and Graphics has no
+   * gradients, so it is three nested wedges. The outline is the part that
+   * actually reads, and it is drawn at full strength.
+   */
+  tells(g, t) {
+    if (run && (run.agonyT || 0) > 0) {
+      const f = 1 - Math.max(0, Math.min(1, run.agonyT / AGONY_WIND));
+      for (const L of enemies) {
+        if (L.kind !== 'lieutenant' || L.hp <= 0 || L.agonyA === undefined) continue;
+        const wedge = (rr, al) => {
+          g.fillStyle(0xc2352a, al);
+          g.beginPath();
+          g.moveTo(L.x, L.y);
+          // Squashed to 0.8 on the short axis, as the canvas build does: a
+          // circle on a top-down floor reads as a sphere in the air.
+          for (let k = 0; k <= 12; k++) {
+            const a = L.agonyA - AGONY_ARC + (k / 12) * AGONY_ARC * 2;
+            g.lineTo(L.x + Math.cos(a) * rr,
+                     L.y + Math.sin(a) * rr * 0.8);
+          }
+          g.closePath(); g.fillPath();
+        };
+        const base = 0.36 * (0.4 + f);
+        wedge(AGONY_REACH, base * 0.30);
+        wedge(AGONY_REACH * 0.66, base * 0.34);
+        wedge(AGONY_REACH * 0.33, base * 0.40);
+        g.lineStyle(2, 0xe87860, 0.4 + 0.5 * f);
+        g.beginPath();
+        g.moveTo(L.x, L.y);
+        for (let k = 0; k <= 12; k++) {
+          const a = L.agonyA - AGONY_ARC + (k / 12) * AGONY_ARC * 2;
+          g.lineTo(L.x + Math.cos(a) * AGONY_REACH,
+                   L.y + Math.sin(a) * AGONY_REACH * 0.8);
+        }
+        g.closePath(); g.strokePath();
+      }
+    }
+
+    // The siphon: a Lieutenant feeding the crystal, and the seconds you have
+    // to stop him. Its own bar over his head, because this is the one you are
+    // meant to reach in time.
+    const boss = run && run.boss;
+    if (!boss || boss.hp <= 0) return;
+    for (const L of enemies) {
+      if (L.kind !== 'lieutenant' || L.hp <= 0 || !L.siphonOn) continue;
+      // Dashed and crawling towards the boss. Phaser's Graphics has no dash
+      // pattern, so the dashes are stepped by hand -- and the offset is what
+      // makes the beam read as flowing rather than as a rope.
+      const dx = boss.x - L.x, dy = boss.y - L.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len, uy = dy / len;
+      const period = 16, dash = 9;
+      g.lineStyle(3, 0xe8c060, 0.75);
+      for (let d = (t * 60) % period - period; d < len; d += period) {
+        const a = Math.max(0, d), b2 = Math.min(len, d + dash);
+        if (b2 <= a) continue;
+        g.beginPath();
+        g.moveTo(L.x + ux * a, L.y + uy * a);
+        g.lineTo(L.x + ux * b2, L.y + uy * b2);
+        g.strokePath();
+      }
+      const w = 46, f = Math.max(0, Math.min(1, 1 - L.casting / SIPHON_TIME));
+      const bx = L.x - w / 2, by = L.y - L.r - 20;
+      g.fillStyle(0x08070a, 0.9); g.fillRect(bx, by, w, 5);
+      g.fillStyle(0xe8c060, 0.95); g.fillRect(bx, by, w * f, 5);
+      g.lineStyle(1, 0xd6b26e, 0.8); g.strokeRect(bx - 0.5, by - 0.5, w + 1, 6);
+    }
+  }
+
+  /* Beams -- Zayd's lance and anything else that fires a line. Additive, so a
+   * beam over a lit floor brightens it, with a white core inside the hue. */
+  beamwork(g) {
+    for (const b of beams) {
+      const f = b.life / b.max;
+      g.lineStyle(3 + f * 9, hex(b.hue || '#5fd0ff'), f * 0.7);
+      g.beginPath(); g.moveTo(b.x, b.y); g.lineTo(b.ex, b.ey); g.strokePath();
+      g.lineStyle(1.6 + f * 2.4, 0xeefaff, f * 0.9);
+      g.beginPath(); g.moveTo(b.x, b.y); g.lineTo(b.ex, b.ey); g.strokePath();
     }
   }
 
