@@ -14,7 +14,8 @@
     "core": "node tools/extract-core.js",
     "verify": "node tools/verify-core.cjs",
     "smoke:delve": "node tools/smoke-delve.cjs",
-    "smoke:play": "node tools/smoke-play.cjs"
+    "smoke:play": "node tools/smoke-play.cjs",
+    "smoke:fx": "node tools/smoke-fx.cjs"
   },
   "dependencies": {
     "phaser": "^4.2.1"

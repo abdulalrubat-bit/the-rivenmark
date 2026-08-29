@@ -13,6 +13,7 @@
 import Phaser from 'phaser';
 import { FrameLog, collect, asText, mountButton } from './diagnostics.js';
 import { Hud } from './hud.js';
+import { Effects } from './effects.js';
 
 // The core's palette is CSS hex strings; Phaser wants numbers.
 const hex = (css, fallback) => {
@@ -36,6 +37,8 @@ const SS = 2;      // art/ is exported at 2x, which is native for it
  * at run time exactly as they do in the canvas build.
  */
 /* global walls, props, enemies, player, run, cam, view, state, stash, stick,
+          arcs, particles, rings, floaters, bolts, slams, hazards, nulls,
+          totems, ruptures, HEROES, TAU, FLOAT_STYLE, FLOAT_LIFE, BOLT_R,
           keys, stickStart, stickMove, stickEnd, STICK_MAX, castAbility,
           swapHero, swapBlocked, abilityBlock, ABILITIES, ABILITY_BY_ID,
           CHARGE_MAX, TENSION_MAX,
@@ -91,6 +94,7 @@ export class Delve extends Phaser.Scene {
 
     if (this.stepping) this.cameras.main.startFollow(this.hero, true, 0.18, 0.18);
 
+    this.fx = new Effects(this);
     this.wireInput();
     this.hud = new Hud();
 
@@ -273,6 +277,7 @@ export class Delve extends Phaser.Scene {
     if (this.hero.frame.name !== hk && this.textures.getFrame('art', hk)) this.hero.setFrame(hk);
     this.hero.setPosition(player.x, player.y).setFlipX(player.face < 0);
 
+    this.fx.draw(time);
     this.drawStick();
     this.hud.sync();
 

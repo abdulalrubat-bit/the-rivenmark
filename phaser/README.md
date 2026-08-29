@@ -57,6 +57,7 @@ the hero, the kit casts, the HUD reads the run.
 |---|---|
 | `npm run smoke:delve` | 10 checks — the world draws, the gait is distance-driven |
 | `npm run smoke:play` | 16 checks — the stick, the kit, and the HUD's layout |
+| `npm run smoke:fx` | 11 checks — the fight reads, the crescent counted in pixels |
 | `npm run smoke` | 13 checks — the proving scene and the diagnostics dump |
 | `npm run verify` | the canvas suites against the extracted core |
 
@@ -65,10 +66,15 @@ at any dpr without a font atlas, a button is a real 44px touch target, and none
 of it goes down with the renderer. The game is what needs the GPU; a life bar
 does not.
 
-Not started: the DOM menus (gate-house, forge, vendor), the floating combat
-text and particle layer, and the stone dressing on the walls — the coursed
-ashlar is procedural canvas art and is not in the atlas yet, so walls show as
-their lit top face.
+The fight reads: crescents, sparks, rings, ranked damage numbers, and the
+telegraphs that matter in play — hazards, Null-Zones, totems, ruptures and
+slam wind-ups. All of it is drawn from the core's own pools, because most of
+it is not decoration: a hazard burns, a pool slows, a slam telegraph is the
+only warning you get.
+
+Not started: the DOM menus (gate-house, forge, vendor), and the stone dressing
+on the walls — the coursed ashlar is procedural canvas art and is not in the
+atlas yet, so walls show as their lit top face.
 
 ## On the phone
 
