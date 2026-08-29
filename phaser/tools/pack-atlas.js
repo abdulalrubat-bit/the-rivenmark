@@ -57,7 +57,7 @@ function pack(frames, maxW) {
 const frames = [];
 // Folder name becomes the frame prefix, so "bestiary/thrall-run-0" is unique
 // against "heroes/isaac-run-0" without any renaming.
-for (const d of ['heroes', 'bestiary', 'props', 'chests', 'misc'])
+for (const d of ['heroes', 'bestiary', 'props', 'chests', 'misc', 'walls'])
   readAll(path.join(ART, d), d + '/', frames);
 // cycles/ is contact strips for looking at, not for drawing. Excluding it
 // keeps a megabyte of duplicated pixels out of GPU memory.

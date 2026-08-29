@@ -11,6 +11,7 @@
  * DESKTOP ONLY (Playwright). Run: npm run smoke:loop
  */
 const { chromium } = require('playwright');
+const buildOnce = require('./build-once.cjs');
 const { spawn } = require('child_process');
 const path = require('path');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -18,6 +19,7 @@ const pass = [], fail = [];
 const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note ? '  [' + note + ']' : ''));
 
 (async () => {
+  buildOnce();                       // the suite must test src/, not a stale bundle
   const PORT = process.env.PORT || '8233';
   const srv = spawn(process.execPath, [path.join(__dirname, 'serve.js')],
                     { env: { ...process.env, PORT }, stdio: 'ignore' });

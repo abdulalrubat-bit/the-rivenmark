@@ -50,12 +50,12 @@ Done, and verified by `phasersmoke.js`:
   phone GPU is the real test, but the direction is not in doubt.
 
 **It is playable.** The delve draws — walls, scenery, the horde and the hero,
-off the core's own state, at 60fps with a 4ms one-off bake. The stick moves
+off the core's own state, at 60fps with a ~19ms one-off bake. The stick moves
 the hero, the kit casts, the HUD reads the run.
 
 | | |
 |---|---|
-| `npm run smoke:delve` | 10 checks — the world draws, the gait is distance-driven |
+| `npm run smoke:delve` | 14 checks — the world draws and is dressed, the gait is distance-driven |
 | `npm run smoke:play` | 16 checks — the stick, the kit, and the HUD's layout |
 | `npm run smoke:fx` | 11 checks — the fight reads, the crescent counted in pixels |
 | `npm run smoke:loop` | 15 checks — dying, the outcome, the gate-house, descending again |
@@ -63,6 +63,14 @@ the hero, the kit casts, the HUD reads the run.
 | `npm run smoke:spend` | 13 checks — the vendor and the hall, and that coin buys what it says |
 | `npm run smoke` | 13 checks — the proving scene and the diagnostics dump |
 | `npm run verify` | the canvas suites against the extracted core |
+
+Each suite builds `public/bundle.js` before it serves it. That is not a
+convenience. The suites serve a build artefact, nothing rebuilt it, and so for
+a while every one of them was testing whatever bundle happened to be on disk.
+It surfaced when a deliberate stub — a `return` at the top of the culling pass,
+put there to prove the culling assertions could fail — changed nothing at all:
+the browser never saw the edit. A test that cannot see your change cannot fail
+on it, and a suite that green-lights a stub is worse than no suite.
 
 The HUD is DOM over the canvas, as it is in the canvas build: text stays crisp
 at any dpr without a font atlas, a button is a real 44px touch target, and none
@@ -87,8 +95,20 @@ The Vendor and the Hall spend it: commissions, tempers, reliquaries, and four
 stations of three tiers that outlast every delve. Prices come from the core,
 so the number on the button is the number that will be taken.
 
-That leaves the stone dressing on the walls — the coursed ashlar is procedural
-canvas art and is not in the atlas yet, so walls show as their lit top face.
+The walls wear their stone. The coursed ashlar was procedural canvas art, so
+the forge output is exported into the atlas — six lit top faces and three
+courses in each of four orientations — and the delve lays them with the canvas
+build's own cell hash, then steps courses along every exposed face, stretching
+each to exactly one step so they butt with no seam.
+
+That dressing costs about 1700 images, and Phaser does not cull ordinary game
+objects: every one of them was submitted every frame. Measured, that took p90
+from 16.7ms to 33.3ms with a quarter of frames over budget. Visibility is now
+set by hand against the camera, recomputed only when the camera has moved far
+enough to change the answer, which puts p90 back to 16.7ms and over-budget
+frames to 1%. `smoke-delve` asserts both halves — that the stone is there, and
+that most of it is switched off — because either one passes while the other is
+broken.
 
 ## On the phone
 

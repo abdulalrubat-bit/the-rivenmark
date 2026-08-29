@@ -131,5 +131,67 @@
       "colour": "#c2352a",
       "introduced_at_depth": null
     }
-  }
+  },
+  "wall_dressing": [
+    {
+      "name": "course-0-0",
+      "spanW": 100,
+      "spanH": 30
+    },
+    {
+      "name": "course-0-1",
+      "spanW": 30,
+      "spanH": 100
+    },
+    {
+      "name": "course-0-2",
+      "spanW": 100,
+      "spanH": 30
+    },
+    {
+      "name": "course-0-3",
+      "spanW": 30,
+      "spanH": 100
+    },
+    {
+      "name": "course-1-0",
+      "spanW": 100,
+      "spanH": 30
+    },
+    {
+      "name": "course-1-1",
+      "spanW": 30,
+      "spanH": 100
+    },
+    {
+      "name": "course-1-2",
+      "spanW": 100,
+      "spanH": 30
+    },
+    {
+      "name": "course-1-3",
+      "spanW": 30,
+      "spanH": 100
+    },
+    {
+      "name": "course-2-0",
+      "spanW": 100,
+      "spanH": 30
+    },
+    {
+      "name": "course-2-1",
+      "spanW": 30,
+      "spanH": 100
+    },
+    {
+      "name": "course-2-2",
+      "spanW": 100,
+      "spanH": 30
+    },
+    {
+      "name": "course-2-3",
+      "spanW": 30,
+      "spanH": 100
+    }
+  ]
 }

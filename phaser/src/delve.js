@@ -40,7 +40,8 @@ const SS = 2;      // art/ is exported at 2x, which is native for it
 /* global walls, props, enemies, player, run, cam, view, state, stash, stick,
           arcs, particles, rings, floaters, bolts, slams, hazards, nulls,
           totems, ruptures, HEROES, TAU, FLOAT_STYLE, FLOAT_LIFE, BOLT_R,
-          portal, stepThrough, LEVEL_BY_ID, powerLevel, blankStash, el,
+          portal, stepThrough, LEVEL_BY_ID, blankStash, el,
+          CELL_W, GW, GH, SOLID, cellAt, pitGrid, gi, edges,
           keys, stickStart, stickMove, stickEnd, STICK_MAX, castAbility,
           swapHero, swapBlocked, abilityBlock, ABILITIES, ABILITY_BY_ID,
           CHARGE_MAX, TENSION_MAX,
@@ -146,6 +147,8 @@ export class Delve extends Phaser.Scene {
   newRun(hero, levelId) {
     if (this.wallGfx) this.wallGfx.destroy();
     for (const im of this.propImgs || []) im.destroy();
+    for (const im of this.wallImgs || []) im.destroy();
+    this.wallImgs = [];
     for (const sp of this.pool) sp.destroy();
     this.propImgs = []; this.pool = [];
     this.fx.texts.forEach(t => t.destroy());
@@ -156,6 +159,7 @@ export class Delve extends Phaser.Scene {
     run.banner = 0;
     this.paintStatics();
     this.hero.setPosition(player.x, player.y);
+    this.culledAt = null;
     this.cameras.main.startFollow(this.hero, true, 0.18, 0.18);
   }
 
@@ -201,6 +205,8 @@ export class Delve extends Phaser.Scene {
     for (const w of walls) if (w.pit) gfx.fillRect(w.x, w.y, w.w, 2);
     this.wallGfx = gfx;
 
+    if (!/nodress/.test(location.search)) this.dressWalls();
+
     // Scenery. `q` is the variant the generator rolled; the exporter wrote
     // four of each. Depth by y so a body passes in front of a barrel it is
     // below and behind one it is above.
@@ -211,6 +217,99 @@ export class Delve extends Phaser.Scene {
       const img = this.add.image(p.x, p.y, 'art', key)
         .setScale(1 / SS).setDepth(p.y - 1e4);
       this.propImgs.push(img);
+    }
+  }
+
+  /* The coursed ashlar and the lit top face.
+   *
+   * These make a wall read as built stone rather than a dark mass, and they
+   * were the last thing still missing from the port: they live in their own
+   * arrays in the canvas build rather than in the sprite atlas, so the
+   * exporter had to learn to write them out.
+   *
+   * The placement is the canvas build's, kept deliberately: the same hash
+   * chooses a cell's top, and the courses are stepped by each run's own length
+   * divided evenly so they butt against each other rather than tiling at a
+   * fixed pitch and leaving a ragged part-course at the end.
+   *
+   * Static images, one per cell and one per course. In the canvas build this
+   * was 158 drawImage calls EVERY FRAME and cost 4.5ms of per-call overhead
+   * alone. Here they go down once and batch out of the one atlas.
+   */
+  dressWalls() {
+    const T = CELL_W;
+    this.wallImgs = [];
+    if (!this.textures.getFrame('art', 'walls/top-0')) return;
+
+    for (let cy = 0; cy < GH; cy++) {
+      for (let cx = 0; cx < GW; cx++) {
+        if (cellAt(cx, cy) !== SOLID) continue;
+        if (pitGrid && pitGrid[gi(cx, cy)]) continue;      // a hole gets no top
+        const h = ((cx * 73856093) ^ (cy * 19349663)) >>> 0;
+        const img = this.add.image(cx * T, cy * T, 'art', 'walls/top-' + (h % 6))
+          .setOrigin(0, 0).setScale(1 / SS).setDepth(-1.5e5);
+        this.wallImgs.push(img);
+      }
+    }
+
+    // Masonry along every exposed face.
+    const spans = (this.cache.json.get('manifest') || {}).wall_dressing || [];
+    const spanOf = name => spans.find(s => s.name === name) || { spanW: 100, spanH: 30 };
+    const L = spanOf('course-0-0').spanW;
+    for (const e of edges) {
+      const len = Math.hypot(e.x2 - e.x1, e.y2 - e.y1);
+      if (!len) continue;
+      const ux = (e.x2 - e.x1) / len, uy = (e.y2 - e.y1) / len;
+      const q = ((Math.round((Math.atan2(e.ny, e.nx) + Math.PI / 2) / (Math.PI / 2)) % 4) + 4) % 4;
+      const n = Math.max(1, Math.round(len / L));
+      const step = len / n;
+      for (let k = 0; k < n; k++) {
+        const d = step * (k + 0.5);
+        const cx = e.x1 + ux * d - e.nx * 7;
+        const cy = e.y1 + uy * d - e.ny * 7;
+        const v = (((cx * 7 + cy * 13) | 0) % 3 + 3) % 3;
+        const name = 'course-' + v + '-' + q;
+        if (!this.textures.getFrame('art', 'walls/' + name)) continue;
+        const sp = spanOf(name);
+        // Whichever dimension lies along the run is stretched to exactly one
+        // step, so courses butt with no seam and no overlap. A run's normal
+        // points across it: ny is set on a face that runs along x.
+        const alongX = e.ny !== 0;
+        const img = this.add.image(cx, cy, 'art', 'walls/' + name)
+          .setDisplaySize(alongX ? step : sp.spanW, alongX ? sp.spanH : step)
+          .setDepth(-1.4e5);
+        this.wallImgs.push(img);
+      }
+    }
+  }
+
+  /* Culling the dressing.
+   *
+   * A delve wears about 1700 wall images and Phaser submits every one of them
+   * every frame -- it does not cull ordinary game objects against the camera.
+   * Measured: p90 went from 16.7ms to 33.3ms and a quarter of frames missed
+   * the budget, purely on quads that were nowhere near the screen.
+   *
+   * So visibility is set by hand, and only when the camera has actually moved
+   * far enough to change the answer. The margin is generous because the test
+   * is cheap and a wall popping in at the edge of the screen is not.
+   */
+  cullDressing(force) {
+    const c = this.cameras.main;
+    if (!force && this.culledAt &&
+        Math.abs(c.scrollX - this.culledAt.x) < 96 &&
+        Math.abs(c.scrollY - this.culledAt.y) < 96) return;
+    this.culledAt = { x: c.scrollX, y: c.scrollY };
+    const M = 160;
+    const x0 = c.scrollX - M, y0 = c.scrollY - M;
+    const x1 = c.scrollX + c.width + M, y1 = c.scrollY + c.height + M;
+    for (const list of [this.wallImgs, this.propImgs]) {
+      if (!list) continue;
+      for (const im of list) {
+        const on = im.x > x0 - im.displayWidth && im.x < x1 &&
+                   im.y > y0 - im.displayHeight && im.y < y1;
+        if (im.visible !== on) im.setVisible(on);
+      }
     }
   }
 
@@ -320,6 +419,7 @@ export class Delve extends Phaser.Scene {
     if (this.hero.frame.name !== hk && this.textures.getFrame('art', hk)) this.hero.setFrame(hk);
     this.hero.setPosition(player.x, player.y).setFlipX(player.face < 0);
 
+    this.cullDressing();
     this.fx.draw(time);
     this.drawStick();
     this.hud.sync();
