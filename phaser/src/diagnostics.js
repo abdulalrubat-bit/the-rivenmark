@@ -45,6 +45,121 @@ export class FrameLog {
   }
 }
 
+/* The governor behind lowFx: is this device keeping up, and is there room to
+ * put the mood back?
+ *
+ * Two measures, because either one alone is blind to half the ways a frame
+ * goes wrong.
+ *
+ * CPU WORK, timed from the top of the scene's update to the game's
+ * POST_RENDER. This is what the canvas build measured, and under canvas 2D it
+ * was the whole story: the rasteriser is the CPU, so the work IS the time.
+ *
+ * DELIVERED INTERVALS, because under WebGL it is not. Measured here: the
+ * atmosphere pass took this box from 60fps to 30 while CPU work moved from
+ * 2.56ms to 2.84ms. The cost was entirely fill rate -- the driver takes the
+ * draw calls and returns, and the bill arrives on the swap. A CPU timer cannot
+ * see that at all, and a governor driven only by one would have sat there at
+ * 30fps reporting plenty of headroom.
+ *
+ * Intervals have their own trap, and the canvas build fell into it: a display
+ * is vsync-locked, so 16.7ms means "keeping up" and says nothing about by how
+ * much. The old code compared against a fixed 11ms, which is 90fps and
+ * unreachable on 60Hz hardware by definition, so once the glow came off it
+ * never went back on. The fix is to compare against THE DISPLAY'S OWN PERIOD
+ * rather than a constant: the tenth percentile of a long window is what this
+ * screen does when nothing is in the way, and everything is judged relative to
+ * it. That reads the same on 60Hz, 90Hz and 120Hz.
+ */
+export class FxGovernor {
+  constructor(game, sample) {
+    this.sample = sample;
+    this.at = 0; this.last = 0;
+    this.work = []; this.ivals = [];      // the current decision window
+    this.periods = [];                    // long-lived, for the display's period
+    this.lastTick = 0;
+    this.good = 0;
+    // How many good windows are needed to put the mood back. It GROWS each
+    // time a restore is followed by another drop, so a device that genuinely
+    // cannot afford the mood stops being asked every three quarters of a
+    // second whether it has changed its mind. Without this the governor flaps:
+    // turning the mood off is what makes the frame look affordable again.
+    this.need = 3;
+    this.droppedAt = 0;
+    const done = () => {
+      if (!this.at) return;
+      this.work.push(performance.now() - this.at);
+      this.at = 0;
+    };
+    const ev = (Phaser.Core && Phaser.Core.Events && Phaser.Core.Events.POST_RENDER)
+               || 'postrender';
+    game.events.on(ev, done);
+    this.hooked = ev;
+  }
+
+  begin(nowMs) {
+    this.at = performance.now();
+    if (this.lastTick) {
+      const d = nowMs - this.lastTick;
+      // A tab that was backgrounded returns one enormous interval; it is not
+      // a rendering fact and must not move the display's period or the median.
+      if (d > 0 && d < 400) { this.ivals.push(d); this.periods.push(d); }
+      if (this.periods.length > 600) this.periods.shift();
+    }
+    this.lastTick = nowMs;
+  }
+
+  /* The display's own frame period: what this screen does when nothing is in
+   * the way.
+   *
+   * CAPPED AT 17ms, and that cap is the whole thing working. Learned purely
+   * from observation it is circular: with the atmosphere on, this box never
+   * once beat 33.3ms, so the tenth percentile was 33.3 and the governor
+   * concluded the display ran at 30Hz and was being hit perfectly -- while
+   * sitting at half frame rate. No screen this game runs on is slower than
+   * 60Hz, so an observed period above 17ms means frames are being MISSED, not
+   * that the screen is slow. Floored at 6ms for the opposite case: a headless
+   * or throttled context delivering sub-millisecond intervals would otherwise
+   * set a bar nothing could clear.
+   */
+  period() {
+    if (this.periods.length < 30) return 16.7;
+    const q = this.periods.slice().sort((a, b) => a - b);
+    return Math.min(17, Math.max(6, q[Math.floor(q.length * 0.1)]));
+  }
+
+  /* Decide, once every `sample` frames. Returns 'drop', 'raise' or null. */
+  decide(low, dropMs, raiseMs) {
+    if (this.work.length < this.sample || this.ivals.length < 8) return null;
+    const avgWork = this.work.reduce((a, b) => a + b, 0) / this.work.length;
+    const q = this.ivals.slice().sort((a, b) => a - b);
+    const p50 = q[Math.floor(q.length * 0.5)];
+    const per = this.period();
+    this.stat = { work: +avgWork.toFixed(2), p50: +p50.toFixed(1), period: +per.toFixed(1) };
+    this.work.length = 0; this.ivals.length = 0;
+
+    if (!low) {
+      // Either bottleneck is a reason to shed: the CPU over budget, or frames
+      // simply not arriving on time whatever the CPU is doing.
+      if (avgWork > dropMs || p50 > per * 1.25) {
+        this.good = 0;
+        const soon = this.droppedAt && performance.now() - this.droppedAt < 12000;
+        if (soon) this.need = Math.min(24, this.need * 2);
+        this.droppedAt = performance.now();
+        return 'drop';
+      }
+      return null;
+    }
+    // Room to put it back: hitting the display's period AND cheap on the CPU.
+    // Both, because either alone is satisfied by a frame that is only cheap
+    // because the mood is currently off.
+    const roomy = p50 <= per * 1.08 && avgWork < raiseMs;
+    this.good = roomy ? this.good + 1 : 0;
+    if (this.good >= this.need) { this.good = 0; return 'raise'; }
+    return null;
+  }
+}
+
 // The GPU behind the context, which is the single most useful line in here and
 // the one thing that cannot be guessed from the far end. Chromium hides it
 // behind an extension that is not always granted; say so rather than inventing

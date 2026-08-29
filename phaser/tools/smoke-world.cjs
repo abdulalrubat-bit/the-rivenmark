@@ -36,7 +36,20 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   p.on('pageerror', e => errs.push(e.message));
   p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
 
-  await p.goto('http://localhost:' + PORT + '/');
+  /* Loaded with ?noatmos&nogov.
+   *
+   * Not to make the numbers look better -- to make them exist at all. Every
+   * pixel assertion below is a DIFFERENCE against a frozen frame, and the
+   * atmosphere is not frozen: fog drifts, ash falls, torches gutter. With it
+   * running, a box with nothing in it reads eighty changed pixels and every
+   * measurement here is noise on top of noise. And the governor, left free,
+   * sheds the mood halfway through a measurement, so the picture under test
+   * stops existing partway through the test.
+   *
+   * The atmosphere has its own suite (smoke:air) where it is the subject
+   * rather than the weather.
+   */
+  await p.goto('http://localhost:' + PORT + '/?noatmos&nogov');
   let booted = false;
   for (let i = 0; i < 40 && !booted; i++) {
     await sleep(250);

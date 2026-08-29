@@ -36,7 +36,11 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   p.on('pageerror', e => errs.push(e.message));
   p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
 
-  await p.goto('http://localhost:' + PORT + '/');
+  /* ?noatmos&nogov: the map and the crystal are measured as differences
+   * against a frozen frame, and a drifting fog or a guttering torch under the
+   * box is noise the measurement cannot tell from the thing being measured.
+   * The atmosphere is the subject of smoke:air, not the weather here. */
+  await p.goto('http://localhost:' + PORT + '/?noatmos&nogov');
   let booted = false;
   for (let i = 0; i < 40 && !booted; i++) {
     await sleep(250);

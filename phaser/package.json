@@ -20,7 +20,8 @@
     "smoke:forge": "node tools/smoke-forge.cjs",
     "smoke:spend": "node tools/smoke-spend.cjs",
     "smoke:world": "node tools/smoke-world.cjs",
-    "smoke:overlay": "node tools/smoke-overlay.cjs"
+    "smoke:overlay": "node tools/smoke-overlay.cjs",
+    "smoke:air": "node tools/smoke-air.cjs"
   },
   "dependencies": {
     "phaser": "^4.2.1"

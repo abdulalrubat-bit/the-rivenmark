@@ -58,6 +58,7 @@ the hero, the kit casts, the HUD reads the run.
 | `npm run smoke:delve` | 14 checks — the world draws and is dressed, the gait is distance-driven |
 | `npm run smoke:world` | 18 checks — the waygate, the coffers, the slag, the beacons |
 | `npm run smoke:overlay` | 22 checks — the map, the arrow out, the boss bar, the crystal |
+| `npm run smoke:air` | 18 checks — light, haze, ash, the dark, and the governor |
 | `npm run smoke:play` | 16 checks — the stick, the kit, and the HUD's layout |
 | `npm run smoke:fx` | 15 checks — the fight reads, the crescent and the tells in pixels |
 | `npm run smoke:loop` | 15 checks — dying, the outcome, the gate-house, descending again |
@@ -96,6 +97,46 @@ a damage affix takes him from 43.8 to 55.8 before he descends.
 The Vendor and the Hall spend it: commissions, tempers, reliquaries, and four
 stations of three tiers that outlast every delve. Prices come from the core,
 so the number on the button is the number that will be taken.
+
+The room has weather. Torches light the stone around them, haze drifts against
+the camera, ash hangs in the air, a vignette closes the frame down to what the
+Vanguard's own light reaches, and the Riftborn takes even that. Phaser has no
+gradients, so the three this needs — a light blob, a fog tile, a vignette — are
+baked once into canvas textures at boot and then drawn as ordinary images. A
+gradient rasterised once is free; a gradient built per frame is what made the
+canvas build slow.
+
+**And the governor that takes it away.** The port had none: `lowFx` is read all
+over — by the atmosphere, and by the core's own budgets — and nothing ever set
+it, so a device that could not hold the frame simply did not. Measured here,
+the atmosphere took this box from 60fps to 30 with `lowFx` false throughout.
+
+It watches two things, because either alone is blind to half the ways a frame
+goes wrong. CPU work, timed from the top of update to POST_RENDER — which under
+canvas 2D was the whole story, since the rasteriser *is* the CPU. And delivered
+intervals, because under WebGL it is not: the atmosphere moved CPU work from
+2.56ms to 2.84ms while halving the frame rate. The cost was entirely fill rate.
+The driver takes the calls and returns; the bill arrives at the swap, where no
+CPU timer can see it.
+
+Intervals have their own trap and the canvas build fell in it: a display is
+vsync-locked, so 16.7ms means "keeping up" and nothing about by how much. The
+old code compared against a fixed 11ms — 90fps, unreachable on 60Hz hardware —
+so once the glow came off it never went back on. Here everything is judged
+against **the display's own period**, the tenth percentile of a long window,
+which reads the same at 60, 90 and 120Hz. That is capped at 17ms, and the cap
+is the whole thing working: learned purely from observation it is circular, and
+with the atmosphere on this box never once beat 33.3ms, so the governor
+concluded the screen ran at 30Hz and was being hit perfectly — while sitting at
+half frame rate.
+
+Restoring costs about 40% more per frame, so it needs several good windows, and
+the number of them **grows** each time a restore is followed by another drop. A
+device that genuinely cannot afford the mood stops being asked every three
+quarters of a second whether it has changed its mind.
+
+One thing never sheds: the light pass. Without it the tunnels read as flat
+black and a torch is a sprite of a torch that lights nothing.
 
 The Deceiver's encounter reads. A Lieutenant's agony winds as a cone on the
 floor that brightens as it comes, and his siphon runs to his master as a
