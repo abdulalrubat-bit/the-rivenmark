@@ -60,6 +60,7 @@ the hero, the kit casts, the HUD reads the run.
 | `npm run smoke:fx` | 11 checks — the fight reads, the crescent counted in pixels |
 | `npm run smoke:loop` | 15 checks — dying, the outcome, the gate-house, descending again |
 | `npm run smoke:forge` | 13 checks — equipping, and that worn gear reaches the hero |
+| `npm run smoke:spend` | 13 checks — the vendor and the hall, and that coin buys what it says |
 | `npm run smoke` | 13 checks — the proving scene and the diagnostics dump |
 | `npm run verify` | the canvas suites against the extracted core |
 
@@ -82,9 +83,12 @@ core rather than writing the same sentences twice.
 The Forge equips what the delve drops, and it reaches the hero: a blade with
 a damage affix takes him from 43.8 to 55.8 before he descends.
 
-Not started: the vendor and the hall (coin has nothing to buy yet), and the
-stone dressing on the walls — the coursed ashlar is procedural canvas art and
-is not in the atlas yet, so walls show as their lit top face.
+The Vendor and the Hall spend it: commissions, tempers, reliquaries, and four
+stations of three tiers that outlast every delve. Prices come from the core,
+so the number on the button is the number that will be taken.
+
+That leaves the stone dressing on the walls — the coursed ashlar is procedural
+canvas art and is not in the atlas yet, so walls show as their lit top face.
 
 ## On the phone
 

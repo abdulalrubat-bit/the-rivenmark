@@ -12,7 +12,9 @@
 
 /* global player, run, stash, state, LEVELS, LEVEL, LEVEL_BY_ID, HEROES,
           startRun, endRun, stepThrough, blankStash, el, stashPower,
-          SLOTS, SLOT_BY_ID, RARITY, itemPower, affixText, saveStash */
+          SLOTS, SLOT_BY_ID, RARITY, itemPower, affixText, saveStash,
+          VENDOR, vendorCost, canAfford, vendorBuy, HALL, hallTier,
+          HALL_MAX, hallBuy, vaultCap */
 
 const CSS = `
 #screens{position:fixed;inset:0;z-index:40;display:none;place-items:center;
@@ -70,6 +72,8 @@ export class Screens {
     this.root.classList.add('up');
     if (name === 'over') this.renderOver();
     else if (name === 'gear') this.renderForge();
+    else if (name === 'vendor') this.renderVendor();
+    else if (name === 'hall') this.renderHall();
     else this.renderGatehouse();
   }
 
@@ -121,7 +125,7 @@ export class Screens {
         '<h1>The Gate-House</h1>' +
         this.tabs('splash') +
         '<p class="sub">Choose a rung and one of the Clear-Sighted.</p>' +
-        '<div class="purse"><span>Purse</span><b>' + (stash.coins || 0) + ' coin</b></div>' +
+        this.purse() +
         '<div class="purse"><span>Power</span><b>' + power + '</b></div>' +
         corpse +
         '<div class="rows" id="heroRows">' +
@@ -154,12 +158,124 @@ export class Screens {
   }
 
   tabs(on) {
-    return '<div class="tabs">' +
-      '<button type="button" data-tab="splash" class="' + (on === 'splash' ? 'on' : '') +
-        '">Descend</button>' +
-      '<button type="button" data-tab="gear" class="' + (on === 'gear' ? 'on' : '') +
-        '">The Forge</button>' +
+    const t = (id, label) =>
+      '<button type="button" data-tab="' + id + '" class="' + (on === id ? 'on' : '') +
+      '">' + label + '</button>';
+    return '<div class="tabs">' + t('splash', 'Descend') + t('gear', 'Forge') +
+           t('vendor', 'Vendor') + t('hall', 'Hall') + '</div>';
+  }
+
+  // A line of coin, shown wherever coin is spent.
+  purse() {
+    return '<div class="purse"><span>Purse</span><b>' +
+           (stash.coins || 0) + ' coin</b></div>';
+  }
+
+  /* The vendor. Costs and affordability come from the core -- vendorCost reads
+   * the hall's discount and the pity counter -- so the price on the button is
+   * the price that will actually be taken.
+   */
+  renderVendor() {
+    const rows = VENDOR.map(v => {
+      const cost = vendorCost(v);
+      const can = canAfford(v);
+      return '<button class="row" type="button" data-buy="' + v.id + '"' +
+        (can ? '' : ' disabled') + '><span class="item"><span><b>' + v.name +
+        '</b><span class="aff">' + v.note + '</span></span>' +
+        '<span class="pw"><span data-cost="' + cost + '">' + cost + '</span>' +
+        '<span class="act">' + (can ? 'coin' : 'too dear') +
+        '</span></span></span></button>';
+    }).join('');
+
+    this.root.innerHTML =
+      '<div class="card">' +
+        '<h1>The Vendor</h1>' + this.tabs('vendor') + this.purse() +
+        (this.note ? '<p class="sub">' + this.note + '</p>' : '') +
+        '<div class="rows">' + rows + '</div>' +
+        (this.slotFor ? this.slotPicker() : '') +
       '</div>';
+
+    this.wireTabs();
+    this.root.querySelectorAll('[data-buy]').forEach(b =>
+      b.addEventListener('click', () => this.buy(b.dataset.buy)));
+    this.root.querySelectorAll('[data-slot]').forEach(b =>
+      b.addEventListener('click', () => {
+        const v = VENDOR.find(x => x.id === this.slotFor);
+        this.finishBuy(v, b.dataset.slot);
+      }));
+    this.root.querySelectorAll('[data-cancel]').forEach(b =>
+      b.addEventListener('click', () => { this.slotFor = null; this.renderVendor(); }));
+  }
+
+  /* Two of the three services need to know WHICH slot, so the purchase is a
+   * two-step rather than a guess. Temper offers only what is worn, because
+   * rerolling nothing is not a service. */
+  slotPicker() {
+    const v = VENDOR.find(x => x.id === this.slotFor);
+    const list = SLOTS.filter(sl => v && v.worn ? !!stash.gear[sl.id] : true);
+    if (!list.length)
+      return '<p class="sub">Nothing is worn to temper.</p>' +
+             '<button class="go" type="button" data-cancel="1">Back</button>';
+    return '<p class="sub">Which slot?</p><div class="rows">' +
+      list.map(sl => '<button class="row" type="button" data-slot="' + sl.id + '">' +
+        '<span>' + sl.mark + ' ' + sl.name +
+        (stash.gear[sl.id] ? '<small>' + stash.gear[sl.id].name + '</small>' : '') +
+        '</span></button>').join('') +
+      '</div><button class="go" type="button" data-cancel="1">Back</button>';
+  }
+
+  buy(id) {
+    const v = VENDOR.find(x => x.id === id);
+    if (!v) return;
+    if (v.slot || v.worn) { this.slotFor = id; this.note = null; this.renderVendor(); return; }
+    this.finishBuy(v, null);
+  }
+
+  finishBuy(v, arg) {
+    const before = stash.coins || 0;
+    const ok = vendorBuy(v, arg);
+    this.slotFor = null;
+    this.note = ok === false
+      ? 'The vendor turns you away.'
+      : 'Done — ' + (before - (stash.coins || 0)) + ' coin.';
+    saveStash();
+    this.renderVendor();
+  }
+
+  /* The hall. Four stations, three tiers each, and every tier says what it
+   * changes rather than what it costs alone. */
+  renderHall() {
+    const rows = HALL.map(h => {
+      const t = hallTier(h.id);
+      const whole = t >= HALL_MAX;
+      const next = whole ? null : h.tiers[t];
+      const can = next && (stash.coins || 0) >= next.cost;
+      return '<button class="row" type="button" data-hall="' + h.id + '"' +
+        (whole || !can ? ' disabled' : '') + '><span class="item"><span><b>' +
+        h.mark + ' ' + h.name + '</b><span class="aff">' +
+        (whole ? 'Whole. ' + h.note : next.text) + '</span></span>' +
+        '<span class="pw"><span data-cost="' + (whole ? '' : next.cost) + '">' +
+        (whole ? '&mdash;' : next.cost) + '</span>' +
+        '<span class="act">' + (whole ? 'built' : t + ' of ' + HALL_MAX) +
+        '</span></span></span></button>';
+    }).join('');
+
+    this.root.innerHTML =
+      '<div class="card">' +
+        '<h1>The Hall</h1>' + this.tabs('hall') + this.purse() +
+        (this.note ? '<p class="sub">' + this.note + '</p>' : '') +
+        '<p class="sub">What you build here outlasts every delve.</p>' +
+        '<div class="rows">' + rows + '</div>' +
+      '</div>';
+
+    this.wireTabs();
+    this.root.querySelectorAll('[data-hall]').forEach(b =>
+      b.addEventListener('click', () => {
+        const h = HALL.find(x => x.id === b.dataset.hall);
+        const why = hallBuy(h);
+        this.note = why ? 'The mason shakes his head — ' + why + '.' : 'Built.';
+        this.renderHall();
+      }));
   }
   wireTabs() {
     this.root.querySelectorAll('[data-tab]').forEach(b =>

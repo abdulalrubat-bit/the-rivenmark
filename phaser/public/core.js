@@ -12,7 +12,7 @@
  * the game lives inside a function named draw, forge or paint, and those are
  * dropped here.
  *
- * 493 statements kept; 16 drawing functions and 47 page-bound statements dropped.
+ * 494 statements kept; 15 drawing functions and 47 page-bound statements dropped.
  * Re-run `npm run core` after changing ../index.html.
  */
 /* =============================================================================
@@ -4959,6 +4959,7 @@ const hallTotal = () => HALL.reduce((n, h) => n + hallTier(h.id), 0);
 const vaultCap   = () => VAULT_MAX + 20 * hallTier('vault');
 const loadoutCap = () => LOADOUT_MAX + hallTier('vault');
 const bagCap     = () => BAG_MAX + (hallTier('forge') >= 3 ? 4 : 0);
+const forgeCut   = () => 1 - 0.12 * hallTier('forge');
 const relicCut   = () => 1 - 0.15 * Math.max(0, hallTier('reliquary') - 1);
 const setBoost   = () => 1 + [0, 0.15, 0.30, 0.50][hallTier('reliquary')];
 const wardStone  = () => ({ maxHp: [0, 10, 22, 38][hallTier('wardstone')],
@@ -6285,7 +6286,6 @@ function endRun(won) {
      forgeGround          called from resetRun
      forgeWallCourses     called from resetRun
      syncHud              called from resetRun
-     forgeCut             called from applyLoadout
      renderHall           called from openHall
      $                    called from refreshDelveLine
      refreshVendorLine    called from refreshHubLines

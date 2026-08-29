@@ -50,7 +50,8 @@
   window.buildStains = noop;
   window.forgeGround = noop;
   window.forgeWallCourses = noop;
-  window.forgeCut = noop;
+  // NOT forgeCut: that is the hall's forge discount, not a sprite. Stubbing it
+  // made every vendor price NaN.
   window.minimapBox = () => ({ x: 0, y: 0, s: 0, pad: 0, over: 0 });
 
   // --- render state the core still touches ---------------------------------

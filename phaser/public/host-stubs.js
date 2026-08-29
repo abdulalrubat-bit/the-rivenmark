@@ -17,7 +17,6 @@
   if (g.forgeGround === undefined) g.forgeGround = noop;
   if (g.forgeWallCourses === undefined) g.forgeWallCourses = noop;
   if (g.syncHud === undefined) g.syncHud = noop;
-  if (g.forgeCut === undefined) g.forgeCut = noop;
   if (g.renderHall === undefined) g.renderHall = noop;
   if (g.$ === undefined) g.$ = noop;
   if (g.refreshVendorLine === undefined) g.refreshVendorLine = noop;
