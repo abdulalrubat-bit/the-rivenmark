@@ -130,9 +130,12 @@ export function mountButton(getReport) {
     '<div id="diagHint">clipboard unavailable — select all and copy</div></div>';
   const css = document.createElement('style');
   css.textContent =
-    '#diag{position:fixed;right:8px;bottom:8px;z-index:50;font:12px ui-monospace,monospace}' +
+    // Top-right, out of the thumbs. It used to sit bottom-right, where it
+    // landed squarely on the ability buttons -- a developer affordance is
+    // not worth a control you cannot press.
+    '#diag{position:fixed;right:8px;top:34px;z-index:50;font:12px ui-monospace,monospace}' +
     '#diagBtn{background:#1b1712;color:#cebe9e;border:1px solid #4a3f30;border-radius:6px;' +
-      'padding:10px 12px;font:inherit;min-height:44px}' +   // 44px: a thumb target
+      'padding:10px 12px;font:inherit;min-height:44px;min-width:44px}' +   // 44px: a thumb target
     '#diagBtn:active{background:#2a2419}' +
     '#diagOut{position:fixed;inset:8px;background:#0b0908;border:1px solid #4a3f30;' +
       'border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:6px}' +

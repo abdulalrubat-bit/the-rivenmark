@@ -10,3 +10,4 @@ public/bundle.js.map
 # the smoke test's screenshot: paths in here are relative to this folder,
 # so it is proving.png, not phaser/proving.png
 proving.png
+playable.png

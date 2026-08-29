@@ -12,6 +12,7 @@
  */
 import Phaser from 'phaser';
 import { FrameLog, collect, asText, mountButton } from './diagnostics.js';
+import { Hud } from './hud.js';
 
 // The core's palette is CSS hex strings; Phaser wants numbers.
 const hex = (css, fallback) => {
@@ -34,7 +35,10 @@ const SS = 2;      // art/ is exported at 2x, which is native for it
  * esbuild leaves free identifiers alone, so these resolve up the scope chain
  * at run time exactly as they do in the canvas build.
  */
-/* global walls, props, enemies, player, run, cam, view, state, stash,
+/* global walls, props, enemies, player, run, cam, view, state, stash, stick,
+          keys, stickStart, stickMove, stickEnd, STICK_MAX, castAbility,
+          swapHero, swapBlocked, abilityBlock, ABILITIES, ABILITY_BY_ID,
+          CHARGE_MAX, TENSION_MAX,
           WORLD, PAL, LEVEL, LEVELS, GAIT_N, GAIT_STEP, GAIT_STILL,
           WALK_STEP, WALK_PACE, update, startRun, loadStash */
 
@@ -80,14 +84,20 @@ export class Delve extends Phaser.Scene {
 
     // Depth bands, so a body never sorts against a wall or the floor.
     this.pool = [];          // body sprites, grown to fit and never shrunk
+    this.stickGfx = this.add.graphics().setScrollFactor(0).setDepth(9e5);
     this.hero = this.add.sprite(this.stepping ? player.x : 200,
                                this.stepping ? player.y : 200, 'art', 'heroes/isaac-rest');
     this.hero.setScale(1 / SS).setDepth(1e5);
 
     if (this.stepping) this.cameras.main.startFollow(this.hero, true, 0.18, 0.18);
 
+    this.wireInput();
+    this.hud = new Hud();
+
     this.log = new FrameLog(240);
-    this.hud = this.add.text(8, 8, '', {
+    // `dbg`, not `hud`: the DOM HUD is this.hud, and naming both the same
+    // silently replaced one with the other.
+    this.dbg = this.add.text(8, 62, '', {
       fontFamily: 'ui-monospace, monospace', fontSize: '12px', color: '#cebe9e'
     }).setScrollFactor(0).setDepth(1e6);
 
@@ -181,6 +191,53 @@ export class Delve extends Phaser.Scene {
     return 'heroes/' + p.hero + (run ? '-run-' : '-walk-') + f;
   }
 
+  /* The stick.
+   *
+   * The core already owns the whole state machine -- stickStart, stickMove,
+   * stickEnd and moveVector, with its own dead zone and throttle curve -- so
+   * this only feeds it pointer positions. Phaser's pointer.x/y are already in
+   * game space, which is what those functions expect.
+   *
+   * Only pointers that land on the canvas get here: the HUD is DOM above it
+   * and swallows its own events, so a thumb on an ability button can never
+   * drag the hero as well.
+   */
+  wireInput() {
+    this.input.addPointer(2);          // a thumb to move, a thumb for the kit
+    this.input.on('pointerdown', pt => {
+      if (state !== 'play') return;
+      if (stick.active) return;        // one finger owns the stick at a time
+      stickStart(pt.id, pt.x, pt.y);
+    });
+    this.input.on('pointermove', pt => {
+      if (stick.active && pt.id === stick.id) stickMove(pt.x, pt.y);
+    });
+    const release = pt => { if (stick.active && pt.id === stick.id) stickEnd(); };
+    this.input.on('pointerup', release);
+    this.input.on('pointerupoutside', release);
+    this.input.on('gameout', () => stickEnd());
+
+    // Desktop: the same keys the canvas build takes, into the same Set.
+    this.input.keyboard?.on('keydown', e => keys.add(e.key.toLowerCase()));
+    this.input.keyboard?.on('keyup',   e => keys.delete(e.key.toLowerCase()));
+    // A window that loses focus mid-delve must not leave a key held down.
+    window.addEventListener('blur', () => { keys.clear(); stickEnd(); });
+  }
+
+  /* The stick, drawn where the thumb put it. Two rings: where the finger went
+   * down, and where it is now. Screen space, so it does not scroll with the
+   * world.
+   */
+  drawStick() {
+    const gfx = this.stickGfx;
+    gfx.clear();
+    if (!stick.active) return;
+    gfx.lineStyle(2, 0xd6b26e, 0.45);
+    gfx.strokeCircle(stick.ox, stick.oy, STICK_MAX);
+    gfx.fillStyle(0xd6b26e, 0.30);
+    gfx.fillCircle(stick.x, stick.y, 18);
+  }
+
   update(time, dtMs) {
     const dt = Math.min(0.05, dtMs / 1000);      // the core's own MAX_DT clamp
     if (this.stepping && state === 'play') update(dt);
@@ -216,10 +273,13 @@ export class Delve extends Phaser.Scene {
     if (this.hero.frame.name !== hk && this.textures.getFrame('art', hk)) this.hero.setFrame(hk);
     this.hero.setPosition(player.x, player.y).setFlipX(player.face < 0);
 
+    this.drawStick();
+    this.hud.sync();
+
     this.log.tick(time);
     const st = this.log.stats();
     if (st && (time | 0) % 8 === 0) {
-      this.hud.setText(
+      this.dbg.setText(
         LEVEL.name + '\n' +
         'slag ' + (run.tech | 0) + '/' + LEVEL.quota + '\n' +
         live.length + ' bodies, ' + (run.awake || 0) + ' awake\n' +
