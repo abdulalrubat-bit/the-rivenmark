@@ -13,6 +13,7 @@
  * one statistic that cannot show a stutter.
  */
 import Phaser from 'phaser';
+import { FrameLog, collect, asText, mountButton } from './diagnostics.js';
 
 const GAIT = 8;                    // poses per cycle, same as the canvas build
 const SS   = 2;                    // art/ is exported at 2x, which is native
@@ -75,8 +76,17 @@ class Proving extends Phaser.Scene {
 
     // Frame intervals, kept as a window. Same reasoning as the canvas build's
     // debug HUD: the worst frame is what a hand feels, and a mean hides it.
-    this.ivals = [];
-    this.lastAt = 0;
+    this.log = new FrameLog(240);
+
+    // The phone's way of telling the desk what happened. Mounted once, and
+    // only in a browser -- the smoke test drives this headless.
+    if (!this.game.__diagMounted) {
+      this.game.__diagMounted = true;
+      mountButton(() => asText(collect(this.game, this.log, {
+        build: 'phaser proving ground',
+        bodies: this.count
+      })));
+    }
   }
 
   spawn(n) {
@@ -111,22 +121,14 @@ class Proving extends Phaser.Scene {
       s.setDepth(s.y);                          // the canvas build's y-sort
     }
 
-    if (this.lastAt) {
-      this.ivals.push(time - this.lastAt);
-      if (this.ivals.length > 180) this.ivals.shift();
-    }
-    this.lastAt = time;
-
-    if (this.ivals.length > 20 && (time | 0) % 8 === 0) {
-      const q = this.ivals.slice().sort((a, b) => a - b);
-      const p50 = q[q.length >> 1];
-      const worst = q[q.length - 1];
-      const over = this.ivals.filter(v => v > 20).length * 100 / this.ivals.length;
+    this.log.tick(time);
+    const s = this.log.stats();
+    if (s && (time | 0) % 8 === 0) {
       this.hud.setText(
         this.count + ' bodies\n' +
-        'fps ' + (1000 / p50).toFixed(0) + '\n' +
-        'worst ' + worst.toFixed(0) + 'ms\n' +
-        'over budget ' + over.toFixed(0) + '%\n' +
+        'fps ' + s.fps + '\n' +
+        'worst ' + s.worst.toFixed(0) + 'ms\n' +
+        'over budget ' + s.overPct + '%\n' +
         'renderer ' + (this.game.renderer.type === Phaser.WEBGL ? 'WebGL' : 'Canvas'));
     }
   }

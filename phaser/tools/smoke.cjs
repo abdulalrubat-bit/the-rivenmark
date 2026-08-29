@@ -66,14 +66,57 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   await sleep(3000);
   const heavy = await p.evaluate(()=>{
     const s=window.__game.scene.getScene('proving');
-    const q=s.ivals.slice().sort((a,b)=>a-b);
-    return { bodies:s.count, p50:+q[q.length>>1].toFixed(1),
-             worst:+q[q.length-1].toFixed(1) };
+    const st=s.log.stats();
+    return { bodies:s.count, p50:st.p50, worst:st.worst };
   });
   ck('and holds up with three hundred bodies', heavy.p50 < 34,
      heavy.bodies+' bodies, median frame '+heavy.p50+'ms, worst '+heavy.worst+
      'ms (software GL here — a phone GPU is the real test)');
 
+  // --- the diagnostics dump -------------------------------------------------
+  // The point of it is a phone reporting numbers I cannot measure, so what
+  // matters is that the block CONTAINS them, and that it still works when the
+  // clipboard does not -- which is the common case, because the clipboard API
+  // needs a secure context and a phone reaching another machine over plain
+  // http is not one.
+  const ctxHasClipboard = await p.evaluate(()=>!!(navigator.clipboard && window.isSecureContext));
+  await p.click('#diagBtn');
+  await sleep(300);
+  const dump = await p.evaluate(async ()=>{
+    const ta=document.querySelector('#diagOut textarea');
+    if(ta && !document.querySelector('#diagOut').hidden) return ta.value;
+    try { return await navigator.clipboard.readText(); } catch(e){ return '(unreadable)'; }
+  });
+  const wants = ['renderer','gpu','dpr','worst','over 20ms','buffer','bodies','fps'];
+  const missing = wants.filter(k=>dump.indexOf(k)<0);
+  ck('the diagnostics dump carries every field', missing.length===0,
+     missing.length ? 'missing: '+missing.join(', ') : dump.split('\n').length+' lines');
+  ck('and names the renderer it actually used', /renderer\s+WebGL/.test(dump),
+     (dump.match(/renderer.*/)||[''])[0]);
+  ck('and reports the worst frame, not just an average',
+     /worst\s+[\d.]+ms in window, [\d.]+ms ever/.test(dump),
+     (dump.match(/worst.*/)||[''])[0]);
+  // Force the path a phone on a plain-http address takes.
+  const fallback = await p.evaluate(async ()=>{
+    document.querySelector('#diagOut').hidden = true;
+    const real = navigator.clipboard;
+    try { Object.defineProperty(navigator,'clipboard',{value:undefined,configurable:true}); }
+    catch(e){}
+    document.querySelector('#diagBtn').click();
+    await new Promise(r=>setTimeout(r,200));
+    const panel=document.querySelector('#diagOut');
+    const shown = !panel.hidden && panel.querySelector('textarea').value.length > 100;
+    try { Object.defineProperty(navigator,'clipboard',{value:real,configurable:true}); }
+    catch(e){}
+    return shown;
+  });
+  ck('and falls back to a selectable panel with no clipboard', fallback,
+     'the phone case: the clipboard API needs a secure context');
+  ck('the button is a thumb target', await p.evaluate(()=>{
+       const r=document.querySelector('#diagBtn').getBoundingClientRect();
+       return r.height>=44 && r.width>=44; }), 'at least 44px');
+
+  await p.evaluate(()=>{ document.querySelector('#diagOut').hidden=true; });
   await p.screenshot({path:require('path').join(__dirname,'..','proving.png')});
   console.log('\nPASS '+pass.length+'\n  '+pass.join('\n  '));
   console.log('\nFAIL '+fail.length+(fail.length?'\n  '+fail.join('\n  '):''));
