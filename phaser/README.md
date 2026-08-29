@@ -56,6 +56,7 @@ the hero, the kit casts, the HUD reads the run.
 | | |
 |---|---|
 | `npm run smoke:delve` | 14 checks — the world draws and is dressed, the gait is distance-driven |
+| `npm run smoke:world` | 18 checks — the waygate, the coffers, the slag, the beacons |
 | `npm run smoke:play` | 16 checks — the stick, the kit, and the HUD's layout |
 | `npm run smoke:fx` | 11 checks — the fight reads, the crescent counted in pixels |
 | `npm run smoke:loop` | 15 checks — dying, the outcome, the gate-house, descending again |
@@ -94,6 +95,17 @@ a damage affix takes him from 43.8 to 55.8 before he descends.
 The Vendor and the Hall spend it: commissions, tempers, reliquaries, and four
 stations of three tiers that outlast every delve. Prices come from the core,
 so the number on the button is the number that will be taken.
+
+The delve is navigable. The waygate is drawn dormant and lit, its rune ring
+turning against its sigil and the channel closing round the kerb as you stand
+in it; coffers open; slag lies on the floor; a drop and your own corpse each
+throw a shaft of light, and a drop's height is its rarity, which is how you
+know from across a room whether it is worth the walk.
+
+Bodies sort by y and so does the hero — at a fixed depth he drew through
+everything standing in front of him — and so does anything standing: a barrel
+is something you walk behind, while rubble is something you walk over. Every
+one of them casts a shadow, all thrown the same way, off the core's own LIGHT.
 
 The walls wear their stone. The coursed ashlar was procedural canvas art, so
 the forge output is exported into the atlas — six lit top faces and three

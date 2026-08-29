@@ -25,6 +25,17 @@ const hex = (css, fallback) => {
 
 const SS = 2;      // art/ is exported at 2x, which is native for it
 
+/* Which scenery stands UP off the floor, and how tall it reads.
+ *
+ * This is a sorting fact, not decoration: a barrel is an object you walk
+ * behind, so it has to sort against bodies by y like a body does. Rubble and
+ * stains lie flat and always go under everything. Presentation data, so it
+ * lives here rather than in the core -- but getting it wrong is visible
+ * immediately, because the hero walks through a pillar.
+ */
+const STANDING = { pillar: 26, barrel: 12, crate: 11, urn: 10, banner: 16,
+                   chain: 14, tomb: 22 };
+
 /* The core's names are used bare, not through `window`.
  *
  * core.js is a classic script, and a top-level `const` or `let` there creates a
@@ -40,7 +51,8 @@ const SS = 2;      // art/ is exported at 2x, which is native for it
 /* global walls, props, enemies, player, run, cam, view, state, stash, stick,
           arcs, particles, rings, floaters, bolts, slams, hazards, nulls,
           totems, ruptures, HEROES, TAU, FLOAT_STYLE, FLOAT_LIFE, BOLT_R,
-          portal, stepThrough, LEVEL_BY_ID, blankStash, el,
+          portal, stepThrough, LEVEL_BY_ID, blankStash, el, chests, loot,
+          CHEST_KINDS, CHEST_OPEN, CHEST_DRAW, LIGHT,
           CELL_W, GW, GH, SOLID, cellAt, pitGrid, gi, edges,
           keys, stickStart, stickMove, stickEnd, STICK_MAX, castAbility,
           swapHero, swapBlocked, abilityBlock, ABILITIES, ABILITY_BY_ID,
@@ -90,10 +102,17 @@ export class Delve extends Phaser.Scene {
 
     // Depth bands, so a body never sorts against a wall or the floor.
     this.pool = [];          // body sprites, grown to fit and never shrunk
+    this.shadows = [];       // one under each, pooled the same way
     this.stickGfx = this.add.graphics().setScrollFactor(0).setDepth(9e5);
     this.hero = this.add.sprite(this.stepping ? player.x : 200,
                                this.stepping ? player.y : 200, 'art', 'heroes/isaac-rest');
-    this.hero.setScale(1 / SS).setDepth(1e5);
+    // Sorted with the crowd, not over it. At a fixed high depth the hero drew
+    // through every body standing in front of him, which reads as him being
+    // pasted on top of the scene rather than in it.
+    this.hero.setScale(1 / SS).setDepth(this.stepping ? player.y : 1e5);
+    this.heroShadow = this.add.image(0, 0, 'art', 'misc/shadow')
+      .setDisplaySize(26, 14).setDepth(-400);
+    this.lootImgs = [];
 
     if (this.stepping) this.cameras.main.startFollow(this.hero, true, 0.18, 0.18);
 
@@ -148,9 +167,12 @@ export class Delve extends Phaser.Scene {
     if (this.wallGfx) this.wallGfx.destroy();
     for (const im of this.propImgs || []) im.destroy();
     for (const im of this.wallImgs || []) im.destroy();
-    this.wallImgs = [];
+    for (const c of this.chestImgs || []) { c.img.destroy(); c.sh.destroy(); }
+    for (const im of this.lootImgs || []) im.destroy();
+    this.wallImgs = []; this.chestImgs = []; this.lootImgs = [];
     for (const sp of this.pool) sp.destroy();
-    this.propImgs = []; this.pool = [];
+    for (const sh of this.shadows || []) sh.destroy();
+    this.propImgs = []; this.pool = []; this.shadows = [];
     this.fx.texts.forEach(t => t.destroy());
     this.fx.texts = [];
 
@@ -183,12 +205,11 @@ export class Delve extends Phaser.Scene {
     // so a neighbour's shadow never lands on finished stone.
     gfx.fillStyle(0x060504, 0.58);
     for (const w of walls) if (!w.pit) gfx.fillRect(w.x + 5, w.y + 7, w.w, w.h);
-    // The mass. PAL.stoneLow is #0b0805 -- almost black -- because in the canvas
-    // build it is only the bed UNDER the coursed ashlar, and what you actually
-    // see is the tile work on top. That dressing is procedural canvas art and
-    // is not ported yet, so drawing the bed alone made every wall read as a
-    // hole. Until the courses are in the atlas, the lit top face stands in:
-    // stoneTop for the mass, stoneLow for a foot that grounds it.
+    // The bed under the coursed ashlar. PAL.stoneLow is #0b0805 -- almost
+    // black -- because in the canvas build it is only ever a bed, and what you
+    // see is the tile work on top; drawing the bed alone made every wall read
+    // as a hole. dressWalls() lays the courses over this, and stoneTop here
+    // stops a gap in them from showing through as a chasm.
     gfx.fillStyle(hex(PAL.stoneTop, 0x241d16), 1);
     for (const w of walls) if (!w.pit) gfx.fillRect(w.x, w.y, w.w, w.h);
     gfx.fillStyle(hex(PAL.stoneLow, 0x0b0805), 1);
@@ -214,10 +235,43 @@ export class Delve extends Phaser.Scene {
     for (const p of props) {
       const key = this.pickProp(p.kind, p.q);
       if (!key) continue;
+      // A barrel is something you walk behind, so it sorts against bodies by
+      // y. Flat scenery -- rubble, stains, bones -- goes under all of it.
+      const up = STANDING[p.kind];
+      if (up) this.propImgs.push(this.shadowAt(p.x, p.y, up, 2));
       const img = this.add.image(p.x, p.y, 'art', key)
-        .setScale(1 / SS).setDepth(p.y - 1e4);
+        .setScale(1 / SS).setDepth(up ? p.y : p.y - 1e4);
       this.propImgs.push(img);
     }
+
+    // The coffers. Two states in the atlas rather than the canvas build's four
+    // frames of lid, so a chest is shut or open; the four-frame lift is the
+    // one thing here that is not a straight port, and it is worth having the
+    // chest at all more than it is worth the animation.
+    this.chestImgs = [];
+    for (const ch of chests) {
+      const sh = this.shadowAt(ch.x, ch.y + CHEST_DRAW * 0.34, CHEST_DRAW * 0.4, 0);
+      const key = 'chests/' + ch.kind + '-shut';
+      if (!this.textures.getFrame('art', key)) continue;
+      const img = this.add.image(ch.x, ch.y, 'art', key)
+        .setDisplaySize(CHEST_DRAW, CHEST_DRAW).setDepth(ch.y);
+      this.chestImgs.push({ ch, img, sh });
+    }
+  }
+
+  /* The shadow every standing thing throws.
+   *
+   * One direction for the whole game -- LIGHT is the core's, and the walls,
+   * the bodies and the scenery all read off it -- which is most of why a flat
+   * top-down scene reads as having a floor at all. Offset by the light and
+   * squashed, the way the canvas build's dropShadow does it.
+   */
+  shadowAt(x, y, r, lift) {
+    const im = this.add.image(x + LIGHT.x * (LIGHT.body + (lift || 0)),
+                              y + LIGHT.y * (LIGHT.body + (lift || 0)) + r * 0.42,
+                              'art', 'misc/shadow')
+      .setDisplaySize(r * 2.05, r * 1.05).setDepth(-400);
+    return im;
   }
 
   /* The coursed ashlar and the lit top face.
@@ -384,6 +438,40 @@ export class Delve extends Phaser.Scene {
     gfx.fillCircle(stick.x, stick.y, 18);
   }
 
+  /* A coffer opens. The only thing that changes about a chest once it is
+   * placed, so it is the only thing looked at. */
+  syncChests() {
+    for (const c of this.chestImgs || []) {
+      const want = 'chests/' + c.ch.kind + (c.ch.open ? '-open' : '-shut');
+      if (c.img.frame.name !== want && this.textures.getFrame('art', want)) {
+        c.img.setFrame(want);
+        c.img.setDisplaySize(CHEST_DRAW, CHEST_DRAW);
+      }
+      // A shut one breathes, so it catches the eye across a dark room without
+      // needing a marker drawn over the top of it.
+      if (c.ch.open) { c.img.setTint(0xffffff); continue; }
+      const p = 0.5 + 0.5 * Math.sin(c.ch.pulse * 1.7);
+      c.img.setTint(p > 0.55 ? 0xfff0cc : 0xffffff);
+    }
+  }
+
+  /* Slag on the floor -- the quota, and the only reason to be down here.
+   * Pooled, because a cleared room drops a lot of it at once and the count
+   * falls again as fast as you can walk over it. */
+  syncLoot(time) {
+    const pool = this.lootImgs;
+    while (pool.length < loot.length) {
+      pool.push(this.add.image(0, 0, 'art', 'misc/loot').setScale(1 / SS).setDepth(-380));
+    }
+    for (let i = 0; i < pool.length; i++) {
+      const im = pool[i], l = loot[i];
+      if (!l) { im.setVisible(false); continue; }
+      const key = l.value > 1 ? 'misc/loot-big' : 'misc/loot';
+      if (im.frame.name !== key && this.textures.getFrame('art', key)) im.setFrame(key);
+      im.setVisible(true).setPosition(l.x, l.y).setRotation(l.spin || 0);
+    }
+  }
+
   update(time, dtMs) {
     const dt = Math.min(0.05, dtMs / 1000);      // the core's own MAX_DT clamp
     if (this.stepping && state === 'play') update(dt);
@@ -402,6 +490,18 @@ export class Delve extends Phaser.Scene {
       const s = this.add.sprite(0, 0, 'art', 'bestiary/thrall-rest').setScale(1 / SS);
       pool.push(s);
     }
+    while (this.shadows.length < live.length) {
+      this.shadows.push(this.add.image(0, 0, 'art', 'misc/shadow').setDepth(-400));
+    }
+    for (let i = 0; i < this.shadows.length; i++) {
+      const sh = this.shadows[i], e = live[i];
+      if (!e) { sh.setVisible(false); continue; }
+      const r = e.r || 13;
+      sh.setVisible(true)
+        .setDisplaySize(r * 2.05, r * 1.05)
+        .setPosition(e.x + LIGHT.x * LIGHT.body,
+                     e.y + LIGHT.y * LIGHT.body + r * 0.42);
+    }
     for (let i = 0; i < pool.length; i++) {
       const s = pool[i], e = live[i];
       if (!e) { s.setVisible(false); continue; }
@@ -417,8 +517,13 @@ export class Delve extends Phaser.Scene {
     if (!this.stepping) return;
     const hk = this.heroFrame(player);
     if (this.hero.frame.name !== hk && this.textures.getFrame('art', hk)) this.hero.setFrame(hk);
-    this.hero.setPosition(player.x, player.y).setFlipX(player.face < 0);
+    this.hero.setPosition(player.x, player.y).setFlipX(player.face < 0)
+        .setDepth(player.y);
+    this.heroShadow.setPosition(player.x + LIGHT.x * LIGHT.body,
+                                player.y + LIGHT.y * LIGHT.body + 13 * 0.42);
 
+    this.syncChests(time);
+    this.syncLoot(time);
     this.cullDressing();
     this.fx.draw(time);
     this.drawStick();
