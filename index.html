@@ -6774,6 +6774,11 @@ const ctx    = canvas.getContext('2d', { alpha: false });
 
 let lowFx = false;              // auto-drops the light pass on slow devices
 let fxAccum = 0, fxFrames = 0, fxGood = 0;
+// Milliseconds of WORK per frame -- time actually spent in update and draw,
+// not how long the frame took to arrive. See the note in frame().
+const FX_DROP   = 13;   // above this the frame cannot hold 60Hz: shed the glow
+const FX_RAISE  = 8;    // below this there is room to put it back
+const FX_SAMPLE = 45;   // frames per decision, about three quarters of a second
 
 let SS = 2;                     // sprite supersample factor
 const SPR = {};                 // forged entity sprites
@@ -13535,22 +13540,7 @@ function frame(now) {
   const dt = last ? Math.min(MAX_DT, t - last) : 0;
   last = t;
 
-  // Adaptive effects: sample real frame cost and drop glow before the frame
-  // rate does. Hysteresis keeps it from flapping on the threshold.
-  fxAccum += dt; fxFrames++;
-  if (fxAccum >= 1) {
-    const avg = fxAccum / fxFrames;
-    if (!lowFx) {
-      if (avg > 0.024) { lowFx = true; fxGood = 0; }
-    } else {
-      // Turning bloom back on costs ~40% more per frame, so climb out only
-      // from a comfortable margin held for several samples. Restoring at the
-      // engage threshold would push cost straight back over it and flap.
-      fxGood = avg < 0.011 ? fxGood + 1 : 0;
-      if (fxGood >= 4) { lowFx = false; fxGood = 0; }
-    }
-    fxAccum = 0; fxFrames = 0;
-  }
+  const workAt = performance.now();
 
   if (state === 'play') {
     // A hit-stop stops the world, not the picture. The freeze is spent in real
@@ -13563,6 +13553,37 @@ function frame(now) {
     updateCamera(dt);
   }
   draw(t);
+
+  // Adaptive effects: shed the glow before the frame rate goes, and put it
+  // back when there is room again.
+  //
+  // This used to sample `dt` -- the interval between delivered frames -- and
+  // that is not a measure of how much work the frame did. A display is
+  // vsync-locked, so on a 60Hz phone dt is 16.7ms whether the game is coasting
+  // or barely keeping up, and the old climb-out asked for an average under
+  // 11ms, which is 90fps. On 60Hz hardware that is unreachable by definition:
+  // once the glow came off it could never go back on, and the game stayed
+  // degraded for the rest of the session for one rough patch. Only a 90Hz-plus
+  // screen ever recovered.
+  //
+  // Timed around update and draw instead, so it measures the game rather than
+  // the screen, and the same numbers mean the same thing at 60Hz and 120Hz.
+  fxAccum += performance.now() - workAt; fxFrames++;
+  if (fxFrames >= FX_SAMPLE) {
+    const avg = fxAccum / fxFrames;
+    if (!lowFx) {
+      if (avg > FX_DROP) { lowFx = true; fxGood = 0; }
+    } else {
+      // Putting the glow back costs about 40% more per frame, so climb out
+      // only from a comfortable margin held for several samples -- restoring
+      // at the drop threshold would push the cost straight back over it and
+      // flap. FX_RAISE is set so a frame that recovers at 8ms lands near 11ms
+      // with the glow on, still clear of FX_DROP.
+      fxGood = avg < FX_RAISE ? fxGood + 1 : 0;
+      if (fxGood >= 3) { lowFx = false; fxGood = 0; }
+    }
+    fxAccum = 0; fxFrames = 0;
+  }
 }
 
 resize();
