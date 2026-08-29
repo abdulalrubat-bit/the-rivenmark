@@ -1711,6 +1711,14 @@ const AGGRO_NEAR    = 250;   // a body notices you inside this
 const AGGRO_FAR     = 340;   // ...and the bigger, slower ones a little sooner
 const ALERT_R       = 155;   // a woken body pulls its neighbours up with it
 const ALERT_DELAY   = 0.18;  // ...one beat later, so a pack rouses in sequence
+// How many bodies may be awake at once. The brief asked for a cap of 40-60 on
+// the horde; applied to bodies *placed* it breaks extraction outright, because
+// a delve holds 1.42x its own slag quota and the quota runs to 270 at ~1 slag
+// a thrall -- the map would no longer contain enough to open its own gate.
+// Applied to bodies AWAKE it gives the same wall of meat in front of you and
+// leaves the delve full behind it. Past the cap a pack still rouses when you
+// walk into it; what stops is the chain running on across the map.
+const HORDE_LIVE    = 54;
 const ELITE_CHANCE  = 0.16;  // share of packs led by a branded champion
 // Odds a pack site gets pitch beside it. Lives here with the other placement
 // knobs rather than down with the scenery it describes, because buildLevels
@@ -3673,6 +3681,10 @@ function wakeEnemy(e, chain) {
   e.awake = true;
   e.alert = 0;
   if (chain === false) return;
+  // The body you walked into always wakes. What the cap stops is the alert
+  // running on past it, so the fight in front of you stays a fight rather
+  // than becoming the whole delve at once.
+  if ((run.awake || 0) >= HORDE_LIVE) return;
   enemyGrid.query(e.x, e.y, ALERT_R, _alert);
   for (let i = 0; i < _alert.length; i++) {
     const o = _alert[i];
@@ -3899,7 +3911,9 @@ function newBody(kind, x, y, t) {
     fuse: 0,                                   // husk: counting down to the burst
     cast: rand(0, 1.2), casting: 0,            // cantor: between throws, and mid-throw
     lurk: rand(0, STALK_BACK), run: 0, struck: false,  // flayer: waiting, running, spent
-    chant: rand(0, 2), chanting: 0, spell: 0   // shaman: between, mid-cast, and which
+    chant: rand(0, 2), chanting: 0, spell: 0,  // shaman: between, mid-cast, and which
+    calcify: 0, calcified: false,             // the retreat, and whether it has used it
+    consume: 0, fed: false,                   // and whether it has eaten
   };
 }
 
@@ -5129,7 +5143,10 @@ function gainTension(n) {
 // chant are both casting; a body walking at you is not, and an interrupt that
 // fires on the nearest body is not an interrupt.
 function isCasting(e) {
-  return e.hp > 0 && ((e.casting || 0) > 0 || (e.chanting || 0) > 0);
+  // A body closing itself up is casting too. That is what gives Zayd's
+  // interrupt something to do outside a boss room.
+  return e.hp > 0 && ((e.casting || 0) > 0 || (e.chanting || 0) > 0 ||
+                      (e.calcify || 0) > 0);
 }
 
 function nearestCaster(R) {
@@ -5149,6 +5166,7 @@ function nearestCaster(R) {
 function silence(e, seconds) {
   e.silenced = Math.max(e.silenced || 0, seconds);
   e.casting = 0; e.chanting = 0;
+  if (e.calcify > 0) breakCalcify(e, true);
   // Put its own clock back too, or it starts again the instant the silence
   // lifts and the interrupt bought nothing.
   if (e.cast !== undefined) e.cast = Math.max(e.cast, seconds * 0.6);
@@ -5544,6 +5562,9 @@ function damageEnemy(e, dmg) {
   }
   e.hp -= dmg;
   e.hitFlash = 0.12;
+  // A heavy enough blow shatters a body that is closing. A scratch does not:
+  // the point is that you have to commit to stopping it, not graze it once.
+  if (e.calcify > 0 && dmg >= e.maxHp * CALCIFY_BREAK) breakCalcify(e, true);
   // Broken across the room or broken at your feet, it goes off either way --
   // and that is the whole lesson, so it must hold however it died.
   if (e.hp <= 0 && e.kind === 'husk' && !e.burst) burstHusk(e);
@@ -5581,6 +5602,10 @@ function damageEnemy(e, dmg) {
       }
     }
     run.kills++;
+    // The delve keeps its dead for a moment. An elite standing over one will
+    // stop and take the slag out of it, which is the only time a champion is
+    // holding still and not looking at you.
+    noteFallen(e.x, e.y);
     // Ravenous: whatever dies near him goes into him. Fighting through the
     // horde at his feet is actively worse than pulling him off it.
     const bs = run && run.boss;
@@ -5740,10 +5765,40 @@ function updateEnemies(dt) {
     enemyGrid.insert(e, e.x, e.y);
   }
 
+  // How many are on their feet, counted BEFORE anything is stepped. Tallying
+  // this as the pass runs looks equivalent and is not: a body would then be
+  // weighed against the count of bodies earlier in the array, so on the first
+  // frame the counter starts at zero and every body in turn waves itself
+  // through a ceiling that has not caught up yet. Measured against a crowd of
+  // 140 inside their own notice, that let all 140 rise against a cap of 54.
+  let awake = 0;
+  for (let i = 0; i < enemies.length; i++) {
+    const e = enemies[i];
+    if (e.hp > 0 && e.awake) awake++;
+  }
+  run.awake = awake;
+
   for (let i = 0; i < enemies.length; i++) {
     const e = enemies[i];
     if (e.hp <= 0) continue;
     e.hitFlash = Math.max(0, e.hitFlash - dt);
+    if (e.mended > 0) e.mended = Math.max(0, e.mended - dt);
+
+    // Closing. A body doing this is not fighting, not moving and not being
+    // steered by anything below -- it is a four-second window and nothing else.
+    if (e.calcify > 0) { updateCalcify(e, dt); continue; }
+
+    // Heavy bodies break off when they are nearly down. Once each: a champion
+    // that can keep retreating is a champion that never dies.
+    if (e.awake && !e.calcified && (e.mass || 1) >= 2.5 && e.hp > 0 &&
+        e.hp < e.maxHp * CALCIFY_AT && e.kind !== 'deceiver' && !e.invader) {
+      beginCalcify(e);
+      continue;
+    }
+
+    // An elite over a fresh corpse stops and takes the slag out of it.
+    if (tryConsume(e, dt)) continue;
+
     // Both are refreshed rather than accumulated -- a Null-Zone re-applies its
     // slow every frame you stand in it, and a second interrupt on a silenced
     // body should not stack into a minute of quiet.
@@ -5813,14 +5868,22 @@ function updateEnemies(dt) {
     if (!e.awake) {
       if (e.alert > 0) {
         e.alert -= dt;
-        if (e.alert <= 0) wakeEnemy(e);
-      } else if (noticeDist(e, d) < e.aggro) {
+        if (e.alert <= 0 && awake < HORDE_LIVE) wakeEnemy(e);
+      } else if (noticeDist(e, d) < e.aggro && awake < HORDE_LIVE) {
+        // The ceiling binds here too. A body over the cap stays down until
+        // something ahead of it falls -- but being struck always wakes it
+        // (see damageEnemy), so nothing on the map can become unkillable and
+        // the delve's slag is never locked away behind the cap.
         wakeEnemy(e);
       }
       if (!e.awake) {
         e.drowse += dt * 1.6;
         continue;
       }
+      // Woken during this pass: the ceiling has to feel it now, not next
+      // frame, or a whole crowd rises through a cap that only ever sees the
+      // frame before.
+      awake++; run.awake = awake;
     }
 
     e.angle = Math.atan2(dy, dx);
@@ -5868,6 +5931,14 @@ function updateEnemies(dt) {
       const push = ((want - od) / want) * (o.mass / e.mass);
       rx += (ox / od) * push;
       ry += (oy / od) * push;
+      // And the shove goes both ways. Repelling only the body being stepped
+      // makes a crowd that slides past itself; pushing the neighbour too makes
+      // it a crowd that has to be got through. The heavier one moves less,
+      // which is what mass is for -- an anchor at its post barely stirs.
+      if (o.awake && !(o.calcify > 0) && !o.braced) {
+        const back = ((want - od) / want) * (e.mass / Math.max(0.5, o.mass)) * 0.5;
+        moveEntity(o, -(ox / od) * back * o.speed * dt, -(oy / od) * back * o.speed * dt);
+      }
     }
     // Cap the repulsion so a dense pack shoves rather than launches.
     const rl = Math.hypot(rx, ry);
@@ -5980,12 +6051,19 @@ function updateEnemies(dt) {
             if (e.spell === 0) {
               addHazard(player.x, player.y, EMBER_R, EMBER_DPS, EMBER_LIFE, '#ff7a2c');
               ring(player.x, player.y, '#ff7a2c', EMBER_R * 0.3, EMBER_R, 0.4);
-            } else {
+            } else if (e.spell === 1) {
               castGloom();
+            } else {
+              // The third: it plants rather than throws. Put at its own feet,
+              // in the middle of the horde it is there to mend, so reaching it
+              // means going through them.
+              plantTotem(e.x, e.y);
             }
           }
           e.chant = e.cd * rand(0.85, 1.3);
-          e.spell = e.spell ? 0 : 1;      // it alternates, so neither is a surprise twice
+          // Fire, then the dark, then a totem, and round again -- so none of
+          // the three is ever a surprise twice running.
+          e.spell = (e.spell + 1) % 3;
         }
         chant = 2;
       } else {
@@ -6098,6 +6176,7 @@ function updateEnemies(dt) {
     moveEntity(e, (sx + rx * 0.8) * spd * dt, (sy + ry * 0.8) * spd * dt);
     advanceGait(e, mx0, my0, dt);
   }
+  run.awake = awake;
 }
 
 // Is an enemy inside the crescent's band? The band is an arc of radius `bow`
@@ -6161,6 +6240,18 @@ function updateArcs(dt) {
         damageEnemy(e, b.dmg);
         b.hit.push(e);
       }
+      // A totem is a thing standing on the floor and the blade cuts it like
+      // anything else. Without this the only answer to one is to wait, which
+      // is not an answer.
+      for (let k = 0; k < totems.length; k++) {
+        const tm = totems[k];
+        if (b.hit.indexOf(tm) !== -1) continue;
+        if (dist2(b.x, b.y, tm.x, tm.y) > (b.bow + b.half + 22) * (b.bow + b.half + 22)) continue;
+        tm.hp -= b.dmg;
+        floatDmg(tm.x, tm.y - 20, b.dmg, 'hit');
+        burst(tm.x, tm.y, '#9dbb5a', 4, 130);
+        b.hit.push(tm);
+      }
       // Scenery is in the way of an edge too. Only the leading centre is
       // tested against it rather than the whole sweep: a barrel is a thing you
       // aim at by standing somewhere, and cutting one down every time a horn
@@ -6215,8 +6306,17 @@ function updateParticles(dt) {
     const p = particles[i];
     p.life -= dt;
     if (p.life <= 0) continue;
-    p.x += p.vx * dt; p.y += p.vy * dt;
-    p.vx *= damp; p.vy *= damp;
+    if (p.suck) {
+      // Drawn in on a cubic curve, so most of the speed is in the last third
+      // of the journey and the eye reads it as being pulled rather than as
+      // drifting across.
+      const u = 1 - p.life / p.max, k = u * u * u;
+      p.x = p.sx + (p.tx - p.sx) * k;
+      p.y = p.sy + (p.ty - p.sy) * k;
+    } else {
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      p.vx *= damp; p.vy *= damp;
+    }
     particles[w++] = p;
   }
   particles.length = w;
@@ -6555,6 +6655,8 @@ function update(dt) {
   updateHazards(dt);
   updateBeams(dt);
   updateNulls(dt);
+  updateTotems(dt);
+  updateFallen(dt);
   if (swapFlash > 0) swapFlash = Math.max(0, swapFlash - dt * 3.4);
   updateDrops(dt);
   updateCorpse(dt);
@@ -10886,6 +10988,7 @@ function draw(t) {
   drawLoot(t);
   drawHazards(t);
   drawNulls();
+  drawTotems(t);
   drawSlams(t);
   drawCorpse(t);
   drawDrops(t);
@@ -11316,6 +11419,225 @@ function hitFlashUI() {
   flashTimer = setTimeout(() => { el.flash.style.opacity = '0'; }, 90);
 }
 
+/* --- what the horde does about dying ---------------------------------------
+   Three behaviours, and all of them are the same idea from different angles:
+   the delve does not simply stand there losing. It heals, it protects, and it
+   eats its own dead, and each of those is a thing the player has to go and
+   stop rather than out-damage.
+   -------------------------------------------------------------------- */
+const CALCIFY_AT   = 0.30;  // the share of life a heavy body breaks off at
+const CALCIFY_TIME = 4;     // and how long you have to stop it
+const CALCIFY_BREAK = 0.12; // damage in one blow, as a share of max, that stops it
+
+const TOTEM_HP    = 60;
+const TOTEM_R     = 180;    // the ring it heals inside
+const TOTEM_HPS   = 9;      // life a second, to everything standing in it
+const TOTEM_LIFE  = 22;
+
+const CONSUME_R    = 90;    // how near a corpse an elite has to be
+const CONSUME_TIME = 2.2;   // how long the feed lasts
+const CONSUME_PCT  = 0.055; // and what it returns a second, as a share of max
+
+let totems = [];
+
+/* Calcification. A heavy body that is nearly down stops fighting, turns away
+   and begins to close: the dust in the room is pulled into it on a cubic
+   curve, a crystal shell rises, and if it is left alone for four seconds it
+   comes back whole.
+
+   It counts as a cast, which is deliberate -- it means Focal Decryption snaps
+   it, and Zayd's interrupt has something to do outside a boss room. */
+function beginCalcify(e) {
+  e.calcify = CALCIFY_TIME;
+  e.calcifyMax = CALCIFY_TIME;
+  e.calcified = true;                 // once only: a body cannot keep retreating
+  toast('It is closing', '#9fd8e8');
+  ring(e.x, e.y, '#9fd8e8', e.r * 3, e.r * 0.8, 0.6);
+}
+
+function breakCalcify(e, hard) {
+  if (!(e.calcify > 0)) return;
+  e.calcify = 0;
+  burst(e.x, e.y, '#cfe9f2', 18, 240);
+  shake(5);
+  if (hard) toast('The shell breaks', '#cfe9f2');
+}
+
+function updateCalcify(e, dt) {
+  e.calcify -= dt;
+  // The vacuum: motes pulled in, accelerating as they arrive. Cubic, so the
+  // last third of the journey is most of the speed and the eye reads it as
+  // being drawn in rather than as drifting.
+  if (!lowFx && Math.random() < 0.7) {
+    const a = Math.random() * TAU, d = e.r * (3 + Math.random() * 2.4);
+    spark(e.x + Math.cos(a) * d, e.y + Math.sin(a) * d, e.x, e.y, '#9fd8e8');
+  }
+  if (e.calcify <= 0) {
+    // Left alone. It comes back whole, and it says so.
+    e.hp = e.maxHp;
+    e.calcify = 0;
+    burst(e.x, e.y, '#cfe9f2', 30, 320);
+    ring(e.x, e.y, '#cfe9f2', 6, e.r * 4, 0.5);
+    shake(8);
+    toast('It is whole again', '#cfe9f2');
+  }
+}
+
+// One mote of the vacuum. Kept in the particle pool so it costs what every
+// other particle costs, and given a target it eases toward.
+function spark(x, y, tx, ty, color) {
+  if (particles.length >= MAX_PARTICLES) return;
+  // Same shape as everything else in the pool -- `color` and `size`, not a
+  // private pair of names -- plus the target it is being drawn toward.
+  particles.push({ x, y, vx: 0, vy: 0, life: 0.55, max: 0.55, color,
+                   size: 1.4 + Math.random() * 1.6,
+                   sx: x, sy: y, tx, ty, suck: true });
+}
+
+/* Resonance Totems. A shaman plants one and the horde standing round it stops
+   dying. It has its own life and no defence -- the difficulty is entirely that
+   the bodies are in the way, which is what the horde's mass is for. */
+function plantTotem(x, y) {
+  if (totems.length >= 4) return;
+  totems.push({ x, y, hp: TOTEM_HP * (1 + (LEVEL.depth || 0)), maxHp: TOTEM_HP * (1 + (LEVEL.depth || 0)),
+                life: TOTEM_LIFE, pulse: 0 });
+  ring(x, y, '#9dbb5a', 8, TOTEM_R, 0.5);
+  toast('A totem is planted', '#9dbb5a');
+}
+
+function updateTotems(dt) {
+  for (let i = totems.length - 1; i >= 0; i--) {
+    const t = totems[i];
+    t.life -= dt;
+    t.pulse += dt;
+    if (t.life <= 0 || t.hp <= 0) {
+      burst(t.x, t.y, '#9dbb5a', 22, 260);
+      ring(t.x, t.y, '#9dbb5a', 6, 70, 0.4);
+      if (t.hp <= 0) toast('The totem falls', '#9dbb5a');
+      totems.splice(i, 1);
+      continue;
+    }
+    // It mends the horde, not the player. Standing in it is not a gift.
+    enemyGrid.query(t.x, t.y, TOTEM_R, _near);
+    for (let k = 0; k < _near.length; k++) {
+      const e = _near[k];
+      if (e.hp <= 0 || e.hp >= e.maxHp) continue;
+      if (dist2(e.x, e.y, t.x, t.y) > TOTEM_R * TOTEM_R) continue;
+      e.hp = Math.min(e.maxHp, e.hp + TOTEM_HPS * dt);
+      e.mended = 0.2;
+    }
+  }
+}
+
+// The blade and everything else hits a totem the way it hits a body. Called
+// from the places that already look for something to damage.
+function hurtTotemsNear(x, y, r, dmg) {
+  let hit = false;
+  for (let i = 0; i < totems.length; i++) {
+    const t = totems[i];
+    if (dist2(x, y, t.x, t.y) > (r + 14) * (r + 14)) continue;
+    t.hp -= dmg;
+    floatDmg(t.x, t.y - 18, dmg, 'hit');
+    burst(t.x, t.y, '#9dbb5a', 4, 120);
+    hit = true;
+  }
+  return hit;
+}
+
+function drawTotems(t) {
+  for (let i = 0; i < totems.length; i++) {
+    const o = totems[i];
+    const f = clamp(o.life / 2, 0, 1);
+    const p = 0.7 + 0.3 * Math.sin(o.pulse * 2.6);
+    // The ring it holds, drawn on the floor so it reads as ground the horde
+    // is safe on rather than as a glow round the totem.
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const g = ctx.createRadialGradient(o.x, o.y, TOTEM_R * 0.35, o.x, o.y, TOTEM_R);
+    g.addColorStop(0, 'rgba(90,150,54,0)');
+    g.addColorStop(0.82, 'rgba(120,190,70,' + (0.10 * f * p).toFixed(3) + ')');
+    g.addColorStop(1, 'rgba(157,187,90,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.ellipse(o.x, o.y, TOTEM_R, TOTEM_R * 0.76, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(157,187,90,' + (0.4 * f * p).toFixed(3) + ')';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([9, 11]);
+    ctx.lineDashOffset = o.pulse * 16;
+    ctx.beginPath(); ctx.ellipse(o.x, o.y, TOTEM_R * 0.94, TOTEM_R * 0.72, 0, 0, TAU); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    // The thing itself: a stake, a bound skull, and a lit stone.
+    ctx.save();
+    ctx.translate(o.x, o.y);
+    ctx.fillStyle = 'rgba(6,9,6,.5)';
+    ctx.beginPath(); ctx.ellipse(0, 3, 13, 5, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = '#4a3a28'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(0, 2); ctx.lineTo(-1, -26); ctx.stroke();
+    ctx.strokeStyle = 'rgba(30,24,18,.9)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(-7, -14); ctx.lineTo(6, -17); ctx.stroke();
+    ctx.fillStyle = 'rgba(206,198,178,.9)';
+    ctx.beginPath(); ctx.ellipse(-1, -30, 7, 8, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(10,8,6,.9)';
+    ctx.beginPath(); ctx.ellipse(-3.4, -31, 2, 2.4, 0, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(1.4, -31, 2, 2.4, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#9dbb5a';
+    ctx.shadowColor = '#9dbb5a'; ctx.shadowBlur = lowFx ? 0 : 16 * p;
+    ctx.beginPath(); ctx.arc(-1, -20, 3.4 + p, 0, TAU); ctx.fill();
+    ctx.shadowBlur = 0;
+    // What is left of it.
+    const w = 26, hf = clamp(o.hp / o.maxHp, 0, 1);
+    ctx.fillStyle = 'rgba(8,11,8,.85)';
+    ctx.fillRect(-w / 2, -42, w, 4);
+    ctx.fillStyle = '#9dbb5a';
+    ctx.fillRect(-w / 2, -42, w * hf, 4);
+    ctx.restore();
+  }
+}
+
+/* Ravenous Consumption. An elite standing over a thrall it did not kill will
+   stop and take the slag out of it. It is the one time a champion is standing
+   still and not looking at you. */
+function tryConsume(e, dt) {
+  if (e.consume > 0) {
+    e.consume -= dt;
+    e.hp = Math.min(e.maxHp, e.hp + e.maxHp * CONSUME_PCT * dt);
+    e.mended = 0.2;
+    if (!lowFx && Math.random() < 0.5 && e.feedX !== undefined) {
+      spark(e.feedX + rand(-10, 10), e.feedY + rand(-10, 10), e.x, e.y, '#c8d63a');
+    }
+    return true;
+  }
+  if (!e.elite || e.fed) return false;
+  // Corpses are the ones the delve keeps: a body that has just gone down.
+  for (let i = 0; i < corpsesFresh.length; i++) {
+    const c = corpsesFresh[i];
+    if (c.taken) continue;
+    if (dist2(e.x, e.y, c.x, c.y) > CONSUME_R * CONSUME_R) continue;
+    c.taken = 1;
+    e.consume = CONSUME_TIME;
+    e.fed = true;                    // once each, or a field of dead is a full heal
+    e.feedX = c.x; e.feedY = c.y;
+    ring(c.x, c.y, '#c8d63a', 4, 40, 0.4);
+    return true;
+  }
+  return false;
+}
+
+// Where a body went down, kept for a moment so an elite has something to feed
+// on. Not the player's corpse -- that is a different thing entirely.
+let corpsesFresh = [];
+function noteFallen(x, y) {
+  if (corpsesFresh.length > 24) corpsesFresh.shift();
+  corpsesFresh.push({ x, y, life: 6, taken: 0 });
+}
+function updateFallen(dt) {
+  for (let i = corpsesFresh.length - 1; i >= 0; i--) {
+    corpsesFresh[i].life -= dt;
+    if (corpsesFresh[i].life <= 0) corpsesFresh.splice(i, 1);
+  }
+}
+
 /* --- the other one ---------------------------------------------------------
    Two of the Clear-Sighted went down there, and the fiction has always said
    so: Isaac is proof against the Deceiver's illusions and Zayd against his
@@ -11540,7 +11862,7 @@ function resetRun(heroId, levelId, diffId) {
   enemies = []; arcs = []; loot = []; drops = []; particles = []; rings = [];
   floaters = []; bolts = []; chests = [];
   slams = [];
-  beams = []; nulls = []; hazards = [];
+  beams = []; nulls = []; totems = []; corpsesFresh = []; hazards = [];
   enemyGrid = new SpatialHash(ENEMY_CELL);
 
   run = { time: 0, tech: 0, kills: 0,
