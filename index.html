@@ -5075,6 +5075,7 @@ const ABILITY_DO = {
   // A pool that holds ground. It does not kill; it decides where the fight
   // can happen, and it eats what the back rank is casting.
   nullzone(a) {
+    tryNullify(player.x, player.y, a.radius);
     nulls.push({ x: player.x, y: player.y, r: a.radius, life: a.life, max: a.life,
                  pulse: 0 });
     ring(player.x, player.y, '#b07cff', 10, a.radius, 0.44);
@@ -5346,6 +5347,21 @@ function startGCD(mul) {
   player.gcdMax = player.gcd;
 }
 
+// A word where a number would go. Same lane, same easing, no arithmetic.
+function floatWord(x, y, word, kind) {
+  if (lowFx) return;
+  for (let i = 0; i < floaters.length; i++) {
+    const f = floaters[i];
+    // One at a time off one body: a tethered swing every frame would stack
+    // eight of the same word up the screen.
+    if (f.word === word && Math.abs(f.x0 - x) < 40 && Math.abs(f.y0 - y) < 40) {
+      f.life = FLOAT_LIFE; f.pop = 1; return;
+    }
+  }
+  floaters.push({ x0: x, y0: y, x, y, n: 0, word, kind, life: FLOAT_LIFE, pop: 1,
+                  drift: rand(-14, 14), rise: rand(50, 64) });
+}
+
 function floatDmg(x, y, amount, kind) {
   if (lowFx) return;
   const n = Math.max(1, Math.round(amount));
@@ -5398,6 +5414,9 @@ const FLOAT_STYLE = {
   heavy:  { c: '#ffe07a', px: 24, rim: 'rgba(255,214,120,.9)', w: 4.5, pop: 0.5, glow: 14 },
   soaked: { c: '#7c7566', px: 11, rim: 'rgba(6,4,3,.4)',    w: 2, pop: 0.06 },
   taken:  { c: '#e0563f', px: 19, rim: 'rgba(6,4,3,.9)',     w: 3.5, pop: 0.34 },
+  // Not a number: a blow that does nothing has no number to show, and showing
+  // a nought or a one for it says the wrong thing twice over.
+  tether: { c: '#e8c060', px: 13, rim: 'rgba(6,4,3,.75)',   w: 2.5, pop: 0.1 },
   bleed:  { c: '#a8242a', px: 14, rim: 'rgba(6,4,3,.8)',     w: 2.5, pop: 0.12 },
   coin:   { c: '#e8c060', px: 17, rim: 'rgba(6,4,3,.85)',    w: 3, pop: 0.22 },
   heal:   { c: '#8fe07a', px: 20, rim: 'rgba(6,20,4,.85)',   w: 3.5, pop: 0.4 }
@@ -5419,7 +5438,7 @@ function drawFloaters() {
     const px = st.px * (1 + st.pop * (f.pop * 0.5 + e));
     ctx.globalAlpha = a;
     ctx.font = '700 ' + px.toFixed(1) + 'px ui-monospace, "SF Mono", monospace';
-    const txt = (f.kind === 'taken' ? '-' : '') + f.n;
+    const txt = f.word || ((f.kind === 'taken' ? '-' : '') + f.n);
     // Struck out of the dark, so it needs its own edge to stay legible over
     // a lit floor, a body, and a wall alike. A heavy landing rims itself in
     // its own colour instead of black, which is what makes it glow.
@@ -5547,10 +5566,16 @@ function damageEnemy(e, dmg) {
   // close to pointless -- so the read is "kill the crimson ones" rather than a
   // rule the game refuses to let you break.
   let soaked = false;
+  // Euphoric Tether. While one of his Lieutenants stands he takes nothing at
+  // all -- this used to be a fourteen-per-cent soak so the rule was one you
+  // could break rather than one the game refused, but a soak reads as a bad
+  // health bar and the player keeps hitting the wrong thing. Immune says it
+  // once. The bar says HELD, the pips say how many, and the floater says
+  // TETHERED on the swing itself.
   if (e.kind === 'deceiver' && escortAlive()) {
-    dmg *= 0.14;
-    soaked = true;
-    burst(e.x, e.y, '#e8c060', 2, 120);
+    burst(e.x, e.y, '#e8c060', 3, 120);
+    floatWord(e.x, e.y - e.r * 0.9, 'TETHERED', 'tether');
+    return;
   }
   // A braced anchor eats most of it. It cannot move or swing while it does,
   // and it has to drop the guard on a rhythm, so the answer is to back off and
@@ -5573,7 +5598,18 @@ function damageEnemy(e, dmg) {
   // a scratch, and the number should read like whichever it was.
   floatDmg(e.x, e.y - e.r * 0.9, dmg,
            soaked ? 'soaked' : dmg > e.maxHp * 0.34 ? 'heavy' : 'hit');
+  // Every wound on an escort pushes the crystal. Killing them is how you get
+  // to him, and it is also how the clock runs down -- which is the whole
+  // shape of the fight in one line.
+  if (e.kind === 'lieutenant' && run && run.boss && run.boss.hp > 0) {
+    dawnAdd(DAWN_PER_LIEUT * clamp(dmg / Math.max(1, e.maxHp), 0, 1),
+            'They bled it into him.');
+  }
   if (e.hp <= 0) {
+    if (e.kind === 'lieutenant' && run && run.boss && run.boss.hp > 0 &&
+        !escortAlive() && !((run.breath || 0) > 0) && !run.dawnFired) {
+      beginBreath(run.boss);
+    }
     if (e.kind === 'mirage') {
       burst(e.x, e.y, '#e8c060', 10, 150);
       return;                                   // a lie, not a body
@@ -5799,17 +5835,43 @@ function updateEnemies(dt) {
     // An elite over a fresh corpse stops and takes the slag out of it.
     if (tryConsume(e, dt)) continue;
 
+    // The escort has two jobs that are not fighting you, and both of them
+    // stop it dead: winding the cleave, and pouring into its master. Neither
+    // is steered by anything below.
+    if (e.kind === 'lieutenant' && lieutenantBusy(e, dt)) continue;
+
     // Both are refreshed rather than accumulated -- a Null-Zone re-applies its
     // slow every frame you stand in it, and a second interrupt on a silenced
     // body should not stack into a minute of quiet.
     if (e.slowed > 0) e.slowed = Math.max(0, e.slowed - dt);
     if (e.silenced > 0) e.silenced = Math.max(0, e.silenced - dt);
+    // Metaphysical Vulnerability. Ten seconds, and the Guillotine reads it.
+    if (e.vuln > 0) e.vuln = Math.max(0, e.vuln - dt);
     e.wob += dt * 7;
 
     if (e.kind === 'mirage') {
       e.fade -= dt;
       if (e.fade <= 0) { e.hp = 0; continue; }
     } else if (e.kind === 'deceiver') {
+      // Nullified. Ten seconds on the floor with the guard down, which is the
+      // only stretch of this fight where his health bar is the thing moving.
+      if ((e.stun || 0) > 0) {
+        e.stun -= dt;
+        e.braced = false;
+        if (!lowFx && Math.random() < 0.4)
+          spark(e.x + rand(-40, 40), e.y + rand(-40, 40), e.x, e.y, '#b07cff');
+        continue;
+      }
+      // Committed to the breath: he goes to the middle and stays there.
+      if ((run.breath || 0) > 0) { updateBreath(e, dt); continue; }
+
+      // Inverted Ley-Rupture: the ground under whoever is standing on it.
+      e.rupture = (e.rupture || 0) - dt;
+      if (e.rupture <= 0) {
+        e.rupture = RUPTURE_CD;
+        beginRupture(player.x, player.y);
+      }
+
       // He does not walk the corridors -- he is an avatar, and a body this
       // wide wedges on corners anyway. He steps out of one place and into
       // another near you, which is both the fix and the character.
@@ -6459,6 +6521,10 @@ function spawnDeceiver() {
     if (!ok) continue;
     const L = newBody('lieutenant', x, y, run.time);
     L.hp = L.maxHp = L.maxHp * (0.5 + dep * 1.3);
+    // Their own clocks, spread out. Left undefined they all read as due on
+    // the first frame, and the whole escort walked off to pour together --
+    // forty-eight points on the crystal in ten seconds, against nobody.
+    L.siphon = SIPHON_CD * (0.55 + i * 0.5);
     enemies.push(L);
   }
   // The name states what he is capable of, so the fight is legible before it
@@ -6657,7 +6723,10 @@ function update(dt) {
   updateNulls(dt);
   updateTotems(dt);
   updateFallen(dt);
+  updateRuptures(dt);
+  if (run.boss && run.boss.hp > 0) updateAgony(dt);
   if (swapFlash > 0) swapFlash = Math.max(0, swapFlash - dt * 3.4);
+  if (run.dawnPop > 0) run.dawnPop = Math.max(0, run.dawnPop - dt * 3.2);
   updateDrops(dt);
   updateCorpse(dt);
   updateParticles(dt);
@@ -10173,8 +10242,16 @@ function drawEnemy(e) {
   }
   // A cantor mid-cast draws a line to where it is throwing. Breaking that
   // line is the answer to it, so the line has to be the thing you see.
-  if (e.casting > 0) {
-    const c = 1 - e.casting / BOLT_WIND;
+  //
+  // Bolts only. The encounter reuses e.casting for two casts that are not
+  // bolts and are much longer than one -- a Lieutenant's Slag Siphon and the
+  // Deceiver's Breath of the Void -- and both already draw their own tell,
+  // pointed at him rather than at you. Drawn through here they aimed the line
+  // at the wrong end AND put a negative radius into arc(), because
+  // 1 - 3.2/0.55 is a long way below zero. The clamp holds whatever else ever
+  // sets this field.
+  if (e.casting > 0 && !e.siphonOn && e.kind !== 'deceiver') {
+    const c = clamp(1 - e.casting / BOLT_WIND, 0, 1);
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.strokeStyle = tint(e.color, 1, 0.12 + c * 0.3);
@@ -10601,15 +10678,25 @@ function drawBossBar() {
   ctx.textAlign = 'left';
 }
 
-function drawMinimap() {
+// Where the map sits, as one answer both it and anything stacked under it can
+// read. Kept as a function rather than copied into the second caller: the two
+// drifted apart once already and the False Dawn crystal was drawn straight
+// through the map.
+function minimapBox() {
   // Top-right, tucked under the HUD bar. The bottom corners are where the
   // thumbs live on a phone -- a map there is under a hand for most of a run --
   // and at 94px the whole 2000-unit world came out too small to read, so it is
   // larger here and its markers are scaled with it.
-  const S = Math.round(Math.min(132, Math.max(96, view.w * 0.30)));
+  const s = Math.round(Math.min(132, Math.max(96, view.w * 0.30)));
   const pad = 14;   // the stone surround overhangs the panel by 7px each side
-  const x = view.w - S - pad - view.safeR;
-  const y = HUD_H + pad + view.safeT + bossBarDrop();
+  return { s, pad, over: 7,
+           x: view.w - s - pad - view.safeR,
+           y: HUD_H + pad + view.safeT + bossBarDrop() };
+}
+
+function drawMinimap() {
+  const box = minimapBox();
+  const S = box.s, pad = box.pad, x = box.x, y = box.y;
   const k = S / WORLD.w;
   const mk = S / 108;              // marker scale, so dots grow with the frame
 
@@ -10989,11 +11076,14 @@ function draw(t) {
   drawHazards(t);
   drawNulls();
   drawTotems(t);
+  drawRuptures(t);
+  drawAgonyTells(t);
   drawSlams(t);
   drawCorpse(t);
   drawDrops(t);
   drawStanding(t, x0, y0, x1, y1);
   drawArcs();
+  drawSiphonBeams(t);
   drawBeams();
   drawBolts(t);
   drawParticles();
@@ -11073,6 +11163,7 @@ function draw(t) {
     ctx.textAlign = 'left';
   }
   drawBossBar();
+  drawDawnCrystal(t);
   drawPortalArrow(t);
   drawMinimap();
   drawStick();
@@ -11638,6 +11729,506 @@ function updateFallen(dt) {
   }
 }
 
+/* --- the Gilded Deceiver ---------------------------------------------------
+   Everything above this line is a delve you can walk out of. This is the one
+   fight the game asks you to learn, and the whole of it is an argument for
+   the two heroes: it is not survivable on one of them.
+
+   He cannot be touched while his Lieutenants stand, so the fight opens on
+   them. They answer with one coordinated cleave that Isaac has to plant
+   himself into, and with a channel that feeds their master, which only Zayd
+   can snap. Everything you fail to stop pushes a crystal toward full, and
+   full is a wipe -- so the meter, not his health bar, is the clock.
+
+   Kill the escort and the meter is already at ninety-five: he goes to the
+   middle of the room and spends five seconds pushing it the rest of the way.
+   That channel is the fight. A Null-Zone dropped underneath it reacts, empties
+   the crystal, puts him down for ten seconds and leaves him Vulnerable -- and
+   Vulnerable is the word the Guillotine has been waiting for since it was
+   written. Swap, build three, and bring it down.
+--------------------------------------------------------------------------- */
+
+const DAWN_MAX      = 100;    // the crystal, full
+const DAWN_PER_LIEUT= 13;     // what one Lieutenant's whole life is worth
+const DAWN_SIPHON   = 12;     // and what one channel you let finish costs
+const DAWN_BREATH   = 95;     // where it stands the moment the last one falls
+
+const AGONY_CD      = 9.5;    // between coordinated cleaves
+const AGONY_WIND    = 1.6;    // and how long you have to answer one
+const AGONY_ARC     = 1.15;   // the half-angle it takes
+const AGONY_REACH   = 168;
+const AGONY_MULT    = 2.6;    // per Lieutenant with you in its arc
+
+const SIPHON_CD     = 11;     // a Lieutenant's own clock, staggered
+const SIPHON_TIME   = 3.2;
+const SIPHON_R      = 150;    // how close to him it has to stand to pour
+const SIPHON_HEAL   = 0.07;   // of his life, per channel you let finish
+
+const RUPTURE_CD    = 7.5;
+const RUPTURE_WIND  = 2;      // the golden circle, before it goes
+const RUPTURE_R     = 96;
+const RUPTURE_MULT  = 2.2;
+
+const BREATH_TIME   = 5;      // the channel that finishes it
+const NULLIFY_STUN  = 10;     // and what breaking the channel buys you
+
+let ruptures = [];
+
+// The crystal only exists while he does, so everything in here is a no-op in
+// an ordinary delve rather than a branch every caller has to remember.
+function dawnAdd(n, why) {
+  if (!run || !run.boss || run.boss.hp <= 0) return;
+  const was = run.dawn || 0;
+  run.dawn = clamp(was + n, 0, DAWN_MAX);
+  if (run.dawn > was) run.dawnPop = 1;
+  if (run.dawn >= DAWN_MAX && was < DAWN_MAX) wipeRoom(why);
+}
+
+// Full. There is no answer to this one -- the answer was upstream, and this
+// is the game saying which upstream thing you missed.
+function wipeRoom(why) {
+  run.dawnFired = true;
+  shake(30);
+  ring(player.x, player.y, '#fff2c8', 20, 900, 1.1);
+  burst(player.x, player.y, '#ffd870', 60, 520);
+  run.banner = 3.6;
+  run.bannerText = 'False Dawn';
+  run.bannerNote = why || 'The light came up, and it was not the sun.';
+  player.invuln = 0;
+  hurtPlayerBy(player.maxHp * 4, player.x, player.y - 200);
+}
+
+// --- Synchronized Agony ----------------------------------------------------
+// They wind together and they land together, which is what makes it worth a
+// cooldown rather than a dodge: three arcs from three directions leave one
+// place to stand, and standing still behind Unyielding Mass is the other
+// half of the answer.
+function updateAgony(dt) {
+  const live = [];
+  for (let i = 0; i < enemies.length; i++) {
+    const e = enemies[i];
+    if (e.kind === 'lieutenant' && e.hp > 0 && !e.siphonOn) live.push(e);
+  }
+  if (!live.length) { run.agonyT = 0; return; }
+
+  if ((run.agonyT || 0) > 0) {
+    run.agonyT -= dt;
+    if (run.agonyT <= 0) {
+      run.agonyT = 0;
+      // One blow, summed. Landing three separate hits would mean two of them
+      // were eaten by the invulnerability the first one grants, so a cleave
+      // you stood in the middle of would cost the same as one you clipped.
+      let dmg = 0;
+      for (let i = 0; i < live.length; i++) {
+        const L = live[i];
+        if (L.agonyA === undefined) continue;
+        L.agony = 0;
+        const d = Math.hypot(player.x - L.x, player.y - L.y);
+        if (d > AGONY_REACH) continue;
+        let off = Math.atan2(player.y - L.y, player.x - L.x) - L.agonyA;
+        while (off >  Math.PI) off -= TAU;
+        while (off < -Math.PI) off += TAU;
+        if (Math.abs(off) > AGONY_ARC) continue;
+        dmg += L.dmg * AGONY_MULT;
+        ring(L.x, L.y, '#c2352a', 20, AGONY_REACH, 0.32);
+      }
+      for (let i = 0; i < live.length; i++) live[i].agonyA = undefined;
+      shake(dmg > 0 ? 18 : 7);
+      if (dmg > 0) {
+        freeze(0.07);
+        hurtPlayerBy(dmg, player.x, player.y + 40);
+      }
+    }
+    return;
+  }
+
+  run.agonyCd = (run.agonyCd || 0) - dt;
+  if (run.agonyCd > 0) return;
+  // Only when at least one of them could actually reach you: winding a cleave
+  // at an empty room teaches the tell without the lesson attached to it.
+  let near = false;
+  for (let i = 0; i < live.length; i++)
+    if (Math.hypot(player.x - live[i].x, player.y - live[i].y) < AGONY_REACH * 1.15) near = true;
+  if (!near) return;
+
+  run.agonyT  = AGONY_WIND;
+  run.agonyCd = AGONY_CD;
+  for (let i = 0; i < live.length; i++) {
+    const L = live[i];
+    // Aimed once, at the wind-up. Walking out of the arc is an answer too --
+    // it is just the one that stops working when there are three of them.
+    L.agonyA = Math.atan2(player.y - L.y, player.x - L.x);
+    L.agony  = AGONY_WIND;
+  }
+  toast('Synchronized Agony', '#c2352a');
+}
+
+// --- Slag Siphon -----------------------------------------------------------
+// A Lieutenant breaks off, goes to its master and pours. It is a cast, so it
+// is Zayd's problem: Focal Decryption ends it, and a Null-Zone under it drags
+// it out long enough to reach.
+function updateSiphon(e, dt) {
+  const boss = run.boss;
+  if (!boss || boss.hp <= 0) { e.siphonOn = false; return false; }
+
+  if (e.siphonOn) {
+    // Interrupted: silence() zeroes the cast bar, so a bar already at zero
+    // when we arrive is one somebody snapped. Checked BEFORE the tick, or our
+    // own subtraction would take it past zero and read as a finished channel.
+    if ((e.silenced || 0) > 0 || (e.casting || 0) <= 0) {
+      e.siphonOn = false;
+      e.siphon = SIPHON_CD * 0.6;
+      ring(e.x, e.y, '#7fd4ff', 8, 70, 0.4);
+      toast('The pour is broken', '#7fd4ff');
+      return false;
+    }
+    e.casting -= dt;
+    if (e.casting <= 0) {
+      e.casting = 0;
+      e.siphonOn = false;
+      e.siphon = SIPHON_CD;
+      boss.hp = Math.min(boss.maxHp, boss.hp + boss.maxHp * SIPHON_HEAL);
+      boss.mended = 0.3;
+      dawnAdd(DAWN_SIPHON, 'They poured it into him and nobody stopped it.');
+      ring(boss.x, boss.y, '#e8c060', 10, 120, 0.5);
+      for (let k = 0; k < 14; k++)
+        spark(e.x + rand(-14, 14), e.y + rand(-14, 14), boss.x, boss.y, '#e8c060');
+      return false;
+    }
+    // Standing still and pouring. Not steered by anything else while it does.
+    for (let k = 0; k < 2; k++)
+      spark(e.x + rand(-12, 12), e.y + rand(-12, 12), boss.x, boss.y, '#e8c060');
+    return true;
+  }
+
+  e.siphon = (e.siphon || 0) - dt;
+  if (e.siphon > 0 || (e.silenced || 0) > 0) return false;
+  // One at a time. Two channels at once cannot both be snapped -- Focal
+  // Decryption takes one target -- so a second pour would not be a harder
+  // test of the interrupt, it would be an untestable one.
+  for (let i = 0; i < enemies.length; i++) {
+    const o = enemies[i];
+    if (o !== e && o.kind === 'lieutenant' && o.hp > 0 && o.siphonOn) return false;
+  }
+
+  // Walk to him first. Until it is close enough it is just a body leaving the
+  // fight, which is its own tell.
+  const d = Math.hypot(boss.x - e.x, boss.y - e.y);
+  if (d > SIPHON_R) {
+    const a = Math.atan2(boss.y - e.y, boss.x - e.x);
+    const mx0 = e.x, my0 = e.y;
+    moveEntity(e, Math.cos(a) * e.speed * 1.25 * dt, Math.sin(a) * e.speed * 1.25 * dt);
+    e.face = Math.cos(a) < 0 ? -1 : 1;
+    // Its legs still have to know it is moving, or a body crossing the room
+    // to pour slides there in its standing pose.
+    advanceGait(e, mx0, my0, dt);
+    return true;
+  }
+  e.siphonOn = true;
+  e.casting  = SIPHON_TIME;
+  ring(e.x, e.y, '#e8c060', 6, 54, 0.4);
+  toast('Slag Siphon — break it', '#e8c060');
+  return true;
+}
+
+// Planted for the cleave, or gone to pour. Either way it is not chasing you,
+// and neither one is steered by the seek below it.
+function lieutenantBusy(e, dt) {
+  if ((e.agony || 0) > 0) {
+    // Planted while it winds. A cone aimed at where you were, thrown by a
+    // body still walking toward you, is a cone that lands somewhere it was
+    // never drawn.
+    e.agony -= dt;
+    return true;
+  }
+  if (!run || !run.boss || run.boss.hp <= 0) return false;
+  if ((run.agonyT || 0) > 0) return false;   // about to swing: not now
+  return updateSiphon(e, dt);
+}
+
+// --- Inverted Ley-Rupture --------------------------------------------------
+// The ground under whoever is standing on it. It costs life, and it costs the
+// resource -- so eating one does not only hurt, it puts the Guillotine or the
+// Null-Zone back out of reach, which is the half that actually matters.
+function beginRupture(x, y) {
+  ruptures.push({ x, y, t: RUPTURE_WIND, max: RUPTURE_WIND });
+}
+function updateRuptures(dt) {
+  for (let i = ruptures.length - 1; i >= 0; i--) {
+    const r = ruptures[i];
+    r.t -= dt;
+    if (r.t > 0) continue;
+    ruptures.splice(i, 1);
+    ring(r.x, r.y, '#ffd870', 12, RUPTURE_R, 0.5);
+    burst(r.x, r.y, '#e8c060', 22, 300);
+    shake(9);
+    if (dist2(player.x, player.y, r.x, r.y) > RUPTURE_R * RUPTURE_R) continue;
+    const boss = run.boss;
+    hurtPlayerBy((boss ? boss.dmg : 30) * RUPTURE_MULT, r.x, r.y);
+    if (player.hero === 'isaac' && (player.charges || 0) > 0) {
+      spendCharges(CHARGE_MAX);
+      toast('The Sun-Gold is inverted', '#e8c060');
+    } else if (player.hero === 'zayd' && (player.tension || 0) > 0) {
+      player.tension = 0;
+      toast('The Tension is inverted', '#e8c060');
+    }
+  }
+}
+function drawRuptures(t) {
+  for (let i = 0; i < ruptures.length; i++) {
+    const r = ruptures[i];
+    const f = 1 - clamp(r.t / r.max, 0, 1);
+    ctx.save();
+    // Drawn at full reach from the first frame. A circle that grows with the
+    // timer tells you when and not where, and where is the half you can act on.
+    const g = ctx.createRadialGradient(r.x, r.y, RUPTURE_R * 0.2, r.x, r.y, RUPTURE_R);
+    g.addColorStop(0, 'rgba(232,192,96,' + (0.10 + 0.26 * f).toFixed(3) + ')');
+    g.addColorStop(1, 'rgba(232,192,96,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.ellipse(r.x, r.y, RUPTURE_R, RUPTURE_R * 0.8, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,216,112,' + (0.5 + 0.4 * f).toFixed(3) + ')';
+    ctx.lineWidth = 2 + 2 * f;
+    ctx.beginPath(); ctx.ellipse(r.x, r.y, RUPTURE_R, RUPTURE_R * 0.8, 0, 0, TAU); ctx.stroke();
+    // The filling wedge: how long is left, as a shape rather than as a number.
+    ctx.fillStyle = 'rgba(255,216,112,.22)';
+    ctx.beginPath();
+    ctx.moveTo(r.x, r.y);
+    ctx.ellipse(r.x, r.y, RUPTURE_R * 0.92, RUPTURE_R * 0.74, 0, -Math.PI / 2, -Math.PI / 2 + TAU * f);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+}
+
+// --- Breath of the Void, and the window it opens ---------------------------
+// The escort is down, the crystal is at ninety-five, and he is going to spend
+// five seconds pushing it the rest of the way. Everything the fight has been
+// teaching is for these five seconds.
+function beginBreath(boss) {
+  run.breath = BREATH_TIME;
+  run.dawn = Math.max(run.dawn || 0, DAWN_BREATH);
+  // The five seconds have exactly one answer, and it is Zayd's. If the escort
+  // went down on Isaac -- which is how it usually goes, because Isaac is who
+  // survives the cleave -- then Zayd's Ley-Tension has been sitting banked and
+  // frozen since the last swap, quite possibly at nothing, and the swap itself
+  // may be four seconds into its own five. A wipe you could not have answered
+  // because of a cooldown is not a mechanic, it is a coin toss, so the fight
+  // hands you the tool and asks only whether you use it: the swap comes off
+  // cooldown and the Spellbreaker arrives full.
+  player.swapCd = 0;
+  run.pools = run.pools || {};
+  if (player.hero === 'zayd') player.tension = TENSION_MAX;
+  else if (run.pools.zayd) run.pools.zayd.tension = TENSION_MAX;
+  else run.pools.zayd = { hp: 0, charges: 0, tension: TENSION_MAX,
+                          jars: JAR_USES, cds: {} };
+  // A pool written before he has ever been out would otherwise hand him zero
+  // life. He arrives whole the first time either way, so mark it.
+  if (run.pools.zayd && !(run.pools.zayd.hp > 0)) run.pools.zayd.firstOut = true;
+  boss.braced = false;
+  boss.blink = 1e9;                 // he stops stepping about: he is committed
+  boss.casting = BREATH_TIME;       // and it reads as a cast, because it is one
+  const c = portal || { x: boss.x, y: boss.y };
+  boss.breathX = c.x; boss.breathY = c.y;
+  run.banner = 3.4;
+  run.bannerText = 'Breath of the Void';
+  run.bannerNote = 'Put a Null-Zone underneath him.';
+  ring(boss.x, boss.y, '#e8c060', 20, 260, 0.7);
+  shake(14);
+}
+
+function updateBreath(boss, dt) {
+  // To the middle of the room, and then still.
+  const dx = boss.breathX - boss.x, dy = boss.breathY - boss.y;
+  const d = Math.hypot(dx, dy);
+  if (d > 6) moveEntity(boss, (dx / d) * boss.speed * 1.6 * dt, (dy / d) * boss.speed * 1.6 * dt);
+
+  run.breath -= dt;
+  boss.casting = Math.max(0, run.breath);
+  // The meter walks the last five points up over the channel, so the crystal
+  // itself is the timer and there is no second clock to read.
+  const f = 1 - clamp(run.breath / BREATH_TIME, 0, 1);
+  run.dawn = Math.max(run.dawn || 0, DAWN_BREATH + (DAWN_MAX - DAWN_BREATH) * f);
+  if (!lowFx && Math.random() < 0.6)
+    spark(boss.x + rand(-90, 90), boss.y + rand(-90, 90), boss.x, boss.y, '#ffd870');
+  if (run.breath <= 0) {
+    run.breath = 0;
+    boss.casting = 0;
+    run.dawn = DAWN_MAX;
+    wipeRoom('He finished the breath. Nothing was under him.');
+  }
+}
+
+// A Null-Zone dropped on him while he breathes. This is the one interaction
+// the whole encounter is built around, so it is checked from the ability
+// rather than from a proximity sweep -- it happens because you did it.
+function tryNullify(zx, zy, zr) {
+  const boss = run && run.boss;
+  if (!boss || boss.hp <= 0 || !((run.breath || 0) > 0)) return false;
+  const reach = zr + boss.r;
+  if (dist2(zx, zy, boss.x, boss.y) > reach * reach) return false;
+
+  run.breath = 0;
+  run.dawn = 0;
+  run.dawnPop = 1;
+  boss.casting = 0;
+  boss.braced = false;
+  boss.blink = 1e9;
+  boss.stun = NULLIFY_STUN;
+  boss.vuln = VULN_TIME;
+  boss.silenced = Math.max(boss.silenced || 0, NULLIFY_STUN);
+  freeze(0.09);
+  shake(24);
+  ring(boss.x, boss.y, '#b07cff', 14, 320, 0.8);
+  burst(boss.x, boss.y, '#b07cff', 46, 420);
+  burst(boss.x, boss.y, '#fff2c8', 30, 260);
+  run.banner = 3.4;
+  run.bannerText = 'Metaphysical Nullification';
+  run.bannerNote = 'He is open. Swap, build three, bring it down.';
+  return true;
+}
+
+// --- the crystal -----------------------------------------------------------
+// Jagged, tall and on the right, where a thumb is not. It is the fight's real
+// health bar: his own only starts mattering once this one is empty.
+function dawnCrystalRect() {
+  // Under the map, not through it. Read off minimapBox() rather than off the
+  // same arithmetic written out again -- the first version put the crystal at
+  // the top-right on its own numbers and drew it straight over the map, with
+  // its label clipped by the screen edge on top of that.
+  const m = minimapBox();
+  const w = 34;
+  const top = m.y + m.s + m.over + 18;          // clear of the stone, and of the label
+  const h = Math.max(120, Math.min(215, view.h * 0.62 - top));
+  return { x: view.w - view.safeR - w - 12, y: top, w, h };
+}
+function crystalPath(x, y, w, h) {
+  // One outline, used for the fill clip, the glass and the rim, so the three
+  // can never disagree about where the edge is.
+  ctx.beginPath();
+  ctx.moveTo(x + w * 0.5, y);
+  ctx.lineTo(x + w,       y + h * 0.17);
+  ctx.lineTo(x + w * 0.82, y + h * 0.55);
+  ctx.lineTo(x + w,       y + h * 0.78);
+  ctx.lineTo(x + w * 0.5, y + h);
+  ctx.lineTo(x,           y + h * 0.78);
+  ctx.lineTo(x + w * 0.18, y + h * 0.55);
+  ctx.lineTo(x,           y + h * 0.17);
+  ctx.closePath();
+}
+function drawDawnCrystal(t) {
+  const bs = bossShown();
+  if (!bs || bs.invader || !run || run.dawn === undefined) return;
+  const f = clamp((run.dawn || 0) / DAWN_MAX, 0, 1);
+  if (f <= 0 && !((run.breath || 0) > 0)) return;
+  const r = dawnCrystalRect();
+  const pop = run.dawnPop || 0;
+
+  ctx.save();
+  ctx.translate(r.x + r.w / 2, r.y + r.h / 2);
+  ctx.scale(1 + pop * 0.06, 1 + pop * 0.06);
+  ctx.translate(-(r.x + r.w / 2), -(r.y + r.h / 2));
+
+  crystalPath(r.x, r.y, r.w, r.h);
+  ctx.fillStyle = 'rgba(8,7,10,.86)';
+  ctx.fill();
+
+  // The light in it, rising from the bottom.
+  ctx.save();
+  crystalPath(r.x, r.y, r.w, r.h);
+  ctx.clip();
+  const fy = r.y + r.h * (1 - f);
+  const g = ctx.createLinearGradient(0, fy, 0, r.y + r.h);
+  g.addColorStop(0, 'rgba(255,242,200,.95)');
+  g.addColorStop(0.45, 'rgba(232,192,96,.92)');
+  g.addColorStop(1, 'rgba(160,104,28,.9)');
+  ctx.fillStyle = g;
+  ctx.fillRect(r.x, fy, r.w, r.h - (fy - r.y));
+  // A restless surface, so a meter that is climbing looks like it is climbing.
+  ctx.fillStyle = 'rgba(255,248,220,.75)';
+  ctx.fillRect(r.x, fy + Math.sin(t * 5) * 1.6, r.w, 2);
+  // Flaws through the glass.
+  ctx.strokeStyle = 'rgba(20,14,8,.4)'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(r.x + r.w * 0.3, r.y + r.h * 0.1); ctx.lineTo(r.x + r.w * 0.66, r.y + r.h * 0.44);
+  ctx.lineTo(r.x + r.w * 0.34, r.y + r.h * 0.72); ctx.lineTo(r.x + r.w * 0.6, r.y + r.h * 0.95);
+  ctx.stroke();
+  ctx.restore();
+
+  // The rim, brighter the fuller it is -- and outright alarming at the top.
+  const hot = f > 0.8;
+  ctx.lineWidth = hot ? 2.4 : 1.6;
+  ctx.strokeStyle = hot
+    ? 'rgba(255,' + (150 + Math.sin(t * 12) * 60 | 0) + ',110,.95)'
+    : 'rgba(214,178,110,.85)';
+  crystalPath(r.x, r.y, r.w, r.h);
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.save();
+  // Right-aligned to the crystal's own edge. Centred on a 34px column the
+  // words ran off the side of the phone.
+  ctx.textAlign = 'right';
+  ctx.font = '600 8px ui-monospace, Menlo, monospace';
+  ctx.fillStyle = hot ? 'rgba(255,190,140,.95)' : 'rgba(206,190,158,.85)';
+  ctx.fillText('FALSE DAWN', r.x + r.w, r.y - 5);
+  ctx.textAlign = 'center';
+  ctx.font = '600 9px ui-monospace, Menlo, monospace';
+  ctx.fillText(Math.round(run.dawn || 0) + '%', r.x + r.w / 2, r.y + r.h + 11);
+  ctx.restore();
+  ctx.textAlign = 'left';
+}
+
+// --- the tells, on the floor ----------------------------------------------
+function drawAgonyTells(t) {
+  if (!run || !((run.agonyT || 0) > 0)) return;
+  const f = 1 - clamp(run.agonyT / AGONY_WIND, 0, 1);
+  for (let i = 0; i < enemies.length; i++) {
+    const L = enemies[i];
+    if (L.kind !== 'lieutenant' || L.hp <= 0 || L.agonyA === undefined) continue;
+    ctx.save();
+    ctx.translate(L.x, L.y);
+    ctx.rotate(L.agonyA);
+    ctx.scale(1, 0.8);
+    const g = ctx.createRadialGradient(0, 0, 12, 0, 0, AGONY_REACH);
+    g.addColorStop(0, 'rgba(194,53,42,' + (0.36 * (0.4 + f)).toFixed(3) + ')');
+    g.addColorStop(1, 'rgba(194,53,42,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.moveTo(0, 0);
+    ctx.arc(0, 0, AGONY_REACH, -AGONY_ARC, AGONY_ARC);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(232,120,96,' + (0.4 + 0.5 * f).toFixed(3) + ')';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(0, 0);
+    ctx.arc(0, 0, AGONY_REACH, -AGONY_ARC, AGONY_ARC);
+    ctx.closePath(); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function drawSiphonBeams(t) {
+  const boss = run && run.boss;
+  if (!boss || boss.hp <= 0) return;
+  for (let i = 0; i < enemies.length; i++) {
+    const L = enemies[i];
+    if (L.kind !== 'lieutenant' || L.hp <= 0 || !L.siphonOn) continue;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(232,192,96,.75)';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([9, 7]);
+    ctx.lineDashOffset = -t * 60;
+    ctx.beginPath(); ctx.moveTo(L.x, L.y); ctx.lineTo(boss.x, boss.y); ctx.stroke();
+    ctx.setLineDash([]);
+    // Its own bar, over its head, because this is the one you are meant to
+    // reach in time.
+    const w = 46, f = clamp(1 - L.casting / SIPHON_TIME, 0, 1);
+    const bx = L.x - w / 2, by = L.y - L.r - 20;
+    ctx.fillStyle = 'rgba(8,7,10,.9)'; ctx.fillRect(bx, by, w, 5);
+    ctx.fillStyle = 'rgba(232,192,96,.95)'; ctx.fillRect(bx, by, w * f, 5);
+    ctx.strokeStyle = 'rgba(214,178,110,.8)'; ctx.lineWidth = 1;
+    ctx.strokeRect(bx - 0.5, by - 0.5, w + 1, 6);
+    ctx.restore();
+  }
+}
+
 /* --- the other one ---------------------------------------------------------
    Two of the Clear-Sighted went down there, and the fiction has always said
    so: Isaac is proof against the Deceiver's illusions and Zayd against his
@@ -11675,7 +12266,13 @@ function swapHero() {
   player.hero = to;
   recomputeStats(player);                 // stats and the forged-for bonus both
   const bank = run.pools[to];
-  if (bank) {
+  if (bank && bank.firstOut) {
+    // A pool the encounter wrote before this hero had ever been out. Take the
+    // resources it left and the full life a first arrival gets.
+    player.hp = player.maxHp;
+    player.charges = bank.charges; player.tension = bank.tension;
+    player.jars = bank.jars; player.cds = bank.cds;
+  } else if (bank) {
     player.hp = Math.min(bank.hp, player.maxHp);
     player.charges = bank.charges; player.tension = bank.tension;
     player.jars = bank.jars; player.cds = bank.cds;
@@ -11863,6 +12460,7 @@ function resetRun(heroId, levelId, diffId) {
   floaters = []; bolts = []; chests = [];
   slams = [];
   beams = []; nulls = []; totems = []; corpsesFresh = []; hazards = [];
+  ruptures = [];
   enemyGrid = new SpatialHash(ENEMY_CELL);
 
   run = { time: 0, tech: 0, kills: 0,
@@ -11878,7 +12476,12 @@ function resetRun(heroId, levelId, diffId) {
           coins: 0, gateOpen: false, holdTime: 0, holdTicks: 0, holdSpawn: 1.5,
           forcedOpen: false, corpse: null,
           holdWave: 0, holdLull: false, holdCrest: false,
-          invader: null, invadeAt: 0, invadeKills: 0 };
+          invader: null, invadeAt: 0, invadeKills: 0,
+          // The Deceiver's clock. Nothing reads these outside his room, and
+          // dawnAdd() is a no-op until he is standing, so an ordinary delve
+          // carries them and never notices.
+          dawn: 0, dawnPop: 0, dawnFired: false, breath: 0,
+          agonyT: 0, agonyCd: AGONY_CD * 0.65 };
   run.invadeAt = rollInvasion();
   // If you died in this level and never came back for it, it is still here.
   run.corpse = placeCorpse();
