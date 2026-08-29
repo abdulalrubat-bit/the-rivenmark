@@ -15,6 +15,7 @@ import { FrameLog, collect, asText, mountButton } from './diagnostics.js';
 import { Hud } from './hud.js';
 import { Effects } from './effects.js';
 import { Screens } from './screens.js';
+import { Overlay } from './overlay.js';
 
 // The core's palette is CSS hex strings; Phaser wants numbers.
 const hex = (css, fallback) => {
@@ -117,6 +118,7 @@ export class Delve extends Phaser.Scene {
     if (this.stepping) this.cameras.main.startFollow(this.hero, true, 0.18, 0.18);
 
     this.fx = new Effects(this);
+    this.overlay = new Overlay(this);
     // The loop around a delve. showScreen is the core's own way of saying
     // "the run is over" or "you are back at the gate-house", so it is routed
     // here rather than second-guessed.
@@ -144,9 +146,15 @@ export class Delve extends Phaser.Scene {
     this.log = new FrameLog(240);
     // `dbg`, not `hud`: the DOM HUD is this.hud, and naming both the same
     // silently replaced one with the other.
-    this.dbg = this.add.text(8, 62, '', {
+    // Bottom-left, not top-left. The top strip belongs to the life bar, the
+    // boss bar and the toast, and the readout sat under all three; the kit
+    // owns bottom-right, so bottom-left is the only corner nothing wants.
+    this.dbg = this.add.text(8, 0, '', {
       fontFamily: 'ui-monospace, monospace', fontSize: '12px', color: '#cebe9e'
-    }).setScrollFactor(0).setDepth(1e6);
+    }).setOrigin(0, 1).setScrollFactor(0).setDepth(1e6);
+    const placeDbg = () => this.dbg.setPosition(8, this.scale.height - 96);
+    placeDbg();
+    this.scale.on('resize', placeDbg);
 
     if (!this.game.__diagMounted) {
       this.game.__diagMounted = true;
@@ -526,6 +534,7 @@ export class Delve extends Phaser.Scene {
     this.syncLoot(time);
     this.cullDressing();
     this.fx.draw(time);
+    this.overlay.draw(time);
     this.drawStick();
     this.hud.sync();
     const atGate = !!(run.gateOpen && portal && portal.inside && state === 'play');

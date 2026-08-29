@@ -219,7 +219,15 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   // shaft is measured, not the rarity table -- asking rarityOf() what rarity
   // an item is passes perfectly with the beacon deleted, which is what the
   // first version of this check did.
-  const beamTop = async id => {
+  //
+  // Measured as AREA in the top strip of the box rather than as "the highest
+  // row anything changed". A shaft fades out towards its top by design, so its
+  // last few bands sit within a few values of the floor, and where exactly they
+  // cross a threshold depends on what is under them -- over a lit wall the same
+  // shaft "ended" 56 rows lower and the check flaked. Counting how much of the
+  // strip lit up asks the question the eye asks.
+  const HEAD = 34;             // rows a worn shaft (54 tall) cannot reach
+  const headLit = async id => {
     await p.evaluate(([w, r]) => {
       drops.length = 0;
       drops.push({ x: w[0], y: w[1],
@@ -227,23 +235,25 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     }, [stage.dropW, id]);
     await sleep(400);
     const now = await shot(stage.dropAt, 90);
-    // Row zero is the top of the box; find the highest row the shaft reaches.
-    for (let y = 0; y < 180; y++) {
+    let n = 0;
+    for (let y = 0; y < HEAD; y++) {
       for (let x = 0; x < 180; x++) {
         const i = (y * 180 + x) * 4;
+        // A lower bar than `moved` uses: this is the faint end of the shaft,
+        // which is the whole point of measuring up here.
         if (Math.abs(now.data[i] - drop.base.data[i]) +
             Math.abs(now.data[i + 1] - drop.base.data[i + 1]) +
-            Math.abs(now.data[i + 2] - drop.base.data[i + 2]) > 24) return y;
+            Math.abs(now.data[i + 2] - drop.base.data[i + 2]) > 9) n++;
       }
     }
-    return 180;
+    return n;
   };
-  const tallest = await beamTop('mythic');
-  const shortest = await beamTop('worn');
+  const tall = await headLit('mythic');
+  const short = await headLit('worn');
   await p.evaluate(() => { drops.length = 0; });
-  ck('and its height is its rarity', shortest - tallest > 30,
-     'a mythic shaft reaches row ' + tallest + ', a worn one row ' + shortest +
-     ' — ' + (shortest - tallest) + ' pixels taller');
+  ck('and its height is its rarity', tall > short + 400,
+     'a mythic shaft lights ' + tall + ' pixels of the top ' + HEAD +
+     ' rows, a worn one ' + short);
 
   // --- the corpse ----------------------------------------------------------
   const corpse = await settle(stage.corpseAt, 80);

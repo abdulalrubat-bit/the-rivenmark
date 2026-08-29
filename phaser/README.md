@@ -57,6 +57,7 @@ the hero, the kit casts, the HUD reads the run.
 |---|---|
 | `npm run smoke:delve` | 14 checks — the world draws and is dressed, the gait is distance-driven |
 | `npm run smoke:world` | 18 checks — the waygate, the coffers, the slag, the beacons |
+| `npm run smoke:overlay` | 17 checks — the map, the arrow out, the boss bar, the toast |
 | `npm run smoke:play` | 16 checks — the stick, the kit, and the HUD's layout |
 | `npm run smoke:fx` | 11 checks — the fight reads, the crescent counted in pixels |
 | `npm run smoke:loop` | 15 checks — dying, the outcome, the gate-house, descending again |
@@ -95,6 +96,20 @@ a damage affix takes him from 43.8 to 55.8 before he descends.
 The Vendor and the Hall spend it: commissions, tempers, reliquaries, and four
 stations of three tiers that outlast every delve. Prices come from the core,
 so the number on the button is the number that will be taken.
+
+You can tell where you are. The map plots the rock, whatever has noticed you
+— and nothing that has not, because plotting every dormant body hands over the
+location of every pack before you set out — the coffers until they are opened,
+the invader always, and your own corpse always. An arrow rides the edge of the
+play area when the waygate is off screen, and the compass points south, which
+is one of the Final Signs and drawn as it reads rather than as it ought to.
+
+The boss bar names whoever owns the frame and says when the Deceiver is held,
+so a bar that will not move reads as a fight with an order to it rather than
+as a bug. The map steps down out from under it — `bossBarDrop()` is the one
+answer both read, and the toast reads it too. The delve names itself again on
+the way in: the port only ever looked at `run.bannerText`, which is empty on
+the opening banner, so it opened a delve and said nothing.
 
 The delve is navigable. The waygate is drawn dormant and lit, its rune ring
 turning against its sigil and the channel closing round the kerb as you stand
