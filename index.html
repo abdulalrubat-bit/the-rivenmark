@@ -1776,7 +1776,7 @@ const PORTAL_R        = 62;
 // sweep mows a broader swathe rather than punching through one more body.
 const BASE_PLAYER = {
   r: 14, maxHp: 100, speed: 205,
-  damage: 22, fireDelay: 0.50, range: 186, arcSpeed: 430,
+  damage: 22, fireDelay: 0.50, range: 186, arcSpeed: 1550,
   sweep: 28, shots: 1, magnet: 118, regen: 0,
   iframe: 0.45
 };
@@ -1948,14 +1948,14 @@ const HEROES = {
            blurb:'The vanguard’s anchor. Sun-Gold magic, a sun-emblazoned shield, ' +
                  'and no purchase for the Deceiver’s illusions.',
            maxHp:125, speed:196, damage:22, fireDelay:0.56,
-           range:178, sweep:33, arcSpeed:380 },
+           range:178, sweep:33, arcSpeed:1480 },
   zayd:  { id:'zayd', name:'Zayd', title:'The Piercing Truth',
            order:'Frost-Scholars of Kael', school:'Azure',
            magic:'#5fd0ff', trim:'rgba(70,150,196,.9)', cape:[30,44,72],
            blurb:'A tactician of Kael. The Sapphire Glaive severs hive-mind tethers, ' +
                  'and inverted ley-lines hold no confusion for him.',
            maxHp:92, speed:228, damage:17, fireDelay:0.42,
-           range:206, sweep:21, arcSpeed:520 }
+           range:206, sweep:21, arcSpeed:1720 }
 };
 
 // The sundered geography. Each delve falls in one of them.
@@ -4071,6 +4071,19 @@ function fire() {
 // scribes, so the band bulges forward the way a swung edge does; `half` is how
 // far along that band it reaches. Both are carried per-crescent so a boon can
 // widen the sweep without re-forging anything.
+//
+// ON THE SPEED. A crescent's whole flight is `range / arcSpeed`, and it used
+// to be 0.47s for Isaac against a swing that finishes in SWING_TIME, 0.17s.
+// That is the swing and the hit reading as two separate attacks: you bring the
+// blade round, it completes, and something dies half a second later at the far
+// end of the room. The speeds are set so a crescent crosses its own full range
+// in about 0.12s -- inside the swing -- and the blow lands while the edge is
+// still coming through. It is the same single attack it always was; it just
+// stopped arriving after the animation that threw it.
+//
+// The stat stays a stat rather than becoming `range / 0.12` so the boons keep
+// meaning what they say: Long Reach still buys reach at a little flight time,
+// and Swift Edge still buys the flight time back.
 function releaseCrescent(a, delay) {
   const half = player.sweep;
   const bow  = Math.max(half * 1.15, 52);
