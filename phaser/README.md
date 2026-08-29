@@ -49,12 +49,107 @@ Done, and verified by `phasersmoke.js`:
   *software* GL rasteriser, where the canvas build was labouring at 54. A
   phone GPU is the real test, but the direction is not in doubt.
 
-The delve draws now — walls, scenery, the horde and the hero, off the core's
-own state, at 60fps with a 4ms one-off bake. `npm run smoke:delve`, 10 checks.
+**It is playable.** The delve draws — walls, scenery, the horde and the hero,
+off the core's own state, at 60fps with a ~19ms one-off bake. The stick moves
+the hero, the kit casts, the HUD reads the run.
 
-Not started: input, the HUD, the DOM menus, and the stone dressing on the
-walls (the coursed ashlar is procedural canvas art and is not in the atlas
-yet, so walls show as their lit top face).
+| | |
+|---|---|
+| `npm run smoke:delve` | 14 checks — the world draws and is dressed, the gait is distance-driven |
+| `npm run smoke:world` | 18 checks — the waygate, the coffers, the slag, the beacons |
+| `npm run smoke:overlay` | 22 checks — the map, the arrow out, the boss bar, the crystal |
+| `npm run smoke:play` | 16 checks — the stick, the kit, and the HUD's layout |
+| `npm run smoke:fx` | 15 checks — the fight reads, the crescent and the tells in pixels |
+| `npm run smoke:loop` | 15 checks — dying, the outcome, the gate-house, descending again |
+| `npm run smoke:forge` | 13 checks — equipping, and that worn gear reaches the hero |
+| `npm run smoke:spend` | 13 checks — the vendor and the hall, and that coin buys what it says |
+| `npm run smoke` | 13 checks — the proving scene and the diagnostics dump |
+| `npm run verify` | the canvas suites against the extracted core |
+
+Each suite builds `public/bundle.js` before it serves it. That is not a
+convenience. The suites serve a build artefact, nothing rebuilt it, and so for
+a while every one of them was testing whatever bundle happened to be on disk.
+It surfaced when a deliberate stub — a `return` at the top of the culling pass,
+put there to prove the culling assertions could fail — changed nothing at all:
+the browser never saw the edit. A test that cannot see your change cannot fail
+on it, and a suite that green-lights a stub is worse than no suite.
+
+The HUD is DOM over the canvas, as it is in the canvas build: text stays crisp
+at any dpr without a font atlas, a button is a real 44px touch target, and none
+of it goes down with the renderer. The game is what needs the GPU; a life bar
+does not.
+
+The fight reads: crescents, sparks, rings, ranked damage numbers, and the
+telegraphs that matter in play — hazards, Null-Zones, totems, ruptures and
+slam wind-ups. All of it is drawn from the core's own pools, because most of
+it is not decoration: a hazard burns, a pool slows, a slam telegraph is the
+only warning you get.
+
+The loop closes: a run ends, the outcome says what happened, the gate-house
+takes you back, and you descend again. Every word of the outcome is written by
+the core's own endRun — the host reads it back out of the store it gives the
+core rather than writing the same sentences twice.
+
+The Forge equips what the delve drops, and it reaches the hero: a blade with
+a damage affix takes him from 43.8 to 55.8 before he descends.
+
+The Vendor and the Hall spend it: commissions, tempers, reliquaries, and four
+stations of three tiers that outlast every delve. Prices come from the core,
+so the number on the button is the number that will be taken.
+
+The Deceiver's encounter reads. A Lieutenant's agony winds as a cone on the
+floor that brightens as it comes, and his siphon runs to his master as a
+crawling dashed line with its own bar over his head, because that is the one
+you are meant to reach in time. The False Dawn hangs under the map as a column
+of light in a flawed crystal — placed by the core's own `dawnCrystalRect()`,
+which reads `minimapBox()`, so the two cannot drift apart the way they did once
+in the canvas build — restless at the surface, and past four fifths the rim
+stops being trim and starts flashing. Zayd's lance draws the line it cut.
+
+Phaser's Graphics has no gradients, so every gradient in the port is banded:
+the crystal's glass, the beacons' shafts, the agony cone. That is what a
+gradient is once it is rasterised, and at these sizes the banding is invisible
+while the cost is a handful of quads instead of a texture upload a frame.
+
+You can tell where you are. The map plots the rock, whatever has noticed you
+— and nothing that has not, because plotting every dormant body hands over the
+location of every pack before you set out — the coffers until they are opened,
+the invader always, and your own corpse always. An arrow rides the edge of the
+play area when the waygate is off screen, and the compass points south, which
+is one of the Final Signs and drawn as it reads rather than as it ought to.
+
+The boss bar names whoever owns the frame and says when the Deceiver is held,
+so a bar that will not move reads as a fight with an order to it rather than
+as a bug. The map steps down out from under it — `bossBarDrop()` is the one
+answer both read, and the toast reads it too. The delve names itself again on
+the way in: the port only ever looked at `run.bannerText`, which is empty on
+the opening banner, so it opened a delve and said nothing.
+
+The delve is navigable. The waygate is drawn dormant and lit, its rune ring
+turning against its sigil and the channel closing round the kerb as you stand
+in it; coffers open; slag lies on the floor; a drop and your own corpse each
+throw a shaft of light, and a drop's height is its rarity, which is how you
+know from across a room whether it is worth the walk.
+
+Bodies sort by y and so does the hero — at a fixed depth he drew through
+everything standing in front of him — and so does anything standing: a barrel
+is something you walk behind, while rubble is something you walk over. Every
+one of them casts a shadow, all thrown the same way, off the core's own LIGHT.
+
+The walls wear their stone. The coursed ashlar was procedural canvas art, so
+the forge output is exported into the atlas — six lit top faces and three
+courses in each of four orientations — and the delve lays them with the canvas
+build's own cell hash, then steps courses along every exposed face, stretching
+each to exactly one step so they butt with no seam.
+
+That dressing costs about 1700 images, and Phaser does not cull ordinary game
+objects: every one of them was submitted every frame. Measured, that took p90
+from 16.7ms to 33.3ms with a quarter of frames over budget. Visibility is now
+set by hand against the camera, recomputed only when the camera has moved far
+enough to change the answer, which puts p90 back to 16.7ms and over-budget
+frames to 1%. `smoke-delve` asserts both halves — that the stone is there, and
+that most of it is switched off — because either one passes while the other is
+broken.
 
 ## On the phone
 

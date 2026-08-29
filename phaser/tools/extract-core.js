@@ -147,7 +147,7 @@ const HOST_OK = new Set([
   'showScreen', 'buildKit', 'syncKit', 'syncHeroSkin',   // the DOM menus
   'renderGear', 'renderHall', 'renderVendor', 'renderLoadouts', 'renderDetail',
   'syncBagBadge', 'hitFlashUI', 'toastEl', '$', 'el', 'resize',
-  'buildStains', 'forgeGround', 'forgeWallCourses', 'forgeCut', 'minimapBox',
+  'buildStains', 'forgeGround', 'forgeWallCourses', 'minimapBox',
   'draw', 'drawHall', 'syncHud', 'frame', 'gearCtx', 'runCtx',
   'forge',                                                // the sprite forge
   'endRun',                                               // run flow
@@ -252,7 +252,21 @@ function declaredName(text) {
   return null;
 }
 
-const IS_DRAW = n => /^(draw|forge|paint|crystalPath|wallGradient|glow)/.test(n);
+/* Names that LOOK like drawing and are not.
+ *
+ * forgeCut is the hall's forge discount -- 1 - 0.12 per tier, read by the
+ * vendor's prices. The prefix rule below dropped it as a drawing function
+ * because it begins with "forge", and I had also listed it in HOST_OK on the
+ * same misreading, which silenced the check that would have caught it. The
+ * result was a vendor quoting NaN and refusing every service.
+ *
+ * Audited: it is the only name in index.html matching these prefixes that is
+ * not rendering. Everything else -- forgeEnemy, forgeChest, forgeDeceiver and
+ * the whole draw* family -- genuinely draws.
+ */
+const NOT_DRAWING = new Set(['forgeCut']);
+const IS_DRAW = n => !NOT_DRAWING.has(n) &&
+                     /^(draw|forge|paint|crystalPath|wallGradient|glow)/.test(n);
 // Statements bound to the page rather than to the game. The core proved clean
 // of every one of these when it was measured, so anything matching is either
 // boot wiring or something that has to be looked at.

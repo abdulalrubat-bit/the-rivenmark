@@ -50,7 +50,11 @@
   window.buildStains = noop;
   window.forgeGround = noop;
   window.forgeWallCourses = noop;
-  window.forgeCut = noop;
+  // NOT forgeCut: that is the hall's forge discount, not a sprite. Stubbing it
+  // made every vendor price NaN.
+  // A placeholder only until the game boots: src/overlay.js replaces this
+  // with the real one, and the core's False Dawn crystal is placed under the
+  // map by reading it. The core-test page has no map, so this stands there.
   window.minimapBox = () => ({ x: 0, y: 0, s: 0, pad: 0, over: 0 });
 
   // --- render state the core still touches ---------------------------------

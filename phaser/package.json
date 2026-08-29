@@ -13,7 +13,14 @@
     "smoke": "node tools/smoke.cjs",
     "core": "node tools/extract-core.js",
     "verify": "node tools/verify-core.cjs",
-    "smoke:delve": "node tools/smoke-delve.cjs"
+    "smoke:delve": "node tools/smoke-delve.cjs",
+    "smoke:play": "node tools/smoke-play.cjs",
+    "smoke:fx": "node tools/smoke-fx.cjs",
+    "smoke:loop": "node tools/smoke-loop.cjs",
+    "smoke:forge": "node tools/smoke-forge.cjs",
+    "smoke:spend": "node tools/smoke-spend.cjs",
+    "smoke:world": "node tools/smoke-world.cjs",
+    "smoke:overlay": "node tools/smoke-overlay.cjs"
   },
   "dependencies": {
     "phaser": "^4.2.1"

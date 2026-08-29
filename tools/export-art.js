@@ -94,6 +94,21 @@ function place(key, roster) {
       return c.toDataURL('image/png');
     };
 
+    // The wall dressing. These are not in SPR -- they are their own arrays,
+    // forged for the canvas renderer to tile with -- but they are the coursed
+    // ashlar and the lit top face, which is most of what makes a wall read as
+    // built stone rather than a dark mass. The Phaser port needs them in the
+    // atlas, so they are exported here alongside everything else.
+    const dressing = [];
+    for (let v = 0; v < (typeof wallTops !== 'undefined' ? wallTops.length : 0); v++)
+      dressing.push({ name: 'top-' + v, png: wallTops[v].toDataURL('image/png') });
+    for (let v = 0; v < (typeof wallCourses !== 'undefined' ? wallCourses.length : 0); v++)
+      for (let q = 0; q < wallCourses[v].length; q++) {
+        const c = wallCourses[v][q];
+        dressing.push({ name: 'course-' + v + '-' + q, png: c.toDataURL('image/png'),
+                        spanW: c.spanW || 0, spanH: c.spanH || 0 });
+      }
+
     const strips = [];
     for (const hid in HEROES) {
       const w = strip([ 'h_' + hid, ...Array.from({length:GAIT_N},(_,i)=>'h_'+hid+'w'+i) ], 6);
@@ -121,7 +136,9 @@ function place(key, roster) {
         introduced_at_depth: d.from === 1e9 ? null : d.from
       }]))
     };
-    return { frames, strips, manifest, roster };
+    manifest.wall_dressing = dressing.map(d => ({ name: d.name,
+      spanW: d.spanW, spanH: d.spanH })).filter(d => d.spanW !== undefined);
+    return { frames, strips, manifest, roster, dressing };
   });
 
   if (errs.length) { console.error('page errors:', errs); process.exit(1); }
@@ -130,7 +147,7 @@ function place(key, roster) {
   // stops existing here too rather than lingering as a file nothing generates.
   // art/README.md is written by hand and is explicitly not swept: it documents
   // the folder, and wiping the whole directory would delete it every run.
-  const GENERATED = ['heroes', 'bestiary', 'props', 'chests', 'cycles', 'misc'];
+  const GENERATED = ['heroes', 'bestiary', 'props', 'chests', 'cycles', 'misc', 'walls'];
   for (const d of GENERATED) fs.rmSync(path.join(out, d), { recursive: true, force: true });
   fs.rmSync(path.join(out, 'manifest.json'), { force: true });
   fs.mkdirSync(out, { recursive: true });
@@ -155,6 +172,10 @@ function place(key, roster) {
   if (orphans.length) {
     console.error('unplaced sprite keys (add a rule to place()):', orphans.join(', '));
     process.exit(1);
+  }
+  for (const d of art.dressing) {
+    write('walls', d.name, d.png);
+    tally.walls = (tally.walls || 0) + 1;
   }
   for (const s of art.strips) {
     write('cycles', s.name, s.png);
