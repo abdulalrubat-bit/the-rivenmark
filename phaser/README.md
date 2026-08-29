@@ -58,6 +58,7 @@ the hero, the kit casts, the HUD reads the run.
 | `npm run smoke:delve` | 10 checks — the world draws, the gait is distance-driven |
 | `npm run smoke:play` | 16 checks — the stick, the kit, and the HUD's layout |
 | `npm run smoke:fx` | 11 checks — the fight reads, the crescent counted in pixels |
+| `npm run smoke:loop` | 15 checks — dying, the outcome, the gate-house, descending again |
 | `npm run smoke` | 13 checks — the proving scene and the diagnostics dump |
 | `npm run verify` | the canvas suites against the extracted core |
 
@@ -72,9 +73,14 @@ slam wind-ups. All of it is drawn from the core's own pools, because most of
 it is not decoration: a hazard burns, a pool slows, a slam telegraph is the
 only warning you get.
 
-Not started: the DOM menus (gate-house, forge, vendor), and the stone dressing
-on the walls — the coursed ashlar is procedural canvas art and is not in the
-atlas yet, so walls show as their lit top face.
+The loop closes: a run ends, the outcome says what happened, the gate-house
+takes you back, and you descend again. Every word of the outcome is written by
+the core's own endRun — the host reads it back out of the store it gives the
+core rather than writing the same sentences twice.
+
+Not started: the forge and the vendor (gear cannot be equipped or bought yet),
+and the stone dressing on the walls — the coursed ashlar is procedural canvas
+art and is not in the atlas yet, so walls show as their lit top face.
 
 ## On the phone
 
