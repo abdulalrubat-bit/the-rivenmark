@@ -13586,6 +13586,16 @@ function frame(now) {
   }
 }
 
+/* --- BOOT ---------------------------------------------------------------
+   Everything below starts the page: it reads the stash off localStorage,
+   builds the first run, fills the menus and hands the loop to the browser.
+
+   The marker is not decoration. phaser/tools/extract-core.js cuts here, and
+   without it the boot came across into the port and ran resetRun() at load,
+   before the state it needs had been declared -- which threw during the
+   script and left everything after it uninitialised. Keep this line, and keep
+   the boot below it.
+   -------------------------------------------------------------------- */
 resize();
 stash = loadStash();
 itemSeq = Math.max(itemSeq, stash.seq || 0);

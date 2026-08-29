@@ -1,0 +1,21 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Rivenmark core — headless</title>
+<!-- The extracted core with no renderer at all, so the canvas build's own test
+     suites can be pointed at it. If the same assertions pass here and against
+     index.html, the extraction did not change the game — which is a far
+     stronger claim than "it parses". -->
+<canvas id="c" width="390" height="844" style="display:none"></canvas>
+<script src="host-stubs.js"></script>
+<script src="host-real.js"></script>
+<script src="core.js"></script>
+<script>
+// After core.js, because `view` and `state` are declared in it.
+//
+// 390x844 is the phone the canvas suites use, so the two agree on the spawn
+// ring. `state` is the one piece of the state machine the suites need:
+// abilityBlock refuses to cast unless it is 'play'.
+__setView(390, 844, 1);
+state = 'play';
+window.__coreReady = true;
+</script>

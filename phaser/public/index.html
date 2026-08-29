@@ -10,4 +10,11 @@
         font:14px ui-monospace,monospace;pointer-events:none}
 </style>
 <div id="boot">forging…</div>
+<!-- The core is a plain script, exactly as it is in the canvas build, so it
+     keeps the flat global scope everything in it expects. The bundle reads it
+     off `window`. Order matters: stubs, then the real host, then the core.
+     See host-real.js. -->
+<script src="host-stubs.js"></script>
+<script src="host-real.js"></script>
+<script src="core.js"></script>
 <script src="bundle.js"></script>
