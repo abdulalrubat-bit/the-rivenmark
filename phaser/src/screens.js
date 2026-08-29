@@ -11,7 +11,8 @@
  */
 
 /* global player, run, stash, state, LEVELS, LEVEL, LEVEL_BY_ID, HEROES,
-          startRun, endRun, stepThrough, blankStash, el, stashPower */
+          startRun, endRun, stepThrough, blankStash, el, stashPower,
+          SLOTS, SLOT_BY_ID, RARITY, itemPower, affixText, saveStash */
 
 const CSS = `
 #screens{position:fixed;inset:0;z-index:40;display:none;place-items:center;
@@ -38,6 +39,15 @@ const CSS = `
   color:#f0e2c2;border:1px solid #d6b26e;font:15px Georgia,serif}
 #screens .go:active{background:#3a2c1c}
 #screens .purse{display:flex;justify-content:space-between;margin:0 0 10px;color:#a89878}
+#screens .tabs{display:flex;gap:6px;margin:0 0 12px}
+#screens .tabs button{flex:1;min-height:40px;border-radius:6px;background:#1a1712;
+  color:#a89878;border:1px solid #33291f;font:inherit}
+#screens .tabs button.on{color:#f0e2c2;border-color:#d6b26e;background:#231d15}
+#screens .item{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+#screens .item .aff{color:#8c8168;font-size:11px;display:block;margin-top:2px;line-height:1.35}
+#screens .pw{color:#d6b26e;white-space:nowrap;text-align:right}
+#screens .act{display:block;color:#8c8168;font-size:11px;margin-top:2px}
+#screens .empty{color:#6a6154;font-style:italic}
 `;
 
 export class Screens {
@@ -59,6 +69,7 @@ export class Screens {
     if (!name || name === 'paused') { this.root.classList.remove('up'); return; }
     this.root.classList.add('up');
     if (name === 'over') this.renderOver();
+    else if (name === 'gear') this.renderForge();
     else this.renderGatehouse();
   }
 
@@ -108,6 +119,7 @@ export class Screens {
     this.root.innerHTML =
       '<div class="card">' +
         '<h1>The Gate-House</h1>' +
+        this.tabs('splash') +
         '<p class="sub">Choose a rung and one of the Clear-Sighted.</p>' +
         '<div class="purse"><span>Purse</span><b>' + (stash.coins || 0) + ' coin</b></div>' +
         '<div class="purse"><span>Power</span><b>' + power + '</b></div>' +
@@ -134,9 +146,99 @@ export class Screens {
       b.addEventListener('click', () => { this.pick.hero = b.dataset.hero; this.renderGatehouse(); }));
     this.root.querySelectorAll('[data-level]').forEach(b =>
       b.addEventListener('click', () => { this.pick.level = b.dataset.level; this.renderGatehouse(); }));
+    this.wireTabs();
     this.root.querySelector('#descend').addEventListener('click', () => {
       this.root.classList.remove('up');
       this.onDescend(this.pick.hero, this.pick.level);
     });
+  }
+
+  tabs(on) {
+    return '<div class="tabs">' +
+      '<button type="button" data-tab="splash" class="' + (on === 'splash' ? 'on' : '') +
+        '">Descend</button>' +
+      '<button type="button" data-tab="gear" class="' + (on === 'gear' ? 'on' : '') +
+        '">The Forge</button>' +
+      '</div>';
+  }
+  wireTabs() {
+    this.root.querySelectorAll('[data-tab]').forEach(b =>
+      b.addEventListener('click', () => this.show(b.dataset.tab)));
+  }
+
+  /* The Forge: what is worn, and what is in the vault.
+   *
+   * Equipping acts straight on stash.gear and stash.vault, the way the core's
+   * own applyLoadout does. The canvas build routes this through a selection
+   * model bound to its DOM, which is exactly the part that did not come
+   * across, and re-implementing that model here would be inventing a second
+   * way for the same two arrays to change.
+   */
+  renderForge() {
+    const card = (it, worn) => {
+      const r = RARITY.find(x => x.id === it.rarity) || RARITY[0];
+      const aff = it.affixes.map(a => affixText(a, stash.hero)).filter(Boolean).join(' · ');
+      return '<span class="item"><span><b style="color:' + r.colour + '">' + it.name +
+             '</b><span class="aff">' + (aff || '&mdash;') + '</span></span>' +
+             // The number is the piece's power; the word is what tapping does.
+             // "41 · off" read as a state rather than an action.
+             '<span class="pw">' + Math.round(itemPower(it)) +
+             '<span class="act">' + (worn ? 'take off' : 'wear') + '</span>' +
+             '</span></span>';
+    };
+
+    this.root.innerHTML =
+      '<div class="card">' +
+        '<h1>The Forge</h1>' +
+        this.tabs('gear') +
+        '<div class="purse"><span>Power</span><b>' + stashPower() + '</b></div>' +
+        '<p class="sub">Worn</p>' +
+        '<div class="rows">' +
+          SLOTS.map(sl => {
+            const it = stash.gear[sl.id];
+            return '<button class="row" type="button" data-off="' + sl.id + '"' +
+              (it ? '' : ' disabled') + '>' +
+              (it ? card(it, true)
+                  : '<span class="item"><span>' + sl.mark + ' ' + sl.name +
+                    '<span class="aff empty">nothing worn</span></span></span>') +
+              '</button>';
+          }).join('') +
+        '</div>' +
+        '<p class="sub">The vault &mdash; ' + stash.vault.length + '</p>' +
+        '<div class="rows">' +
+          (stash.vault.length
+            ? stash.vault.map((it, i) =>
+                '<button class="row" type="button" data-on="' + i + '">' +
+                card(it, false) + '</button>').join('')
+            : '<div class="row"><span class="empty">Nothing here yet. ' +
+              'Champions and the avatar carry the Regalia.</span></div>') +
+        '</div>' +
+      '</div>';
+
+    this.wireTabs();
+    this.root.querySelectorAll('[data-on]').forEach(b =>
+      b.addEventListener('click', () => { this.equip(+b.dataset.on); this.renderForge(); }));
+    this.root.querySelectorAll('[data-off]').forEach(b =>
+      b.addEventListener('click', () => { this.unequip(b.dataset.off); this.renderForge(); }));
+  }
+
+  equip(index) {
+    const it = stash.vault[index];
+    if (!it || !SLOT_BY_ID[it.slot]) return;
+    stash.vault.splice(index, 1);
+    const prev = stash.gear[it.slot];
+    stash.gear[it.slot] = it;
+    // The piece it replaces goes back to the vault rather than vanishing --
+    // losing an item to a mis-tap is not a trade anyone agreed to.
+    if (prev) stash.vault.push(prev);
+    saveStash();
+  }
+
+  unequip(slotId) {
+    const it = stash.gear[slotId];
+    if (!it) return;
+    stash.gear[slotId] = null;
+    stash.vault.push(it);
+    saveStash();
   }
 }

@@ -16,7 +16,8 @@
     "smoke:delve": "node tools/smoke-delve.cjs",
     "smoke:play": "node tools/smoke-play.cjs",
     "smoke:fx": "node tools/smoke-fx.cjs",
-    "smoke:loop": "node tools/smoke-loop.cjs"
+    "smoke:loop": "node tools/smoke-loop.cjs",
+    "smoke:forge": "node tools/smoke-forge.cjs"
   },
   "dependencies": {
     "phaser": "^4.2.1"
