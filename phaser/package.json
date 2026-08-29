@@ -12,7 +12,8 @@
     "dev": "node tools/build.js --watch & node tools/serve.js",
     "smoke": "node tools/smoke.cjs",
     "core": "node tools/extract-core.js",
-    "verify": "node tools/verify-core.cjs"
+    "verify": "node tools/verify-core.cjs",
+    "smoke:delve": "node tools/smoke-delve.cjs"
   },
   "dependencies": {
     "phaser": "^4.2.1"

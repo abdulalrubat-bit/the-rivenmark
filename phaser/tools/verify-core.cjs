@@ -123,16 +123,23 @@ for (const s of SUITES) {
                 why.slice(0, 2).join(' '));
     continue;
   }
-  const orig = run(src);
   const copy = path.join(tmp, s + '.js');
   fs.writeFileSync(copy, fs.readFileSync(src, 'utf8').split(CANVAS_URL).join(CORE_URL));
-  const port = run(copy);
-  const same = orig.pass === port.pass && orig.fail === port.fail;
+
+  // Run both, and on a difference run both again before believing it. This box
+  // stalls for half a second at a time under load, and a suite with fixed
+  // sleeps in it flakes on either side -- bosses has come back 23/24 against
+  // index.html itself. One sample cannot tell a flake from a regression, and
+  // reporting one as the other is worse than saying nothing.
+  let orig = run(src), port = run(copy), tries = 1;
+  const agree = () => orig.pass === port.pass && orig.fail === port.fail;
+  while (!agree() && tries < 2) { orig = run(src); port = run(copy); tries++; }
+  const same = agree();
   if (!same) bad++;
   console.log(s.padEnd(12) +
     String(orig.pass + '/' + (orig.pass + orig.fail)).padEnd(16) +
     String(port.pass + '/' + (port.pass + port.fail)).padEnd(14) +
-    (same ? 'same' : '  <-- DIFFERS') +
+    (same ? (tries > 1 ? 'same (2nd run)' : 'same') : '  <-- DIFFERS') +
     (port.out ? '  ' + port.out.replace(/\s+/g, ' ').slice(0, 120) : ''));
 }
 srv.kill();

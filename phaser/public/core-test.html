@@ -2,96 +2,20 @@
 <meta charset="utf-8">
 <title>Rivenmark core — headless</title>
 <!-- The extracted core with no renderer at all, so the canvas build's own test
-     suites can be pointed at it. If the same assertions pass against this page
-     and against index.html, the extraction did not change the game -- which is
-     a far stronger claim than "it parses". -->
+     suites can be pointed at it. If the same assertions pass here and against
+     index.html, the extraction did not change the game — which is a far
+     stronger claim than "it parses". -->
 <canvas id="c" width="390" height="844" style="display:none"></canvas>
-<!-- Generated: a no-op for every name core.js calls and does not declare.
-     First, so the real implementations below can claim the few that matter. -->
 <script src="host-stubs.js"></script>
-<script>
-// The host functions core.js expects, inlined rather than imported so this
-// page stays a plain script and the suites see the same flat global scope
-// they see in index.html.
-//
-// Layered OVER host-stubs.js: the generated file gives every missing name a
-// no-op, and these claim back the handful that need real behaviour.
-//
-// BEFORE core.js, not after: core.js runs top-level initialisers as it
-// loads and some of them reach for the host. Declared afterwards, the very
-// first of those threw "resize is not defined" and aborted the rest of the
-// script.
-(function () {
-  const STORE_KEY = 'rivenmark.best.v1', STASH_KEY = 'rivenmark.stash.v1';
-  const noop = () => {};
-  window.loadBest = () => { try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; }
-                            catch (e) { return {}; } };
-  window.saveBest = b => { try { localStorage.setItem(STORE_KEY, JSON.stringify(b)); } catch (e) {} };
-  // The suites call loadStash directly. The canvas build's version does a good
-  // deal of migration on old saves; this one is the part that matters here --
-  // read it back if it is there, start clean if it is not.
-  window.loadStash = () => {
-    let st = null;
-    try { st = JSON.parse(localStorage.getItem(STASH_KEY)); } catch (e) {}
-    if (!st || typeof st !== 'object') return blankStash();
-    const base = blankStash();
-    return Object.assign(base, st, { gear: Object.assign(base.gear, st.gear || {}) });
-  };
-  window.saveStash = () => { try { stash.seq = itemSeq;
-                                   localStorage.setItem(STASH_KEY, JSON.stringify(stash)); }
-                             catch (e) {} };
-  window.buildStains = noop; window.forgeGround = noop; window.forgeWallCourses = noop;
-  window.forgeCut = noop;
-  window.minimapBox = () => ({ x: 0, y: 0, s: 0, pad: 0, over: 0 });
-  window.showScreen = noop; window.buildKit = noop; window.syncKit = noop;
-  window.syncHeroSkin = noop; window.renderGear = noop; window.renderHall = noop;
-  window.renderVendor = noop; window.resize = noop;
-  window.$ = () => null;
-
-  // The canvas build's map of DOM nodes. A suite that reaches into it should
-  // get something harmless rather than a ReferenceError -- every write lands
-  // on a throwaway object, every read gives one back.
-  const limbo = new Proxy({}, {
-    get: (t, k) => (k in t ? t[k] : (t[k] = { textContent: '', innerHTML: '',
-                                              classList: { toggle(){}, add(){}, remove(){} },
-                                              style: {}, hidden: false })),
-    set: (t, k, v) => (t[k] = v, true)
-  });
-  window.el = limbo;
-
-  // --- render state the core still touches ---------------------------------
-  // Listed in the extractor's RENDER_HOST: declared under RENDERING in the
-  // canvas build and deliberately left behind, but resetRun() still clears the
-  // gradient cache and the sprite table, so they have to exist.
-  window.wallGrads = new Map();   // gradient cache; resetRun clears it
-  window.SPR = {};                // forged sprite table; Phaser uses its atlas
-
-  // The remaining menu lines. endRun is NOT here: it banks the run, writes the
-  // corpse and saves, which is simulation, so it comes across in core.js.
-  window.refreshHallLine = noop;
-  window.refreshVendorLine = noop;
-  window.refreshKitLine = noop;
-  window.forge = () => null;   // sprite forge; Phaser draws from the atlas
-
-  // The suites drive the game directly and never draw, so `state` is the one
-  // piece of the state machine they need: abilityBlock refuses to cast unless
-  // it is 'play'.
-  window.state = 'play';
-  window.__coreReady = true;
-})();
-</script>
+<script src="host-real.js"></script>
 <script src="core.js"></script>
 <script>
-// After core.js, because `view` is declared in it.
+// After core.js, because `view` and `state` are declared in it.
 //
-// The simulation reads the viewport: spawnEnemy places bodies in a ring just
-// past the edge of the screen, sized from view.w/h, so a view left at 0x0
-// collapses that ring to 60 units and the delve sends a fraction of what it
-// should. extract.js caught it -- 6 bodies then 4, against 11 then 18 in the
-// canvas build -- which is the sort of difference that would have been very
-// hard to find later, and is exactly what running the old suites is for.
-//
-// 390x844 is the phone the canvas suites use, so the two agree.
-view.w = 390; view.h = 844; view.dpr = 1;
+// 390x844 is the phone the canvas suites use, so the two agree on the spawn
+// ring. `state` is the one piece of the state machine the suites need:
+// abilityBlock refuses to cast unless it is 'play'.
+__setView(390, 844, 1);
+state = 'play';
 window.__coreReady = true;
 </script>

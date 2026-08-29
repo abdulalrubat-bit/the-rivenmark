@@ -49,7 +49,12 @@ Done, and verified by `phasersmoke.js`:
   *software* GL rasteriser, where the canvas build was labouring at 54. A
   phone GPU is the real test, but the direction is not in doubt.
 
-Not started: the core extraction, the DOM UI, the delve itself.
+The delve draws now — walls, scenery, the horde and the hero, off the core's
+own state, at 60fps with a 4ms one-off bake. `npm run smoke:delve`, 10 checks.
+
+Not started: input, the HUD, the DOM menus, and the stone dressing on the
+walls (the coursed ashlar is procedural canvas art and is not in the atlas
+yet, so walls show as their lit top face).
 
 ## On the phone
 

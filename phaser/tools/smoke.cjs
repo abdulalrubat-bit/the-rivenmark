@@ -26,7 +26,7 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   p.on('console',m=>{ if(m.type()==='error') errs.push(m.text()); });
   const bad=[]; p.on('response',r=>{ if(r.status()>=400) bad.push(r.status()+' '+r.url()); });
 
-  await p.goto('http://localhost:8137/');
+  await p.goto('http://localhost:8137/?scene=proving');
   await sleep(3500);
 
   const R = await p.evaluate(()=>{

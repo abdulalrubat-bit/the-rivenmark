@@ -14,6 +14,7 @@
  */
 import Phaser from 'phaser';
 import { FrameLog, collect, asText, mountButton } from './diagnostics.js';
+import { Delve } from './delve.js';
 
 const GAIT = 8;                    // poses per cycle, same as the canvas build
 const SS   = 2;                    // art/ is exported at 2x, which is native
@@ -148,7 +149,12 @@ const game = new Phaser.Game({
     autoCenter: Phaser.Scale.NO_CENTER,
     width: '100%', height: '100%'
   },
-  scene: [Proving]
+  // Delve first: it is the game. Proving stays reachable as a benchmark --
+  // it is the scene that settled whether the atlas and the GPU renderer
+  // could carry this at all, and it is still the quickest way to ask.
+  // ?scene=proving starts the benchmark instead of the game. Phaser starts the
+  // first scene in the list, so the order is the switch.
+  scene: /scene=proving/.test(location.search) ? [Proving, Delve] : [Delve, Proving]
 });
 
 // Handy from the console, and from a test harness.
