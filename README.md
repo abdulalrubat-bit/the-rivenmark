@@ -322,15 +322,20 @@ requires.
 Body copy stays a system serif: Cinzel has no true lowercase, and prose set in
 it is unreadable.
 
-### A standing note on `assets/`
+### A note on `assets/`
 
-The sheets in `assets/` came from art packs whose licence has not been
-confirmed for redistribution, and this repository builds an APK — which is
-redistribution. Before shipping anything to anyone, that needs settling.
+The sheets in `assets/` came from royalty-free art packs, confirmed by the
+project owner as cleared for redistribution. This repository builds an APK,
+which is redistribution, so that clearance is what the build rests on.
 
-Nothing in `art/` is affected: it exports only the code-drawn sprites, and the
-handful of things that have a sheet-backed version export their forged fallback
-instead.
+Keep the pack licences and their terms somewhere in the repo as this grows —
+"royalty-free" covers a range of terms, and some packs still ask for
+attribution or forbid resale of the assets as assets. Nothing here needs it
+today; a future contributor will.
+
+Nothing in `art/` is affected either way: it exports only the code-drawn
+sprites, and the handful of things that have a sheet-backed version export
+their forged fallback instead.
 
 ---
 

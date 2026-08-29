@@ -62,10 +62,12 @@ which is why the exporter is the only way to get it out.
 
 Some things the game draws are *not* here, on purpose. The gear and item icons,
 the coffer frames and some of the scenery are cut from the sheets in
-`assets/` — art packs whose licence has not been confirmed for redistribution.
-Those are drawn straight from their embedded data and are not exported.
+`assets/` — royalty-free art packs, cleared for redistribution. They are drawn
+straight from their embedded data and are not exported, because this exporter
+walks the code-drawn sprite atlas and they were never in it.
 
 Every one of those sheet-backed things keeps a code-drawn fallback, and **it is
 the fallback that appears here**. So `chests/coffer-shut.png` is the forged
-coffer, not the one cut from the sheet. If the licence question is ever
-settled one way or the other, that is the line to revisit.
+coffer, not the one cut from the sheet. Exporting the sheet-backed art too is
+now a licensing question already answered and only a plumbing question: the
+exporter would have to cut from the sheets rather than read `SPR`.

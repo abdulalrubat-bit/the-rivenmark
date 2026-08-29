@@ -14,9 +14,11 @@
    NOTE ON PROVENANCE. This exports SPR only, which is entirely code-drawn.
    The sheet-backed art -- the gear icons, the coffer frames, the scenery cut
    from the tilesets in assets/ -- is drawn straight from its data URI and is
-   deliberately NOT exported here, because those sheets came from art packs
-   whose licence has not been confirmed. Every sheet-backed thing keeps a
-   forged fallback, and it is the fallback that appears in art/.
+   not exported here, because this walks the forged sprite atlas and those were
+   never in it. Every sheet-backed thing keeps a forged fallback, and it is the
+   fallback that appears in art/. (The sheets are royalty-free and cleared for
+   redistribution, so including them is a plumbing question now, not a
+   licensing one.)
 
    Run: node tools/export-art.js          (needs playwright + chromium)
 */
