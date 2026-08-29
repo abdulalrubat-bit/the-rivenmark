@@ -38,6 +38,14 @@
   // pins it back when you actually want the seed box on the start screen.
   const screenUp = () => state !== 'play';
   let fps = 0, frames = 0, fpsT = 0, updMs = 0, drawMs = 0;
+  // Jitter is not a slow average, and an average is the one statistic that
+  // cannot show it: a second holding fifty-eight good frames and two
+  // half-second stalls averages out to something that looks fine and feels
+  // terrible. So the delivered frame-to-frame interval is kept as a window,
+  // and what is reported off it is the WORST one and how many missed the
+  // 60Hz budget -- which is what the hand actually feels.
+  const IVAL_N = 180;
+  let ivals = [], lastFrameAt = 0, worstMs = 0, jankPct = 0;
 
   // --- wrap the loop for timings -------------------------------------------
   const _update = update, _draw = draw;
@@ -55,7 +63,23 @@
     if (D.showHits) overlayHits();
     frames++;
     const now = performance.now();
-    if (now - fpsT > 500) { fps = frames * 1000 / (now - fpsT); frames = 0; fpsT = now; }
+    if (lastFrameAt) {
+      ivals.push(now - lastFrameAt);
+      if (ivals.length > IVAL_N) ivals.shift();
+    }
+    lastFrameAt = now;
+    if (now - fpsT > 500) {
+      fps = frames * 1000 / (now - fpsT); frames = 0; fpsT = now;
+      if (ivals.length > 8) {
+        worstMs = 0;
+        let over = 0;
+        for (let i = 0; i < ivals.length; i++) {
+          if (ivals[i] > worstMs) worstMs = ivals[i];
+          if (ivals[i] > 20) over++;
+        }
+        jankPct = 100 * over / ivals.length;
+      }
+    }
     syncPanel();
     if (D.open && !screenUp()) paint();
   };
@@ -277,6 +301,10 @@
     const ms = updMs + drawMs;
     statsHost.innerHTML =
       row('fps', fps.toFixed(0), fps < 50) +
+      // Read these two before the average. A worst frame over about 50ms is a
+      // visible hitch however good the fps line looks.
+      row('worst frame', worstMs.toFixed(0) + 'ms', worstMs > 50) +
+      row('over budget', jankPct.toFixed(0) + '%', jankPct > 5) +
       row('draw / upd', drawMs.toFixed(1) + ' / ' + updMs.toFixed(2) + 'ms', ms > 16.7) +
       row('lowFx', lowFx, lowFx) +
       row('delve', LEVEL.id) +

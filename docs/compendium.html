@@ -331,6 +331,7 @@ footer{
       <li><a href="#fiction">The Premise</a></li>
       <li><a href="#realm">The Realm</a></li>
       <li><a href="#vanguard">The Vanguard</a></li>
+      <li><a href="#kit">The Kit</a></li>
       <li><a href="#bestiary">The Bestiary</a></li>
       <li><a href="#deceiver">The Deceiver</a></li>
       <li><a href="#delve">The Delve</a></li>
@@ -508,7 +509,8 @@ footer{
 
     <div class="note">
       <h4>The design tell</h4>
-      <p>Isaac is proof against illusion; Zayd is proof against the hive-mind and against inverted ley-lines. The Deceiver&rsquo;s two signature tricks are illusion (mirages, splitting) and the tether. <strong>Each hero is written as the counter to one half of the antagonist</strong> &mdash; which strongly implies the two of them were meant to descend together, and the game only ever lets you take one.</p>
+      <p>Isaac is proof against illusion; Zayd is proof against the hive-mind and against inverted ley-lines. The Deceiver&rsquo;s two signature tricks are illusion (mirages, splitting) and the tether. <strong>Each hero is written as the counter to one half of the antagonist</strong> &mdash; which always implied the two of them were meant to descend together.</p>
+      <p>They do now. <strong>Both go down, and you hold one at a time</strong> &mdash; see Book IV. The one you are not holding waits with his own wounds, and the Deceiver&rsquo;s last phase cannot be answered by either of them alone.</p>
     </div>
 
     <h3>Strike forms</h3>
@@ -521,9 +523,69 @@ footer{
   </section>
 
   <!-- ============ IV ============ -->
-  <section class="book" id="bestiary">
+  <section class="book" id="kit">
     <div class="book-head">
       <span class="book-num">Book IV</span>
+      <h2>The Kit</h2>
+      <span class="kicker">Nine abilities across two heroes, and a beat slow enough that you have to choose which one.</span>
+    </div>
+
+    <p class="lede">The blade is always there and always free. Everything in this book sits on top of it, on a shared <span class="term">global cooldown</span> of <span class="num">1.2</span> seconds &mdash; press one thing and the rest of the kit greys for a beat. That single number is what makes the kit a sequence of decisions rather than five buttons to mash.</p>
+
+    <p>Two exceptions, and both are deliberate. <strong>Focal Decryption is off the beat</strong>, because an interrupt that has to wait its turn is not an interrupt. And <strong>the swap costs a beat and a quarter</strong> &mdash; <span class="num">1.5</span> seconds &mdash; because changing who is standing there should never be free.</p>
+
+    <h3>The beat, and what it feels like</h3>
+    <p>A heavy landing freezes the simulation for up to <span class="num">90ms</span> &mdash; not the animation, the whole world &mdash; which is the cheapest way a 2D canvas can make a blow feel like it had mass. Damage numbers are ranked rather than uniform: a scratch is small and dim, a heavy blow is large, bright and rimmed in its own colour, a soaked one shrinks and greys, and a heal is green. The camera shake is bound to <em>the share of your life a hit took</em>, not to a constant, so a graze and a blow that nearly ended the run do not shake the same.</p>
+
+    <h3>Isaac &mdash; Sun-Gold Charges</h3>
+    <p>A combo resource, maximum <span class="num">3</span>. One builder makes them, two spenders eat all three. He is the hero who stands still on purpose.</p>
+
+    <div class="tw">
+      <table>
+        <caption>The Unyielding Shield&rsquo;s five</caption>
+        <thead><tr><th>Ability</th><th>Cost</th><th>Cooldown</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><th>Anchoring Strike</th><td>&mdash;</td><td class="n">&mdash;</td><td>A shield bash at <span class="num">62</span> reach &mdash; close enough that you have to be in the crowd. Builds <span class="num">1</span> Charge.</td></tr>
+          <tr><th>Aegis of Tor-Varden</th><td class="n">3</td><td class="n">&mdash;</td><td>A <span class="num">150</span>-unit ring of Sun-Gold that knocks bodies back, and <span class="num">2</span> seconds of halved damage behind it.</td></tr>
+          <tr><th>Unyielding Mass</th><td>&mdash;</td><td class="n">12s</td><td>Rooted for <span class="num">4</span> seconds: unmovable, and half of everything. You cannot leave, and that is the trade.</td></tr>
+          <tr><th>Grounding Purge</th><td>&mdash;</td><td class="n">14s</td><td>A <span class="num">3</span>-second channel restoring <span class="num">15%</span> a second. Breaks instantly on a hit or on touching the stick &mdash; the most fragile thing either hero owns.</td></tr>
+          <tr><th>Star-Forged Guillotine</th><td class="n">3</td><td class="n">&mdash;</td><td>One overhead blow on one body. <strong>Five times damage against Metaphysical Vulnerability</strong>, which exists in exactly one place in the game.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Zayd &mdash; Ley-Tension</h3>
+    <p>A pool of <span class="num">100</span> that regenerates at <span class="num">4</span> a second and refills <em>completely</em> on a successful interrupt. Interrupting is not a utility he can afford occasionally; it is how he is paid.</p>
+
+    <div class="tw">
+      <table>
+        <caption>The Piercing Truth&rsquo;s four</caption>
+        <thead><tr><th>Ability</th><th>Cost</th><th>Cooldown</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><th>Piercing Truth</th><td>&mdash;</td><td class="n">&mdash;</td><td>A <span class="num">340</span>-unit line through everything standing in it. Builds <span class="num">14</span> Tension per body &mdash; so it pays best down a corridor.</td></tr>
+          <tr><th>Null-Zone Eruption</th><td class="n">40%</td><td class="n">&mdash;</td><td>A standing pool that slows what stands in it and <em>eats what it is casting</em>. Not damage: it decides how fast the ground in front of you can be crossed.</td></tr>
+          <tr><th>Focal Decryption</th><td>&mdash;</td><td class="n">8s</td><td><strong>Off the beat.</strong> Snaps a cast, silences for <span class="num">3</span> seconds, and hands back the whole pool. A miss costs a fifth of the cooldown &mdash; enough that timing matters, not so much that one mistake ends the fight.</td></tr>
+          <tr><th>Crimson-Infused Jars</th><td class="n">1 of 3</td><td class="n">30s</td><td>Three to a delve, set at the Forge. Instant, and <span class="num">45%</span> of your life at once.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>The swap</h3>
+    <p>Both of the Clear-Sighted go down. You hold one; the other waits. Tapping the swap banks everything the current hero is carrying &mdash; life, Charges or Tension, jars, every cooldown mid-count &mdash; and takes up whatever the other one was left with. <strong>Wounds are kept.</strong> Swapping is not a heal; a Zayd you left at a third of his life is a Zayd you come back to at a third of his life. A new delve is a new delve, and both start whole.</p>
+
+    <p>It costs <span class="num">1.5</span> seconds of beat and puts itself on a <span class="num">5</span>-second cooldown, and the frame changes with the hero: Isaac&rsquo;s heavy bronze and Sun-Gold, Zayd&rsquo;s narrow Azure geometry.</p>
+
+    <div class="note">
+      <h4>The gear question, and the answer taken</h4>
+      <p>Two heroes and one set of Regalia is a decision that had to go one way or the other. <strong>The kit is shared.</strong> Both wear the same pieces, and an affix forged for one hero still pays out for whoever is holding it &mdash; a Sun-Wide roll gives Isaac more sweep than it gives Zayd, because it is scaling each of them from their own numbers.</p>
+      <p>The alternative &mdash; two independent loadouts &mdash; doubles every drop&rsquo;s value and halves how often any single drop matters, and turns the Forge into two Forges. This is the reversible choice, and it is written down here so that reversing it is a decision rather than a discovery.</p>
+    </div>
+  </section>
+
+  <!-- ============ V ============ -->
+  <section class="book" id="bestiary">
+    <div class="book-head">
+      <span class="book-num">Book V</span>
       <h2>The Bestiary</h2>
       <span class="kicker">Eight archetypes walk the horde. Each asks a different question, and every one of them wears the void-brand.</span>
     </div>
@@ -665,16 +727,38 @@ footer{
         <tbody>
           <tr><th>Lieutenant</th><td class="n">300</td><td class="n">26</td><td class="n">12</td><td>The Deceiver&rsquo;s own. They arrive with him and they are the reason he is hard to reach. They slam.</td></tr>
           <tr><th>Mirage</th><td class="n">1</td><td class="n">0</td><td class="n">0</td><td>A lie of the Deceiver. Harmless, worth nothing, drops nothing &mdash; it exists to waste your blade.</td></tr>
-          <tr><th>The Deceiver</th><td class="n">540</td><td class="n">32</td><td class="n">30</td><td>The avatar at the gate. See Book V.</td></tr>
+          <tr><th>The Deceiver</th><td class="n">540</td><td class="n">32</td><td class="n">30</td><td>The avatar at the gate. See Book VI.</td></tr>
         </tbody>
       </table>
     </div>
+
+    <h3>What the horde does about dying</h3>
+    <p class="lede">Four behaviours that are not attacks. Each one is something you have to go and stop rather than out-damage, and each one costs you if you leave it.</p>
+
+    <div class="tw">
+      <table>
+        <caption>The delve looking after its own</caption>
+        <thead><tr><th>Behaviour</th><th>Who</th><th>The answer</th></tr></thead>
+        <tbody>
+          <tr><th>The Calcification Retreat</th><td>Anything heavy &mdash; Gorgers, Breakers, champions &mdash; below <span class="num">30%</span> life</td><td>It breaks off, freezes, drags a vacuum of particles into itself and closes over. <strong>Four seconds, and if you leave it, it comes back whole.</strong> A real blow shatters the shell &mdash; <span class="num">12%</span> of its life in one hit &mdash; but a scratch does not, so you have to commit rather than graze it. It reads as a cast, so Zayd can snap it instead. Once each: a champion that can keep retreating never dies.</td></tr>
+          <tr><th>Resonance Totems</th><td>Shamans, as one of three spells in rotation</td><td>Planted at the shaman&rsquo;s own feet, in the middle of the bodies it is there to mend: <span class="num">9</span> life a second to everything within <span class="num">180</span> units, for <span class="num">22</span> seconds, and nothing at all for you. It has <span class="num">60</span> life of its own. Reaching it means carving through the horde standing on it, which is the point.</td></tr>
+          <tr><th>Ravenous Consumption</th><td>Champions standing over a body that has just gone down</td><td>It stops and takes the slag out of the corpse, healing steadily for <span class="num">2.2</span> seconds. Once each &mdash; a field of dead would otherwise be a full heal. The rank and file never do it.</td></tr>
+          <tr><th>Physical mass</th><td>Everything</td><td>Separation pushes <em>both</em> bodies, scaled by weight, so a crowd presses rather than sliding through itself. A wall of meat blocks a line and blocks a melee approach, and Zayd&rsquo;s beam stops being free.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <h4>The ceiling, and why it counts feet rather than bodies</h4>
+      <p>No more than <span class="num">54</span> of them are ever on their feet at once. The obvious reading &mdash; cap how many are <em>placed</em> &mdash; breaks extraction outright: a delve carries about <span class="num">1.4&times;</span> its own quota in slag and the quota runs to <span class="num">270</span>, at roughly a slag a thrall, so a capped map would stop containing enough to open its own gate.</p>
+      <p>Capping the <strong>awake</strong> instead gives the same wall in front of you and leaves the delve full behind it. A body over the ceiling stays down until something ahead of it falls &mdash; but <strong>anything you actually hit gets up regardless</strong>, so nothing on the map can become unkillable and no slag is ever locked away behind the cap.</p>
+    </div>
   </section>
 
-  <!-- ============ V ============ -->
+  <!-- ============ VI ============ -->
   <section class="book" id="deceiver">
     <div class="book-head">
-      <span class="book-num">Book V</span>
+      <span class="book-num">Book VI</span>
       <h2>The Deceiver</h2>
       <span class="kicker">Fifty-two rungs cannot each have a hand-built boss, and fifty-two copies of one boss is worse than having none.</span>
     </div>
@@ -702,6 +786,32 @@ footer{
       </table>
     </div>
 
+    <h3>The fight itself</h3>
+    <p class="lede">Everything before this is a delve you can walk out of. This is the one fight the game asks you to learn, and the whole of it is an argument for two heroes: it is not survivable on one.</p>
+
+    <div class="tw">
+      <table>
+        <caption>The encounter, in the order you meet it</caption>
+        <thead><tr><th>Mechanic</th><th>What happens</th><th>The answer</th></tr></thead>
+        <tbody>
+          <tr><th>Euphoric Tether</th><td>While a single Lieutenant stands, <strong>he takes nothing at all</strong>. Every swing floats <em>TETHERED</em>, the bar reads HELD, and a pip shows for each one still up.</td><td>Kill the escort. The fight has an order to it, and this is it.</td></tr>
+          <tr><th>Synchronized Agony</th><td>The Lieutenants plant and wind one cleave <em>together</em>, each aiming a wide arc at where you stand, and land it as a single summed blow. Three arcs from three directions leave one place to stand.</td><td>Walk out of it, or &mdash; when there is nowhere left to walk &mdash; plant Isaac in it behind <strong>Unyielding Mass</strong> and eat half.</td></tr>
+          <tr><th>Slag Siphon</th><td>A Lieutenant breaks off, walks to its master and pours raw energy into him: a <span class="num">3.2</span>-second channel that mends him and pushes the crystal. Only one pours at a time.</td><td>Zayd&rsquo;s <strong>Focal Decryption</strong>. A Null-Zone underneath drags the channel out long enough to reach it.</td></tr>
+          <tr><th>Inverted Ley-Rupture</th><td>A pulsing golden circle opens under whoever is standing there, drawn at full reach from the first frame, and goes off after <span class="num">2</span> seconds.</td><td>Move. Staying costs life <em>and</em> empties Isaac&rsquo;s Charges or Zayd&rsquo;s Tension &mdash; which is the half that matters, because it puts the answer out of reach.</td></tr>
+          <tr><th>False Dawn</th><td>A tall jagged crystal beside the map. Every wound on a Lieutenant and every pour you let finish fills it. At <span class="num">100%</span> he unleashes a room-wide wipe, and there is no answer to that one &mdash; the answer was upstream.</td><td>The crystal is the clock, not his health bar. Kill the escort briskly, and snap every pour.</td></tr>
+          <tr><th>Breath of the Void</th><td>The last Lieutenant falls and the crystal is <em>already</em> at <span class="num">95</span>. He goes to the middle of the room and spends <span class="num">5</span> seconds pushing it the rest of the way.</td><td>These five seconds are the fight.</td></tr>
+          <tr><th>Metaphysical Nullification</th><td>A <strong>Null-Zone dropped underneath the channel</strong> reacts catastrophically: the crystal empties, he goes down for <span class="num">10</span> seconds, and he is left <em>Metaphysically Vulnerable</em>.</td><td>Swap to Isaac, build three Charges, and bring the <strong>Star-Forged Guillotine</strong> down for five times damage. This is the only place in the game that word appears.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <h4>The fight hands you the means</h4>
+      <p>Those five seconds have exactly one answer and it is Zayd&rsquo;s. But the escort usually goes down on Isaac &mdash; he is who survives the cleave &mdash; which leaves Zayd&rsquo;s Ley-Tension banked and frozen since the last swap, possibly at nothing, and the swap itself possibly four seconds into its own five.</p>
+      <p><strong>A wipe you could not have answered because of a cooldown is a coin toss, not a mechanic.</strong> So the moment the breath begins the swap comes off cooldown and the Spellbreaker arrives full. The phase asks only whether you use it.</p>
+      <p>Burning him down raw inside those five seconds is a real alternative and stays one on purpose &mdash; but his life scales with the rung and the window does not, so it stops being one as you go deeper.</p>
+    </div>
+
     <h3>The Uninvited</h3>
     <p>The avatar at the gate is scheduled &mdash; you know he is coming because you can watch the slag counter fill. <strong>The invader is not.</strong> Somewhere past the <span class="num">34</span>-second mark he simply arrives, and the delve says: <em>&ldquo;Something has come for you. He was not called. Kill him, or lose him in the dark.&rdquo;</em></p>
 
@@ -710,10 +820,10 @@ footer{
     <p>But he hunts alone, he is faster than the scheduled one, the ground does not close behind him, and if you put him down he <strong>always</strong> drops a piece of the Regalia. Being hunted through a delve you did not plan to fight in is the price, and it should be paid.</p>
   </section>
 
-  <!-- ============ VI ============ -->
+  <!-- ============ VII ============ -->
   <section class="book" id="delve">
     <div class="book-head">
-      <span class="book-num">Book VI</span>
+      <span class="book-num">Book VII</span>
       <h2>The Delve</h2>
       <span class="kicker">Fifty-two rungs, cut fresh every descent, populated at generation and cleared by walking into it.</span>
     </div>
@@ -821,10 +931,10 @@ footer{
     </div>
   </section>
 
-  <!-- ============ VII ============ -->
+  <!-- ============ VIII ============ -->
   <section class="book" id="gate">
     <div class="book-head">
-      <span class="book-num">Book VII</span>
+      <span class="book-num">Book VIII</span>
       <h2>The Gate</h2>
       <span class="kicker">Meeting the quota does not open the ley-gate. It draws him to it.</span>
     </div>
@@ -860,11 +970,11 @@ footer{
     <p>What is <em>worn</em> survives either way. Losing the kit off your back to one bad tap would make every delve a decision about whether to risk playing at all.</p>
   </section>
 
-  <!-- ============ VIII ============ -->
+  <!-- ============ IX ============ -->
   <section class="book" id="regalia">
     <div class="book-head">
-      <span class="book-num">Book VIII</span>
-      <h2>The Regalia &amp; the Kit</h2>
+      <span class="book-num">Book IX</span>
+      <h2>The Regalia</h2>
       <span class="kicker">Eight slots, no helm &mdash; because the Clear-Sighted fight unhelmeted, and the compendium is explicit about it.</span>
     </div>
 
@@ -978,10 +1088,10 @@ footer{
     </div>
   </section>
 
-  <!-- ============ IX ============ -->
+  <!-- ============ X ============ -->
   <section class="book" id="gatehouse">
     <div class="book-head">
-      <span class="book-num">Book IX</span>
+      <span class="book-num">Book X</span>
       <h2>The Gate-House</h2>
       <span class="kicker">Where the Vanguard come back to. Four stations, a vendor, and somewhere for the money to go.</span>
     </div>
@@ -1016,10 +1126,10 @@ footer{
     <p>Gear outlives a delve, but <strong>only what you carried out</strong>. Extract and the bag comes home; die and it stays on the floor where you fell. The bag holds twenty pieces, the vault sixty before the Hall widens it, and a corpse will hold on to ten of them for you.</p>
   </section>
 
-  <!-- ============ X ============ -->
+  <!-- ============ XI ============ -->
   <section class="book" id="open">
     <div class="book-head">
-      <span class="book-num">Book X</span>
+      <span class="book-num">Book XI</span>
       <h2>Open Ground</h2>
       <span class="kicker">Named in the game, unexplained by it. The most useful pages in the book, because nothing is standing on them yet.</span>
     </div>
