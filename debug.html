@@ -1439,6 +1439,62 @@
     display:block; height:100%; width:100%; transform-origin:left center;
     background:linear-gradient(90deg,#4f7a3a,#9dbb5a);
   }
+
+  /* The pool, for the one who fights on it. Charges are three pips; Tension is
+     a hundred points and has to be a bar. */
+  .tension{
+    width:118px; height:9px; border-radius:2px; overflow:hidden;
+    background:linear-gradient(180deg,rgba(24,34,46,.95),rgba(6,10,16,.98));
+    box-shadow:0 0 0 2px rgba(70,110,150,.7), 0 2px 7px rgba(0,0,0,.8);
+  }
+  .tension[hidden]{display:none;}
+  .tension i{
+    display:block; height:100%; width:100%; transform-origin:left center;
+    background:linear-gradient(90deg,#2a6fae,#5fd0ff);
+    transition:transform .1s linear;
+  }
+  /* The swap sits apart from the five, because it is not one of them: it
+     changes who you are rather than what you do. */
+  .key.swap{
+    width:50px; height:50px; margin-top:2px;
+    background-image:linear-gradient(180deg,rgba(70,58,34,.92),rgba(12,14,20,.96)),
+                     var(--tex-bronze);
+    background-size:auto, 96px 96px;
+  }
+  body.as-zayd .key.swap{
+    background-image:linear-gradient(180deg,rgba(30,64,96,.92),rgba(8,12,20,.96)),
+                     var(--tex-slate);
+  }
+
+  /* =========================================================================
+     WHOSE GROUND IT IS
+     Isaac holds it in bronze and Sun-Gold. Zayd holds it in Azure. One class
+     on the body and the whole interface follows, because the player has to
+     know who they are without reading anything.
+     ====================================================================== */
+  body.as-zayd{ --br-lit:#9ad2f2; --br-mid:#4d86b4; --br-dk:#1b3a55; }
+  body.as-zayd .hud{
+    background-image:
+      var(--cracks),
+      linear-gradient(180deg,rgba(38,62,84,.62),rgba(8,14,22,.94)),
+      var(--tex-slate) !important;
+  }
+  body.as-zayd #hpFill{background:linear-gradient(90deg,#1d4a7d,#2a86d0 60%,#5fd0ff);}
+  body.as-zayd .clock{color:#dcefff; text-shadow:0 0 14px rgba(95,208,255,.4);}
+  body.as-zayd .key{
+    background-image:linear-gradient(180deg,rgba(34,62,88,.92),rgba(8,12,20,.96)),
+                     var(--tex-slate);
+    background-size:auto, 96px 96px;
+  }
+  body.as-zayd .key.ready{
+    box-shadow:0 0 0 3px rgba(120,200,246,.95), 0 0 0 4px rgba(0,0,0,.8),
+               inset 0 2px 0 rgba(214,240,255,.26),
+               0 0 14px rgba(95,208,255,.45), 0 4px 12px rgba(0,0,0,.75);
+  }
+  body.as-zayd .pips i.lit{
+    background:radial-gradient(circle at 50% 34%,#d6f0ff,#2a86d0);
+    box-shadow:0 0 0 2px rgba(120,200,246,.95), 0 0 12px rgba(95,208,255,.7);
+  }
 </style>
 </head>
 <body>
@@ -1552,7 +1608,12 @@
 
   <div id="kitBar" hidden>
     <div class="pips" id="chargePips" aria-hidden="true"></div>
+    <div class="tension" id="tensionBar" hidden aria-hidden="true"><i id="tensionFill"></i></div>
     <div class="keys" id="kitKeys"></div>
+    <button class="key swap" id="swapBtn" aria-label="Call the other one">
+      <span class="km" aria-hidden="true">⇄</span>
+      <span class="sweep"></span><span class="cdn"></span>
+    </button>
   </div>
 
   <div class="screen" id="gear">
@@ -3530,8 +3591,10 @@ function makePlayer(x, y, heroId) {
   p.ward = 0;
   p.gcd = 0; p.gcdMax = GCD_TIME;   // the beat, and what it was set from
   p.charges = 0; p.chargePop = 0;   // Isaac's Sun-Gold
+  p.tension = 0;                    // Zayd's Ley-Tension
+  p.jars = JAR_USES;
   p.cds = {}; p.channel = null;
-  p.mitigate = 0; p.rooted = 0;
+  p.mitigate = 0; p.rooted = 0; p.swapCd = 0;
   return p;
 }
 
@@ -4813,6 +4876,11 @@ const FLOAT_MERGE  = 0.22;   // a follow-up this soon joins the running total
    interrupt.
    -------------------------------------------------------------------- */
 const CHARGE_MAX = 3;      // Isaac's Sun-Gold Charges
+const TENSION_MAX = 100;   // Zayd's Ley-Tension
+const TENSION_REGEN = 4;   // a second, which is slow on purpose: the pool is
+                           // meant to be refilled by interrupting, not by waiting
+const SWAP_CD = 5;         // and how long before the other one can be called back
+const JAR_USES = 3;        // Crimson-Infused Jars carried into a delve
 const VULN_TIME  = 10;     // how long Metaphysical Vulnerability lasts
 const VULN_MULT  = 5;      // and what the Guillotine does to a body under it
 
@@ -4833,6 +4901,20 @@ const ABILITIES = {
     { id: 'guillotine', name: 'Star-Forged Guillotine', mark: '⚔',
       note: 'Spends three. Comes down on one body, and on the Vulnerable it ends things.',
       cd: 0, gcd: 1.25, cost: CHARGE_MAX, reach: 96, dmg: 7 }
+  ],
+  zayd: [
+    { id: 'truth', name: 'Piercing Truth', mark: '↠',
+      note: 'A line of Azure through everything standing in it. Builds Tension.',
+      cd: 0, gcd: 1, build: 14, reach: 340, dmg: 1.5 },
+    { id: 'nullzone', name: 'Null-Zone Eruption', mark: '◍',
+      note: 'Spends two fifths. A pool that slows what stands in it and eats what it is casting.',
+      cd: 0, gcd: 1, costPct: 0.40, radius: 96, life: 7 },
+    { id: 'decrypt', name: 'Focal Decryption', mark: '⌁',
+      note: 'Off the beat. Snaps a cast, silences for three, and gives the Tension back.',
+      cd: 8, gcd: 0, reach: 300, silence: 3 },
+    { id: 'jars', name: 'Crimson-Infused Jars', mark: '⚱',
+      note: 'Three to a delve. Instant, and a great deal of life at once.',
+      cd: 30, gcd: 1, uses: 3, healPct: 0.45 }
   ]
 };
 
@@ -4848,6 +4930,8 @@ function abilityBlock(a) {
   if ((player.cds && player.cds[a.id] > 0)) return 'cd';
   if (a.gcd && onGCD()) return 'gcd';
   if (a.cost && (player.charges || 0) < a.cost) return 'cost';
+  if (a.costPct && (player.tension || 0) < TENSION_MAX * a.costPct) return 'cost';
+  if (a.uses && (player.jars || 0) <= 0) return 'cost';
   return null;
 }
 
@@ -4855,6 +4939,8 @@ function castAbility(id) {
   const a = ABILITY_BY_ID[id];
   if (!a || abilityBlock(a)) return false;
   if (a.cost) spendCharges(a.cost);
+  if (a.costPct) { player.tension = Math.max(0, (player.tension || 0) - TENSION_MAX * a.costPct);
+                   player.chargePop = 1; }
   if (a.cd) { player.cds = player.cds || {}; player.cds[a.id] = a.cd; }
   if (a.gcd) startGCD(a.gcd);
   ABILITY_DO[a.id](a);
@@ -4946,8 +5032,196 @@ const ABILITY_DO = {
     burst(t.x, t.y, '#fff2c8', vuln ? 40 : 22, 380);
     damageEnemy(t, player.damage * a.dmg * (vuln ? VULN_MULT : 1));
     if (vuln) toast('The guard is broken', '#fff2c8');
+  },
+
+  // A line, not a target. It rewards putting a corridor between you and the
+  // horde, which is the whole of how Zayd is meant to be played.
+  truth(a) {
+    const ang = player.angle;
+    const ex = player.x + Math.cos(ang) * a.reach;
+    const ey = player.y + Math.sin(ang) * a.reach;
+    beams.push({ x: player.x, y: player.y, ex, ey, life: 0.24, max: 0.24 });
+    shake(4);
+    let hits = 0;
+    enemyGrid.query((player.x + ex) / 2, (player.y + ey) / 2, a.reach, _near);
+    for (let i = 0; i < _near.length; i++) {
+      const e = _near[i];
+      if (e.hp <= 0) continue;
+      // Distance from the body to the line, so everything standing in it is
+      // struck rather than only what the beam's centre passes through.
+      if (segDist(player.x, player.y, ex, ey, e.x, e.y) > e.r + 10) continue;
+      if (!clearShot(player.x, player.y, e.x, e.y)) continue;
+      damageEnemy(e, player.damage * a.dmg);
+      burst(e.x, e.y, '#5fd0ff', 6, 150);
+      hits++;
+    }
+    if (hits) { gainTension(a.build * hits); freeze(0.02); }
+  },
+
+  // A pool that holds ground. It does not kill; it decides where the fight
+  // can happen, and it eats what the back rank is casting.
+  nullzone(a) {
+    nulls.push({ x: player.x, y: player.y, r: a.radius, life: a.life, max: a.life,
+                 pulse: 0 });
+    ring(player.x, player.y, '#b07cff', 10, a.radius, 0.44);
+    burst(player.x, player.y, '#7a4fd0', 22, 250);
+    shake(6);
+  },
+
+  // Off the beat, because an interrupt you have to wait for is not one. It
+  // finds what is actually casting rather than what is nearest.
+  decrypt(a) {
+    const t = nearestCaster(a.reach);
+    if (!t) {
+      // A miss costs a fraction of the cooldown, not all of it and not none.
+      // The full eight seconds makes one mistimed press a disaster; nothing at
+      // all makes it free to mash, and then there is no timing to get right,
+      // which is the whole of what this ability is.
+      if (player.cds) player.cds.decrypt = a.cd * 0.2;
+      toast('Nothing is casting', '#8c8168');
+      return;
+    }
+    silence(t, a.silence);
+    gainTension(TENSION_MAX);
+    beams.push({ x: player.x, y: player.y, ex: t.x, ey: t.y, life: 0.2, max: 0.2,
+                 hue: '#b07cff' });
+    burst(t.x, t.y, '#b07cff', 16, 220);
+    ring(t.x, t.y, '#b07cff', 6, t.r * 3, 0.3);
+    freeze(0.04);
+    shake(7);
+    toast('Snapped', '#b07cff');
+  },
+
+  // Three to a delve, configured at the Forge. Instant, and enormous.
+  jars(a) {
+    if ((player.jars || 0) <= 0) { toast('No jars left', '#8c8168'); return; }
+    player.jars--;
+    const heal = player.maxHp * a.healPct;
+    player.hp = Math.min(player.maxHp, player.hp + heal);
+    floatDmg(player.x, player.y - player.r * 1.4, heal, 'heal');
+    burst(player.x, player.y, '#c2352a', 20, 200);
+    ring(player.x, player.y, '#e0563f', 8, 54, 0.36);
   }
 };
+
+// Beams and Null-Zones: the two things Zayd leaves on the floor.
+let beams = [];
+let nulls = [];
+
+// Distance from a point to a segment. Piercing Truth is a line, so everything
+// standing in it has to be struck, not only what the centre line passes over.
+function segDist(ax, ay, bx, by, px, py) {
+  const dx = bx - ax, dy = by - ay;
+  const l2 = dx * dx + dy * dy;
+  if (l2 < 1e-6) return Math.hypot(px - ax, py - ay);
+  let t = ((px - ax) * dx + (py - ay) * dy) / l2;
+  t = clamp(t, 0, 1);
+  return Math.hypot(px - (ax + dx * t), py - (ay + dy * t));
+}
+
+function gainTension(n) {
+  const was = player.tension || 0;
+  player.tension = Math.min(TENSION_MAX, was + n);
+  if (player.tension !== was) player.chargePop = 1;
+}
+
+// Who is actually mid-cast. A cantor winding a bolt and a shaman winding a
+// chant are both casting; a body walking at you is not, and an interrupt that
+// fires on the nearest body is not an interrupt.
+function isCasting(e) {
+  return e.hp > 0 && ((e.casting || 0) > 0 || (e.chanting || 0) > 0);
+}
+
+function nearestCaster(R) {
+  enemyGrid.query(player.x, player.y, R, _near);
+  let best = null, bestD = R * R;
+  for (let i = 0; i < _near.length; i++) {
+    const e = _near[i];
+    if (!isCasting(e)) continue;
+    if (!clearShot(player.x, player.y, e.x, e.y)) continue;
+    const d = dist2(player.x, player.y, e.x, e.y);
+    if (d < bestD) { bestD = d; best = e; }
+  }
+  return best;
+}
+
+// Silenced: whatever it was winding is lost, and it cannot start another.
+function silence(e, seconds) {
+  e.silenced = Math.max(e.silenced || 0, seconds);
+  e.casting = 0; e.chanting = 0;
+  // Put its own clock back too, or it starts again the instant the silence
+  // lifts and the interrupt bought nothing.
+  if (e.cast !== undefined) e.cast = Math.max(e.cast, seconds * 0.6);
+  if (e.chant !== undefined) e.chant = Math.max(e.chant, seconds * 0.6);
+}
+
+function updateBeams(dt) {
+  for (let i = beams.length - 1; i >= 0; i--) {
+    beams[i].life -= dt;
+    if (beams[i].life <= 0) beams.splice(i, 1);
+  }
+}
+
+// The pools. They slow what stands in them and eat what it is casting, which
+// is what makes a Null-Zone an answer to the back rank rather than damage.
+function updateNulls(dt) {
+  for (let i = nulls.length - 1; i >= 0; i--) {
+    const z = nulls[i];
+    z.life -= dt;
+    z.pulse += dt;
+    if (z.life <= 0) { nulls.splice(i, 1); continue; }
+    enemyGrid.query(z.x, z.y, z.r, _near);
+    for (let k = 0; k < _near.length; k++) {
+      const e = _near[k];
+      if (e.hp <= 0) continue;
+      if (dist2(e.x, e.y, z.x, z.y) > z.r * z.r) continue;
+      e.slowed = Math.max(e.slowed || 0, 0.12);
+      if (e.casting > 0) e.casting = Math.min(e.casting + dt * 2.2, 1e9);
+      if (e.chanting > 0) e.chanting = Math.min(e.chanting + dt * 2.2, 1e9);
+    }
+  }
+}
+
+function drawNulls() {
+  for (let i = 0; i < nulls.length; i++) {
+    const z = nulls[i];
+    const f = clamp(z.life / Math.min(1.2, z.max), 0, 1);
+    const g = ctx.createRadialGradient(z.x, z.y, 0, z.x, z.y, z.r);
+    g.addColorStop(0, 'rgba(10,4,18,' + (0.86 * f).toFixed(3) + ')');
+    g.addColorStop(0.72, 'rgba(38,12,64,' + (0.6 * f).toFixed(3) + ')');
+    g.addColorStop(1, 'rgba(60,20,96,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.ellipse(z.x, z.y, z.r, z.r * 0.78, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(176,124,255,' + (0.5 * f).toFixed(3) + ')';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([7, 9]);
+    ctx.lineDashOffset = -z.pulse * 22;
+    ctx.beginPath(); ctx.ellipse(z.x, z.y, z.r * 0.9, z.r * 0.7, 0, 0, TAU); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+function drawBeams() {
+  for (let i = 0; i < beams.length; i++) {
+    const b = beams[i];
+    const f = b.life / b.max;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = b.hue || '#5fd0ff';
+    ctx.globalAlpha = f;
+    ctx.lineWidth = 3 + f * 9;
+    ctx.shadowColor = b.hue || '#5fd0ff';
+    ctx.shadowBlur = lowFx ? 0 : 18;
+    ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(b.ex, b.ey); ctx.stroke();
+    ctx.globalAlpha = f * 0.9;
+    ctx.strokeStyle = 'rgba(238,250,255,.95)';
+    ctx.lineWidth = 1.6 + f * 2.4;
+    ctx.shadowBlur = 0;
+    ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(b.ex, b.ey); ctx.stroke();
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+}
 
 // Nearest body inside a radius that is actually reachable. Shares the rule the
 // blade uses: rock stops everything, and Isaac does not see mirages.
@@ -4984,6 +5258,12 @@ function updateAbilities(dt) {
   if (player.chargePop > 0) player.chargePop = Math.max(0, player.chargePop - dt * 3);
   if (player.mitigate > 0) player.mitigate = Math.max(0, player.mitigate - dt);
   if (player.rooted > 0) player.rooted = Math.max(0, player.rooted - dt);
+  if (player.swapCd > 0) player.swapCd = Math.max(0, player.swapCd - dt);
+  // Tension comes back slowly on its own. It is meant to be refilled by
+  // interrupting something, not by standing still and waiting.
+  if (player.hero === 'zayd' && (player.tension || 0) < TENSION_MAX) {
+    player.tension = Math.min(TENSION_MAX, (player.tension || 0) + TENSION_REGEN * dt);
+  }
 
   const c = player.channel;
   if (c) {
@@ -5101,7 +5381,8 @@ const FLOAT_STYLE = {
   soaked: { c: '#7c7566', px: 11, rim: 'rgba(6,4,3,.4)',    w: 2, pop: 0.06 },
   taken:  { c: '#e0563f', px: 19, rim: 'rgba(6,4,3,.9)',     w: 3.5, pop: 0.34 },
   bleed:  { c: '#a8242a', px: 14, rim: 'rgba(6,4,3,.8)',     w: 2.5, pop: 0.12 },
-  coin:   { c: '#e8c060', px: 17, rim: 'rgba(6,4,3,.85)',    w: 3, pop: 0.22 }
+  coin:   { c: '#e8c060', px: 17, rim: 'rgba(6,4,3,.85)',    w: 3, pop: 0.22 },
+  heal:   { c: '#8fe07a', px: 20, rim: 'rgba(6,20,4,.85)',   w: 3.5, pop: 0.4 }
 };
 
 function drawFloaters() {
@@ -5463,6 +5744,11 @@ function updateEnemies(dt) {
     const e = enemies[i];
     if (e.hp <= 0) continue;
     e.hitFlash = Math.max(0, e.hitFlash - dt);
+    // Both are refreshed rather than accumulated -- a Null-Zone re-applies its
+    // slow every frame you stand in it, and a second interrupt on a silenced
+    // body should not stack into a minute of quiet.
+    if (e.slowed > 0) e.slowed = Math.max(0, e.slowed - dt);
+    if (e.silenced > 0) e.silenced = Math.max(0, e.silenced - dt);
     e.wob += dt * 7;
 
     if (e.kind === 'mirage') {
@@ -5629,7 +5915,8 @@ function updateEnemies(dt) {
     // walks to find a line, and you break the line to stop it.
     let shade = 0;    // -1 give ground, 1 close in, 2 planted to cast
     if (e.role === 'shade') {
-      const clear = clearShot(e.x, e.y, player.x, player.y);
+      // Silenced: the ley-lines are snapped and nothing can be wound.
+      const clear = clearShot(e.x, e.y, player.x, player.y) && !((e.silenced || 0) > 0);
       if (e.casting > 0) {
         e.casting -= dt;
         if (e.casting <= 0) {
@@ -5684,7 +5971,8 @@ function updateEnemies(dt) {
     // it and the gloom is stopped only by reaching him, which is the point.
     let chant = 0;    // -1 give ground, 1 close in, 2 planted to cast
     if (e.role === 'chant') {
-      const clear = clearShot(e.x, e.y, player.x, player.y);
+      // Silenced: the ley-lines are snapped and nothing can be wound.
+      const clear = clearShot(e.x, e.y, player.x, player.y) && !((e.silenced || 0) > 0);
       if (e.chanting > 0) {
         e.chanting -= dt;
         if (e.chanting <= 0) {
@@ -5804,7 +6092,10 @@ function updateEnemies(dt) {
     }
 
     const mx0 = e.x, my0 = e.y;
-    moveEntity(e, (sx + rx * 0.8) * e.speed * dt, (sy + ry * 0.8) * e.speed * dt);
+    // Slowed by a Null-Zone. The pool does not kill anything; it decides how
+    // fast the ground in front of you can be crossed.
+    const spd = e.speed * ((e.slowed || 0) > 0 ? 0.3 : 1);
+    moveEntity(e, (sx + rx * 0.8) * spd * dt, (sy + ry * 0.8) * spd * dt);
     advanceGait(e, mx0, my0, dt);
   }
 }
@@ -6262,6 +6553,9 @@ function update(dt) {
   updateProps(dt);
   updateSlams(dt);
   updateHazards(dt);
+  updateBeams(dt);
+  updateNulls(dt);
+  if (swapFlash > 0) swapFlash = Math.max(0, swapFlash - dt * 3.4);
   updateDrops(dt);
   updateCorpse(dt);
   updateParticles(dt);
@@ -10591,11 +10885,13 @@ function draw(t) {
   drawChests(t);
   drawLoot(t);
   drawHazards(t);
+  drawNulls();
   drawSlams(t);
   drawCorpse(t);
   drawDrops(t);
   drawStanding(t, x0, y0, x1, y1);
   drawArcs();
+  drawBeams();
   drawBolts(t);
   drawParticles();
   if (!lowFx) drawLightPass(t);
@@ -10605,6 +10901,7 @@ function draw(t) {
   ctx.restore();
 
   drawMotes(t);
+  drawSwapFlash();
   if (vignette && !lowFx) ctx.drawImage(vignette, 0, 0, view.w, view.h);
   drawGloom();
   if (run && run.banner > 0 && state !== 'menu') {
@@ -11019,6 +11316,89 @@ function hitFlashUI() {
   flashTimer = setTimeout(() => { el.flash.style.opacity = '0'; }, 90);
 }
 
+/* --- the other one ---------------------------------------------------------
+   Two of the Clear-Sighted went down there, and the fiction has always said
+   so: Isaac is proof against the Deceiver's illusions and Zayd against his
+   tether, which is a pair of answers to one antagonist. Until now you took one
+   and left the other at the gate.
+
+   They keep their own life. Swapping is not a heal and not an escape -- the
+   one you leave keeps the wounds you left him with, and comes back with them.
+
+   GEAR IS SHARED. One worn kit, and the hero-forged affixes pay out for
+   whichever of them is holding it. Two kits would double what a run has to
+   farm before either of them is dressed, and the alternative -- half your
+   affixes idle at all times -- is worse.
+   -------------------------------------------------------------------- */
+function otherHero() { return player.hero === 'isaac' ? 'zayd' : 'isaac'; }
+
+function swapBlocked() {
+  if (state !== 'play') return 'no';
+  if ((player.swapCd || 0) > 0) return 'cd';
+  if (onGCD()) return 'gcd';
+  return null;
+}
+
+function swapHero() {
+  if (swapBlocked()) return false;
+  const from = player.hero, to = otherHero();
+
+  breakChannel('swap');
+  // Bank what this one is carrying, then take up what the other was left with.
+  run.pools = run.pools || {};
+  run.pools[from] = { hp: player.hp, charges: player.charges || 0,
+                      tension: player.tension || 0, jars: player.jars || 0,
+                      cds: Object.assign({}, player.cds) };
+
+  player.hero = to;
+  recomputeStats(player);                 // stats and the forged-for bonus both
+  const bank = run.pools[to];
+  if (bank) {
+    player.hp = Math.min(bank.hp, player.maxHp);
+    player.charges = bank.charges; player.tension = bank.tension;
+    player.jars = bank.jars; player.cds = bank.cds;
+  } else {
+    // First time out. A hero who has not been down yet arrives whole.
+    player.hp = player.maxHp;
+    player.charges = 0; player.tension = 0;
+    player.jars = JAR_USES; player.cds = {};
+  }
+
+  player.swapCd = SWAP_CD;
+  startGCD(1.25);                          // 1.5s, the beat the brief asks for
+  player.invuln = Math.max(player.invuln, 0.35);
+  swapFlash = 1;
+  shake(7);
+  ring(player.x, player.y, HEROES[to].magic, 8, 90, 0.4);
+  burst(player.x, player.y, HEROES[to].magic, 22, 260);
+  buildKit();
+  syncHeroSkin();
+  toast(HEROES[to].name + ' takes the ground', HEROES[to].magic);
+  return true;
+}
+
+// The composite flash. One frame-wide wash in the arriving hero's colour,
+// drawn over everything, falling away fast.
+let swapFlash = 0;
+function drawSwapFlash() {
+  if (swapFlash <= 0) return;
+  const H = HEROES[player.hero];
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = swapFlash * 0.5;
+  ctx.fillStyle = H.magic;
+  ctx.fillRect(0, 0, view.w, view.h);
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
+// The interface belongs to whoever is holding the ground: Isaac's bronze and
+// Sun-Gold, or Zayd's Azure. One class on the body, and every frame follows.
+function syncHeroSkin() {
+  document.body.classList.toggle('as-zayd', player.hero === 'zayd');
+  document.documentElement.style.setProperty('--hero', HEROES[player.hero].magic);
+}
+
 /* --- the kit, on the glass -------------------------------------------------
    Built once when a run starts, then only the state that changed is written
    each frame. The HUD next door already works this way and for the same
@@ -11046,6 +11426,14 @@ function buildKit() {
       castAbility(a.id);
     });
     keys.appendChild(b);
+  }
+  const sw = $('swapBtn');
+  if (sw && !sw._wired) {
+    sw._wired = true;
+    sw.addEventListener('pointerdown', ev => {
+      ev.preventDefault(); ev.stopPropagation();
+      swapHero();
+    });
   }
   if (pips) {
     pips.innerHTML = '';
@@ -11077,13 +11465,40 @@ function syncKit(force) {
     b.querySelector('.cdn').textContent = cd > 0 ? Math.ceil(cd) : '';
   }
 
-  const pips = $('chargePips');
-  if (pips) {
+  // Whichever pool this one fights on. Charges are three pips and Tension is
+  // a hundred points, so they are different readouts and only one is up.
+  const pips = $('chargePips'), tb = $('tensionBar');
+  const isZayd = player.hero === 'zayd';
+  if (pips) pips.hidden = isZayd;
+  if (tb) tb.hidden = !isZayd;
+  if (pips && !isZayd) {
     const n = player.charges || 0;
     if (force || kitCache._ch !== n) {
       kitCache._ch = n;
       const kids = pips.children;
       for (let i = 0; i < kids.length; i++) kids[i].className = i < n ? 'lit' : '';
+    }
+  }
+  if (tb && isZayd) {
+    const f = Math.round((player.tension || 0) / TENSION_MAX * 100) / 100;
+    if (force || kitCache._tn !== f) {
+      kitCache._tn = f;
+      $('tensionFill').style.transform = 'scaleX(' + f + ')';
+    }
+  }
+
+  // The swap wears its own cooldown, and it says which of them it will call.
+  const sw = $('swapBtn');
+  if (sw) {
+    const cd = player.swapCd || 0;
+    const blk = swapBlocked();
+    const sig = blk + '|' + Math.ceil(cd);
+    if (force || kitCache._sw !== sig) {
+      kitCache._sw = sig;
+      sw.className = 'key swap' + (blk ? ' ' + blk : ' ready');
+      sw.querySelector('.sweep').style.setProperty('--sw', (cd > 0 ? cd / SWAP_CD : 0) + 'turn');
+      sw.querySelector('.cdn').textContent = cd > 0 ? Math.ceil(cd) : '';
+      sw.setAttribute('aria-label', 'Call ' + HEROES[otherHero()].name);
     }
   }
 
@@ -11124,10 +11539,14 @@ function resetRun(heroId, levelId, diffId) {
   player  = makePlayer(spawn.x, spawn.y, hero);
   enemies = []; arcs = []; loot = []; drops = []; particles = []; rings = [];
   floaters = []; bolts = []; chests = [];
-  slams = []; hazards = [];
+  slams = [];
+  beams = []; nulls = []; hazards = [];
   enemyGrid = new SpatialHash(ENEMY_CELL);
 
   run = { time: 0, tech: 0, kills: 0,
+          // Where the one who is not on the ground keeps his wounds. Cleared
+          // per run: swapping is not a heal, but a new delve is a new delve.
+          pools: {},
           spawnTimer: 1.4, hero: hero, level_id: LEVEL.id,
           diff_id: DIFF.id,
           banner: 4.2,
@@ -11162,6 +11581,7 @@ function startRun(heroId, levelId, diffId) {
   resetRun(heroId, levelId, diffId);
   state = 'play';
   buildKit();
+  syncHeroSkin();
   showScreen(null);
 }
 
@@ -12219,7 +12639,7 @@ showScreen('splash');
 requestAnimationFrame(frame);
 </script>
 <script>
-/* generated from index.html 9c99e53fbe48 + overlay c49f1ecc083e by tools/build-debug.js — do not edit */
+/* generated from index.html 44089326da5c + overlay c49f1ecc083e by tools/build-debug.js — do not edit */
 /* =============================================================================
    THE RIVENMARK — debug overlay
    Injected into debug.html by tools/build-debug.js. Never shipped in the
