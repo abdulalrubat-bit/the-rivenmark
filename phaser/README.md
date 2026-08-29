@@ -89,3 +89,41 @@ native, pngjs is pure JS, and esbuild ships an `android-arm64` binary.
 `atlas.png`, `atlas.json`, `manifest.json` and `bundle.js` are all built.
 Do not hand-edit them; `index.html` in there is the shell and is written by
 hand.
+
+## The core
+
+`src/core/core.js` is **generated** by `npm run core` from `../index.html`. Do
+not edit it; edit the canvas build and re-run. The canvas build is still the
+live game, and a port that forks the logic by hand drifts the moment anything
+is tuned.
+
+What comes across: config and tuning, maths, the spatial hash, world
+generation, collision, entities and spawning, the kit, input, the whole
+simulation, and the enemy ecosystem and Deceiver encounter that live in the
+canvas build's UI section but are simulation wherever they sit. 493 statements,
+271kB. What stays behind: 16 drawing functions and 47 page-bound ones.
+
+At the foot of the generated file is a list of what the host must supply —
+generated too, so it cannot go stale. `src/host/stubs.js` provides them.
+
+### It is verified, not asserted
+
+`npm run verify` runs the canvas build's own suites against the extracted core
+and compares them, suite by suite, in the same session. A suite that asserts
+about the renderer or the DOM is reported as not comparable rather than quietly
+dropped — deciding that by hand, one failure at a time, is indistinguishable
+from excluding whatever happens to be failing.
+
+Six suites are comparable, and all six match assertion for assertion:
+
+| suite | |
+|---|---|
+| roles | 25/25 |
+| lieuts | 16/16 |
+| bosses | 24/24 |
+| invader | 19/19 |
+| eco | 25/25 |
+| crescent | 7/7 |
+
+That is 116 assertions about spawning, roles, bosses, the invader, the enemy
+ecosystem and the blade, all holding against a core with no renderer at all.
