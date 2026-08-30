@@ -174,6 +174,34 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
          withArc.n + ' with, ' + without.n + ' without), brightest rgb(' +
          (withArc.best || []).join(',') + ') against ' + arc.magic);
 
+  /* The numbers survive lowFx.
+   *
+   * They used to be shed with the fog, and that was invisible for as long as
+   * nothing set the flag. The Phaser build's frame governor sets it for real,
+   * and the first thing it did was take every damage number off the screen on
+   * exactly the device that needed them most. A number is information: the
+   * whole ranked-floater hierarchy exists so a scratch reads differently from
+   * a heavy landing, and a phone short of frames is not a reason to stop
+   * saying what a hit did.
+   */
+  const under = await p.evaluate(async () => {
+    const was = lowFx;
+    floaters.length = 0;
+    lowFx = true;
+    const e = enemies.find(x => x.hp > 0);
+    if (!e) { lowFx = was; return { none: true }; }
+    damageEnemy(e, 25);
+    floatWord(e.x, e.y, 'TESTED', 'tether');
+    const n = floaters.length;
+    const kinds = floaters.map(f => f.kind);
+    lowFx = was;
+    return { n, kinds };
+  });
+  ck('and they are not shed when the frame is', !under.none && under.n >= 2,
+     under.none ? 'nothing left alive to hit'
+       : under.n + ' floaters raised with lowFx on (' + under.kinds.join(', ') + ')');
+  await p.evaluate(() => { floaters.length = 0; });
+
   /* The Deceiver's tells, in pixels.
    *
    * The encounter is telegraph and answer all the way down: a Lieutenant winds

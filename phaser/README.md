@@ -60,12 +60,21 @@ the hero, the kit casts, the HUD reads the run.
 | `npm run smoke:overlay` | 22 checks — the map, the arrow out, the boss bar, the crystal |
 | `npm run smoke:air` | 18 checks — light, haze, ash, the dark, and the governor |
 | `npm run smoke:play` | 16 checks — the stick, the kit, and the HUD's layout |
-| `npm run smoke:fx` | 15 checks — the fight reads, the crescent and the tells in pixels |
+| `npm run smoke:fx` | 16 checks — the fight reads, the crescent and the tells in pixels |
 | `npm run smoke:loop` | 15 checks — dying, the outcome, the gate-house, descending again |
 | `npm run smoke:forge` | 13 checks — equipping, and that worn gear reaches the hero |
 | `npm run smoke:spend` | 13 checks — the vendor and the hall, and that coin buys what it says |
 | `npm run smoke` | 13 checks — the proving scene and the diagnostics dump |
 | `npm run verify` | the canvas suites against the extracted core |
+
+One thing never sheds, and the numbers are the second: `floatDmg` and
+`floatWord` used to bail on `lowFx` too, which was invisible for as long as
+nothing set the flag. The governor sets it for real, and the first thing it did
+was take every damage number off the screen on exactly the device that needed
+them most. A number is information — the whole ranked-floater hierarchy exists
+so a scratch reads differently from a heavy landing — and it costs nothing
+worth having: floaters are capped at 22, merged on the way in, and pooled Text
+objects here.
 
 Each suite builds `public/bundle.js` before it serves it. That is not a
 convenience. The suites serve a build artefact, nothing rebuilt it, and so for
@@ -74,6 +83,11 @@ It surfaced when a deliberate stub — a `return` at the top of the culling pass
 put there to prove the culling assertions could fail — changed nothing at all:
 the browser never saw the edit. A test that cannot see your change cannot fail
 on it, and a suite that green-lights a stub is worse than no suite.
+
+The build also copies `src/core/core.js` to `public/core.js`, which the page
+actually loads. That was a hand copy, and a hand copy that is forgotten leaves
+the game running the previous core with nothing to say so — the same hazard,
+and worse: a stale bundle is stale presentation, a stale core is stale rules.
 
 The HUD is DOM over the canvas, as it is in the canvas build: text stays crisp
 at any dpr without a font atlas, a button is a real 44px touch target, and none
