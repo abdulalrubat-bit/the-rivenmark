@@ -38,4 +38,8 @@ configurations.all {
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'androidx.core:core:1.13.1'
+    // WebViewAssetLoader: serves assets/ over an https origin instead of
+    // file://, which the Phaser build needs because it fetches atlas.json and
+    // XHR from a file:// origin is refused by every current WebView.
+    implementation 'androidx.webkit:webkit:1.11.0'
 }
