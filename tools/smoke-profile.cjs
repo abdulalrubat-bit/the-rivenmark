@@ -78,13 +78,26 @@ const LAYER = 'drawProps'; // ...which the profile calls `scenery`
   ck('the profile runs to completion', done, done ? '' : 'never finished');
   if (!done) { report(); await b.close(); process.exit(1); }
 
+  /* Over file:// the clipboard REJECTS -- navigator.clipboard exists in an
+   * Android WebView but writeText fails, because file:// is not a secure
+   * context. That is the device this whole tool exists to measure, so the
+   * fallback is what actually gets tested here: the table has to appear in a
+   * selectable box on screen. A guard on the API being present is not enough;
+   * the promise fails and the button appears to do nothing at all. */
   await p.evaluate(() => {
     [...document.querySelectorAll('#dbg button')]
       .find(x => x.textContent === 'copy profile').click();
   });
-  const text = await p.evaluate(() => navigator.clipboard.readText()).catch(() => '');
-  ck('and puts its findings on the clipboard', /LAYER PROFILE/.test(text),
-     text ? text.split('\n')[0] : 'nothing copied');
+  await sleep(400);
+  const shown = await p.evaluate(() => {
+    const ta = document.querySelector('#dbgProfOut textarea');
+    return ta ? ta.value : '';
+  });
+  const clip = await p.evaluate(() => navigator.clipboard.readText()).catch(() => '');
+  const text = /LAYER PROFILE/.test(shown) ? shown : clip;
+  ck('the findings come back off the device', /LAYER PROFILE/.test(text),
+     /LAYER PROFILE/.test(shown) ? 'in a selectable box (clipboard unavailable here)'
+       : /LAYER PROFILE/.test(clip) ? 'on the clipboard' : 'nowhere');
 
   const rows = text.split('\n')
     .map(l => l.match(/^ {2}(\S+)\s+>?=?\s*([-+])([\d.]+)ms(.*)$/))
