@@ -75,6 +75,13 @@ export class Delve extends Phaser.Scene {
 
   preload() {
     this.load.atlas('art', 'atlas.png', 'atlas.json');
+    // The manifest travels with the atlas and this scene needs it: the wall
+    // course spans and the authored-art scale table both live in it. main.js
+    // loaded it and this scene did not, and since both readers had a `||`
+    // fallback nothing ever said so -- every vertical wall course was drawn
+    // 100 wide instead of 30, three times too wide, from the day the dressing
+    // went in.
+    this.load.json('manifest', 'manifest.json');
   }
 
   create() {
@@ -98,6 +105,18 @@ export class Delve extends Phaser.Scene {
       run.banner = 0;
       console.log('startRun ' + (performance.now() - t0).toFixed(0) + 'ms');
     }
+
+    /* The manifest is not optional. A missing one used to mean silently wrong
+     * geometry rather than a failure, which is the worst of both: the game
+     * runs and the walls are wrong. Say so once, loudly, and carry on with
+     * defaults so a broken build is still playable enough to debug. */
+    this.man = this.cache.json.get('manifest');
+    if (!this.man) {
+      console.error('manifest.json did not load — wall courses and authored-art ' +
+                    'scales will fall back to defaults and be WRONG');
+      this.man = {};
+    }
+    this.frameScale = this.man.frame_scale || {};
 
     this.cameras.main.setBackgroundColor(PAL.floor || '#1a1512');
     this.cameras.main.setBounds(0, 0, WORLD.w, WORLD.h);
@@ -126,7 +145,8 @@ export class Delve extends Phaser.Scene {
     // Sorted with the crowd, not over it. At a fixed high depth the hero drew
     // through every body standing in front of him, which reads as him being
     // pasted on top of the scene rather than in it.
-    this.hero.setScale(1 / SS).setDepth(this.stepping ? player.y : 1e5);
+    this.hero.setDepth(this.stepping ? player.y : 1e5);
+    this.wearFrame(this.hero, this.hero.frame.name);
     this.heroShadow = this.add.image(0, 0, 'art', 'misc/shadow')
       .setDisplaySize(26, 14).setDepth(-400);
     this.lootImgs = [];
@@ -285,7 +305,7 @@ export class Delve extends Phaser.Scene {
       const up = STANDING[p.kind];
       if (up) this.propImgs.push(this.shadowAt(p.x, p.y, up, 2));
       const img = this.add.image(p.x, p.y, 'art', key)
-        .setScale(1 / SS).setDepth(up ? p.y : p.y - 1e4);
+        .setScale(this.artScale(key)).setDepth(up ? p.y : p.y - 1e4);
       this.propImgs.push(img);
     }
 
@@ -345,14 +365,15 @@ export class Delve extends Phaser.Scene {
         if (cellAt(cx, cy) !== SOLID) continue;
         if (pitGrid && pitGrid[gi(cx, cy)]) continue;      // a hole gets no top
         const h = ((cx * 73856093) ^ (cy * 19349663)) >>> 0;
-        const img = this.add.image(cx * T, cy * T, 'art', 'walls/top-' + (h % 6))
-          .setOrigin(0, 0).setScale(1 / SS).setDepth(-1.5e5);
+        const topKey = 'walls/top-' + (h % 6);
+        const img = this.add.image(cx * T, cy * T, 'art', topKey)
+          .setOrigin(0, 0).setScale(this.artScale(topKey)).setDepth(-1.5e5);
         this.wallImgs.push(img);
       }
     }
 
     // Masonry along every exposed face.
-    const spans = (this.cache.json.get('manifest') || {}).wall_dressing || [];
+    const spans = (this.man && this.man.wall_dressing) || [];
     const spanOf = name => spans.find(s => s.name === name) || { spanW: 100, spanH: 30 };
     const L = spanOf('course-0-0').spanW;
     for (const e of edges) {
@@ -419,6 +440,36 @@ export class Delve extends Phaser.Scene {
   }
   frameW(key) { const f = this.textures.getFrame('art', key); return f ? f.width : 0; }
   frameH(key) { const f = this.textures.getFrame('art', key); return f ? f.height : 0; }
+
+  /* How big a frame is meant to be drawn.
+   *
+   * Everything forged is exported at SS (2x) and drawn at 1/2. Authored art in
+   * art-custom/ has no reason to be at that resolution -- a 4x thrall is a
+   * better thrall -- so the packer records the ratio of each replacement to
+   * the frame it replaced, and this divides by it. A build with no authored
+   * art has an empty table and every answer is 1/SS, exactly as before.
+   *
+   * Looked up rather than assumed, because the alternative is every authored
+   * sprite silently rendering at twice the size of the one it replaced.
+   */
+  artScale(key) {
+    const k = this.frameScale && this.frameScale[key];
+    return k ? 1 / (SS * k) : 1 / SS;
+  }
+
+  /* Put a frame on a sprite and make its scale match.
+   *
+   * The scale is corrected whether or not the FRAME changed, which is not
+   * belt-and-braces: a pooled sprite is constructed already wearing a frame,
+   * so a version of this that only acted on a change left every newly created
+   * sprite at the default scale -- and an authored 4x frame then stood at
+   * twice the size of the horde around it.
+   */
+  wearFrame(sp, key) {
+    if (sp.frame.name !== key && this.textures.getFrame('art', key)) sp.setFrame(key);
+    const want = this.artScale(sp.frame.name);
+    if (sp.scaleX !== want) sp.setScale(want);
+  }
 
   /* Which frame a body wears. The canvas build's bodyFrame/heroFrame, reading
    * the same gait state the core computes, resolved to atlas frames instead of
@@ -506,13 +557,15 @@ export class Delve extends Phaser.Scene {
   syncLoot(time) {
     const pool = this.lootImgs;
     while (pool.length < loot.length) {
-      pool.push(this.add.image(0, 0, 'art', 'misc/loot').setScale(1 / SS).setDepth(-380));
+      const im = this.add.image(0, 0, 'art', 'misc/loot').setDepth(-380);
+      this.wearFrame(im, 'misc/loot');
+      pool.push(im);
     }
     for (let i = 0; i < pool.length; i++) {
       const im = pool[i], l = loot[i];
       if (!l) { im.setVisible(false); continue; }
       const key = l.value > 1 ? 'misc/loot-big' : 'misc/loot';
-      if (im.frame.name !== key && this.textures.getFrame('art', key)) im.setFrame(key);
+      this.wearFrame(im, key);
       im.setVisible(true).setPosition(l.x, l.y).setRotation(l.spin || 0);
     }
   }
@@ -560,7 +613,8 @@ export class Delve extends Phaser.Scene {
     const live = this.stepping ? enemies.filter(e => e.hp > 0) : [];
     const pool = this.pool;
     while (pool.length < live.length) {
-      const s = this.add.sprite(0, 0, 'art', 'bestiary/thrall-rest').setScale(1 / SS);
+      const s = this.add.sprite(0, 0, 'art', 'bestiary/thrall-rest');
+      this.wearFrame(s, 'bestiary/thrall-rest');
       pool.push(s);
     }
     while (this.shadows.length < live.length) {
@@ -580,7 +634,7 @@ export class Delve extends Phaser.Scene {
       if (!e) { s.setVisible(false); continue; }
       const key = this.bodyFrame(e);
       s.setVisible(true).setPosition(e.x, e.y).setDepth(e.y);
-      if (s.frame.name !== key && this.textures.getFrame('art', key)) s.setFrame(key);
+      this.wearFrame(s, key);
       s.setFlipX(e.face < 0);
       // Struck bodies flash, calcifying ones sit under a shell of light.
       s.setTint(e.hitFlash > 0 ? 0xffffff : (e.calcify > 0 ? 0x9fd8e8 : 0xffffff));
@@ -589,7 +643,7 @@ export class Delve extends Phaser.Scene {
 
     if (!this.stepping) return;
     const hk = this.heroFrame(player);
-    if (this.hero.frame.name !== hk && this.textures.getFrame('art', hk)) this.hero.setFrame(hk);
+    this.wearFrame(this.hero, hk);
     this.hero.setPosition(player.x, player.y).setFlipX(player.face < 0)
         .setDepth(player.y);
     this.heroShadow.setPosition(player.x + LIGHT.x * LIGHT.body,
