@@ -12,7 +12,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.join(here, '..', 'public');
+// public/ by default; ROOT overrides it so a suite can serve a DEPLOYED copy
+// instead. What a player gets is what deploy.js chose to copy, and that list
+// is worth testing against rather than assuming.
+const ROOT = process.env.ROOT || path.join(here, '..', 'public');
 const PORT = +(process.env.PORT || 8080);
 
 const TYPES = { '.html':'text/html', '.js':'text/javascript', '.map':'application/json',

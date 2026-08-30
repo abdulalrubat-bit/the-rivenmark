@@ -21,7 +21,10 @@
     "smoke:spend": "node tools/smoke-spend.cjs",
     "smoke:world": "node tools/smoke-world.cjs",
     "smoke:overlay": "node tools/smoke-overlay.cjs",
-    "smoke:air": "node tools/smoke-air.cjs"
+    "smoke:air": "node tools/smoke-air.cjs",
+    "icons": "node tools/make-icons.js",
+    "deploy": "node tools/deploy.js",
+    "smoke:pwa": "node tools/smoke-pwa.cjs"
   },
   "dependencies": {
     "phaser": "^4.2.1"

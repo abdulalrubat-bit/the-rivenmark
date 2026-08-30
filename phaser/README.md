@@ -59,6 +59,7 @@ the hero, the kit casts, the HUD reads the run.
 | `npm run smoke:world` | 18 checks — the waygate, the coffers, the slag, the beacons |
 | `npm run smoke:overlay` | 22 checks — the map, the arrow out, the boss bar, the crystal |
 | `npm run smoke:air` | 18 checks — light, haze, ash, the dark, and the governor |
+| `npm run smoke:pwa` | 13 checks — installable, and it opens with the network cut |
 | `npm run smoke:play` | 16 checks — the stick, the kit, and the HUD's layout |
 | `npm run smoke:fx` | 16 checks — the fight reads, the crescent and the tells in pixels |
 | `npm run smoke:loop` | 15 checks — dying, the outcome, the gate-house, descending again |
@@ -206,6 +207,41 @@ frames to 1%. `smoke-delve` asserts both halves — that the stone is there, and
 that most of it is switched off — because either one passes while the other is
 broken.
 
+## Getting it onto a phone
+
+`npm run deploy <dir>` copies the thirteen files a player actually needs into a
+directory something else serves, and nothing else — not the 11MB source map,
+not the core-test harness. It builds first, always: every hard lesson in this
+folder is the same one, and a stale deploy is the worst of them because it
+lands on a device you cannot reach and gives no sign at all.
+
+What lands is an installable app. `app.webmanifest` and `sw.js` make it one:
+add it to the home screen and it opens fullscreen, in portrait, with no browser
+chrome — and it opens **with no network**, because the service worker holds the
+whole 3.4MB shell. That is the difference between a game and a web page: the
+atlas alone is 1.6MB, and fetching it over a phone connection every launch is
+felt every single time.
+
+The worker's cache key is a hash of the content being shipped, stamped by the
+deploy step. A key bumped by hand is a key someone forgets, and a forgotten one
+leaves an installed player on an old build for ever — their browser keeps
+serving the cached shell and never asks. Same class of mistake as the stale
+bundle and the stale core, with the longest blast radius of the three.
+
+`smoke:pwa` deploys to a temp directory, serves *that*, installs the worker,
+then cuts the network and reloads. Everything else about a PWA can pass while
+that fails, and it fails on a train rather than at a desk.
+
+The icons are drawn in arithmetic — pure pngjs, no browser — so they can be
+regenerated under Termux like everything else here. The mark is the crescent,
+because it is the whole of the hero's attack and the one shape a player of this
+game would know at 48 pixels. The first cut of it was the difference of two
+circles, which is a lune: a fat moon, exactly what the comment above it warned
+against. It is a thin tapering band now, the way the game draws it.
+
+An APK is a separate step and not done: a Trusted Web Activity wraps this
+manifest, but the wrapping needs an Android SDK.
+
 ## On the phone
 
 ```sh
@@ -226,6 +262,8 @@ screen rather than as an error.
 | `npm run dev` | rebuild on save + serve on 8080 |
 | `npm run build` | one-off bundle into `public/` |
 | `npm run atlas` | repack `public/atlas.png` from `../art` |
+| `npm run icons` | redraw the app icons |
+| `npm run deploy <dir>` | build, then copy what a player needs into `<dir>` |
 
 Nothing compiles on the device: Phaser has a single dependency and it is not
 native, pngjs is pure JS, and esbuild ships an `android-arm64` binary.

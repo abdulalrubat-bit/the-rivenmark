@@ -1,7 +1,15 @@
 <!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>The Rivenmark — Phaser</title>
+<title>The Rivenmark</title>
+<meta name="theme-color" content="#0b0908">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Rivenmark">
+<link rel="manifest" href="app.webmanifest">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <style>
   html,body{margin:0;height:100%;background:#0b0908;overflow:hidden;
             -webkit-tap-highlight-color:transparent}
@@ -18,3 +26,15 @@
 <script src="host-real.js"></script>
 <script src="core.js"></script>
 <script src="bundle.js"></script>
+<!-- Installability, and a delve that opens on a train. Registered last and
+     guarded: a service worker is an enhancement, and a page that will not boot
+     without one is a page that will not boot from file:// or over plain http,
+     which is exactly where this gets developed. -->
+<script>
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(e =>
+        console.log('no service worker: ' + e.message));
+    });
+  }
+</script>
