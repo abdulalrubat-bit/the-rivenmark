@@ -60,7 +60,7 @@ the hero, the kit casts, the HUD reads the run.
 | `npm run smoke:overlay` | 22 checks — the map, the arrow out, the boss bar, the crystal |
 | `npm run smoke:air` | 19 checks — light, haze, ash, the dark, and the governor |
 | `npm run smoke:prof` | 10 checks — the layer profiler finds a planted cost |
-| `npm run smoke:pwa` | 13 checks — installable, and it opens with the network cut |
+| `npm run smoke:pwa` | 14 checks — installable, offline, and served from a subpath |
 | `npm run smoke:play` | 16 checks — the stick, the kit, and the HUD's layout |
 | `npm run smoke:fx` | 16 checks — the fight reads, the crescent and the tells in pixels |
 | `npm run smoke:loop` | 15 checks — dying, the outcome, the gate-house, descending again |
@@ -137,6 +137,13 @@ layer big enough to reach the refresh ceiling alone has its saving cut off and
 is marked `>=`; the noise band comes from the drift between two baselines
 rather than being picked. `smoke:prof` plants a known cost in one layer and
 asserts the profile names that layer and clears the other twelve.
+
+The dump says whether the mood was ON for the numbers beside it. It did not,
+and that was the one omission that could invert a reading: 60fps at full
+effects and 60fps with the atmosphere already shed are different findings
+about the same number. `effects` now reports `full` or `LOW (mood shed)`, how
+many times the governor dropped and restored this session, and its last
+sample.
 
 **And the governor that takes it away.** The port had none: `lowFx` is read all
 over — by the atmosphere, and by the core's own budgets — and nothing ever set

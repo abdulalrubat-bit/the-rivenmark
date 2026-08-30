@@ -205,10 +205,53 @@
     }
     lines.push('ua ' + navigator.userAgent);
     prof.text = lines.join('\n');
-    // Straight to the clipboard: this is meant to come back to a desk, and
-    // reading twenty numbers off a phone and retyping them loses exactly the
-    // ones that matter.
-    if (navigator.clipboard) navigator.clipboard.writeText(prof.text).catch(() => {});
+    showProfile(prof.text);
+  }
+
+  /* Getting the table off the phone.
+   *
+   * navigator.clipboard EXISTS in an Android WebView over file:// and its
+   * writeText REJECTS, because file:// is not a secure context. Guarding on
+   * the API being present is therefore not enough: the promise fails, the
+   * catch swallows it, and the button appears to do nothing at all -- on
+   * exactly the device this whole tool exists to measure. So the text is put
+   * on screen in a selectable box whenever the copy does not land, and the box
+   * is the fallback rather than an error message, because a table you can
+   * select and share is worth more than a report that it could not be copied.
+   */
+  function showProfile(text) {
+    const done = () => {};
+    let ok = false;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(done, () => showBox(text));
+        ok = true;
+      }
+    } catch (e) { ok = false; }
+    if (!ok) showBox(text);
+  }
+  function showBox(text) {
+    let box = document.getElementById('dbgProfOut');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'dbgProfOut';
+      box.innerHTML = '<textarea readonly></textarea><button type="button">close</button>';
+      box.style.cssText = 'position:fixed;inset:8px;z-index:60;background:#0b0f0a;' +
+        'border:1px solid #3c5a34;border-radius:8px;padding:8px;display:flex;' +
+        'flex-direction:column;gap:6px';
+      const ta = box.querySelector('textarea');
+      ta.style.cssText = 'flex:1;width:100%;background:#101610;color:#d8e4d0;' +
+        'border:1px solid #3c5a34;border-radius:4px;font:12px ui-monospace,monospace;padding:6px';
+      const cl = box.querySelector('button');
+      cl.style.cssText = 'min-height:44px;background:#1b2418;color:#d8e4d0;' +
+        'border:1px solid #3c5a34;border-radius:6px;font:12px ui-monospace,monospace';
+      cl.onclick = () => box.remove();
+      document.body.appendChild(box);
+    }
+    const ta = box.querySelector('textarea');
+    ta.value = text;
+    ta.focus();
+    ta.select();
   }
 
   // --- wrap the loop for timings -------------------------------------------
@@ -413,11 +456,8 @@
     // PROF_LAYERS: the draw/upd row above cannot see rasterising, so this is
     // the only thing in here that can say WHERE a frame goes.
     ['profile', () => startProfile()],
-    ['copy profile', () => {
-      const t = (prof && prof.text) || 'no profile yet — tap `profile` first';
-      if (navigator.clipboard) navigator.clipboard.writeText(t);
-      else window.prompt('profile', t);
-    }],
+    ['copy profile', () => showProfile(
+      (prof && prof.text) || 'no profile yet — tap `profile` first')],
     ['heal', () => { player.hp = player.maxHp; }],
     ['remake map', () => resetRun(run.hero)],
     ['drop item', () => { if (player.bag.length < BAG_MAX) {

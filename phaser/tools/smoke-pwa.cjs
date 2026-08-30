@@ -139,6 +139,48 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   ck('no errors offline', offErrs.length === 0, offErrs.slice(0, 3).join(' | '));
   await ctx.setOffline(false);
 
+  /* Served from a SUBPATH, which is what the APK does.
+   *
+   * The Android shell serves these same files over
+   * https://appassets.androidplatform.net/assets/, not at a root. Every URL in
+   * the build is relative, so it should hold -- but "should" is how a black
+   * screen on a phone starts, and this is the one part of that arrangement
+   * testable from here.
+   */
+  const sub = fs.mkdtempSync(path.join(os.tmpdir(), 'rivenmark-sub-'));
+  fs.mkdirSync(path.join(sub, 'assets'), { recursive: true });
+  for (const f of fs.readdirSync(dir)) {
+    fs.copyFileSync(path.join(dir, f), path.join(sub, 'assets', f));
+  }
+  const srv2 = spawn(process.execPath, [path.join(__dirname, 'serve.js')],
+                     { env: { ...process.env, PORT: String(+PORT + 1), ROOT: sub },
+                       stdio: 'ignore' });
+  await sleep(800);
+  const sp = await ctx.newPage();
+  const subFails = [];
+  sp.on('requestfailed', r => subFails.push(r.url().split('/').pop()));
+  sp.on('response', r => { if (r.status() >= 400) subFails.push(r.url().split('/').pop() + ' ' + r.status()); });
+  await sp.goto('http://localhost:' + (+PORT + 1) + '/assets/index.html');
+  let subUp = false;
+  for (let i = 0; i < 40 && !subUp; i++) {
+    await sleep(250);
+    subUp = await sp.evaluate(() => {
+      const g = window.__game;
+      return !!(g && g.scene.getScene('delve') && g.scene.getScene('delve').scene.isActive());
+    }).catch(() => false);
+  }
+  const subWorld = subUp ? await sp.evaluate(() => ({
+    walls: walls.length, frames: window.__game.textures.get('art').getFrameNames().length
+  })).catch(() => null) : null;
+  ck('and it runs served from a subpath, as the APK serves it',
+     subUp && subWorld && subWorld.frames > 200 && subFails.length === 0,
+     subUp ? (subWorld ? subWorld.walls + ' walls, ' + subWorld.frames + ' frames' +
+              (subFails.length ? ', FAILED: ' + subFails.join(', ') : ', nothing 404ed')
+              : 'booted but no world')
+           : 'never booted under /assets/');
+  await sp.close(); srv2.kill();
+  fs.rmSync(sub, { recursive: true, force: true });
+
   // --- what is shipped -----------------------------------------------------
   const shipped = fs.readdirSync(dir);
   ck('the source map is not published', !shipped.some(f => /\.map$/.test(f)),

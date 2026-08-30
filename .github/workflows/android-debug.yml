@@ -28,29 +28,45 @@ jobs:
 
       - uses: android-actions/setup-android@v3
 
-      - name: Build the debug page and copy it into assets
-        run: node android/sync-assets.js
+      # The APK carries the Phaser build, which is bundled with esbuild and
+      # whose atlas is packed with pngjs -- neither of which exists in a fresh
+      # checkout. Without this the first run failed with ERR_MODULE_NOT_FOUND
+      # before it ever reached Gradle.
+      - name: Install the Phaser build's tools
+        working-directory: phaser
+        run: npm ci --no-audit --no-fund
 
-      - name: Assert the packaged page matches the generated one
-        run: |
-          a=$(sha256sum debug.html | cut -d' ' -f1)
-          b=$(sha256sum android/app/src/main/assets/index.html | cut -d' ' -f1)
-          echo "debug.html      $a"
-          echo "packaged asset  $b"
-          [ "$a" = "$b" ] || { echo "::error::packaged asset does not match debug.html"; exit 1; }
+      - name: Build the game and copy it into assets
+        run: node android/sync-assets.js
 
       - name: Assemble
         working-directory: android
         run: gradle --no-daemon assembleDebug
 
-      - name: Check the APK carries the game
+      # The APK must carry exactly what sync-assets.js just built from source,
+      # file for file. It used to be one hash of one self-contained HTML file;
+      # the Phaser build is thirteen files, and checking only index.html would
+      # pass an APK with a stale bundle or no atlas in it at all.
+      - name: Check the APK carries the game, every file of it
         run: |
           apk=android/app/build/outputs/apk/debug/app-debug.apk
-          unzip -l "$apk" | grep -q 'assets/index.html' \
-            || { echo "::error::APK has no game asset"; exit 1; }
-          in_apk=$(unzip -p "$apk" assets/index.html | sha256sum | cut -d' ' -f1)
-          src=$(sha256sum debug.html | cut -d' ' -f1)
-          [ "$in_apk" = "$src" ] || { echo "::error::APK asset differs from debug.html"; exit 1; }
+          src=android/app/src/main/assets
+          n=0
+          for f in "$src"/*; do
+            b=$(basename "$f")
+            a=$(sha256sum "$f" | cut -d' ' -f1)
+            unzip -l "$apk" | grep -q "assets/$b" \
+              || { echo "::error::APK is missing assets/$b"; exit 1; }
+            c=$(unzip -p "$apk" "assets/$b" | sha256sum | cut -d' ' -f1)
+            [ "$a" = "$c" ] || { echo "::error::assets/$b in the APK differs from source"; exit 1; }
+            n=$((n+1))
+          done
+          echo "$n asset(s) verified against source"
+          # The three that would leave a black screen if they went missing.
+          for must in index.html bundle.js atlas.png; do
+            unzip -l "$apk" | grep -q "assets/$must" \
+              || { echo "::error::APK has no assets/$must"; exit 1; }
+          done
           ls -lh "$apk"
 
       - uses: actions/upload-artifact@v4

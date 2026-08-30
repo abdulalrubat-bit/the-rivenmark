@@ -722,24 +722,41 @@ restores the real generator.
 
 ## Android
 
-`android/` wraps the game in a WebView and packages it as a debug APK. The game
-itself is unchanged by this — it is still one HTML file that runs from `file://`,
-and the Android app is a shell around it.
+`android/` wraps the game in a WebView and packages it as a debug APK.
 
-    node android/sync-assets.js       # rebuilds debug.html and copies it into assets
+**The APK carries the Phaser build.** It used to carry the canvas one, and on
+a phone that difference is the whole story: measured on an Adreno 840, same
+device and comparable load, the canvas build ran at **20fps with 99% of frames
+over budget and its effects already shed**, and the Phaser build holds a
+**locked 60 with 0% over budget** and a profiler that cannot find a single
+layer worth removing.
+
+    node android/sync-assets.js       # deploys the Phaser build into assets
     cd android && gradle assembleDebug
     # -> app/build/outputs/apk/debug/app-debug.apk
 
-`sync-assets.js` runs the debug build first and copies the result, rather than
-trusting whatever is sitting in `assets/`, so the APK cannot ship a stale page.
-The copied asset is gitignored for the same reason: it is generated, and a
-committed copy would go out of date the moment `index.html` changed.
+`sync-assets.js` empties `assets/` and runs `phaser/tools/deploy.js`, which
+builds first, always — so the APK cannot ship a stale page, and cannot ship a
+leftover from the build it used to carry. The whole folder is gitignored for
+the same reason it always was: it is generated.
+
+**The page is served, not opened.** It used to load straight off
+`file:///android_asset/index.html`, which worked while the game was one
+self-contained HTML file. The Phaser build fetches `atlas.json` and
+`manifest.json`, and XHR from a `file://` origin is refused by every current
+WebView — `setAllowFileAccessFromFileURLs` was the old way round that and is
+ignored on modern ones. `WebViewAssetLoader` serves the same assets over
+`https://appassets.androidplatform.net` instead, which fixes the fetches and
+gives three things with them: a secure context, so the clipboard works for the
+diagnostics dump; a stable origin for the stash in `localStorage`; and no
+`file://` access to grant at all.
 
 The APK is **not committed** either. `.github/workflows/android-debug.yml` builds
 it on every push and uploads it as an artifact, and asserts along the way that
-the page inside the APK hashes identically to the generated `debug.html` — a
-green build is therefore evidence the APK matches its source, which a binary in
-git could never be.
+EVERY asset inside the APK hashes identically to what `sync-assets.js` built
+from source — a green build is therefore evidence the APK matches its source,
+which a binary in git could never be. File for file, because checking only
+`index.html` would pass an APK with a stale bundle or no atlas in it at all.
 
 What the shell has to get right:
 

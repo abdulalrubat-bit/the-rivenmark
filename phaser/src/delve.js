@@ -178,6 +178,15 @@ export class Delve extends Phaser.Scene {
         return (prof ? prof + '\n\n' : '') +
           asText(collect(this.game, this.log, {
             build: 'phaser delve',
+            // The single most important line in the dump after the frame rate:
+            // 60fps with the mood on and 60fps with it already shed are
+            // different findings about the same number.
+            fx: (lowFx ? 'LOW (mood shed)' : 'full') +
+                '   governor: ' + this.gov.drops + ' drop(s), ' +
+                this.gov.raises + ' restore(s)' +
+                (this.gov.stat ? '   last sample: work ' + this.gov.stat.work +
+                  'ms, frames ' + this.gov.stat.p50 + 'ms against a ' +
+                  this.gov.stat.period + 'ms display' : '   (no sample yet)'),
             bodies: this.pool.length,
             awake: run.awake || 0,
             delve: LEVEL.id
