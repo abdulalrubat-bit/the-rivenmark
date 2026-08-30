@@ -60,7 +60,7 @@ the hero, the kit casts, the HUD reads the run.
 | `npm run smoke:overlay` | 22 checks — the map, the arrow out, the boss bar, the crystal |
 | `npm run smoke:air` | 19 checks — light, haze, ash, the dark, and the governor |
 | `npm run smoke:prof` | 10 checks — the layer profiler finds a planted cost |
-| `npm run smoke:pwa` | 13 checks — installable, and it opens with the network cut |
+| `npm run smoke:pwa` | 14 checks — installable, offline, and served from a subpath |
 | `npm run smoke:play` | 16 checks — the stick, the kit, and the HUD's layout |
 | `npm run smoke:fx` | 16 checks — the fight reads, the crescent and the tells in pixels |
 | `npm run smoke:loop` | 15 checks — dying, the outcome, the gate-house, descending again |
