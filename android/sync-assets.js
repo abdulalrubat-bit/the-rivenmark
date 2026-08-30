@@ -22,8 +22,18 @@ const dstDir = path.join(__dirname, 'app', 'src', 'main', 'assets');
 fs.rmSync(dstDir, { recursive: true, force: true });
 fs.mkdirSync(dstDir, { recursive: true });
 
+// The atlas is generated from ../art and gitignored, so a clean checkout does
+// not have one -- which is exactly how this failed in CI the first time, with
+// deploy.js quite correctly refusing to ship without it. Packed here rather
+// than left to a separate command somebody has to remember, and packed every
+// time rather than when missing: the art can change, and "the APK must never
+// carry a stale build" has to mean the art too.
+const phaser = path.join(root, 'phaser');
+cp.execFileSync(process.execPath, [path.join(phaser, 'tools', 'pack-atlas.js')],
+                { stdio: 'inherit', cwd: phaser });
+
 cp.execFileSync(process.execPath,
-  [path.join(root, 'phaser', 'tools', 'deploy.js'), dstDir], { stdio: 'inherit' });
+  [path.join(phaser, 'tools', 'deploy.js'), dstDir], { stdio: 'inherit', cwd: phaser });
 
 const files = fs.readdirSync(dstDir).sort();
 let total = 0;

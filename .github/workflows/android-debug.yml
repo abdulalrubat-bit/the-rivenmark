@@ -28,6 +28,14 @@ jobs:
 
       - uses: android-actions/setup-android@v3
 
+      # The APK carries the Phaser build, which is bundled with esbuild and
+      # whose atlas is packed with pngjs -- neither of which exists in a fresh
+      # checkout. Without this the first run failed with ERR_MODULE_NOT_FOUND
+      # before it ever reached Gradle.
+      - name: Install the Phaser build's tools
+        working-directory: phaser
+        run: npm ci --no-audit --no-fund
+
       - name: Build the game and copy it into assets
         run: node android/sync-assets.js
 
