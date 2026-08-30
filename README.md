@@ -668,6 +668,36 @@ byte-identical to `index.html`.
 while a menu is up so it can never swallow a tap meant for a hero or boon card;
 tap `D` on the start screen to pin it there anyway when you want the seed box.
 
+**The profiler** — `profile` runs about twenty seconds of ablation: it turns
+each drawing layer off in turn, measures the median delivered frame, puts it
+back, and takes a baseline at both ends. `copy profile` puts the table on the
+clipboard. Read it rather than the `draw / upd` row, which cannot see this.
+
+That row is `performance.now()` either side of `update()` and `draw()`. For
+update it is the truth — the simulation is JS on the main thread and the clock
+sees all of it. For draw it is not: canvas 2D in Chrome and in an Android
+WebView is GPU-backed, so `drawImage` records a command and returns, and the
+rasterising happens later, off that clock. Measured on a phone: **draw 0.6ms,
+update 0.14ms, fps 20, over budget 99%** — every number correct, and between
+them they say nothing about where the frame went.
+
+Two things the profile is careful about, both learned by planting a known cost
+and watching it lie. **Vsync clamps it from below**: no amount of removed work
+makes a frame arrive before the refresh, so a layer big enough to reach the
+ceiling on its own has its saving cut off — a planted 22ms reported as 11.6,
+which is exactly baseline minus the refresh period. Those rows are marked
+`>=`. And the **noise band is derived from the drift** between the two
+baselines rather than picked: a delve is not a still life, and if the world
+moved 1.5ms under the run then a 1.5ms finding is the world moving.
+
+It only works on a device that is *already* missing frames. On one holding its
+refresh rate every row reads as noise, and the report says so rather than
+leaving fourteen findings of zero to be interpreted.
+
+`tools/smoke-profile.cjs` plants a cost and asserts the profile points at that
+layer and clears every other one. A profiler that cannot find a cost is worse
+than none, because it clears every layer of suspicion at once.
+
 **Live stats** — fps, draw/update cost, whether `lowFx` has engaged, level,
 region, hero, enemy/crescent/particle counts, prop and lamp counts, wall and edge
 counts, slag against quota, boss health, active seed.
