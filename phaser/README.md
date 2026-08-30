@@ -138,6 +138,13 @@ is marked `>=`; the noise band comes from the drift between two baselines
 rather than being picked. `smoke:prof` plants a known cost in one layer and
 asserts the profile names that layer and clears the other twelve.
 
+The dump says whether the mood was ON for the numbers beside it. It did not,
+and that was the one omission that could invert a reading: 60fps at full
+effects and 60fps with the atmosphere already shed are different findings
+about the same number. `effects` now reports `full` or `LOW (mood shed)`, how
+many times the governor dropped and restored this session, and its last
+sample.
+
 **And the governor that takes it away.** The port had none: `lowFx` is read all
 over — by the atmosphere, and by the core's own budgets — and nothing ever set
 it, so a device that could not hold the frame simply did not. Measured here,

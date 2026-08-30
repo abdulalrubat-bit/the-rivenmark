@@ -86,6 +86,11 @@ export class FxGovernor {
     // turning the mood off is what makes the frame look affordable again.
     this.need = 3;
     this.droppedAt = 0;
+    // How many times it has actually fired this session. Without this the dump
+    // cannot distinguish "60fps with everything on" from "60fps because the
+    // mood was shed a minute ago", and those are completely different findings
+    // about the same number.
+    this.drops = 0; this.raises = 0;
     const done = () => {
       if (!this.at) return;
       this.work.push(performance.now() - this.at);
@@ -146,6 +151,7 @@ export class FxGovernor {
         const soon = this.droppedAt && performance.now() - this.droppedAt < 12000;
         if (soon) this.need = Math.min(24, this.need * 2);
         this.droppedAt = performance.now();
+        this.drops++;
         return 'drop';
       }
       return null;
@@ -155,7 +161,7 @@ export class FxGovernor {
     // because the mood is currently off.
     const roomy = p50 <= per * 1.08 && avgWork < raiseMs;
     this.good = roomy ? this.good + 1 : 0;
-    if (this.good >= this.need) { this.good = 0; return 'raise'; }
+    if (this.good >= this.need) { this.good = 0; this.raises++; return 'raise'; }
     return null;
   }
 }
@@ -371,6 +377,10 @@ export function asText(d) {
     'css        ' + d.css + '   buffer ' + d.buffer + '   dpr ' + d.dpr,
     'screen     ' + d.screen,
     'memory     ' + d.mem + '   cores ' + d.cores,
+    // Whether the mood was ON for the numbers below it. A frame rate means one
+    // thing at full effects and quite another with them already shed, and the
+    // dump used to report the number without the flag.
+    d.fx ? 'effects    ' + d.fx : null,
     f ? 'frames     ' + f.frames + ' sampled' : 'frames     ' + d.frame,
     f ? 'fps        ' + f.fps + '  (median ' + f.p50 + 'ms)' : '',
     f ? 'p90/p99    ' + f.p90 + 'ms / ' + f.p99 + 'ms' : '',
