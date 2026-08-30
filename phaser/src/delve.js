@@ -11,11 +11,13 @@
  * e.gait and e.pace exactly as the canvas build chose a sprite.
  */
 import Phaser from 'phaser';
-import { FrameLog, collect, asText, mountButton } from './diagnostics.js';
+import { FrameLog, FxGovernor, LayerProfiler, collect, asText, mountButton }
+  from './diagnostics.js';
 import { Hud } from './hud.js';
 import { Effects } from './effects.js';
 import { Screens } from './screens.js';
 import { Overlay } from './overlay.js';
+import { Atmosphere } from './atmosphere.js';
 
 // The core's palette is CSS hex strings; Phaser wants numbers.
 const hex = (css, fallback) => {
@@ -25,6 +27,12 @@ const hex = (css, fallback) => {
 };
 
 const SS = 2;      // art/ is exported at 2x, which is native for it
+
+/* The adaptive-effects thresholds, in milliseconds of WORK per frame. The
+ * canvas build's numbers, kept: above FX_DROP a frame cannot hold 60Hz, below
+ * FX_RAISE there is room to put the mood back, and FX_SAMPLE frames is about
+ * three quarters of a second -- long enough not to react to one bad frame. */
+const FX_DROP = 13, FX_RAISE = 8, FX_SAMPLE = 45;
 
 /* Which scenery stands UP off the floor, and how tall it reads.
  *
@@ -58,7 +66,8 @@ const STANDING = { pillar: 26, barrel: 12, crate: 11, urn: 10, banner: 16,
           keys, stickStart, stickMove, stickEnd, STICK_MAX, castAbility,
           swapHero, swapBlocked, abilityBlock, ABILITIES, ABILITY_BY_ID,
           CHARGE_MAX, TENSION_MAX,
-          WORLD, PAL, LEVEL, LEVELS, GAIT_N, GAIT_STEP, GAIT_STILL,
+          WORLD, PAL, LEVEL, LEVELS, GAIT_N, GAIT_STEP, GAIT_STILL, lamps,
+          lowFx,
           WALK_STEP, WALK_PACE, update, startRun, loadStash */
 
 export class Delve extends Phaser.Scene {
@@ -119,6 +128,7 @@ export class Delve extends Phaser.Scene {
 
     this.fx = new Effects(this);
     this.overlay = new Overlay(this);
+    this.air = new Atmosphere(this);
     // The loop around a delve. showScreen is the core's own way of saying
     // "the run is over" or "you are back at the gate-house", so it is routed
     // here rather than second-guessed.
@@ -144,6 +154,8 @@ export class Delve extends Phaser.Scene {
     document.head.appendChild(gs);
 
     this.log = new FrameLog(240);
+    this.gov = new FxGovernor(this.game, FX_SAMPLE);
+    this.prof = new LayerProfiler(this);
     // `dbg`, not `hud`: the DOM HUD is this.hud, and naming both the same
     // silently replaced one with the other.
     // Bottom-left, not top-left. The top strip belongs to the life bar, the
@@ -158,12 +170,19 @@ export class Delve extends Phaser.Scene {
 
     if (!this.game.__diagMounted) {
       this.game.__diagMounted = true;
-      mountButton(() => asText(collect(this.game, this.log, {
-        build: 'phaser delve',
-        bodies: this.pool.length,
-        awake: run.awake || 0,
-        delve: LEVEL.id
-      })));
+      mountButton(() => {
+        // The profile goes at the TOP of the dump when there is one. It is the
+        // only part that says where the frame went; everything under it says
+        // what the frame contained.
+        const prof = this.prof.state && this.prof.state.text;
+        return (prof ? prof + '\n\n' : '') +
+          asText(collect(this.game, this.log, {
+            build: 'phaser delve',
+            bodies: this.pool.length,
+            awake: run.awake || 0,
+            delve: LEVEL.id
+          }));
+      }, () => this.prof.start(), () => this.prof.label());
     }
   }
 
@@ -480,7 +499,35 @@ export class Delve extends Phaser.Scene {
     }
   }
 
+  /* Adaptive effects: shed the mood before the frame rate goes, and put it
+   * back when there is room again.
+   *
+   * The port had none of this. The core's `lowFx` is read all over -- by the
+   * atmosphere here, and by the core's own spark budgets -- and nothing ever
+   * set it, so a device that could not hold the frame simply did not hold it.
+   * Measured on this box: the atmosphere alone took 60fps to 30 and lowFx
+   * stayed false the whole time.
+   *
+   * The decision itself lives in FxGovernor, with the reasoning for its two
+   * measures. All that happens here is setting the core's flag -- `lowFx` is a
+   * top-level `let` in the core, and esbuild leaves free identifiers alone, so
+   * this assignment lands on the core's own binding exactly as reading it bare
+   * reads the core's own value.
+   */
+  adaptFx(time) {
+    // ?nogov holds the governor off. Anything that measures the mood on screen
+    // has to, or it races it: the atmosphere is what makes the frame expensive,
+    // so the governor sheds it halfway through the measurement and the picture
+    // under test stops existing.
+    if (/nogov/.test(location.search)) return;
+    const call = this.gov.decide(lowFx, FX_DROP, FX_RAISE);
+    if (call === 'drop') lowFx = true;
+    else if (call === 'raise') lowFx = false;
+    this.gov.begin(time);
+  }
+
   update(time, dtMs) {
+    this.adaptFx(time);
     const dt = Math.min(0.05, dtMs / 1000);      // the core's own MAX_DT clamp
     if (this.stepping && state === 'play') update(dt);
 
@@ -535,12 +582,18 @@ export class Delve extends Phaser.Scene {
     this.cullDressing();
     this.fx.draw(time);
     this.overlay.draw(time);
+    this.air.draw(time);
     this.drawStick();
     this.hud.sync();
     const atGate = !!(run.gateOpen && portal && portal.inside && state === 'play');
     if (this.gateBtn.hidden === atGate) this.gateBtn.hidden = !atGate;
 
     this.log.tick(time);
+    // One delivered interval per frame into the profiler, from the same source
+    // the FrameLog reads. Delivered, because that is the only measure that
+    // includes work no clock in this process can see.
+    if (this.profLast) this.prof.tick(time - this.profLast);
+    this.profLast = time;
     const st = this.log.stats();
     if (st && (time | 0) % 8 === 0) {
       this.dbg.setText(
@@ -548,7 +601,12 @@ export class Delve extends Phaser.Scene {
         'slag ' + (run.tech | 0) + '/' + LEVEL.quota + '\n' +
         live.length + ' bodies, ' + (run.awake || 0) + ' awake\n' +
         'fps ' + st.fps + '   worst ' + st.worst.toFixed(0) + 'ms\n' +
-        'over budget ' + st.overPct + '%');
+        'over budget ' + st.overPct + '%' +
+        (this.gov.stat ? '   work ' + this.gov.stat.work + 'ms, ' +
+          this.gov.stat.p50 + '/' + this.gov.stat.period + 'ms' : '') +
+        (lowFx ? '   LOW FX' : '') +
+        (this.prof.state && !this.prof.state.done
+          ? '\nprofiling ' + this.prof.label() : ''));
     }
   }
 }

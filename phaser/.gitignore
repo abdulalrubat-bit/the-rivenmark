@@ -2,6 +2,9 @@ node_modules/
 # All generated from ../art and src/ by the tools in this folder. Regenerating
 # is one command and costs a second; keeping a 1.4MB binary in history that
 # churns on every art change is not worth the saved step.
+# The icons are generated too, but by arithmetic rather than from ../art, and
+# they are 150kB that changes only when the mark does. Kept, so a deploy from
+# a fresh clone does not need a build step nobody remembers.
 public/atlas.png
 public/atlas.json
 public/manifest.json

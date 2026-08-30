@@ -47,6 +47,170 @@
   const IVAL_N = 180;
   let ivals = [], lastFrameAt = 0, worstMs = 0, jankPct = 0;
 
+  /* --- the layer profiler ---------------------------------------------------
+     Why this exists, and why `draw / upd` above is not enough.
+
+     Those two numbers are `performance.now()` either side of update() and
+     draw(). For update() that is the truth: the simulation runs in JS on the
+     main thread and the clock sees all of it. For draw() it is NOT. Canvas 2D
+     in Chrome and in an Android WebView is GPU-backed: ctx.drawImage and
+     ctx.fillRect record commands into a display list and return, and the
+     rasterising happens later, off that clock. So draw can read 0.6ms on a
+     device delivering 20fps, and both numbers are correct. Measured on a phone:
+     draw 0.6ms, update 0.14ms, fps 20, over budget 99%.
+
+     A timer that cannot see the cost cannot find it. What can is ablation: turn
+     one layer off, see whether the frame gets faster, put it back. Every draw
+     function in the game is a top-level declaration, which in a classic script
+     means it is a property of `window`, so each can be swapped for a no-op from
+     out here without the game carrying a single debug branch.
+
+     Judged on DELIVERED FRAME INTERVALS, and on the median of them. An average
+     hides a stall, and the interval is the only thing that includes work no
+     clock in this process can see.
+
+     The baseline is taken twice, before and after. A delve is not a still life
+     -- bodies die, the horde spawns, the camera moves over different ground --
+     and if the two baselines disagree the whole run is comparing layers against
+     different worlds. It says so rather than reporting numbers that look fine.
+     -------------------------------------------------------------------- */
+  const PROF_N = 30;          // frames per layer: ~1.5s at 20fps, ~0.5s at 60
+  // Grouped by what a person would decide about, not one entry per function:
+  // "the scenery costs 8ms" is actionable, "drawProps costs 8ms" is the same
+  // fact with the answer left out.
+  const PROF_LAYERS = [
+    ['ground',   ['drawGround']],
+    ['walls',    ['drawWalls']],
+    ['scenery',  ['drawProps']],
+    ['bodies',   ['drawStanding']],
+    ['light',    ['drawLightPass']],
+    ['fog',      ['drawFog']],
+    ['motes',    ['drawMotes']],
+    ['gloom',    ['drawGloom']],
+    ['pickups',  ['drawChests', 'drawLoot', 'drawDrops', 'drawCorpse']],
+    ['telegraphs', ['drawHazards', 'drawNulls', 'drawSlams', 'drawTotems',
+                    'drawRuptures', 'drawAgonyTells', 'drawSiphonBeams']],
+    ['fx',       ['drawArcs', 'drawParticles', 'drawBeams', 'drawBolts']],
+    ['numbers',  ['drawFloaters']],
+    ['minimap',  ['drawMinimap']],
+    ['hud',      ['drawBossBar', 'drawHudFrame', 'drawViewFrame',
+                  'drawDawnCrystal', 'drawPortalArrow']]
+  ];
+
+  let prof = null;
+  const held = {};
+  function profStub(names) {
+    for (const n of names) {
+      if (typeof window[n] === 'function' && !(n in held)) {
+        held[n] = window[n];
+        window[n] = function () {};
+      }
+    }
+  }
+  function profRestore() {
+    for (const n in held) { window[n] = held[n]; delete held[n]; }
+  }
+  const median = a => {
+    if (!a.length) return 0;
+    const q = a.slice().sort((x, y) => x - y);
+    return q[Math.floor(q.length / 2)];
+  };
+
+  function startProfile() {
+    if (prof) return;
+    prof = { step: -1, samples: [], rows: [], base0: 0, base1: 0, done: false };
+    profNext();
+  }
+  function profNext() {
+    // Whatever was off goes back on before anything else is measured.
+    profRestore();
+    prof.samples = [];
+    prof.step++;
+    if (prof.step === 0) return;                       // first baseline
+    if (prof.step <= PROF_LAYERS.length) {
+      profStub(PROF_LAYERS[prof.step - 1][1]);
+      return;
+    }
+    if (prof.step === PROF_LAYERS.length + 1) return;  // second baseline
+    prof.done = true;
+  }
+  function profSample(ival) {
+    if (!prof || prof.done) return;
+    prof.samples.push(ival);
+    if (prof.samples.length < PROF_N) return;
+    const m = median(prof.samples);
+    if (prof.step === 0) prof.base0 = m;
+    else if (prof.step === PROF_LAYERS.length + 1) prof.base1 = m;
+    else prof.rows.push([PROF_LAYERS[prof.step - 1][0], m]);
+    profNext();
+    if (prof.done) profReport();
+  }
+  function profReport() {
+    profRestore();
+    const base = (prof.base0 + prof.base1) / 2;
+    const drift = Math.abs(prof.base1 - prof.base0);
+    // The floor: the fastest any phase managed. A display is vsync-locked, so
+    // no amount of removed work makes a frame arrive sooner than this, and a
+    // layer big enough to reach it on its own has its saving CLAMPED. Proved by
+    // planting a deliberate 22ms cost in one layer: the profile attributed
+    // 11.6ms of it, which is exactly baseline minus the refresh period. So a
+    // clamped row is marked rather than read as the layer's true cost.
+    const floor = Math.min.apply(null, prof.rows.map(r => r[1]));
+    // The noise band is derived from how much the two baselines disagreed
+    // rather than picked: if the world moved 1.5ms under the run, a 1.5ms
+    // finding is the world moving, not a layer.
+    const band = Math.max(1, drift * 1.5);
+    const rows = prof.rows
+      .map(([name, ms]) => [name, base - ms, ms <= floor + 1])
+      .sort((a, b) => b[1] - a[1]);
+    const lines = [
+      'LAYER PROFILE — median delivered frame, ' + PROF_N + ' frames each',
+      'baseline ' + base.toFixed(1) + 'ms (' + (1000 / base).toFixed(0) + 'fps)' +
+        ', drift ' + drift.toFixed(1) + 'ms between the two baselines',
+      drift > base * 0.2
+        ? '!! the two baselines disagree by more than a fifth: the world changed'
+          + ' under the run. Stand still, then profile again.'
+        : '',
+      // The one result that means nothing at all, said plainly rather than
+      // left to look like fourteen findings of zero. A display is vsync-locked:
+      // if the frame is already arriving on time, taking work away cannot make
+      // it arrive sooner, and every row below will read as noise. That is the
+      // tool working correctly on a device that does not have the problem.
+      base < 18
+        ? '!! this device is already holding its refresh rate, so nothing can'
+          + ' show a saving. Ablation only measures a frame that is ALREADY'
+          + ' late. Profile on the device that is slow.'
+        : '',
+      ''
+    ].filter(Boolean);
+    for (const [name, saved, clamped] of rows) {
+      const big = Math.abs(saved) >= band;
+      lines.push('  ' + name.padEnd(12) +
+                 (big && clamped ? '>=' : '  ') +
+                 (saved >= 0 ? '-' : '+') + Math.abs(saved).toFixed(1) + 'ms' +
+                 (!big ? '   (noise, band ' + band.toFixed(1) + 'ms)'
+                       : clamped ? '   (hit the refresh ceiling — costs more than this)'
+                                 : ''));
+    }
+    lines.push('', 'lowFx ' + lowFx + '   enemies ' + enemies.length +
+               '   props ' + props.length + '   lamps ' + lamps.length +
+               '   walls ' + walls.length);
+    lines.push('dpr ' + view.dpr + '   canvas ' + canvas.width + 'x' + canvas.height +
+               '   css ' + view.w + 'x' + view.h);
+    const gl = document.createElement('canvas').getContext('webgl');
+    if (gl) {
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      lines.push('gpu ' + (ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)
+                               : 'masked'));
+    }
+    lines.push('ua ' + navigator.userAgent);
+    prof.text = lines.join('\n');
+    // Straight to the clipboard: this is meant to come back to a desk, and
+    // reading twenty numbers off a phone and retyping them loses exactly the
+    // ones that matter.
+    if (navigator.clipboard) navigator.clipboard.writeText(prof.text).catch(() => {});
+  }
+
   // --- wrap the loop for timings -------------------------------------------
   const _update = update, _draw = draw;
   update = function (dt) {
@@ -64,8 +228,10 @@
     frames++;
     const now = performance.now();
     if (lastFrameAt) {
-      ivals.push(now - lastFrameAt);
+      const ival = now - lastFrameAt;
+      ivals.push(ival);
       if (ivals.length > IVAL_N) ivals.shift();
+      profSample(ival);
     }
     lastFrameAt = now;
     if (now - fpsT > 500) {
@@ -243,6 +409,15 @@
         (stash.level || 1) + 5)); stash.level = levelForXp(stash.xp);
         player.level = stash.level; recomputeStats(); saveStash(); }],
     ['+200 coins', () => { stash.coins = (stash.coins || 0) + 200; saveStash(); }],
+    // ~20s of ablation, then a table on the clipboard. See the note by
+    // PROF_LAYERS: the draw/upd row above cannot see rasterising, so this is
+    // the only thing in here that can say WHERE a frame goes.
+    ['profile', () => startProfile()],
+    ['copy profile', () => {
+      const t = (prof && prof.text) || 'no profile yet — tap `profile` first';
+      if (navigator.clipboard) navigator.clipboard.writeText(t);
+      else window.prompt('profile', t);
+    }],
     ['heal', () => { player.hp = player.maxHp; }],
     ['remake map', () => resetRun(run.hero)],
     ['drop item', () => { if (player.bag.length < BAG_MAX) {
@@ -307,6 +482,15 @@
       row('over budget', jankPct.toFixed(0) + '%', jankPct > 5) +
       row('draw / upd', drawMs.toFixed(1) + ' / ' + updMs.toFixed(2) + 'ms', ms > 16.7) +
       row('lowFx', lowFx, lowFx) +
+      // A twenty-second ablation with no sign of life reads as a crash, and
+      // the first thing anyone does to a crashed profiler is tap it again.
+      (prof ? row('profiling',
+                  prof.done ? 'done — tap copy'
+                            : (prof.step === 0 ? 'baseline'
+                               : prof.step > PROF_LAYERS.length ? 'baseline'
+                               : PROF_LAYERS[prof.step - 1][0]) +
+                              ' ' + prof.step + '/' + (PROF_LAYERS.length + 1),
+                  !prof.done) : '') +
       row('delve', LEVEL.id) +
       row('hero lv / power', (player ? player.level : 1) + ' / ' + stashPower()) +
       row('coins', stash ? (stash.coins || 0) : 0) +

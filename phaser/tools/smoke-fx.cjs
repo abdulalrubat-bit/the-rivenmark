@@ -31,7 +31,20 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   const errs = [];
   p.on('pageerror', e => errs.push(e.message));
   p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
-  await p.goto('http://localhost:' + PORT + '/');
+  /* Loaded with ?noatmos&nogov.
+   *
+   * Not to make the numbers look better -- to make them exist at all. Every
+   * pixel assertion below is a DIFFERENCE against a frozen frame, and the
+   * atmosphere is not frozen: fog drifts, ash falls, torches gutter. With it
+   * running, a box with nothing in it reads eighty changed pixels and every
+   * measurement here is noise on top of noise. And the governor, left free,
+   * sheds the mood halfway through a measurement, so the picture under test
+   * stops existing partway through the test.
+   *
+   * The atmosphere has its own suite (smoke:air) where it is the subject
+   * rather than the weather.
+   */
+  await p.goto('http://localhost:' + PORT + '/?noatmos&nogov');
   await sleep(3200);
 
   // Start a fight in front of the hero, on ground that is actually clear.
@@ -160,6 +173,34 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
        : delta + ' pixels of Sun-Gold that are there only when the arc is (' +
          withArc.n + ' with, ' + without.n + ' without), brightest rgb(' +
          (withArc.best || []).join(',') + ') against ' + arc.magic);
+
+  /* The numbers survive lowFx.
+   *
+   * They used to be shed with the fog, and that was invisible for as long as
+   * nothing set the flag. The Phaser build's frame governor sets it for real,
+   * and the first thing it did was take every damage number off the screen on
+   * exactly the device that needed them most. A number is information: the
+   * whole ranked-floater hierarchy exists so a scratch reads differently from
+   * a heavy landing, and a phone short of frames is not a reason to stop
+   * saying what a hit did.
+   */
+  const under = await p.evaluate(async () => {
+    const was = lowFx;
+    floaters.length = 0;
+    lowFx = true;
+    const e = enemies.find(x => x.hp > 0);
+    if (!e) { lowFx = was; return { none: true }; }
+    damageEnemy(e, 25);
+    floatWord(e.x, e.y, 'TESTED', 'tether');
+    const n = floaters.length;
+    const kinds = floaters.map(f => f.kind);
+    lowFx = was;
+    return { n, kinds };
+  });
+  ck('and they are not shed when the frame is', !under.none && under.n >= 2,
+     under.none ? 'nothing left alive to hit'
+       : under.n + ' floaters raised with lowFx on (' + under.kinds.join(', ') + ')');
+  await p.evaluate(() => { floaters.length = 0; });
 
   /* The Deceiver's tells, in pixels.
    *

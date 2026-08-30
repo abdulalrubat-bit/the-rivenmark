@@ -58,13 +58,25 @@ the hero, the kit casts, the HUD reads the run.
 | `npm run smoke:delve` | 14 checks — the world draws and is dressed, the gait is distance-driven |
 | `npm run smoke:world` | 18 checks — the waygate, the coffers, the slag, the beacons |
 | `npm run smoke:overlay` | 22 checks — the map, the arrow out, the boss bar, the crystal |
+| `npm run smoke:air` | 19 checks — light, haze, ash, the dark, and the governor |
+| `npm run smoke:prof` | 10 checks — the layer profiler finds a planted cost |
+| `npm run smoke:pwa` | 13 checks — installable, and it opens with the network cut |
 | `npm run smoke:play` | 16 checks — the stick, the kit, and the HUD's layout |
-| `npm run smoke:fx` | 15 checks — the fight reads, the crescent and the tells in pixels |
+| `npm run smoke:fx` | 16 checks — the fight reads, the crescent and the tells in pixels |
 | `npm run smoke:loop` | 15 checks — dying, the outcome, the gate-house, descending again |
 | `npm run smoke:forge` | 13 checks — equipping, and that worn gear reaches the hero |
 | `npm run smoke:spend` | 13 checks — the vendor and the hall, and that coin buys what it says |
 | `npm run smoke` | 13 checks — the proving scene and the diagnostics dump |
 | `npm run verify` | the canvas suites against the extracted core |
+
+One thing never sheds, and the numbers are the second: `floatDmg` and
+`floatWord` used to bail on `lowFx` too, which was invisible for as long as
+nothing set the flag. The governor sets it for real, and the first thing it did
+was take every damage number off the screen on exactly the device that needed
+them most. A number is information — the whole ranked-floater hierarchy exists
+so a scratch reads differently from a heavy landing — and it costs nothing
+worth having: floaters are capped at 22, merged on the way in, and pooled Text
+objects here.
 
 Each suite builds `public/bundle.js` before it serves it. That is not a
 convenience. The suites serve a build artefact, nothing rebuilt it, and so for
@@ -73,6 +85,11 @@ It surfaced when a deliberate stub — a `return` at the top of the culling pass
 put there to prove the culling assertions could fail — changed nothing at all:
 the browser never saw the edit. A test that cannot see your change cannot fail
 on it, and a suite that green-lights a stub is worse than no suite.
+
+The build also copies `src/core/core.js` to `public/core.js`, which the page
+actually loads. That was a hand copy, and a hand copy that is forgotten leaves
+the game running the previous core with nothing to say so — the same hazard,
+and worse: a stale bundle is stale presentation, a stale core is stale rules.
 
 The HUD is DOM over the canvas, as it is in the canvas build: text stays crisp
 at any dpr without a font atlas, a button is a real 44px touch target, and none
@@ -96,6 +113,62 @@ a damage affix takes him from 43.8 to 55.8 before he descends.
 The Vendor and the Hall spend it: commissions, tempers, reliquaries, and four
 stations of three tiers that outlast every delve. Prices come from the core,
 so the number on the button is the number that will be taken.
+
+The room has weather. Torches light the stone around them, haze drifts against
+the camera, ash hangs in the air, a vignette closes the frame down to what the
+Vanguard's own light reaches, and the Riftborn takes even that. Phaser has no
+gradients, so the three this needs — a light blob, a fog tile, a vignette — are
+baked once into canvas textures at boot and then drawn as ordinary images. A
+gradient rasterised once is free; a gradient built per frame is what made the
+canvas build slow.
+
+**And a profiler, so the two builds can be compared.** `profile`, next to
+*copy diagnostics*, ablates each layer in turn — walls, dressing, scenery,
+bodies, pickups, gate, fx, beacons, numbers, overlay, fog, motes, vignette,
+light — and reports the median delivered frame with each one switched off. The
+canvas build has the same thing in `tools/debug-overlay.js`, deliberately with
+the same method, statistics and report shape, so a profile taken from each on
+the SAME phone reads side by side. That comparison is the only thing that can
+say whether moving engines bought anything.
+
+Ablation, because no clock in the process can see rasterising — the same
+finding as the governor below. Vsync clamps the result from underneath, so a
+layer big enough to reach the refresh ceiling alone has its saving cut off and
+is marked `>=`; the noise band comes from the drift between two baselines
+rather than being picked. `smoke:prof` plants a known cost in one layer and
+asserts the profile names that layer and clears the other twelve.
+
+**And the governor that takes it away.** The port had none: `lowFx` is read all
+over — by the atmosphere, and by the core's own budgets — and nothing ever set
+it, so a device that could not hold the frame simply did not. Measured here,
+the atmosphere took this box from 60fps to 30 with `lowFx` false throughout.
+
+It watches two things, because either alone is blind to half the ways a frame
+goes wrong. CPU work, timed from the top of update to POST_RENDER — which under
+canvas 2D was the whole story, since the rasteriser *is* the CPU. And delivered
+intervals, because under WebGL it is not: the atmosphere moved CPU work from
+2.56ms to 2.84ms while halving the frame rate. The cost was entirely fill rate.
+The driver takes the calls and returns; the bill arrives at the swap, where no
+CPU timer can see it.
+
+Intervals have their own trap and the canvas build fell in it: a display is
+vsync-locked, so 16.7ms means "keeping up" and nothing about by how much. The
+old code compared against a fixed 11ms — 90fps, unreachable on 60Hz hardware —
+so once the glow came off it never went back on. Here everything is judged
+against **the display's own period**, the tenth percentile of a long window,
+which reads the same at 60, 90 and 120Hz. That is capped at 17ms, and the cap
+is the whole thing working: learned purely from observation it is circular, and
+with the atmosphere on this box never once beat 33.3ms, so the governor
+concluded the screen ran at 30Hz and was being hit perfectly — while sitting at
+half frame rate.
+
+Restoring costs about 40% more per frame, so it needs several good windows, and
+the number of them **grows** each time a restore is followed by another drop. A
+device that genuinely cannot afford the mood stops being asked every three
+quarters of a second whether it has changed its mind.
+
+One thing never sheds: the light pass. Without it the tunnels read as flat
+black and a torch is a sprite of a torch that lights nothing.
 
 The Deceiver's encounter reads. A Lieutenant's agony winds as a cone on the
 floor that brightens as it comes, and his siphon runs to his master as a
@@ -151,6 +224,41 @@ frames to 1%. `smoke-delve` asserts both halves — that the stone is there, and
 that most of it is switched off — because either one passes while the other is
 broken.
 
+## Getting it onto a phone
+
+`npm run deploy <dir>` copies the thirteen files a player actually needs into a
+directory something else serves, and nothing else — not the 11MB source map,
+not the core-test harness. It builds first, always: every hard lesson in this
+folder is the same one, and a stale deploy is the worst of them because it
+lands on a device you cannot reach and gives no sign at all.
+
+What lands is an installable app. `app.webmanifest` and `sw.js` make it one:
+add it to the home screen and it opens fullscreen, in portrait, with no browser
+chrome — and it opens **with no network**, because the service worker holds the
+whole 3.4MB shell. That is the difference between a game and a web page: the
+atlas alone is 1.6MB, and fetching it over a phone connection every launch is
+felt every single time.
+
+The worker's cache key is a hash of the content being shipped, stamped by the
+deploy step. A key bumped by hand is a key someone forgets, and a forgotten one
+leaves an installed player on an old build for ever — their browser keeps
+serving the cached shell and never asks. Same class of mistake as the stale
+bundle and the stale core, with the longest blast radius of the three.
+
+`smoke:pwa` deploys to a temp directory, serves *that*, installs the worker,
+then cuts the network and reloads. Everything else about a PWA can pass while
+that fails, and it fails on a train rather than at a desk.
+
+The icons are drawn in arithmetic — pure pngjs, no browser — so they can be
+regenerated under Termux like everything else here. The mark is the crescent,
+because it is the whole of the hero's attack and the one shape a player of this
+game would know at 48 pixels. The first cut of it was the difference of two
+circles, which is a lune: a fat moon, exactly what the comment above it warned
+against. It is a thin tapering band now, the way the game draws it.
+
+An APK is a separate step and not done: a Trusted Web Activity wraps this
+manifest, but the wrapping needs an Android SDK.
+
 ## On the phone
 
 ```sh
@@ -171,6 +279,8 @@ screen rather than as an error.
 | `npm run dev` | rebuild on save + serve on 8080 |
 | `npm run build` | one-off bundle into `public/` |
 | `npm run atlas` | repack `public/atlas.png` from `../art` |
+| `npm run icons` | redraw the app icons |
+| `npm run deploy <dir>` | build, then copy what a player needs into `<dir>` |
 
 Nothing compiles on the device: Phaser has a single dependency and it is not
 native, pngjs is pure JS, and esbuild ships an `android-arm64` binary.

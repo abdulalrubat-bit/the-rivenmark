@@ -3526,9 +3526,22 @@ function startGCD(mul) {
   player.gcdMax = player.gcd;
 }
 
-// A word where a number would go. Same lane, same easing, no arithmetic.
+/* A word where a number would go. Same lane, same easing, no arithmetic.
+ *
+ * NOT shed under lowFx, and neither is floatDmg below. Both used to bail on
+ * it, and that was only ever invisible because nothing set the flag on a
+ * desktop -- the Phaser build's frame governor sets it for real, and the first
+ * thing it did was take every damage number off the screen on exactly the
+ * device that needed them most.
+ *
+ * A number is information. The whole of the ranked-floater hierarchy exists so
+ * a player can tell a scratch from a heavy landing at a glance, and a phone
+ * struggling for frames is not a reason to stop telling them what their hits
+ * did. It costs nothing worth having either: floaters are capped at 22, merged
+ * on the way in, and pooled Text objects in the Phaser build. The mood goes
+ * under lowFx; the readout stays.
+ */
 function floatWord(x, y, word, kind) {
-  if (lowFx) return;
   for (let i = 0; i < floaters.length; i++) {
     const f = floaters[i];
     // One at a time off one body: a tethered swing every frame would stack
@@ -3542,7 +3555,6 @@ function floatWord(x, y, word, kind) {
 }
 
 function floatDmg(x, y, amount, kind) {
-  if (lowFx) return;
   const n = Math.max(1, Math.round(amount));
   // Merge into a number already climbing off the same spot.
   for (let i = 0; i < floaters.length; i++) {
