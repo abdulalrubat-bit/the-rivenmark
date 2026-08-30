@@ -11,7 +11,8 @@
  * e.gait and e.pace exactly as the canvas build chose a sprite.
  */
 import Phaser from 'phaser';
-import { FrameLog, FxGovernor, collect, asText, mountButton } from './diagnostics.js';
+import { FrameLog, FxGovernor, LayerProfiler, collect, asText, mountButton }
+  from './diagnostics.js';
 import { Hud } from './hud.js';
 import { Effects } from './effects.js';
 import { Screens } from './screens.js';
@@ -154,6 +155,7 @@ export class Delve extends Phaser.Scene {
 
     this.log = new FrameLog(240);
     this.gov = new FxGovernor(this.game, FX_SAMPLE);
+    this.prof = new LayerProfiler(this);
     // `dbg`, not `hud`: the DOM HUD is this.hud, and naming both the same
     // silently replaced one with the other.
     // Bottom-left, not top-left. The top strip belongs to the life bar, the
@@ -168,12 +170,19 @@ export class Delve extends Phaser.Scene {
 
     if (!this.game.__diagMounted) {
       this.game.__diagMounted = true;
-      mountButton(() => asText(collect(this.game, this.log, {
-        build: 'phaser delve',
-        bodies: this.pool.length,
-        awake: run.awake || 0,
-        delve: LEVEL.id
-      })));
+      mountButton(() => {
+        // The profile goes at the TOP of the dump when there is one. It is the
+        // only part that says where the frame went; everything under it says
+        // what the frame contained.
+        const prof = this.prof.state && this.prof.state.text;
+        return (prof ? prof + '\n\n' : '') +
+          asText(collect(this.game, this.log, {
+            build: 'phaser delve',
+            bodies: this.pool.length,
+            awake: run.awake || 0,
+            delve: LEVEL.id
+          }));
+      }, () => this.prof.start(), () => this.prof.label());
     }
   }
 
@@ -580,6 +589,11 @@ export class Delve extends Phaser.Scene {
     if (this.gateBtn.hidden === atGate) this.gateBtn.hidden = !atGate;
 
     this.log.tick(time);
+    // One delivered interval per frame into the profiler, from the same source
+    // the FrameLog reads. Delivered, because that is the only measure that
+    // includes work no clock in this process can see.
+    if (this.profLast) this.prof.tick(time - this.profLast);
+    this.profLast = time;
     const st = this.log.stats();
     if (st && (time | 0) % 8 === 0) {
       this.dbg.setText(
@@ -590,7 +604,9 @@ export class Delve extends Phaser.Scene {
         'over budget ' + st.overPct + '%' +
         (this.gov.stat ? '   work ' + this.gov.stat.work + 'ms, ' +
           this.gov.stat.p50 + '/' + this.gov.stat.period + 'ms' : '') +
-        (lowFx ? '   LOW FX' : ''));
+        (lowFx ? '   LOW FX' : '') +
+        (this.prof.state && !this.prof.state.done
+          ? '\nprofiling ' + this.prof.label() : ''));
     }
   }
 }

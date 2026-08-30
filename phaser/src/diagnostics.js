@@ -160,6 +160,161 @@ export class FxGovernor {
   }
 }
 
+/* The layer profiler: where does a frame actually go?
+ *
+ * The canvas build has one of these too (tools/debug-overlay.js) and this is
+ * deliberately the same method, the same statistics and the same report shape,
+ * so a profile taken from each build on the SAME phone can be read side by
+ * side. That comparison is the only thing that can say whether moving engines
+ * bought anything.
+ *
+ * Ablation, for the reason set out on FxGovernor: no clock in this process can
+ * see rasterising. Under WebGL the driver takes the draw calls and returns, and
+ * the bill arrives at the swap -- measured here, the atmosphere took a box from
+ * 60fps to 30 while CPU work moved 2.56ms to 2.84ms. So a layer is switched
+ * off, the delivered frames are measured, and it is switched back on.
+ *
+ * Phaser ablates differently from the canvas build: there are no draw functions
+ * to stub, only display objects to hide. Same idea, and `visible` is exactly
+ * the switch -- Phaser skips an invisible object at submission time, which is
+ * the cost being hunted.
+ */
+export class LayerProfiler {
+  constructor(scene, sample = 30) {
+    this.s = scene;
+    this.n = sample;
+    this.state = null;
+  }
+
+  /* What each layer is, resolved live: the scene rebuilds most of these on
+   * every delve, so holding references from construction would profile the
+   * previous world's objects. */
+  layers() {
+    const sc = this.s;
+    const list = o => (Array.isArray(o) ? o : o ? [o] : []).filter(Boolean);
+    return [
+      ['walls',    list(sc.wallGfx)],
+      ['dressing', list(sc.wallImgs)],
+      ['scenery',  list(sc.propImgs)],
+      ['bodies',   list(sc.pool).concat(list(sc.shadows), list(sc.hero), list(sc.heroShadow))],
+      ['pickups',  list(sc.lootImgs).concat((sc.chestImgs || []).flatMap(c => [c.img, c.sh]))],
+      ['gate',     list(sc.fx && sc.fx.gateGfx)],
+      ['fx',       list(sc.fx && sc.fx.below).concat(list(sc.fx && sc.fx.above))],
+      ['beacons',  list(sc.fx && sc.fx.lightGfx)],
+      ['numbers',  list(sc.fx && sc.fx.texts)],
+      ['overlay',  list(sc.overlay && sc.overlay.g).concat(
+                     list(sc.overlay && sc.overlay.compass),
+                     list(sc.overlay && sc.overlay.dawnLabel),
+                     list(sc.overlay && sc.overlay.dawnPct))],
+      ['fog',      list(sc.air && sc.air.fog)],
+      ['motes',    list(sc.air && sc.air.moteGfx)],
+      ['vignette', list(sc.air && sc.air.vig)],
+      ['light',    list(sc.air && sc.air.lights)]
+    ].filter(([, objs]) => objs.length);
+  }
+
+  start() {
+    if (this.state && !this.state.done) return;
+    this.state = { step: -1, samples: [], rows: [], base0: 0, base1: 0,
+                   done: false, names: this.layers().map(l => l[0]), hidden: [] };
+    this.next();
+  }
+
+  /* Only objects that were VISIBLE are hidden and restored. Half the delve is
+   * already invisible at any moment -- culled dressing, an unused sprite in the
+   * pool, a beacon with nothing under it -- and restoring those would put the
+   * previous world back on screen and charge this layer for it. */
+  hide(objs) {
+    for (const o of objs) {
+      if (o && o.visible) { o.visible = false; this.state.hidden.push(o); }
+    }
+  }
+  show() {
+    for (const o of this.state.hidden) o.visible = true;
+    this.state.hidden.length = 0;
+  }
+
+  next() {
+    this.show();
+    const st = this.state;
+    st.samples = [];
+    st.step++;
+    const L = this.layers();
+    if (st.step === 0) return;                      // first baseline
+    if (st.step <= L.length) { this.hide(L[st.step - 1][1]); return; }
+    if (st.step === L.length + 1) return;           // second baseline
+    st.done = true;
+  }
+
+  /* Fed one delivered interval per frame. */
+  tick(ival) {
+    const st = this.state;
+    if (!st || st.done) return;
+    st.samples.push(ival);
+    if (st.samples.length < this.n) return;
+    const q = st.samples.slice().sort((a, b) => a - b);
+    const m = q[Math.floor(q.length / 2)];
+    const L = st.names;
+    if (st.step === 0) st.base0 = m;
+    else if (st.step === L.length + 1) st.base1 = m;
+    else st.rows.push([L[st.step - 1], m]);
+    this.next();
+    if (st.done) this.report();
+  }
+
+  label() {
+    const st = this.state;
+    if (!st) return '';
+    if (st.done) return 'done';
+    const L = st.names;
+    if (st.step === 0 || st.step > L.length) return 'baseline';
+    return L[st.step - 1] + ' ' + st.step + '/' + (L.length + 1);
+  }
+
+  report() {
+    const st = this.state;
+    this.show();
+    const base = (st.base0 + st.base1) / 2;
+    const drift = Math.abs(st.base1 - st.base0);
+    // Vsync clamps this from below: no removed work makes a frame arrive
+    // before the refresh, so a layer big enough to reach the ceiling alone has
+    // its saving cut off. Marked rather than believed.
+    const floor = Math.min.apply(null, st.rows.map(r => r[1]));
+    // The noise band comes from how far the two baselines drifted, not from a
+    // number picked in advance: a delve is not a still life.
+    const band = Math.max(1, drift * 1.5);
+    const rows = st.rows
+      .map(([name, ms]) => [name, base - ms, ms <= floor + 1])
+      .sort((a, b) => b[1] - a[1]);
+
+    const lines = [
+      'LAYER PROFILE (phaser) — median delivered frame, ' + this.n + ' frames each',
+      'baseline ' + base.toFixed(1) + 'ms (' + (1000 / base).toFixed(0) + 'fps)' +
+        ', drift ' + drift.toFixed(1) + 'ms between the two baselines'
+    ];
+    if (drift > base * 0.2) {
+      lines.push('!! the two baselines disagree by more than a fifth: the world ' +
+                 'changed under the run. Stand still, then profile again.');
+    }
+    if (base < 18) {
+      lines.push('!! this device is already holding its refresh rate, so nothing ' +
+                 'can show a saving. Ablation only measures a frame that is ' +
+                 'ALREADY late. Profile on the device that is slow.');
+    }
+    lines.push('');
+    for (const [name, saved, clamped] of rows) {
+      const big = Math.abs(saved) >= band;
+      lines.push('  ' + name.padEnd(12) +
+                 (big && clamped ? '>=' : '  ') +
+                 (saved >= 0 ? '-' : '+') + Math.abs(saved).toFixed(1) + 'ms' +
+                 (!big ? '   (noise, band ' + band.toFixed(1) + 'ms)'
+                       : clamped ? '   (hit the refresh ceiling — costs more than this)'
+                                 : ''));
+    }
+    st.text = lines.join('\n');
+  }
+}
+
 // The GPU behind the context, which is the single most useful line in here and
 // the one thing that cannot be guessed from the far end. Chromium hides it
 // behind an extension that is not always granted; say so rather than inventing
@@ -236,11 +391,12 @@ export function asText(d) {
  * but a phone reaching another machine's IP over plain http does not -- so
  * there is a textarea fallback that always works.
  */
-export function mountButton(getReport) {
+export function mountButton(getReport, onProfile, profLabel) {
   const wrap = document.createElement('div');
   wrap.id = 'diag';
   wrap.innerHTML =
     '<button id="diagBtn" type="button">copy diagnostics</button>' +
+    (onProfile ? '<button id="profBtn" type="button">profile</button>' : '') +
     '<div id="diagOut" hidden><textarea readonly rows="14"></textarea>' +
     '<div id="diagHint">clipboard unavailable — select all and copy</div></div>';
   const css = document.createElement('style');
@@ -248,7 +404,11 @@ export function mountButton(getReport) {
     // Top-right, out of the thumbs. It used to sit bottom-right, where it
     // landed squarely on the ability buttons -- a developer affordance is
     // not worth a control you cannot press.
-    '#diag{position:fixed;right:8px;top:34px;z-index:50;font:12px ui-monospace,monospace}' +
+    '#diag{position:fixed;right:8px;top:34px;z-index:50;font:12px ui-monospace,monospace;' +
+      'display:flex;flex-direction:column;gap:6px;align-items:flex-end}' +
+    '#profBtn{background:#1b1712;color:#cebe9e;border:1px solid #4a3f30;border-radius:6px;' +
+      'padding:10px 12px;font:inherit;min-height:44px;min-width:44px}' +
+    '#profBtn:active{background:#2a2419}' +
     '#diagBtn{background:#1b1712;color:#cebe9e;border:1px solid #4a3f30;border-radius:6px;' +
       'padding:10px 12px;font:inherit;min-height:44px;min-width:44px}' +   // 44px: a thumb target
     '#diagBtn:active{background:#2a2419}' +
@@ -260,6 +420,22 @@ export function mountButton(getReport) {
     '#diag [hidden]{display:none!important}';   // an attribute loses to any display rule
   document.head.appendChild(css);
   document.body.appendChild(wrap);
+
+  const pbtn = wrap.querySelector('#profBtn');
+  if (pbtn) {
+    pbtn.addEventListener('click', () => {
+      onProfile();
+      // ~20 seconds with no sign of life reads as a crash, and the first thing
+      // anyone does to a crashed button is press it again. `profLabel` is the
+      // profiler's own progress, so this cannot say "done" while it is not.
+      const t = setInterval(() => {
+        const l = profLabel ? profLabel() : '';
+        if (!l) return;
+        pbtn.textContent = l === 'done' ? 'profile — done' : 'profiling ' + l;
+        if (l === 'done') clearInterval(t);
+      }, 400);
+    });
+  }
 
   const btn = wrap.querySelector('#diagBtn');
   const out = wrap.querySelector('#diagOut');

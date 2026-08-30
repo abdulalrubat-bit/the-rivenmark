@@ -120,38 +120,97 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     const sc = window.__game.scene.getScene('delve');
     const c = sc.cameras.main;
     state = 'over';                              // freeze; the layer redraws
-    lowFx = false;
+    // lowFx ON for this one, which sheds the fog, the ash and the vignette and
+    // keeps the light pass -- exactly the property being asserted below.
+    //
+    // Not a convenience. Mean brightness over a box is the measurement, and
+    // fog DRIFTS and ash FALLS across that box between the two screenshots.
+    // With them running the "unlit" shot came back BRIGHTER than the lit one
+    // as often as not, which is the haze moving, not a torch.
+    lowFx = true;
     if (!lamps.length) return { none: true };
-    // Drive the camera TO a lamp rather than hoping one is on screen. The
-    // first version filtered for a lamp already in view and clear of the
-    // hero's own glow, and on some seeds there simply is not one -- a suite
-    // that passes or fails on the world generator's mood is not a suite.
-    const L = lamps[0];
+    // Drive the camera TO a lamp rather than hoping one is on screen: the
+    // first version filtered for a lamp already in view, and on some seeds
+    // there simply is not one.
+    //
+    // Read the camera back A FRAME LATER, not immediately. setScroll does not
+    // clamp to the camera bounds until preRender, so scrollY straight after it
+    // still holds the out-of-bounds value asked for -- and for a lamp near the
+    // top of the world that is a lie by nearly 300 pixels. The suite believed
+    // the lamp was centred at y=422 while it actually rendered at y=139,
+    // measured a box with no lamp in it, and reported a torch that lit
+    // nothing. It failed on about half of all seeds: exactly the ones where
+    // the clamp bit.
     c.stopFollow();
-    c.setScroll(L.x - c.width / 2, L.y - c.height / 2);
-    for (let i = 0; i < 8; i++) await new Promise(r => requestAnimationFrame(r));
-    return { at: [Math.round(L.x - c.scrollX), Math.round(L.y - c.scrollY)],
-             lamps: lamps.length, lit: sc.air.litCount };
+    const frame = () => new Promise(r => requestAnimationFrame(r));
+    let L = null, at = null;
+    for (const cand of lamps) {
+      c.setScroll(cand.x - c.width / 2, cand.y - c.height / 2);
+      await frame();
+      const sx = cand.x - c.scrollX, sy = cand.y - c.scrollY;
+      if (sx > 90 && sx < c.width - 90 && sy > 150 && sy < c.height - 200) {
+        L = cand; at = [Math.round(sx), Math.round(sy)];
+        break;
+      }
+    }
+    if (!L) return { none: true };
+    for (let i = 0; i < 8; i++) await frame();
+    // And check the camera did not move under us between choosing and settling.
+    const finalAt = [Math.round(L.x - c.scrollX), Math.round(L.y - c.scrollY)];
+    if (Math.abs(finalAt[0] - at[0]) > 2 || Math.abs(finalAt[1] - at[1]) > 2) {
+      return { none: true, moved: [at, finalAt] };
+    }
+    return { at, lamps: lamps.length, lit: sc.air.litCount };
   });
   ck('there is a lamp to measure', !light.none,
-     light.none ? 'this delve has no lamps at all' : light.lamps + ' lamps in the delve');
+     light.none ? (light.moved ? 'the camera moved between choosing and settling: ' +
+                                 JSON.stringify(light.moved)
+                               : 'no lamp lands clear of the screen edges this seed')
+                : light.lamps + ' lamps in the delve');
   if (light.none) { report(); await b.close(); srv.kill(); process.exit(1); }
 
+  /* Counted as CHANGED PIXELS, not as mean brightness.
+   *
+   * Mean brightness over a 140px box was the first attempt and it never
+   * worked: one torch shifts the average of that box by less than a unit, so
+   * the check was reading whatever else moved. With the haze running it
+   * "passed" by 16-20 units of drifting fog, and the unlit shot came back
+   * brighter than the lit one as often as not. With the haze off, both shots
+   * read 137.4. It was measuring the weather either way.
+   *
+   * A torch is a LOCAL glow. What it does is change a few thousand pixels
+   * near itself, which is exactly what a difference image sees.
+   */
   const lampClip = { x: Math.max(0, light.at[0] - 70), y: Math.max(0, light.at[1] - 70),
                      width: 140, height: 140 };
   const lampOn = await shot(lampClip);
-  await p.evaluate(() => { window.__lamps = lamps.slice(); lamps.length = 0; });
+  await p.evaluate(async () => {
+    const sc = window.__game.scene.getScene('delve');
+    window.__lamps = lamps.slice(); lamps.length = 0;
+    for (let i = 0; i < 10; i++) await new Promise(r => requestAnimationFrame(r));
+    return sc.air.litCount;
+  });
   await sleep(400);
   const lampOff = await shot(lampClip);
-  ck('a torch lights the stone around it',
-     brightness(lampOn) - brightness(lampOff) > 6,
-     'the wall reads ' + brightness(lampOn).toFixed(1) + ' lit against ' +
-     brightness(lampOff).toFixed(1) + ' unlit');
+  // The noise floor is taken with the lamps ALREADY OUT, not before.
+  // A lit box is never still: torches gutter, by design --
+  // `0.78 + 0.22 * sin(t*7.3) * sin(t*3.1)` -- so the flicker is the very
+  // thing being measured and taking the floor while it runs charged the
+  // measurement for its own signal. It read 1359 "still" pixels that way.
+  await sleep(350);
+  const lampNoise = moved(lampOff, await shot(lampClip));
+  const lampDelta = moved(lampOn, lampOff);
+  ck('an unlit box is still', lampNoise < 60,
+     lampNoise + ' pixels move on their own once the lamps are out');
+  ck('a torch lights the stone around it', lampDelta > lampNoise + 500,
+     lampDelta + ' pixels change when the lamps go out, over a still floor of ' +
+     lampNoise);
 
   // Culled to the view, so a big cave costs no more than a small one.
   const cull = await p.evaluate(async () => {
     const sc = window.__game.scene.getScene('delve');
     lamps.push(...window.__lamps);
+    lowFx = false;                               // the mood back on for what follows
     for (let i = 0; i < 8; i++) await new Promise(r => requestAnimationFrame(r));
     return { lamps: lamps.length, lit: sc.air.litCount };
   });

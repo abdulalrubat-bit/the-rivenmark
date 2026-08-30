@@ -58,7 +58,8 @@ the hero, the kit casts, the HUD reads the run.
 | `npm run smoke:delve` | 14 checks — the world draws and is dressed, the gait is distance-driven |
 | `npm run smoke:world` | 18 checks — the waygate, the coffers, the slag, the beacons |
 | `npm run smoke:overlay` | 22 checks — the map, the arrow out, the boss bar, the crystal |
-| `npm run smoke:air` | 18 checks — light, haze, ash, the dark, and the governor |
+| `npm run smoke:air` | 19 checks — light, haze, ash, the dark, and the governor |
+| `npm run smoke:prof` | 10 checks — the layer profiler finds a planted cost |
 | `npm run smoke:pwa` | 13 checks — installable, and it opens with the network cut |
 | `npm run smoke:play` | 16 checks — the stick, the kit, and the HUD's layout |
 | `npm run smoke:fx` | 16 checks — the fight reads, the crescent and the tells in pixels |
@@ -120,6 +121,22 @@ gradients, so the three this needs — a light blob, a fog tile, a vignette — 
 baked once into canvas textures at boot and then drawn as ordinary images. A
 gradient rasterised once is free; a gradient built per frame is what made the
 canvas build slow.
+
+**And a profiler, so the two builds can be compared.** `profile`, next to
+*copy diagnostics*, ablates each layer in turn — walls, dressing, scenery,
+bodies, pickups, gate, fx, beacons, numbers, overlay, fog, motes, vignette,
+light — and reports the median delivered frame with each one switched off. The
+canvas build has the same thing in `tools/debug-overlay.js`, deliberately with
+the same method, statistics and report shape, so a profile taken from each on
+the SAME phone reads side by side. That comparison is the only thing that can
+say whether moving engines bought anything.
+
+Ablation, because no clock in the process can see rasterising — the same
+finding as the governor below. Vsync clamps the result from underneath, so a
+layer big enough to reach the refresh ceiling alone has its saving cut off and
+is marked `>=`; the noise band comes from the drift between two baselines
+rather than being picked. `smoke:prof` plants a known cost in one layer and
+asserts the profile names that layer and clears the other twelve.
 
 **And the governor that takes it away.** The port had none: `lowFx` is read all
 over — by the atmosphere, and by the core's own budgets — and nothing ever set

@@ -24,7 +24,8 @@
     "smoke:air": "node tools/smoke-air.cjs",
     "icons": "node tools/make-icons.js",
     "deploy": "node tools/deploy.js",
-    "smoke:pwa": "node tools/smoke-pwa.cjs"
+    "smoke:pwa": "node tools/smoke-pwa.cjs",
+    "smoke:prof": "node tools/smoke-prof.cjs"
   },
   "dependencies": {
     "phaser": "^4.2.1"
