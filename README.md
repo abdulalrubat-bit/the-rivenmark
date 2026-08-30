@@ -765,7 +765,36 @@ makes no network calls and needs none.
 
 ## Testing
 
-No test framework is committed. Verification was done by driving the built
+    node tools/run-suites.js            # all 29
+    node tools/run-suites.js eco gait   # only these
+
+29 suites, 864 checks, in `tools/suites/`. They drive the built page in
+headless Chromium and assert about the simulation: the horde ramp, the roles
+and packs, terrain and rooms, the bosses and the Deceiver's encounter, the
+kit, the loop, the forge, the vendor and the hall.
+
+They lived in a scratch directory under `/tmp` until recently, which is one
+container restart from gone and certain to go when the session that wrote them
+ended — an odd place for the only safety net a 14,000-line file has. Moving
+them in immediately caught a regression that had been invisible: `combat3`
+still asserted that `lowFx` suppressed damage numbers, a rule deliberately
+changed when the Phaser build's frame governor started setting that flag for
+real. `phaser/tools/verify-core.cjs` had not caught it, and could not: it
+proves the two builds AGREE, not that either is right.
+
+Each suite finds the page relative to itself, and `RIVENMARK_PAGE` overrides
+that. `verify-core` uses the override to run the same file against `index.html`
+and against the extracted core. It used to copy the suite to a temp directory
+with the URL string-replaced, which broke silently the moment the suites
+stopped hard-coding an absolute path — the replace stopped matching, both arms
+ran against the same page, and six suites were reported as behaving
+differently when the only difference was a rewrite that no longer happened.
+
+DESKTOP ONLY: Playwright does not run under Termux. The game does; its tests
+do not, and that is the one seam in this project between what the phone can do
+and what it cannot.
+
+Verification beyond the suites was done the same way, by driving the built
 page in headless Chromium (Playwright) — state transitions, joystick deadzone
 curve, auto-fire cadence, geometry embedding, frame cost at load, layout at
 320/390/1440 px, and console errors. The bot simulation above runs the same way.

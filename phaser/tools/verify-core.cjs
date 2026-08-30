@@ -51,8 +51,13 @@ function touchesPresentation(src) {
   return PRESENTATION.filter(re => re.test(src)).map(re => String(re));
 }
 
+// The suites live in the repo now. They used to live in a scratch directory
+// under /tmp, which is one container restart from gone and certain to go when
+// the session that wrote them ended -- an odd place for the only safety net a
+// 14,000-line file has. SCRATCH still overrides, for running against a working
+// copy of a suite without committing it.
 const SCRATCH = process.env.SCRATCH ||
-  '/tmp/claude-0/-home-user-abdulalrubat-bit-github-io/4bff2945-7328-5fd1-8354-f2ea6e41425c/scratchpad';
+  path.join(__dirname, '..', '..', 'tools', 'suites');
 const PORT = process.env.PORT || '8155';
 const CORE_URL = 'http://localhost:' + PORT + '/core-test.html';
 
@@ -63,11 +68,12 @@ const CORE_URL = 'http://localhost:' + PORT + '/core-test.html';
 // directly.
 const CANVAS_URL = 'file:///home/user/neon-extraction/index.html';
 
-function run(file) {
+function run(file, page) {
   try {
     const out = execFileSync(process.execPath, [file], {
       encoding: 'utf8', timeout: 420000,
-      env: { ...process.env, NODE_PATH: '/opt/node22/lib/node_modules' }
+      env: { ...process.env, NODE_PATH: '/opt/node22/lib/node_modules',
+             ...(page ? { RIVENMARK_PAGE: page } : {}) }
     });
     return parse(out);
   } catch (e) {
@@ -123,17 +129,21 @@ for (const s of SUITES) {
                 why.slice(0, 2).join(' '));
     continue;
   }
-  const copy = path.join(tmp, s + '.js');
-  fs.writeFileSync(copy, fs.readFileSync(src, 'utf8').split(CANVAS_URL).join(CORE_URL));
-
+  // The SAME file, twice, pointed at a different page by the environment. It
+  // used to be copied to a temp directory with the URL string-replaced, and
+  // that broke silently the moment the suites stopped hard-coding an absolute
+  // path: the replace stopped matching, both arms ran against index.html, and
+  // six suites were reported as behaving differently when the only difference
+  // was a rewrite that no longer happened.
+  //
   // Run both, and on a difference run both again before believing it. This box
   // stalls for half a second at a time under load, and a suite with fixed
   // sleeps in it flakes on either side -- bosses has come back 23/24 against
   // index.html itself. One sample cannot tell a flake from a regression, and
   // reporting one as the other is worse than saying nothing.
-  let orig = run(src), port = run(copy), tries = 1;
+  let orig = run(src), port = run(src, CORE_URL), tries = 1;
   const agree = () => orig.pass === port.pass && orig.fail === port.fail;
-  while (!agree() && tries < 2) { orig = run(src); port = run(copy); tries++; }
+  while (!agree() && tries < 2) { orig = run(src); port = run(src, CORE_URL); tries++; }
   const same = agree();
   if (!same) bad++;
   console.log(s.padEnd(12) +
