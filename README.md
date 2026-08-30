@@ -724,12 +724,13 @@ restores the real generator.
 
 `android/` wraps the game in a WebView and packages it as a debug APK.
 
-**The APK carries the Phaser build.** It used to carry the canvas one, and on
-a phone that difference is the whole story: measured on an Adreno 840, same
-device and comparable load, the canvas build ran at **20fps with 99% of frames
-over budget and its effects already shed**, and the Phaser build holds a
-**locked 60 with 0% over budget** and a profiler that cannot find a single
-layer worth removing.
+**The APK carries the Phaser build**, and on a phone that difference is the
+whole story. Measured in the APK on a Galaxy S26 Ultra (Adreno 840), fullscreen
+at 1080x2340, 130 bodies: the canvas build ran at **20fps, worst frame 118ms,
+99% of frames over budget and its effects already shed**; the Phaser build
+holds **60fps, p99 16.8ms, 0% over budget, atmosphere at full**, with the
+frame governor never once needing to fire and a layer profiler that cannot
+find anything worth removing.
 
     node android/sync-assets.js       # deploys the Phaser build into assets
     cd android && gradle assembleDebug

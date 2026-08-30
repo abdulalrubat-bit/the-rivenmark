@@ -49,6 +49,23 @@ Done, and verified by `phasersmoke.js`:
   *software* GL rasteriser, where the canvas build was labouring at 54. A
   phone GPU is the real test, but the direction is not in doubt.
 
+**Measured on the phone.** A Galaxy S26 Ultra, Adreno 840, in the APK at
+1080x2340 (384x832 css, dpr 2.8), 130 bodies, full atmosphere:
+
+    fps 60   p90/p99 16.7 / 16.8ms   worst 16.8ms   over 20ms: 0% of frames
+    effects  full   governor: 0 drops, 0 restores   work 4.76ms/frame
+
+The canvas build on the same device: **20fps, worst 118ms, 99% of frames over
+budget, and its effects already shed.** The layer profiler cannot find
+anything to remove here, and says so — it only measures a frame that is
+already late.
+
+The governor never fired, which is the point of it: the atmosphere is
+affordable on this hardware, and 4.76ms of work against a 16.7ms budget leaves
+room to grow. The one rough edge left is a single 166ms stall entering a
+delve; `bake` in the dump is there to say whether that is the one-off statics
+pass, which creates ~2100 game objects and uploads the atlas in one frame.
+
 **It is playable.** The delve draws — walls, scenery, the horde and the hero,
 off the core's own state, at 60fps with a ~19ms one-off bake. The stick moves
 the hero, the kit casts, the HUD reads the run.

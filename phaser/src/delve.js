@@ -106,6 +106,13 @@ export class Delve extends Phaser.Scene {
     if (!/nostatics/.test(location.search)) {
       const t0 = performance.now();
       this.paintStatics();
+      // Kept, not just logged. The only rough edge left on a real phone is a
+      // single stall at the start of a delve -- 166ms measured on an Adreno
+      // 840 while every other frame held 16.7 -- and this is the prime
+      // suspect: it creates ~2100 game objects and uploads the atlas in one
+      // frame. A console line cannot come back from a device you cannot
+      // reach; a line in the dump can.
+      this.bakeMs = Math.round(performance.now() - t0);
       console.log('paintStatics ' + (performance.now() - t0).toFixed(0) + 'ms, ' +
                   walls.length + ' walls, ' + props.length + ' props');
     }
@@ -187,6 +194,8 @@ export class Delve extends Phaser.Scene {
                 (this.gov.stat ? '   last sample: work ' + this.gov.stat.work +
                   'ms, frames ' + this.gov.stat.p50 + 'ms against a ' +
                   this.gov.stat.period + 'ms display' : '   (no sample yet)'),
+            bake: (this.bakeMs || 0) + 'ms one-off (' + walls.length + ' walls, ' +
+                  props.length + ' props, ' + (this.wallImgs || []).length + ' dressing)',
             bodies: this.pool.length,
             awake: run.awake || 0,
             delve: LEVEL.id
