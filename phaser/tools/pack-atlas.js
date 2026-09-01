@@ -121,18 +121,19 @@ for (const f of frames) {
    * sizes new poses against. The two agreeing is the point: whatever the
    * importer measured is what the packer divides by.
    *
-   * By MAX of the two axes, not by width: a new pose is legitimately a
-   * different shape from the rest pose (an idle with an arm out is wider than
-   * a rest with arms down), the importer fits it INSIDE the box preserving
-   * aspect, and so only the constraining axis carries the scale. Taking the
-   * other one would draw it too large by exactly the amount the shape differs.
-   * For the same reason a new pose is not reported as an odd aspect ratio.
+   * By HEIGHT alone, not by width or by the larger of the two. A standing
+   * figure is read by how tall it is, so height is what the importer matches
+   * and height is what the canvas preserves exactly; the width is free, and a
+   * broad pose gets a broader canvas rather than being shrunk to fit a square
+   * cut for a narrow body. Reading the scale off the width would then squash
+   * exactly the creatures that needed the room. For the same reason a new pose
+   * is not reported as an odd aspect ratio.
    */
   const slash = f.name.indexOf('/');
   const kind = f.name.slice(slash + 1).split('-')[0];
   const rest = forgedSize.get(f.name.slice(0, slash + 1) + kind + '-rest');
   if (!rest) continue;                      // not a pose of anything forged
-  const k = Math.max(f.w / rest[0], f.h / rest[1]);
+  const k = f.h / rest[1];
   if (Math.abs(k - 1) > 0.001) frameScale[f.name] = +k.toFixed(4);
 }
 

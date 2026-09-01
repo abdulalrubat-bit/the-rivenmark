@@ -70,9 +70,9 @@ different in the loop so a pack does not breathe in unison. A kind with no
 idle frames still holds its one rest pose, exactly as before, so this arrives
 one creature at a time.
 
-The flayer has a ten-frame breath; four other kinds have a two-frame pulse.
-Everything else is still a frozen frame, and that is still the single biggest
-reason the scene reads as static.
+The shaman has a ten-frame breath and a six-frame cast; three other kinds have
+a two-frame pulse. Everything else is still a frozen frame, and that is still
+the single biggest reason the scene reads as static.
 
 Two things the cycle player works out for itself, so nothing has to be
 declared:
@@ -90,21 +90,20 @@ declared:
 
 What would fix the rest, roughly in order of value for effort:
 
-1. **Idles for the other six kinds, and longer ones for the four on two
+1. **Idles for the other seven kinds, and longer ones for the three on two
    frames.** 4–6 frames of breathing, weight shift, a hood stirring. Two
-   frames reads as a pulse; ten reads as breath — the flayer is the proof.
-   `thrall`, `breaker`, `gorger`, `lieutenant`, `mirage`, `deceiver` have none
-   at all, and neither hero does.
+   frames reads as a pulse; ten reads as breath — the shaman is the proof.
+   `thrall`, `breaker`, `gorger`, `flayer`, `lieutenant`, `mirage`,
+   `deceiver` have none at all, and neither hero does.
 2. **Secondary motion in the run.** Capes, hems, chains and hair that lag
    behind the body. The current run cycles move the whole figure rigidly.
 3. **A hit pose.** Bodies currently flash white when struck. A one-frame
    recoil reads far better.
-3b. **A cast or strike pose.** There is no frame for a body attacking: it
-   plays its walk or its idle and the blow simply lands. The core already
-   knows — `casting` on the cantor, `chanting` on the shaman, `run` on the
-   flayer — so the state is there to hang art on, and only the art is
-   missing. This is the one place where authored frames currently exist with
-   nowhere to go.
+3b. **Cast poses for the cantor.** `<kind>-cast-0..N` now plays across a
+   body's wind-up, driven by how far through it is rather than by a clock —
+   so the last frame lands as the blow does, and a caster wound back up by a
+   null zone visibly loses ground. The shaman has one. The cantor's bolt
+   (`casting`, 0.55s) has the state and no art.
 4. **Death frames.** Bodies presently just stop being drawn.
 
 ## The palette
@@ -168,6 +167,17 @@ and none of which are optional:
 Author at 2× the forged resolution (the default). A body is 38–96 world units
 and a phone renders at dpr ~2.8, so 2× is about pixel parity on the device and
 anything more is texture nobody can see.
+
+A cast is imported exactly like an idle — `bestiary/<kind>-cast` with the
+frames in the order they play, the last one being the pose the spell leaves
+on. It is not a loop and is never reversed: it runs once, across the wind-up.
+
+If a creature is broader than the body it replaces, its canvas is widened
+rather than the figure shrunk. The forged frames are square and cut for narrow
+bodies — the shaman's figure is 57×101 in a 108×108 frame — and squeezing a
+winged reference into that costs the one thing the sizing rule protects, and
+costs a different amount per pose, so the body changed height when it started
+casting.
 
 **Author a whole kind, not a pose.** The coherent unit is the creature. Give a
 body an authored idle and leave its run cycle forged and it changes art style

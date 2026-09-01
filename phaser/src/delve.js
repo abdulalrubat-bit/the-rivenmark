@@ -85,6 +85,7 @@ const STANDING = { pillar: 26, barrel: 12, crate: 11, urn: 10, banner: 16,
           swapHero, swapBlocked, abilityBlock, ABILITIES, ABILITY_BY_ID,
           CHARGE_MAX, TENSION_MAX,
           WORLD, PAL, LEVEL, LEVELS, GAIT_N, GAIT_STEP, GAIT_STILL, lamps,
+          BOLT_WIND, CHANT_WIND,
           lowFx,
           WALK_STEP, WALK_PACE, update, startRun, loadStash */
 
@@ -135,7 +136,7 @@ export class Delve extends Phaser.Scene {
       this.man = {};
     }
     this.frameScale = this.man.frame_scale || {};
-    this.buildIdleTable(this.man.idle_pingpong || []);
+    this.buildCycleTable(this.man.idle_pingpong || []);
 
     this.cameras.main.setBackgroundColor(PAL.floor || '#1a1512');
     this.cameras.main.setBounds(0, 0, WORLD.w, WORLD.h);
@@ -490,11 +491,15 @@ export class Delve extends Phaser.Scene {
     if (sp.scaleX !== want) sp.setScale(want);
   }
 
-  /* Which names have an idle loop, and how many frames long it is.
+  /* Every numbered cycle in the atlas, and how many frames long it is.
    *
-   * Read off the atlas once, at scene start, rather than probed frame by
-   * frame while drawing: the answer cannot change while the scene runs, and a
-   * miss on textures.getFrame is not silently free in every Phaser version.
+   * Keyed by everything up to the number, so 'bestiary/shaman-idle' answers 10
+   * and 'bestiary/shaman-cast' answers 6. Not idle-only: a cast is the same
+   * question asked about a different pose, and one table beats two that drift.
+   *
+   * Read off the atlas once, at scene start, rather than probed frame by frame
+   * while drawing: the answer cannot change while the scene runs, and a miss
+   * on textures.getFrame is not silently free in every Phaser version.
    *
    * Counted CONTIGUOUSLY from zero, so idle-0 and idle-2 with no idle-1 is a
    * one-frame loop rather than a three-frame loop that spends a third of its
@@ -502,8 +507,8 @@ export class Delve extends Phaser.Scene {
    * tail of the animation, not leave a body wearing whatever it happened to
    * be wearing when the frame lookup failed.
    */
-  buildIdleTable(pingpong) {
-    this.idleN = Object.create(null);
+  buildCycleTable(pingpong) {
+    this.cycleN = Object.create(null);
     // Which cycles go there and back rather than round: measured by the packer,
     // which is the one place that has every frame's pixels in hand.
     this.idlePong = new Set(pingpong);
@@ -511,15 +516,32 @@ export class Delve extends Phaser.Scene {
     const names = (tex && tex.getFrameNames) ? tex.getFrameNames() : [];
     const seen = Object.create(null);
     for (const n of names) {
-      const m = /^(.*)-idle-(\d+)$/.exec(n);
+      const m = /^(.*)-(\d+)$/.exec(n);
       if (!m) continue;
-      (seen[m[1]] || (seen[m[1]] = new Set())).add(+m[2]);
+      if (!seen[m[1]]) seen[m[1]] = new Set();
+      seen[m[1]].add(+m[2]);
     }
     for (const base in seen) {
       let i = 0;
       while (seen[base].has(i)) i++;
-      if (i) this.idleN[base] = i;
+      if (i) this.cycleN[base] = i;
     }
+  }
+
+  /* How far through a wind-up a body is: 0 as it starts, 1 as the blow lands,
+   * and -1 when it is not winding up at all.
+   *
+   * Both wind-ups in the game count DOWN from their full length -- the
+   * cantor's bolt from BOLT_WIND, the shaman's chant from CHANT_WIND -- so
+   * progress is what is left subtracted from one. Clamped at the top because a
+   * null zone winds a caster back up (`casting + dt * 2.2`), which can put the
+   * timer above where it started and would otherwise run the animation
+   * backwards past its first frame.
+   */
+  castProgress(e) {
+    if ((e.chanting || 0) > 0) return Math.max(0, 1 - e.chanting / CHANT_WIND);
+    if ((e.casting || 0) > 0) return Math.max(0, 1 - e.casting / BOLT_WIND);
+    return -1;
   }
 
   /* Standing still is not the same as being frozen.
@@ -545,7 +567,7 @@ export class Delve extends Phaser.Scene {
    * kind at a time, and the kinds without it are exactly as they were.
    */
   idleFrame(base, e, time) {
-    const n = this.idleN && this.idleN[base];
+    const n = this.cycleN && this.cycleN[base + '-idle'];
     if (!n) return base + '-rest';
     // A there-and-back cycle of n frames is 2n-2 steps long: out to the far
     // end and home again without playing either end twice.
@@ -567,6 +589,25 @@ export class Delve extends Phaser.Scene {
     // A calcifying body is stone under a shell of light. Stone does not
     // breathe, and the held frame is half of what sells the state.
     if (e.calcify > 0) return base + '-rest';
+
+    /* Mid-wind-up, which outranks both standing and walking.
+     *
+     * Driven by PROGRESS through the cast, not by a clock of its own: the
+     * whole point of a wind-up in this game is that it is "a cast you can see
+     * coming and reach it during", so the animation has to be the timer. The
+     * last frame lands as the spell fires, and a caster wound back up by a
+     * null zone visibly loses ground through the same frames.
+     *
+     * It also has to come before the idle branch rather than after: a chanting
+     * body is planted, so its pace is zero and it would otherwise stand there
+     * breathing while it called down fire.
+     */
+    const p = this.castProgress(e);
+    if (p >= 0) {
+      const cn = this.cycleN[base + '-cast'];
+      if (cn) return base + '-cast-' + Math.min(cn - 1, (p * cn) | 0);
+    }
+
     if (e.pace < GAIT_STILL || e.braced) return this.idleFrame(base, e, time);
     const f = ((e.gait / GAIT_STEP) | 0) % GAIT_N;
     return base + '-run-' + f;

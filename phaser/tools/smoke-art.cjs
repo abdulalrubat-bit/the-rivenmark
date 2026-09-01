@@ -50,6 +50,10 @@ const NAMES = ['rest', 'run-0', 'run-1', 'run-2', 'run-3', 'run-4', 'run-5', 'ru
  */
 const CYCLES = [{ kind: 'thrall', shifts: [0, 5, 10], open: true },
                 { kind: 'breaker', shifts: [0, 9, 5], open: false }];
+// A wind-up is not a loop: it runs once, driven by how far through the cast
+// the body is. Four frames so the quarters of a cast map to distinct frames
+// and an off-by-one in the mapping cannot hide.
+const CAST_N = 4;
 
 (async () => {
   const forgedDir = path.join(ROOT, 'art', 'bestiary');
@@ -100,7 +104,8 @@ const CYCLES = [{ kind: 'thrall', shifts: [0, 5, 10], open: true },
     for (const c of CYCLES) {
       c.shifts.forEach((sh, i) => plant(c.kind, 'idle-' + i, 'rest', sh));
     }
-    ck('authored frames can be dropped in', made.length >= 15,
+    for (let i = 0; i < CAST_N; i++) plant(KIND, 'cast-' + i, 'rest', 0);
+    ck('authored frames can be dropped in', made.length >= 19,
        made.length + ' poses at 4x under art-custom/bestiary/');
 
     const packed = execFileSync(process.execPath, [path.join(__dirname, 'pack-atlas.js')],
@@ -319,7 +324,10 @@ const CYCLES = [{ kind: 'thrall', shifts: [0, 5, 10], open: true },
         const walk = r.slice(0, 8).map(x => x.i);
         // A cycle long enough to be clamped by the pacing rule, which the
         // planted three-frame ones are not. Whatever real art has one.
-        const longBase = Object.keys(sc.idleN).find(b => sc.idleN[b] >= 10);
+        // cycleN is keyed by name-and-pose ('bestiary/shaman-idle'); idleFrame
+        // takes the name and appends the pose itself.
+        const longKey = Object.keys(sc.cycleN).find(b => /-idle$/.test(b) && sc.cycleN[b] >= 10);
+        const longBase = longKey ? longKey.replace(/-idle$/, '') : null;
         const lr = longBase ? runs(longBase) : null;
         // Held time per frame, off the middle of the sampling window so a
         // clipped first or last run cannot skew it.
@@ -334,12 +342,45 @@ const CYCLES = [{ kind: 'thrall', shifts: [0, 5, 10], open: true },
             if (ok) { longPeriod = p; break; }
           }
         }
+        /* The wind-up, walked from its start to the blow.
+         *
+         * chanting counts DOWN from CHANT_WIND, so this is a body getting
+         * closer to casting, and the frame it wears has to move with it. The
+         * last frame must land ON the blow -- the tell is the whole point of a
+         * 1.15s wind-up you are meant to see coming and interrupt.
+         */
+        const wind = body(kind);
+        wind.pace = 0;
+        const castWalk = [];
+        for (let i = 0; i < 8; i++) {
+          wind.chanting = CHANT_WIND * (1 - i / 8);
+          castWalk.push(sc.bodyFrame(wind, 0));
+        }
+        // A hair before the blow, not on it: the core fires the spell as
+        // chanting reaches zero, so zero is already the far side of the cast.
+        // This is the sample that pins the LAST frame to the moment it lands --
+        // a cast whose final pose never reaches the screen is a tell that
+        // tells you nothing.
+        wind.chanting = 0.0001;
+        const atTheBlow = sc.bodyFrame(wind, 0);
+        // A body wound BACK UP past its own start (what a null zone does)
+        // must not run off the front of the cycle.
+        wind.chanting = CHANT_WIND * 1.6;
+        const overwound = sc.bodyFrame(wind, 0);
+        // And a body not casting at all is back to standing.
+        wind.chanting = 0;
+        const notCasting = sc.bodyFrame(wind, 0);
         const restKey = 'bestiary/' + kind + '-rest';
         const idleKey = 'bestiary/' + kind + '-idle-0';
         const wF = k => { const f = sc.textures.getFrame('art', k); return f ? f.width : 0; };
         return {
-          table: sc.idleN['bestiary/' + kind] || 0,
+          table: sc.cycleN['bestiary/' + kind + '-idle'] || 0,
           walk,
+          castWalk: castWalk.map(n => n.replace('bestiary/' + kind + '-', '')),
+          atTheBlow: atTheBlow.replace('bestiary/' + kind + '-', ''),
+          overwound: overwound.replace('bestiary/' + kind + '-', ''),
+          notCasting: notCasting.replace('bestiary/' + kind + '-', ''),
+          castN: sc.cycleN['bestiary/' + kind + '-cast'] || 0,
           longBase, longPeriod,
           longMs: mid && mid.length ? mid[mid.length >> 1] : null,
           idle: across(body(kind)),
@@ -356,7 +397,7 @@ const CYCLES = [{ kind: 'thrall', shifts: [0, 5, 10], open: true },
       }, [KIND]);
 
       ck('the scene counts the idle frames it has',
-         D.table === 3, 'idleN[bestiary/' + KIND + '] = ' + D.table);
+         D.table === 3, 'cycleN[bestiary/' + KIND + '-idle] = ' + D.table);
       ck('a standing body with idle art cycles instead of freezing',
          D.idle.length === 3 && D.idle.every(n => /-idle-\d+$/.test(n)),
          D.idle.join(' '));
@@ -376,6 +417,21 @@ const CYCLES = [{ kind: 'thrall', shifts: [0, 5, 10], open: true },
            : D.longBase + ': a period of ' + D.longPeriod + ' frames held ' +
              D.longMs + 'ms each = ' +
              (D.longPeriod * D.longMs / 1000).toFixed(1) + 's a breath');
+      ck('the scene counts a wind-up like any other cycle',
+         D.castN === 4, 'cycleN[bestiary/' + KIND + '-cast] = ' + D.castN);
+      // Nine samples across a four-frame cast: 0,0,1,1,2,2,3,3 and the last
+      // one exactly on the blow. Not a clock -- move the timer and the frame
+      // moves with it, which is what makes the animation the tell.
+      ck('a wind-up plays by how far through the cast it is',
+         D.castWalk.join(' ') === 'cast-0 cast-0 cast-1 cast-1 cast-2 cast-2 cast-3 cast-3',
+         D.castWalk.join(' '));
+      ck('and the last frame is still on screen as the blow lands',
+         D.atTheBlow === 'cast-3', D.atTheBlow);
+      ck('and a caster wound back up does not run off the front of it',
+         D.overwound === 'cast-0', D.overwound);
+      ck('while a body that is not casting is back to standing',
+         /^idle-\d+$/.test(D.notCasting), D.notCasting);
+
       ck('a kind with no idle art still holds its one rest frame',
          D.none.length === 1 && D.none[0] === 'bestiary/nosuchkind-rest',
          D.none.join(' '));

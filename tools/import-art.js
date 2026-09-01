@@ -200,45 +200,55 @@ const fh = t.box.y1 - t.box.y0 + 1;
  * rest pose and should not be shrunk for it. Squashing to fit both would change
  * the shape outright, which is worse than either.
  */
-let H = Math.max(1, Math.round(fh * scale));
-let W = Math.max(1, Math.round(H * (bw / bh)));
-// ...unless the pose is so much wider than the forged one that it would not fit
-// on the canvas at all. Then it is the width that binds, and it is worth
-// saying so: a genuinely wide pose may want a wider forged frame behind it.
-if (W > CW) {
-  const shrunk = CW / W;
-  console.log('  note: ' + W + 'px wide will not fit a ' + CW + 'px canvas — ' +
-              'holding the width and standing ' + (100 - shrunk * 100).toFixed(0) +
-              '% shorter than ' + t.from);
-  W = CW;
-  H = Math.max(1, Math.round(H * shrunk));
-}
+const H = Math.max(1, Math.round(fh * scale));
+const W = Math.max(1, Math.round(H * (bw / bh)));
 
 // Where it stands: feet on the forged figure's foot line, centred left-to-right
 // on the forged figure rather than on the canvas, since the forged figure is
 // not always centred in its own frame either.
 const footY = (t.box.y1 + 1) * scale;
 const midX = ((t.box.x0 + t.box.x1 + 1) / 2) * scale;
-const ox = Math.round(midX - W / 2);
 const oy = Math.round(footY - H);
+
+/* A broad pose gets a broader canvas rather than a haircut.
+ *
+ * The forged frames are square and sized for the forged bodies, which are
+ * narrow: the shaman's figure is 57x101 inside a 108x108 frame. A reference
+ * creature with a wingspan does not fit that, and squeezing it to fit costs
+ * the one thing the whole sizing rule exists to protect -- its height. Worse,
+ * it costs a DIFFERENT amount per pose, so the body changed height when it
+ * started casting.
+ *
+ * So the canvas widens instead. Symmetrically about the OLD canvas centre,
+ * because that centre is the body's position on the floor: move it and every
+ * frame shifts sideways. Only the width moves; the height stays exactly
+ * forged-height x scale, which is what the packer reads the draw scale from.
+ */
+const half = Math.max(CW / 2 - midX, midX - CW / 2) + W / 2;
+const CWo = Math.max(CW, 2 * Math.ceil(half));
+const ox = Math.round(CWo / 2 + (midX - CW / 2) - W / 2);
+if (CWo > CW) {
+  console.log('  canvas widened to ' + CWo + 'px (from ' + CW +
+              ') to hold a figure ' + W + 'px across at full height');
+}
 
 const dst = path.join(CUSTOM, folder);
 fs.mkdirSync(dst, { recursive: true });
 
 console.log((cycle ? pngs.length + ' frames' : path.basename(sources[0])) +
             '  ->  common box ' + bw + 'x' + bh + '  ->  figure ' + W + 'x' + H +
-            ' on a ' + CW + 'x' + CH + ' canvas');
+            ' on a ' + CWo + 'x' + CH + ' canvas');
 console.log('  matched to ' + t.from + ': figure ' + fw + 'x' + fh +
             ' in a ' + t.w + 'x' + t.h + ' frame, at ' + scale + 'x');
 
 pngs.forEach((p, i) => {
   const fig = resample(cut(p.png, box), W, H);
-  const out = new PNG({ width: CW, height: CH });
+  const out = new PNG({ width: CWo, height: CH });
   out.data.fill(0);
   // Clipped rather than trusted: a rounding of ox/oy that lands one pixel off
   // the canvas is a thrown exception in bitblt and a lost afternoon.
   const sx = Math.max(0, -ox), sy = Math.max(0, -oy);
-  const w = Math.min(W - sx, CW - Math.max(0, ox));
+  const w = Math.min(W - sx, CWo - Math.max(0, ox));
   const h = Math.min(H - sy, CH - Math.max(0, oy));
   if (w > 0 && h > 0) {
     PNG.bitblt(fig, out, sx, sy, w, h, Math.max(0, ox), Math.max(0, oy));
