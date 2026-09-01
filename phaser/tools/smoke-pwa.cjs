@@ -13,6 +13,7 @@
  * DESKTOP ONLY (Playwright). Run: npm run smoke:pwa
  */
 const { chromium } = require('playwright');
+const buildOnce = require('./build-once.cjs');
 const { execFileSync } = require('child_process');
 const { spawn } = require('child_process');
 const fs = require('fs');
@@ -36,6 +37,8 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   }
 
   const PORT = process.env.PORT || '8218';
+  // src/ is the thing under test; public/bundle.js is a souvenir of it.
+  buildOnce();
   const srv = spawn(process.execPath, [path.join(__dirname, 'serve.js')],
                     { env: { ...process.env, PORT, ROOT: dir }, stdio: 'ignore' });
   await sleep(800);

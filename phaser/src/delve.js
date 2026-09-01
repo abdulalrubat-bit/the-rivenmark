@@ -28,6 +28,17 @@ const hex = (css, fallback) => {
 
 const SS = 2;      // art/ is exported at 2x, which is native for it
 
+/* How long one frame of an idle loop is held, in milliseconds.
+ *
+ * Idle is the one cycle that CANNOT be driven by distance travelled the way
+ * the gait is, because the whole point of it is a body that is not
+ * travelling. So it runs off the clock, and this is the clock. 420ms is
+ * roughly a slow breath over a two-frame loop; a longer authored loop gets
+ * proportionally slower rather than faster, which is the right way round --
+ * more frames should read as more detail, not more haste.
+ */
+const IDLE_MS = 420;
+
 /* The adaptive-effects thresholds, in milliseconds of WORK per frame. The
  * canvas build's numbers, kept: above FX_DROP a frame cannot hold 60Hz, below
  * FX_RAISE there is room to put the mood back, and FX_SAMPLE frames is about
@@ -117,6 +128,7 @@ export class Delve extends Phaser.Scene {
       this.man = {};
     }
     this.frameScale = this.man.frame_scale || {};
+    this.buildIdleTable();
 
     this.cameras.main.setBackgroundColor(PAL.floor || '#1a1512');
     this.cameras.main.setBounds(0, 0, WORLD.w, WORLD.h);
@@ -471,20 +483,84 @@ export class Delve extends Phaser.Scene {
     if (sp.scaleX !== want) sp.setScale(want);
   }
 
+  /* Which names have an idle loop, and how many frames long it is.
+   *
+   * Read off the atlas once, at scene start, rather than probed frame by
+   * frame while drawing: the answer cannot change while the scene runs, and a
+   * miss on textures.getFrame is not silently free in every Phaser version.
+   *
+   * Counted CONTIGUOUSLY from zero, so idle-0 and idle-2 with no idle-1 is a
+   * one-frame loop rather than a three-frame loop that spends a third of its
+   * time asking for a frame that does not exist. A gap should cost you the
+   * tail of the animation, not leave a body wearing whatever it happened to
+   * be wearing when the frame lookup failed.
+   */
+  buildIdleTable() {
+    this.idleN = Object.create(null);
+    const tex = this.textures.get('art');
+    const names = (tex && tex.getFrameNames) ? tex.getFrameNames() : [];
+    const seen = Object.create(null);
+    for (const n of names) {
+      const m = /^(.*)-idle-(\d+)$/.exec(n);
+      if (!m) continue;
+      (seen[m[1]] || (seen[m[1]] = new Set())).add(+m[2]);
+    }
+    for (const base in seen) {
+      let i = 0;
+      while (seen[base].has(i)) i++;
+      if (i) this.idleN[base] = i;
+    }
+  }
+
+  /* Standing still is not the same as being frozen.
+   *
+   * The gait advances by DISTANCE TRAVELLED, which is exactly what makes a
+   * walk read as walking whether the body is hurrying or trudging -- and it
+   * is also why a body that stops moving stops animating entirely. A room of
+   * stopped bodies is a room of statues. An idle loop cannot be driven that
+   * way by construction; it needs a clock, so this is the one cycle that has
+   * one.
+   *
+   * The phase is per-body and drawn once, for the same reason newBody starts
+   * gait somewhere random in its cycle: five thralls breathing in perfect
+   * unison looks more mechanical than five thralls not breathing at all. It
+   * is memoised on the BODY rather than on the sprite because the pool hands
+   * a given body a different sprite from one frame to the next, so a sprite
+   * cannot be trusted to remember anything about who it is currently
+   * wearing.
+   *
+   * A name with no authored idle art answers with the single -rest frame,
+   * which is what the entire bestiary did before any of this existed. That is
+   * the fallback the whole thing is built around: idle art can arrive one
+   * kind at a time, and the kinds without it are exactly as they were.
+   */
+  idleFrame(base, e, time) {
+    const n = this.idleN && this.idleN[base];
+    if (!n) return base + '-rest';
+    if (e.idlePhase === undefined) e.idlePhase = Math.random() * n * IDLE_MS;
+    const t = (time === undefined ? this.time.now : time) + e.idlePhase;
+    return base + '-idle-' + (((t / IDLE_MS) | 0) % n);
+  }
+
   /* Which frame a body wears. The canvas build's bodyFrame/heroFrame, reading
    * the same gait state the core computes, resolved to atlas frames instead of
    * forged canvases.
    */
-  bodyFrame(e) {
-    if (e.pace < GAIT_STILL || e.braced) return 'bestiary/' + e.kind + '-rest';
+  bodyFrame(e, time) {
+    const base = 'bestiary/' + e.kind;
+    // A calcifying body is stone under a shell of light. Stone does not
+    // breathe, and the held frame is half of what sells the state.
+    if (e.calcify > 0) return base + '-rest';
+    if (e.pace < GAIT_STILL || e.braced) return this.idleFrame(base, e, time);
     const f = ((e.gait / GAIT_STEP) | 0) % GAIT_N;
-    return 'bestiary/' + e.kind + '-run-' + f;
+    return base + '-run-' + f;
   }
-  heroFrame(p) {
-    if (p.pace < GAIT_STILL) return 'heroes/' + p.hero + '-rest';
+  heroFrame(p, time) {
+    const base = 'heroes/' + p.hero;
+    if (p.pace < GAIT_STILL) return this.idleFrame(base, p, time);
     const run = p.pace >= WALK_PACE;
     const f = ((p.gait / (run ? GAIT_STEP : WALK_STEP)) | 0) % GAIT_N;
-    return 'heroes/' + p.hero + (run ? '-run-' : '-walk-') + f;
+    return base + (run ? '-run-' : '-walk-') + f;
   }
 
   /* The stick.
@@ -632,7 +708,7 @@ export class Delve extends Phaser.Scene {
     for (let i = 0; i < pool.length; i++) {
       const s = pool[i], e = live[i];
       if (!e) { s.setVisible(false); continue; }
-      const key = this.bodyFrame(e);
+      const key = this.bodyFrame(e, time);
       s.setVisible(true).setPosition(e.x, e.y).setDepth(e.y);
       this.wearFrame(s, key);
       s.setFlipX(e.face < 0);
@@ -642,7 +718,7 @@ export class Delve extends Phaser.Scene {
     }
 
     if (!this.stepping) return;
-    const hk = this.heroFrame(player);
+    const hk = this.heroFrame(player, time);
     this.wearFrame(this.hero, hk);
     this.hero.setPosition(player.x, player.y).setFlipX(player.face < 0)
         .setDepth(player.y);

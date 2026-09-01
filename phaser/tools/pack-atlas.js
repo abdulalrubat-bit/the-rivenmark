@@ -97,14 +97,43 @@ const odd = [];
 for (const f of frames) {
   if (!f.authored) continue;
   const was = forgedSize.get(f.name);
-  if (!was) continue;                       // a wholly new frame: nothing to scale against
-  const sx = f.w / was[0], sy = f.h / was[1];
-  // A replacement that changes the aspect ratio will not sit where the forged
-  // one sat -- it is a different shape in a game that positions by centre and
-  // sorts by foot. Named rather than silently accepted.
-  if (Math.abs(sx - sy) > 0.02) odd.push(f.name + ' ' + f.w + 'x' + f.h +
-                                         ' replacing ' + was[0] + 'x' + was[1]);
-  if (Math.abs(sx - 1) > 0.001) frameScale[f.name] = +sx.toFixed(4);
+  if (was) {
+    const sx = f.w / was[0], sy = f.h / was[1];
+    // A replacement that changes the aspect ratio will not sit where the forged
+    // one sat -- it is a different shape in a game that positions by centre and
+    // sorts by foot. Named rather than silently accepted.
+    if (Math.abs(sx - sy) > 0.02) odd.push(f.name + ' ' + f.w + 'x' + f.h +
+                                           ' replacing ' + was[0] + 'x' + was[1]);
+    if (Math.abs(sx - 1) > 0.001) frameScale[f.name] = +sx.toFixed(4);
+    continue;
+  }
+
+  /* A pose that has no forged counterpart at all -- an idle loop, say, which
+   * the forged bestiary simply does not have.
+   *
+   * "Nothing to scale against, so leave it alone" was wrong, and wrong in the
+   * exact way this whole table exists to prevent: with no entry the host draws
+   * at 1/2, so a 176px idle authored against an 88px rest stood at twice the
+   * height of the body it belongs to -- and only while STANDING STILL, so it
+   * grew when it stopped and shrank when it charged.
+   *
+   * So fall back to the kind's -rest, which is what import-art.js already
+   * sizes new poses against. The two agreeing is the point: whatever the
+   * importer measured is what the packer divides by.
+   *
+   * By MAX of the two axes, not by width: a new pose is legitimately a
+   * different shape from the rest pose (an idle with an arm out is wider than
+   * a rest with arms down), the importer fits it INSIDE the box preserving
+   * aspect, and so only the constraining axis carries the scale. Taking the
+   * other one would draw it too large by exactly the amount the shape differs.
+   * For the same reason a new pose is not reported as an odd aspect ratio.
+   */
+  const slash = f.name.indexOf('/');
+  const kind = f.name.slice(slash + 1).split('-')[0];
+  const rest = forgedSize.get(f.name.slice(0, slash + 1) + kind + '-rest');
+  if (!rest) continue;                      // not a pose of anything forged
+  const k = Math.max(f.w / rest[0], f.h / rest[1]);
+  if (Math.abs(k - 1) > 0.001) frameScale[f.name] = +k.toFixed(4);
 }
 
 if (!frames.length) {
@@ -168,4 +197,36 @@ if (odd.length) {
   console.log('\n  these change shape, not just resolution — they will not sit ' +
               'where the forged frame sat:');
   for (const o of odd.slice(0, 12)) console.log('    ' + o);
+}
+
+/* Half-dressed kinds.
+ *
+ * The coherent unit of art is a KIND, not a pose. Author a body's idle loop
+ * and leave its run cycle forged and the thing changes art style the instant
+ * it takes a step -- which is not a subtle regression, it is a different
+ * creature. Sizes and foot lines are checked to the pixel elsewhere; nothing
+ * checked whether the drawing was by the same hand, and that is the failure
+ * anyone would notice first.
+ *
+ * Not an error. Importing one pose at a time is exactly how art-custom/ is
+ * meant to be used, and a half-dressed kind is a normal state to pass through.
+ * It is just a state worth being told you are in.
+ */
+const dressed = new Map();
+for (const f of frames) {
+  const slash = f.name.indexOf('/');
+  const dir = f.name.slice(0, slash);
+  if (dir !== 'bestiary' && dir !== 'heroes') continue;
+  const kind = dir + '/' + f.name.slice(slash + 1).split('-')[0];
+  const d = dressed.get(kind) || { yes: 0, no: 0 };
+  d[f.authored ? 'yes' : 'no']++;
+  dressed.set(kind, d);
+}
+const mixed = [...dressed].filter(([, d]) => d.yes && d.no);
+if (mixed.length) {
+  console.log('\n  these wear authored art for some poses and forged art for the ' +
+              'rest — they will change style as they move:');
+  for (const [k, d] of mixed) {
+    console.log('    ' + k + '  ' + d.yes + ' authored, ' + d.no + ' forged');
+  }
 }

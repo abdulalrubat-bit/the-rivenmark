@@ -59,17 +59,27 @@ that lowers contrast between a body and the floor.
 
 ## What "more alive" means here — and the honest gap
 
-**There is no idle animation. A standing body is a single frozen frame.**
-`bestiary/<kind>-rest` is one image, and the game shows it whenever a body is
-not moving. Nothing breathes, sways, or blinks. This is the single biggest
-reason the scene reads as static, and no amount of added detail fixes it.
+**The game can now animate a standing body, and almost nothing uses it.**
 
-What would fix it, roughly in order of value for effort:
+It could not before: the gait advances by DISTANCE TRAVELLED, so a body that
+stopped moving stopped animating, and `bestiary/<kind>-rest` — one image — was
+what it held. That is fixed. Drop `bestiary/<kind>-idle-0.png`,
+`-idle-1.png`, … into `art-custom/bestiary/` and that kind breathes on a clock
+whenever it is standing still, at 420ms a frame, each body starting somewhere
+different in the loop so a pack does not breathe in unison. A kind with no
+idle frames still holds its one rest pose, exactly as before, so this arrives
+one creature at a time.
 
-1. **An idle cycle.** 4–6 frames of breathing, weight shift, a hood stirring.
-   Needs a small code change too: the gait picks `-rest` below a movement
-   threshold, and would instead run an idle loop on a clock. Ask for
-   `<kind>-idle-0..N` alongside `-rest` and it can be wired up.
+Five kinds have a two-frame idle imported from reference art. Everything else
+is still a frozen frame, and that is still the single biggest reason the scene
+reads as static.
+
+What would fix the rest, roughly in order of value for effort:
+
+1. **Longer idle cycles, and idles for the other six kinds.** 4–6 frames of
+   breathing, weight shift, a hood stirring. Two frames reads as a pulse; four
+   reads as breath. `thrall`, `breaker`, `gorger`, `lieutenant`, `mirage`,
+   `deceiver` have none at all, and neither hero does.
 2. **Secondary motion in the run.** Capes, hems, chains and hair that lag
    behind the body. The current run cycles move the whole figure rigidly.
 3. **A hit pose.** Bodies currently flash white when struck. A one-frame
@@ -111,3 +121,35 @@ about 44 pixels tall. Art authored for a bigger presentation will lose exactly
 the detail it was drawn for. Draw at 2× or 4× by all means (any resolution
 works, see `art-custom/README.md`), but **judge it at final size**, on a dark
 background, with three of them overlapping.
+
+## Delivering a frame
+
+`node tools/import-art.js bestiary/husk-idle a.png b.png` takes reference art
+at any size — a figure floating in a mostly transparent sheet is fine, that is
+how it arrives — and lands it as a game frame. Give it several sources and it
+treats them as one cycle, trimming them to a COMMON bounding box so the figure
+does not shift by a pixel between frames.
+
+Three things it makes true, all of which are checked by `npm run smoke:art`
+and none of which are optional:
+
+- **The output canvas matches the forged frame's**, so the frame is a drop-in
+  with the same registration. The game centres a sprite on the body's
+  position; a tight-trimmed frame centres its own bounding box there instead,
+  and the body floats.
+- **The figure stands the same height as the forged figure** — the figure, not
+  the canvas. A forged body fills 47–83% of its square frame and the rest is
+  margin. Fitting to the margin made the imported husk 27% taller than the
+  husk that walks, and it is the same husk: it grew every time it stopped.
+- **The feet land on the forged foot line.** A top-down crowd reads as standing
+  on a floor only while every pair of feet is on the same one.
+
+Author at 2× the forged resolution (the default). A body is 38–96 world units
+and a phone renders at dpr ~2.8, so 2× is about pixel parity on the device and
+anything more is texture nobody can see.
+
+**Author a whole kind, not a pose.** The coherent unit is the creature. Give a
+body an authored idle and leave its run cycle forged and it changes art style
+the instant it takes a step — which is not a subtle regression, it is a
+different creature. `pack-atlas.js` prints which kinds are in that state every
+time it runs; five of them are, right now.
