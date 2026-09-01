@@ -70,20 +70,41 @@ different in the loop so a pack does not breathe in unison. A kind with no
 idle frames still holds its one rest pose, exactly as before, so this arrives
 one creature at a time.
 
-Five kinds have a two-frame idle imported from reference art. Everything else
-is still a frozen frame, and that is still the single biggest reason the scene
-reads as static.
+The flayer has a ten-frame breath; four other kinds have a two-frame pulse.
+Everything else is still a frozen frame, and that is still the single biggest
+reason the scene reads as static.
+
+Two things the cycle player works out for itself, so nothing has to be
+declared:
+
+- **How fast to run.** What is held constant is the length of the breath
+  (~2.8s), not the length of a frame. A ten-frame cycle at a two-frame cycle's
+  pace would take seven and a half seconds — not a creature resting, a creature
+  in a coma. Short cycles keep the old 420ms a frame; long ones speed up.
+- **Whether to loop or to go there and back.** A breath is an open path: the
+  body rises from one extreme to the other, and playing it as a ring snaps
+  back once a cycle. A true cycle — a guttering flame, a turning orb — is a
+  ring, and reversing it would be wrong. The packer tells them apart by
+  measuring whether the wrap is bigger than the largest step inside the chain,
+  and prints the ratio it used every time it runs.
 
 What would fix the rest, roughly in order of value for effort:
 
-1. **Longer idle cycles, and idles for the other six kinds.** 4–6 frames of
-   breathing, weight shift, a hood stirring. Two frames reads as a pulse; four
-   reads as breath. `thrall`, `breaker`, `gorger`, `lieutenant`, `mirage`,
-   `deceiver` have none at all, and neither hero does.
+1. **Idles for the other six kinds, and longer ones for the four on two
+   frames.** 4–6 frames of breathing, weight shift, a hood stirring. Two
+   frames reads as a pulse; ten reads as breath — the flayer is the proof.
+   `thrall`, `breaker`, `gorger`, `lieutenant`, `mirage`, `deceiver` have none
+   at all, and neither hero does.
 2. **Secondary motion in the run.** Capes, hems, chains and hair that lag
    behind the body. The current run cycles move the whole figure rigidly.
 3. **A hit pose.** Bodies currently flash white when struck. A one-frame
    recoil reads far better.
+3b. **A cast or strike pose.** There is no frame for a body attacking: it
+   plays its walk or its idle and the blow simply lands. The core already
+   knows — `casting` on the cantor, `chanting` on the shaman, `run` on the
+   flayer — so the state is there to hang art on, and only the art is
+   missing. This is the one place where authored frames currently exist with
+   nowhere to go.
 4. **Death frames.** Bodies presently just stop being drawn.
 
 ## The palette

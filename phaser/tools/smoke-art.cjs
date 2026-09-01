@@ -29,11 +29,27 @@ const ROOT = path.join(__dirname, '..', '..');
 const CUSTOM = path.join(ROOT, 'art-custom');
 const KIND = 'thrall';
 const NAMES = ['rest', 'run-0', 'run-1', 'run-2', 'run-3', 'run-4', 'run-5', 'run-6', 'run-7'];
-// Two idle frames the forged bestiary does not have, cut from the rest pose so
-// they are exactly 2x it. A pose with no forged counterpart is the case that
-// used to fall through the scale table entirely, so the fixture has to include
-// one or the check cannot see it.
-const IDLES = ['idle-0', 'idle-1'];
+/* Idle cycles the forged bestiary does not have.
+ *
+ * A pose with no forged counterpart is the case that used to fall through the
+ * scale table entirely, so the fixture has to contain one or the check cannot
+ * see it. Three frames rather than two, because a two-frame cycle plays the
+ * same forwards and backwards and so cannot exercise the there-and-back
+ * decision at all.
+ *
+ * The frames are the rest silhouette slid sideways by a set number of pixels,
+ * which is what makes this a test rather than a hope: pairwise difference then
+ * follows from the shifts, so the class of each cycle is KNOWN rather than
+ * whatever the forged run poses happen to work out to.
+ *
+ *   thrall  0, 5, 10 -- walks away and never comes back. The wrap is the
+ *                       largest step in it: an open path, to be played there
+ *                       and back.
+ *   breaker 0, 9, 5  -- goes out and most of the way home. The wrap is not the
+ *                       largest step: a ring, to be played round.
+ */
+const CYCLES = [{ kind: 'thrall', shifts: [0, 5, 10], open: true },
+                { kind: 'breaker', shifts: [0, 9, 5], open: false }];
 
 (async () => {
   const forgedDir = path.join(ROOT, 'art', 'bestiary');
@@ -59,25 +75,32 @@ const IDLES = ['idle-0', 'idle-1'];
     // A stand-in for authored art: the forged frame at DOUBLE size, flat
     // magenta so it is unmistakable on screen and in a pixel count. Every
     // pose, or the body flickers between authored and forged as it walks.
-    for (const n of NAMES.concat(IDLES)) {
-      const src = path.join(forgedDir, KIND + '-' +
-                            (IDLES.includes(n) ? 'rest' : n) + '.png');
-      if (!fs.existsSync(src)) continue;
+    // The forged frame at DOUBLE size, flat magenta so it is unmistakable on
+    // screen and in a pixel count, slid `shift` pixels right.
+    const plant = (kind, pose, from, shift) => {
+      const src = path.join(forgedDir, kind + '-' + from + '.png');
+      if (!fs.existsSync(src)) return;
       const f = PNG.sync.read(fs.readFileSync(src));
       const big = new PNG({ width: f.width * 2, height: f.height * 2 });
       for (let y = 0; y < big.height; y++) {
         for (let x = 0; x < big.width; x++) {
-          const s = ((f.width * (y >> 1)) + (x >> 1)) << 2;
+          const sx = x - (shift || 0);
           const d = ((big.width * y) + x) << 2;
           big.data[d] = 255; big.data[d + 1] = 0; big.data[d + 2] = 255;
+          if (sx < 0 || sx >= big.width) { big.data[d + 3] = 0; continue; }
+          const s = ((f.width * (y >> 1)) + (sx >> 1)) << 2;
           big.data[d + 3] = f.data[s + 3];       // keep the silhouette
         }
       }
-      const to = path.join(outDir, KIND + '-' + n + '.png');
+      const to = path.join(outDir, kind + '-' + pose + '.png');
       fs.writeFileSync(to, PNG.sync.write(big));
       made.push(to);
+    };
+    for (const n of NAMES) plant(KIND, n, n, 0);
+    for (const c of CYCLES) {
+      c.shifts.forEach((sh, i) => plant(c.kind, 'idle-' + i, 'rest', sh));
     }
-    ck('authored frames can be dropped in', made.length >= 10,
+    ck('authored frames can be dropped in', made.length >= 15,
        made.length + ' poses at 4x under art-custom/bestiary/');
 
     const packed = execFileSync(process.execPath, [path.join(__dirname, 'pack-atlas.js')],
@@ -147,6 +170,18 @@ const IDLES = ['idle-0', 'idle-1'];
         off.push(nm + ': stands ' + aH.toFixed(0) + ' tall against ' + fH.toFixed(0));
       }
     }
+    // The classifier, on two cycles whose class was built in rather than hoped
+    // for. Getting this wrong either way is visible every time a body stands
+    // still: a ring played there-and-back runs the motion backwards, and an
+    // open path played round snaps at the wrap once a cycle.
+    const pong = new Set(man.idle_pingpong || []);
+    for (const c of CYCLES) {
+      ck('a ' + (c.open ? 'breath is played there and back' : 'true loop is played round'),
+         pong.has('bestiary/' + c.kind) === c.open,
+         'bestiary/' + c.kind + ' shifts ' + c.shifts.join(',') + ' -> ' +
+         (pong.has('bestiary/' + c.kind) ? 'there and back' : 'looping'));
+    }
+
     ck('and every authored figure is the size of the forged one, on the same feet',
        checked > 0 && off.length === 0,
        checked ? checked + ' checked' + (off.length ? ': ' + off.slice(0, 4).join('; ') : '')
@@ -195,18 +230,31 @@ const IDLES = ['idle-0', 'idle-1'];
         // "Forged" means the packer recorded no scale for it -- not merely
         // "some other kind". There is real authored art in the tree now, and
         // comparing against it proves nothing about frames nobody replaced.
-        const forgedSp = sc.pool.find(s => s.visible && /^bestiary\//.test(s.frame.name) &&
-                                      !mine.test(s.frame.name) &&
-                                      sc.frameScale[s.frame.name] === undefined);
+        //
+        // Falling back to a named frame rather than reporting "nothing on
+        // screen to compare": which kinds a delve happens to spawn is not
+        // this suite's subject, and a check that quietly stops checking on
+        // some seeds is worse than no check.
+        let forgedSp = sc.pool.find(s => s.visible && /^bestiary\//.test(s.frame.name) &&
+                                    !mine.test(s.frame.name) &&
+                                    sc.frameScale[s.frame.name] === undefined);
+        let forgedName = forgedSp && forgedSp.frame.name;
+        let forgedScale = forgedSp && +forgedSp.scaleX.toFixed(4);
+        if (!forgedName) {
+          forgedName = Object.keys(sc.textures.get('art').frames)
+                             .find(n => /^bestiary\/.*-rest$/.test(n) &&
+                                        sc.frameScale[n] === undefined);
+          forgedScale = forgedName ? +sc.artScale(forgedName).toFixed(4) : null;
+        }
         const tex = sp ? window.__game.textures.getFrame('art', sp.frame.name) : null;
         return {
           worn: sp ? sp.frame.name : null,
           scale: sp ? +sp.scaleX.toFixed(4) : null,
           shown: sp ? Math.round(sp.displayWidth) : null,
           texW: tex ? tex.width : null,
-          forgedScale: forgedSp ? +forgedSp.scaleX.toFixed(4) : null,
-          forgedShown: forgedSp ? Math.round(forgedSp.displayWidth) : null,
-          forgedTexW: forgedSp ? window.__game.textures.getFrame('art', forgedSp.frame.name).width : null,
+          forgedScale,
+          forgedName,
+          forgedTexW: forgedName ? window.__game.textures.getFrame('art', forgedName).width : null,
           table: sc.frameScale[key]
         };
       }, [KIND, key]);
@@ -221,9 +269,9 @@ const IDLES = ['idle-0', 'idle-1'];
          R.none ? '' : (R.worn || '?') + ': texture ' + R.texW + 'px at scale ' +
                  R.scale + ' = ' + R.shown + ' world units');
       ck('while frames nobody replaced are untouched',
-         !R.none && (R.forgedScale === null || Math.abs(R.forgedScale - 0.5) < 0.001),
-         R.forgedScale === null ? 'no unreplaced body on screen to compare'
-           : 'forged texture ' + R.forgedTexW + 'px at scale ' + R.forgedScale);
+         !R.none && R.forgedScale !== null && Math.abs(R.forgedScale - 0.5) < 0.001,
+         R.forgedScale === null ? 'no unreplaced frame in the atlas at all'
+           : R.forgedName + ', ' + R.forgedTexW + 'px at scale ' + R.forgedScale);
       /* Idle: does a body that has stopped moving still move?
        *
        * The gait runs off DISTANCE TRAVELLED, so a standing body has nothing
@@ -248,11 +296,52 @@ const IDLES = ['idle-0', 'idle-1'];
           for (let i = 0; i < 8; i++) out.push(sc.bodyFrame(e, i * 420 * 0.5));
           return [...new Set(out)];
         };
+        /* Sample the real thing finely and watch what it does.
+         *
+         * Every number below -- which frame comes next, how long each is held,
+         * how long a full cycle takes -- is READ OFF idleFrame rather than
+         * recomputed from the same formula it uses. A test that recalculates
+         * the implementation's arithmetic only proves the arithmetic was typed
+         * twice.
+         */
+        const runs = base => {
+          const e = body('x');
+          e.idlePhase = 0;                 // or the walk starts mid-stride
+          const out = [];
+          for (let t = 0; t <= 14000; t += 5) {
+            const i = +sc.idleFrame(base, e, t).replace(/^.*-/, '');
+            if (out.length && out[out.length - 1].i === i) out[out.length - 1].ms += 5;
+            else out.push({ i, ms: 5 });
+          }
+          return out;
+        };
+        const r = runs('bestiary/' + kind);
+        const walk = r.slice(0, 8).map(x => x.i);
+        // A cycle long enough to be clamped by the pacing rule, which the
+        // planted three-frame ones are not. Whatever real art has one.
+        const longBase = Object.keys(sc.idleN).find(b => sc.idleN[b] >= 10);
+        const lr = longBase ? runs(longBase) : null;
+        // Held time per frame, off the middle of the sampling window so a
+        // clipped first or last run cannot skew it.
+        const mid = lr ? lr.slice(1, -1).map(x => x.ms).sort((a, b) => a - b) : null;
+        // One full cycle: how many frames before the index sequence repeats.
+        let longPeriod = 0;
+        if (lr) {
+          const seq = lr.slice(1).map(x => x.i);
+          for (let p = 2; p <= seq.length / 2; p++) {
+            let ok = true;
+            for (let i = 0; i + p < seq.length && ok; i++) ok = seq[i] === seq[i + p];
+            if (ok) { longPeriod = p; break; }
+          }
+        }
         const restKey = 'bestiary/' + kind + '-rest';
         const idleKey = 'bestiary/' + kind + '-idle-0';
         const wF = k => { const f = sc.textures.getFrame('art', k); return f ? f.width : 0; };
         return {
           table: sc.idleN['bestiary/' + kind] || 0,
+          walk,
+          longBase, longPeriod,
+          longMs: mid && mid.length ? mid[mid.length >> 1] : null,
           idle: across(body(kind)),
           none: across(body('nosuchkind')),
           stone: across(body(kind), { calcify: 1 }),
@@ -267,10 +356,26 @@ const IDLES = ['idle-0', 'idle-1'];
       }, [KIND]);
 
       ck('the scene counts the idle frames it has',
-         D.table === 2, 'idleN[bestiary/' + KIND + '] = ' + D.table);
+         D.table === 3, 'idleN[bestiary/' + KIND + '] = ' + D.table);
       ck('a standing body with idle art cycles instead of freezing',
-         D.idle.length === 2 && D.idle.every(n => /-idle-\d+$/.test(n)),
+         D.idle.length === 3 && D.idle.every(n => /-idle-\d+$/.test(n)),
          D.idle.join(' '));
+      // 0,1,2,1 -- not 0,1,2,0. The frame after the far end is the one before
+      // it, which is what "there and back" means and what a plain modulo does
+      // not do.
+      ck('and a breath comes back the way it went',
+         D.walk.join(' ') === '0 1 2 1 0 1 2 1',
+         'frame indices over one period: ' + D.walk.join(' '));
+      // A ten-frame breath at a two-frame breath's pace is seven and a half
+      // seconds long. The cycle duration is what is held constant, not the
+      // frame duration, so more frames buy smoothness rather than torpor.
+      ck('and a long cycle runs faster so the breath stays a breath',
+         D.longMs !== null && D.longPeriod > 0 &&
+         D.longPeriod * D.longMs > 2000 && D.longPeriod * D.longMs < 3600,
+         D.longMs === null ? 'no ten-frame cycle in the tree to measure'
+           : D.longBase + ': a period of ' + D.longPeriod + ' frames held ' +
+             D.longMs + 'ms each = ' +
+             (D.longPeriod * D.longMs / 1000).toFixed(1) + 's a breath');
       ck('a kind with no idle art still holds its one rest frame',
          D.none.length === 1 && D.none[0] === 'bestiary/nosuchkind-rest',
          D.none.join(' '));

@@ -28,16 +28,23 @@ const hex = (css, fallback) => {
 
 const SS = 2;      // art/ is exported at 2x, which is native for it
 
-/* How long one frame of an idle loop is held, in milliseconds.
+/* How fast an idle loop runs.
  *
  * Idle is the one cycle that CANNOT be driven by distance travelled the way
  * the gait is, because the whole point of it is a body that is not
- * travelling. So it runs off the clock, and this is the clock. 420ms is
- * roughly a slow breath over a two-frame loop; a longer authored loop gets
- * proportionally slower rather than faster, which is the right way round --
- * more frames should read as more detail, not more haste.
+ * travelling. So it runs off the clock, and this is the clock.
+ *
+ * What is held constant is the length of the BREATH, not the length of a
+ * frame: a ten-frame breath at a two-frame breath's pace takes seven and a
+ * half seconds, which is not a creature resting, it is a creature in a coma.
+ * So a longer cycle runs proportionally faster and lands near IDLE_CYCLE_MS
+ * either way -- more frames buy smoothness, not duration.
+ *
+ * Clamped at both ends. IDLE_MAX_MS is the old fixed value, so every short
+ * cycle keeps exactly the pace it already had; IDLE_MIN_MS stops a very long
+ * cycle from turning a breath into a shiver.
  */
-const IDLE_MS = 420;
+const IDLE_CYCLE_MS = 2800, IDLE_MIN_MS = 110, IDLE_MAX_MS = 420;
 
 /* The adaptive-effects thresholds, in milliseconds of WORK per frame. The
  * canvas build's numbers, kept: above FX_DROP a frame cannot hold 60Hz, below
@@ -128,7 +135,7 @@ export class Delve extends Phaser.Scene {
       this.man = {};
     }
     this.frameScale = this.man.frame_scale || {};
-    this.buildIdleTable();
+    this.buildIdleTable(this.man.idle_pingpong || []);
 
     this.cameras.main.setBackgroundColor(PAL.floor || '#1a1512');
     this.cameras.main.setBounds(0, 0, WORLD.w, WORLD.h);
@@ -495,8 +502,11 @@ export class Delve extends Phaser.Scene {
    * tail of the animation, not leave a body wearing whatever it happened to
    * be wearing when the frame lookup failed.
    */
-  buildIdleTable() {
+  buildIdleTable(pingpong) {
     this.idleN = Object.create(null);
+    // Which cycles go there and back rather than round: measured by the packer,
+    // which is the one place that has every frame's pixels in hand.
+    this.idlePong = new Set(pingpong);
     const tex = this.textures.get('art');
     const names = (tex && tex.getFrameNames) ? tex.getFrameNames() : [];
     const seen = Object.create(null);
@@ -537,9 +547,15 @@ export class Delve extends Phaser.Scene {
   idleFrame(base, e, time) {
     const n = this.idleN && this.idleN[base];
     if (!n) return base + '-rest';
-    if (e.idlePhase === undefined) e.idlePhase = Math.random() * n * IDLE_MS;
+    // A there-and-back cycle of n frames is 2n-2 steps long: out to the far
+    // end and home again without playing either end twice.
+    const pong = n > 2 && this.idlePong.has(base);
+    const period = pong ? 2 * n - 2 : n;
+    const ms = Math.min(IDLE_MAX_MS, Math.max(IDLE_MIN_MS, IDLE_CYCLE_MS / period));
+    if (e.idlePhase === undefined) e.idlePhase = Math.random() * period * ms;
     const t = (time === undefined ? this.time.now : time) + e.idlePhase;
-    return base + '-idle-' + (((t / IDLE_MS) | 0) % n);
+    const i = ((t / ms) | 0) % period;
+    return base + '-idle-' + (i < n ? i : period - i);
   }
 
   /* Which frame a body wears. The canvas build's bodyFrame/heroFrame, reading

@@ -136,6 +136,65 @@ for (const f of frames) {
   if (Math.abs(k - 1) > 0.001) frameScale[f.name] = +k.toFixed(4);
 }
 
+/* Does an idle cycle loop, or does it go there and come back?
+ *
+ * A breath is an OPEN PATH: the body rises from one extreme to the other, and
+ * the last frame is further from the first than any two neighbours are from
+ * each other. Played as a ring it snaps back at the wrap, once per cycle,
+ * which is the most visible thing in the animation. Played forwards then
+ * backwards it breathes.
+ *
+ * A true cycle -- a guttering flame, a turning orb -- is a RING: its wrap step
+ * is just another step, no bigger than the rest, and reversing it would be
+ * wrong. So the two are told apart by the one measurement that distinguishes
+ * them: whether the wrap is larger than the largest step inside the chain.
+ * 1.25x of it, for margin. Measured on the imported flayer breath: steps of
+ * 17k to 75k differing pixels, wrap of 111k -- an open path by a clear margin.
+ *
+ * Decided here rather than by whoever drops the files in, because this is the
+ * one place that has already decoded every frame and can simply look.
+ */
+const idleCycles = new Map();
+for (const f of frames) {
+  const m = /^(.*)-idle-(\d+)$/.exec(f.name);
+  if (!m) continue;
+  if (!idleCycles.has(m[1])) idleCycles.set(m[1], []);
+  idleCycles.get(m[1])[+m[2]] = f;
+}
+const pingpong = [];
+const cycleNote = [];
+for (const [base, list] of idleCycles) {
+  let n = 0;
+  while (list[n]) n++;                       // contiguous from zero, as drawn
+  if (n < 3) continue;                       // two frames alternate either way
+  const cut = list.slice(0, n);
+  if (cut.some(f => f.w !== cut[0].w || f.h !== cut[0].h)) continue;   // not comparable
+  const diff = (a, b) => {
+    let d = 0;
+    for (let k = 0; k < a.png.data.length; k += 4) {
+      if (Math.abs(a.png.data[k + 3] - b.png.data[k + 3]) > 16 ||
+          Math.abs(a.png.data[k] - b.png.data[k]) > 16 ||
+          Math.abs(a.png.data[k + 1] - b.png.data[k + 1]) > 16 ||
+          Math.abs(a.png.data[k + 2] - b.png.data[k + 2]) > 16) d++;
+    }
+    return d;
+  };
+  let worst = 0;
+  for (let i = 1; i < n; i++) worst = Math.max(worst, diff(cut[i - 1], cut[i]));
+  const wrap = diff(cut[n - 1], cut[0]);
+  const open = wrap > worst * 1.25;
+  if (open) pingpong.push(base);
+  // The ratio is printed, not just the verdict: this is one threshold standing
+  // between a breath and a twitch, and the margin narrows on small frames --
+  // the same flayer breath measures 1.48 at reference size and 1.33 once
+  // resampled down to 202px. A call near 1.25 is worth looking at.
+  cycleNote.push('    ' + base + '  ' + n + ' frames, ' +
+                 (open ? 'there and back' : 'looping') +
+                 '  (wrap/worst step = ' + (wrap / (worst || 1)).toFixed(2) +
+                 ', threshold 1.25)');
+}
+pingpong.sort();
+
 if (!frames.length) {
   console.error('no PNGs under ' + ART + ' — run `node tools/export-art.js` in the repo root first');
   process.exit(1);
@@ -185,6 +244,7 @@ if (fs.existsSync(man)) {
   // big an authored frame is meant to be drawn.
   m.frame_scale = frameScale;
   m.authored = frames.filter(f => f.authored).map(f => f.name).sort();
+  m.idle_pingpong = pingpong;
   fs.writeFileSync(path.join(OUT, 'manifest.json'), JSON.stringify(m, null, 2) + '\n');
 }
 
@@ -193,6 +253,10 @@ const authored = frames.filter(f => f.authored).length;
 console.log('atlas ' + size.w + 'x' + size.h + '  ' + frames.length + ' frames  ' +
             kb(fs.statSync(path.join(OUT, 'atlas.png')).size) +
             '   ' + authored + ' authored, ' + (frames.length - authored) + ' forged');
+if (cycleNote.length) {
+  console.log('\n  idle cycles:');
+  for (const c of cycleNote) console.log(c);
+}
 if (odd.length) {
   console.log('\n  these change shape, not just resolution — they will not sit ' +
               'where the forged frame sat:');
