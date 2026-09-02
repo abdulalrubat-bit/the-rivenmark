@@ -46,6 +46,21 @@ const SS = 2;      // art/ is exported at 2x, which is native for it
  */
 const IDLE_CYCLE_MS = 2800, IDLE_MIN_MS = 110, IDLE_MAX_MS = 420;
 
+/* How long a body takes to fall over, in milliseconds.
+ *
+ * Bodies used to stop being drawn the instant their hp reached zero, which is
+ * the cheapest possible death and reads as one: a thrall does not die, it is
+ * deleted. A kind with `<kind>-die-0..N` now topples over that long and is
+ * then gone -- gone, not lying there, because a floor of corpses is a
+ * different game and a different culling cost, and this is meant to be the
+ * beat that was missing rather than a new kind of clutter.
+ *
+ * The core never removes a dead body from `enemies` -- everything simply skips
+ * hp <= 0 -- so all of this is the renderer's business and the simulation does
+ * not know it happened.
+ */
+const DIE_MS = 480;
+
 /* The adaptive-effects thresholds, in milliseconds of WORK per frame. The
  * canvas build's numbers, kept: above FX_DROP a frame cannot hold 60Hz, below
  * FX_RAISE there is room to put the mood back, and FX_SAMPLE frames is about
@@ -528,6 +543,27 @@ export class Delve extends Phaser.Scene {
     }
   }
 
+  /* Whether a body is still worth drawing.
+   *
+   * Alive: always. Dead: only while it is still falling over, and only if it
+   * has frames to fall over WITH -- a kind with no die art vanishes on the
+   * frame it dies, exactly as every kind did before this existed.
+   *
+   * The moment of death is noticed here rather than told to us: the core has
+   * no death event, it just stops treating a body as alive, and the renderer
+   * sees that within a frame. Cleared again if the body somehow comes back,
+   * so a revived body does not inherit a stale clock.
+   */
+  showBody(e, time) {
+    if (e.hp > 0) {
+      if (e.dieAt !== undefined) e.dieAt = undefined;
+      return true;
+    }
+    if (!this.cycleN['bestiary/' + e.kind + '-die']) return false;
+    if (e.dieAt === undefined) e.dieAt = time;
+    return time - e.dieAt < DIE_MS;
+  }
+
   /* How far through a wind-up a body is: 0 as it starts, 1 as the blow lands,
    * and -1 when it is not winding up at all.
    *
@@ -586,6 +622,16 @@ export class Delve extends Phaser.Scene {
    */
   bodyFrame(e, time) {
     const base = 'bestiary/' + e.kind;
+
+    // Falling over outranks everything else a body could be doing, including
+    // the cast it was halfway through when it was killed.
+    if (e.hp <= 0) {
+      const dn = this.cycleN[base + '-die'];
+      if (!dn) return base + '-rest';
+      const t = (time === undefined ? this.time.now : time) - (e.dieAt || 0);
+      return base + '-die-' + Math.min(dn - 1, ((t / DIE_MS) * dn) | 0);
+    }
+
     // A calcifying body is stone under a shell of light. Stone does not
     // breathe, and the held frame is half of what sells the state.
     if (e.calcify > 0) return base + '-rest';
@@ -743,7 +789,7 @@ export class Delve extends Phaser.Scene {
     // assumes add() appends to the very array getChildren() handed back -- and
     // when it does not, the loop never terminates and the page simply stops,
     // which is a hang with no error and nothing in the log.
-    const live = this.stepping ? enemies.filter(e => e.hp > 0) : [];
+    const live = this.stepping ? enemies.filter(e => this.showBody(e, time)) : [];
     const pool = this.pool;
     while (pool.length < live.length) {
       const s = this.add.sprite(0, 0, 'art', 'bestiary/thrall-rest');

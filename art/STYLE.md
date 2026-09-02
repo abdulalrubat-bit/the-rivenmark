@@ -70,9 +70,9 @@ different in the loop so a pack does not breathe in unison. A kind with no
 idle frames still holds its one rest pose, exactly as before, so this arrives
 one creature at a time.
 
-The shaman has a ten-frame breath and a six-frame cast; three other kinds have
-a two-frame pulse. Everything else is still a frozen frame, and that is still
-the single biggest reason the scene reads as static.
+The shaman has a ten-frame breath, a three-frame cast and a five-frame death;
+three other kinds have a two-frame pulse. Everything else is still a frozen
+frame, and that is still the single biggest reason the scene reads as static.
 
 Two things the cycle player works out for itself, so nothing has to be
 declared:
@@ -99,12 +99,16 @@ What would fix the rest, roughly in order of value for effort:
    behind the body. The current run cycles move the whole figure rigidly.
 3. **A hit pose.** Bodies currently flash white when struck. A one-frame
    recoil reads far better.
-3b. **Cast poses for the cantor.** `<kind>-cast-0..N` now plays across a
-   body's wind-up, driven by how far through it is rather than by a clock —
-   so the last frame lands as the blow does, and a caster wound back up by a
-   null zone visibly loses ground. The shaman has one. The cantor's bolt
+3b. **Cast poses for the cantor.** `<kind>-cast-0..N` plays across a body's
+   wind-up, driven by how far through it is rather than by a clock — so the
+   last frame lands as the blow does, and a caster wound back up by a null
+   zone visibly loses ground. The shaman has one. The cantor's bolt
    (`casting`, 0.55s) has the state and no art.
-4. **Death frames.** Bodies presently just stop being drawn.
+4. **Death frames for everything else.** `<kind>-die-0..N` plays over 480ms
+   from the killing blow and the body is then gone — gone rather than lying
+   there, because a floor of corpses is a different game. A kind with no die
+   art still vanishes on the frame it dies, which is what every kind did
+   before. Only the shaman has one.
 
 ## The palette
 
@@ -168,9 +172,17 @@ Author at 2× the forged resolution (the default). A body is 38–96 world units
 and a phone renders at dpr ~2.8, so 2× is about pixel parity on the device and
 anything more is texture nobody can see.
 
-A cast is imported exactly like an idle — `bestiary/<kind>-cast` with the
-frames in the order they play, the last one being the pose the spell leaves
-on. It is not a loop and is never reversed: it runs once, across the wind-up.
+A cast or a death is imported exactly like an idle — `bestiary/<kind>-cast`,
+`bestiary/<kind>-die` — with the frames in the order they play. Neither is a
+loop and neither is ever reversed: a cast runs once across the wind-up, a death
+runs once and then the body is gone.
+
+**A cycle is registered on its FIRST frame**, which stands in for the pose the
+body was already in; every frame after it keeps whatever offset the artist gave
+it inside the shared box. That is what lets a death sink as it falls and a
+takeoff leave the ground. Registering on the box instead put a dying body 3
+world units in the air at the instant it died and set it down only once it was
+flat — it hopped up in order to fall over.
 
 If a creature is broader than the body it replaces, its canvas is widened
 rather than the figure shrunk. The forged frames are square and cut for narrow

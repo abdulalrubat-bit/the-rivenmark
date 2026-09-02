@@ -208,7 +208,22 @@ const W = Math.max(1, Math.round(H * (bw / bh)));
 // not always centred in its own frame either.
 const footY = (t.box.y1 + 1) * scale;
 const midX = ((t.box.x0 + t.box.x1 + 1) / 2) * scale;
-const oy = Math.round(footY - H);
+
+/* Registered on the FIRST frame, not on the common box.
+ *
+ * The box spans every frame of the cycle, so aligning its bottom to the foot
+ * line aligns the LOWEST frame -- and in a cycle that deliberately moves, that
+ * is not the frame that has to line up. A death topple sinks 25px as it falls,
+ * so registering by the box put the body 3 world units in the air at the
+ * instant it died and settled it on the ground only once it was flat: the body
+ * hopped up to fall over.
+ *
+ * Frame 0 is the frame that stands in for the pose the body was already in, so
+ * frame 0 is what goes on the foot line. Everything after it keeps its own
+ * offset inside the box, which is the whole reason the box is shared.
+ */
+const first = bounds(pngs[0].png, pngs[0].file);
+const oy = Math.round(footY - (first.y1 - box.y0 + 1) * (H / bh));
 
 /* A broad pose gets a broader canvas rather than a haircut.
  *

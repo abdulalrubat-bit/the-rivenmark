@@ -54,6 +54,10 @@ const CYCLES = [{ kind: 'thrall', shifts: [0, 5, 10], open: true },
 // the body is. Four frames so the quarters of a cast map to distinct frames
 // and an off-by-one in the mapping cannot hide.
 const CAST_N = 4;
+// And a death, on a kind that has one, so the fixture can watch a body fall
+// over and then go. Three frames: enough for a start, a middle and a last one
+// that has to be held rather than wrapped round.
+const DIE_N = 3;
 
 (async () => {
   const forgedDir = path.join(ROOT, 'art', 'bestiary');
@@ -105,7 +109,8 @@ const CAST_N = 4;
       c.shifts.forEach((sh, i) => plant(c.kind, 'idle-' + i, 'rest', sh));
     }
     for (let i = 0; i < CAST_N; i++) plant(KIND, 'cast-' + i, 'rest', 0);
-    ck('authored frames can be dropped in', made.length >= 19,
+    for (let i = 0; i < DIE_N; i++) plant(KIND, 'die-' + i, 'rest', i * 4);
+    ck('authored frames can be dropped in', made.length >= 22,
        made.length + ' poses at 4x under art-custom/bestiary/');
 
     const packed = execFileSync(process.execPath, [path.join(__dirname, 'pack-atlas.js')],
@@ -150,6 +155,16 @@ const CAST_N = 4;
     const off = [];
     let checked = 0;
     for (const nm of (man.authored || [])) {
+      /* Frame 0 of a cycle, and any frame that is not part of one.
+       *
+       * A cycle registers on its FIRST frame -- the one standing in for the
+       * pose the body was already in -- and the frames after it move because
+       * the artist moved them. A death topple sinks as it falls and a takeoff
+       * leaves the ground entirely; holding every frame to the foot line would
+       * either fail on honest art or, worse, pass by forcing the importer to
+       * flatten the motion out of it.
+       */
+      if (/-[1-9]\d*$/.test(nm)) continue;
       const dir = nm.slice(0, nm.indexOf('/')), base = nm.slice(nm.indexOf('/') + 1);
       const custom = path.join(CUSTOM, dir, base + '.png');
       // The same pose when the forged art has one, else the kind's rest pose --
@@ -187,7 +202,7 @@ const CAST_N = 4;
          (pong.has('bestiary/' + c.kind) ? 'there and back' : 'looping'));
     }
 
-    ck('and every authored figure is the size of the forged one, on the same feet',
+    ck('and every authored cycle starts the size of the forged one, on its feet',
        checked > 0 && off.length === 0,
        checked ? checked + ' checked' + (off.length ? ': ' + off.slice(0, 4).join('; ') : '')
                : 'nothing authored to check — the fixture should have planted some');
@@ -370,6 +385,29 @@ const CAST_N = 4;
         // And a body not casting at all is back to standing.
         wind.chanting = 0;
         const notCasting = sc.bodyFrame(wind, 0);
+        /* Dying, watched from the killing blow.
+         *
+         * The core has no death event and never removes a dead body from
+         * `enemies` -- it just stops treating it as alive -- so the renderer
+         * notices, times the fall itself, and then drops the body. Sampled
+         * through the whole fall and past the end of it.
+         */
+        const dead = body(kind);
+        dead.hp = 0;
+        const dieWalk = [], dieShown = [];
+        for (let i = 0; i <= 6; i++) {
+          const t = 480 * (i / 6) + (i === 6 ? 1 : 0);
+          // showBody is what stamps the clock and what decides it is over.
+          dieShown.push(sc.showBody(dead, (dead.dieAt || 0) + t));
+          dieWalk.push(sc.bodyFrame(dead, (dead.dieAt || 0) + t));
+        }
+        // A kind with no die art keeps vanishing on the frame it dies.
+        const plain = body('nosuchkind');
+        plain.hp = 0;
+        const plainShown = sc.showBody(plain, 0);
+        // And a body that comes back does not inherit a stale clock.
+        dead.hp = 10;
+        const revived = sc.showBody(dead, 1e9);
         const restKey = 'bestiary/' + kind + '-rest';
         const idleKey = 'bestiary/' + kind + '-idle-0';
         const wF = k => { const f = sc.textures.getFrame('art', k); return f ? f.width : 0; };
@@ -381,6 +419,9 @@ const CAST_N = 4;
           overwound: overwound.replace('bestiary/' + kind + '-', ''),
           notCasting: notCasting.replace('bestiary/' + kind + '-', ''),
           castN: sc.cycleN['bestiary/' + kind + '-cast'] || 0,
+          dieN: sc.cycleN['bestiary/' + kind + '-die'] || 0,
+          dieWalk: dieWalk.map(n => n.replace('bestiary/' + kind + '-', '')),
+          dieShown, plainShown, revived, revivedClock: dead.dieAt === undefined,
           longBase, longPeriod,
           longMs: mid && mid.length ? mid[mid.length >> 1] : null,
           idle: across(body(kind)),
@@ -431,6 +472,20 @@ const CAST_N = 4;
          D.overwound === 'cast-0', D.overwound);
       ck('while a body that is not casting is back to standing',
          /^idle-\d+$/.test(D.notCasting), D.notCasting);
+
+      ck('a body falls over instead of being deleted',
+         D.dieN === 3 && D.dieWalk.slice(0, 6).join(' ') === 'die-0 die-0 die-1 die-1 die-2 die-2',
+         D.dieN + ' frames: ' + D.dieWalk.join(' '));
+      // Drawn for exactly as long as the fall, then gone -- a floor of corpses
+      // is a different game.
+      ck('and is drawn until it lands, then not after',
+         D.dieShown.slice(0, 6).every(Boolean) && D.dieShown[6] === false,
+         'shown at each sample: ' + D.dieShown.join(' '));
+      ck('while a kind with no death art still vanishes on the blow',
+         D.plainShown === false, 'shown: ' + D.plainShown);
+      ck('and a body brought back does not carry a stale death clock',
+         D.revived === true && D.revivedClock,
+         'shown ' + D.revived + ', clock cleared ' + D.revivedClock);
 
       ck('a kind with no idle art still holds its one rest frame',
          D.none.length === 1 && D.none[0] === 'bestiary/nosuchkind-rest',
