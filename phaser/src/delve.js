@@ -28,6 +28,39 @@ const hex = (css, fallback) => {
 
 const SS = 2;      // art/ is exported at 2x, which is native for it
 
+/* How fast an idle loop runs.
+ *
+ * Idle is the one cycle that CANNOT be driven by distance travelled the way
+ * the gait is, because the whole point of it is a body that is not
+ * travelling. So it runs off the clock, and this is the clock.
+ *
+ * What is held constant is the length of the BREATH, not the length of a
+ * frame: a ten-frame breath at a two-frame breath's pace takes seven and a
+ * half seconds, which is not a creature resting, it is a creature in a coma.
+ * So a longer cycle runs proportionally faster and lands near IDLE_CYCLE_MS
+ * either way -- more frames buy smoothness, not duration.
+ *
+ * Clamped at both ends. IDLE_MAX_MS is the old fixed value, so every short
+ * cycle keeps exactly the pace it already had; IDLE_MIN_MS stops a very long
+ * cycle from turning a breath into a shiver.
+ */
+const IDLE_CYCLE_MS = 2800, IDLE_MIN_MS = 110, IDLE_MAX_MS = 420;
+
+/* How long a body takes to fall over, in milliseconds.
+ *
+ * Bodies used to stop being drawn the instant their hp reached zero, which is
+ * the cheapest possible death and reads as one: a thrall does not die, it is
+ * deleted. A kind with `<kind>-die-0..N` now topples over that long and is
+ * then gone -- gone, not lying there, because a floor of corpses is a
+ * different game and a different culling cost, and this is meant to be the
+ * beat that was missing rather than a new kind of clutter.
+ *
+ * The core never removes a dead body from `enemies` -- everything simply skips
+ * hp <= 0 -- so all of this is the renderer's business and the simulation does
+ * not know it happened.
+ */
+const DIE_MS = 480;
+
 /* The adaptive-effects thresholds, in milliseconds of WORK per frame. The
  * canvas build's numbers, kept: above FX_DROP a frame cannot hold 60Hz, below
  * FX_RAISE there is room to put the mood back, and FX_SAMPLE frames is about
@@ -67,6 +100,7 @@ const STANDING = { pillar: 26, barrel: 12, crate: 11, urn: 10, banner: 16,
           swapHero, swapBlocked, abilityBlock, ABILITIES, ABILITY_BY_ID,
           CHARGE_MAX, TENSION_MAX,
           WORLD, PAL, LEVEL, LEVELS, GAIT_N, GAIT_STEP, GAIT_STILL, lamps,
+          BOLT_WIND, CHANT_WIND,
           lowFx,
           WALK_STEP, WALK_PACE, update, startRun, loadStash */
 
@@ -75,6 +109,13 @@ export class Delve extends Phaser.Scene {
 
   preload() {
     this.load.atlas('art', 'atlas.png', 'atlas.json');
+    // The manifest travels with the atlas and this scene needs it: the wall
+    // course spans and the authored-art scale table both live in it. main.js
+    // loaded it and this scene did not, and since both readers had a `||`
+    // fallback nothing ever said so -- every vertical wall course was drawn
+    // 100 wide instead of 30, three times too wide, from the day the dressing
+    // went in.
+    this.load.json('manifest', 'manifest.json');
   }
 
   create() {
@@ -99,6 +140,19 @@ export class Delve extends Phaser.Scene {
       console.log('startRun ' + (performance.now() - t0).toFixed(0) + 'ms');
     }
 
+    /* The manifest is not optional. A missing one used to mean silently wrong
+     * geometry rather than a failure, which is the worst of both: the game
+     * runs and the walls are wrong. Say so once, loudly, and carry on with
+     * defaults so a broken build is still playable enough to debug. */
+    this.man = this.cache.json.get('manifest');
+    if (!this.man) {
+      console.error('manifest.json did not load — wall courses and authored-art ' +
+                    'scales will fall back to defaults and be WRONG');
+      this.man = {};
+    }
+    this.frameScale = this.man.frame_scale || {};
+    this.buildCycleTable(this.man.idle_pingpong || []);
+
     this.cameras.main.setBackgroundColor(PAL.floor || '#1a1512');
     this.cameras.main.setBounds(0, 0, WORLD.w, WORLD.h);
 
@@ -106,6 +160,13 @@ export class Delve extends Phaser.Scene {
     if (!/nostatics/.test(location.search)) {
       const t0 = performance.now();
       this.paintStatics();
+      // Kept, not just logged. The only rough edge left on a real phone is a
+      // single stall at the start of a delve -- 166ms measured on an Adreno
+      // 840 while every other frame held 16.7 -- and this is the prime
+      // suspect: it creates ~2100 game objects and uploads the atlas in one
+      // frame. A console line cannot come back from a device you cannot
+      // reach; a line in the dump can.
+      this.bakeMs = Math.round(performance.now() - t0);
       console.log('paintStatics ' + (performance.now() - t0).toFixed(0) + 'ms, ' +
                   walls.length + ' walls, ' + props.length + ' props');
     }
@@ -119,7 +180,8 @@ export class Delve extends Phaser.Scene {
     // Sorted with the crowd, not over it. At a fixed high depth the hero drew
     // through every body standing in front of him, which reads as him being
     // pasted on top of the scene rather than in it.
-    this.hero.setScale(1 / SS).setDepth(this.stepping ? player.y : 1e5);
+    this.hero.setDepth(this.stepping ? player.y : 1e5);
+    this.wearFrame(this.hero, this.hero.frame.name);
     this.heroShadow = this.add.image(0, 0, 'art', 'misc/shadow')
       .setDisplaySize(26, 14).setDepth(-400);
     this.lootImgs = [];
@@ -187,6 +249,8 @@ export class Delve extends Phaser.Scene {
                 (this.gov.stat ? '   last sample: work ' + this.gov.stat.work +
                   'ms, frames ' + this.gov.stat.p50 + 'ms against a ' +
                   this.gov.stat.period + 'ms display' : '   (no sample yet)'),
+            bake: (this.bakeMs || 0) + 'ms one-off (' + walls.length + ' walls, ' +
+                  props.length + ' props, ' + (this.wallImgs || []).length + ' dressing)',
             bodies: this.pool.length,
             awake: run.awake || 0,
             delve: LEVEL.id
@@ -276,7 +340,7 @@ export class Delve extends Phaser.Scene {
       const up = STANDING[p.kind];
       if (up) this.propImgs.push(this.shadowAt(p.x, p.y, up, 2));
       const img = this.add.image(p.x, p.y, 'art', key)
-        .setScale(1 / SS).setDepth(up ? p.y : p.y - 1e4);
+        .setScale(this.artScale(key)).setDepth(up ? p.y : p.y - 1e4);
       this.propImgs.push(img);
     }
 
@@ -336,14 +400,15 @@ export class Delve extends Phaser.Scene {
         if (cellAt(cx, cy) !== SOLID) continue;
         if (pitGrid && pitGrid[gi(cx, cy)]) continue;      // a hole gets no top
         const h = ((cx * 73856093) ^ (cy * 19349663)) >>> 0;
-        const img = this.add.image(cx * T, cy * T, 'art', 'walls/top-' + (h % 6))
-          .setOrigin(0, 0).setScale(1 / SS).setDepth(-1.5e5);
+        const topKey = 'walls/top-' + (h % 6);
+        const img = this.add.image(cx * T, cy * T, 'art', topKey)
+          .setOrigin(0, 0).setScale(this.artScale(topKey)).setDepth(-1.5e5);
         this.wallImgs.push(img);
       }
     }
 
     // Masonry along every exposed face.
-    const spans = (this.cache.json.get('manifest') || {}).wall_dressing || [];
+    const spans = (this.man && this.man.wall_dressing) || [];
     const spanOf = name => spans.find(s => s.name === name) || { spanW: 100, spanH: 30 };
     const L = spanOf('course-0-0').spanW;
     for (const e of edges) {
@@ -411,20 +476,194 @@ export class Delve extends Phaser.Scene {
   frameW(key) { const f = this.textures.getFrame('art', key); return f ? f.width : 0; }
   frameH(key) { const f = this.textures.getFrame('art', key); return f ? f.height : 0; }
 
+  /* How big a frame is meant to be drawn.
+   *
+   * Everything forged is exported at SS (2x) and drawn at 1/2. Authored art in
+   * art-custom/ has no reason to be at that resolution -- a 4x thrall is a
+   * better thrall -- so the packer records the ratio of each replacement to
+   * the frame it replaced, and this divides by it. A build with no authored
+   * art has an empty table and every answer is 1/SS, exactly as before.
+   *
+   * Looked up rather than assumed, because the alternative is every authored
+   * sprite silently rendering at twice the size of the one it replaced.
+   */
+  artScale(key) {
+    const k = this.frameScale && this.frameScale[key];
+    return k ? 1 / (SS * k) : 1 / SS;
+  }
+
+  /* Put a frame on a sprite and make its scale match.
+   *
+   * The scale is corrected whether or not the FRAME changed, which is not
+   * belt-and-braces: a pooled sprite is constructed already wearing a frame,
+   * so a version of this that only acted on a change left every newly created
+   * sprite at the default scale -- and an authored 4x frame then stood at
+   * twice the size of the horde around it.
+   */
+  wearFrame(sp, key) {
+    if (sp.frame.name !== key && this.textures.getFrame('art', key)) sp.setFrame(key);
+    const want = this.artScale(sp.frame.name);
+    if (sp.scaleX !== want) sp.setScale(want);
+  }
+
+  /* Every numbered cycle in the atlas, and how many frames long it is.
+   *
+   * Keyed by everything up to the number, so 'bestiary/shaman-idle' answers 10
+   * and 'bestiary/shaman-cast' answers 6. Not idle-only: a cast is the same
+   * question asked about a different pose, and one table beats two that drift.
+   *
+   * Read off the atlas once, at scene start, rather than probed frame by frame
+   * while drawing: the answer cannot change while the scene runs, and a miss
+   * on textures.getFrame is not silently free in every Phaser version.
+   *
+   * Counted CONTIGUOUSLY from zero, so idle-0 and idle-2 with no idle-1 is a
+   * one-frame loop rather than a three-frame loop that spends a third of its
+   * time asking for a frame that does not exist. A gap should cost you the
+   * tail of the animation, not leave a body wearing whatever it happened to
+   * be wearing when the frame lookup failed.
+   */
+  buildCycleTable(pingpong) {
+    this.cycleN = Object.create(null);
+    // Which cycles go there and back rather than round: measured by the packer,
+    // which is the one place that has every frame's pixels in hand.
+    this.idlePong = new Set(pingpong);
+    const tex = this.textures.get('art');
+    const names = (tex && tex.getFrameNames) ? tex.getFrameNames() : [];
+    const seen = Object.create(null);
+    for (const n of names) {
+      const m = /^(.*)-(\d+)$/.exec(n);
+      if (!m) continue;
+      if (!seen[m[1]]) seen[m[1]] = new Set();
+      seen[m[1]].add(+m[2]);
+    }
+    for (const base in seen) {
+      let i = 0;
+      while (seen[base].has(i)) i++;
+      if (i) this.cycleN[base] = i;
+    }
+  }
+
+  /* Whether a body is still worth drawing.
+   *
+   * Alive: always. Dead: only while it is still falling over, and only if it
+   * has frames to fall over WITH -- a kind with no die art vanishes on the
+   * frame it dies, exactly as every kind did before this existed.
+   *
+   * The moment of death is noticed here rather than told to us: the core has
+   * no death event, it just stops treating a body as alive, and the renderer
+   * sees that within a frame. Cleared again if the body somehow comes back,
+   * so a revived body does not inherit a stale clock.
+   */
+  showBody(e, time) {
+    if (e.hp > 0) {
+      if (e.dieAt !== undefined) e.dieAt = undefined;
+      return true;
+    }
+    if (!this.cycleN['bestiary/' + e.kind + '-die']) return false;
+    if (e.dieAt === undefined) e.dieAt = time;
+    return time - e.dieAt < DIE_MS;
+  }
+
+  /* How far through a wind-up a body is: 0 as it starts, 1 as the blow lands,
+   * and -1 when it is not winding up at all.
+   *
+   * Both wind-ups in the game count DOWN from their full length -- the
+   * cantor's bolt from BOLT_WIND, the shaman's chant from CHANT_WIND -- so
+   * progress is what is left subtracted from one. Clamped at the top because a
+   * null zone winds a caster back up (`casting + dt * 2.2`), which can put the
+   * timer above where it started and would otherwise run the animation
+   * backwards past its first frame.
+   */
+  castProgress(e) {
+    if ((e.chanting || 0) > 0) return Math.max(0, 1 - e.chanting / CHANT_WIND);
+    if ((e.casting || 0) > 0) return Math.max(0, 1 - e.casting / BOLT_WIND);
+    return -1;
+  }
+
+  /* Standing still is not the same as being frozen.
+   *
+   * The gait advances by DISTANCE TRAVELLED, which is exactly what makes a
+   * walk read as walking whether the body is hurrying or trudging -- and it
+   * is also why a body that stops moving stops animating entirely. A room of
+   * stopped bodies is a room of statues. An idle loop cannot be driven that
+   * way by construction; it needs a clock, so this is the one cycle that has
+   * one.
+   *
+   * The phase is per-body and drawn once, for the same reason newBody starts
+   * gait somewhere random in its cycle: five thralls breathing in perfect
+   * unison looks more mechanical than five thralls not breathing at all. It
+   * is memoised on the BODY rather than on the sprite because the pool hands
+   * a given body a different sprite from one frame to the next, so a sprite
+   * cannot be trusted to remember anything about who it is currently
+   * wearing.
+   *
+   * A name with no authored idle art answers with the single -rest frame,
+   * which is what the entire bestiary did before any of this existed. That is
+   * the fallback the whole thing is built around: idle art can arrive one
+   * kind at a time, and the kinds without it are exactly as they were.
+   */
+  idleFrame(base, e, time) {
+    const n = this.cycleN && this.cycleN[base + '-idle'];
+    if (!n) return base + '-rest';
+    // A there-and-back cycle of n frames is 2n-2 steps long: out to the far
+    // end and home again without playing either end twice.
+    const pong = n > 2 && this.idlePong.has(base);
+    const period = pong ? 2 * n - 2 : n;
+    const ms = Math.min(IDLE_MAX_MS, Math.max(IDLE_MIN_MS, IDLE_CYCLE_MS / period));
+    if (e.idlePhase === undefined) e.idlePhase = Math.random() * period * ms;
+    const t = (time === undefined ? this.time.now : time) + e.idlePhase;
+    const i = ((t / ms) | 0) % period;
+    return base + '-idle-' + (i < n ? i : period - i);
+  }
+
   /* Which frame a body wears. The canvas build's bodyFrame/heroFrame, reading
    * the same gait state the core computes, resolved to atlas frames instead of
    * forged canvases.
    */
-  bodyFrame(e) {
-    if (e.pace < GAIT_STILL || e.braced) return 'bestiary/' + e.kind + '-rest';
+  bodyFrame(e, time) {
+    const base = 'bestiary/' + e.kind;
+
+    // Falling over outranks everything else a body could be doing, including
+    // the cast it was halfway through when it was killed.
+    if (e.hp <= 0) {
+      const dn = this.cycleN[base + '-die'];
+      if (!dn) return base + '-rest';
+      const t = (time === undefined ? this.time.now : time) - (e.dieAt || 0);
+      return base + '-die-' + Math.min(dn - 1, ((t / DIE_MS) * dn) | 0);
+    }
+
+    // A calcifying body is stone under a shell of light. Stone does not
+    // breathe, and the held frame is half of what sells the state.
+    if (e.calcify > 0) return base + '-rest';
+
+    /* Mid-wind-up, which outranks both standing and walking.
+     *
+     * Driven by PROGRESS through the cast, not by a clock of its own: the
+     * whole point of a wind-up in this game is that it is "a cast you can see
+     * coming and reach it during", so the animation has to be the timer. The
+     * last frame lands as the spell fires, and a caster wound back up by a
+     * null zone visibly loses ground through the same frames.
+     *
+     * It also has to come before the idle branch rather than after: a chanting
+     * body is planted, so its pace is zero and it would otherwise stand there
+     * breathing while it called down fire.
+     */
+    const p = this.castProgress(e);
+    if (p >= 0) {
+      const cn = this.cycleN[base + '-cast'];
+      if (cn) return base + '-cast-' + Math.min(cn - 1, (p * cn) | 0);
+    }
+
+    if (e.pace < GAIT_STILL || e.braced) return this.idleFrame(base, e, time);
     const f = ((e.gait / GAIT_STEP) | 0) % GAIT_N;
-    return 'bestiary/' + e.kind + '-run-' + f;
+    return base + '-run-' + f;
   }
-  heroFrame(p) {
-    if (p.pace < GAIT_STILL) return 'heroes/' + p.hero + '-rest';
+  heroFrame(p, time) {
+    const base = 'heroes/' + p.hero;
+    if (p.pace < GAIT_STILL) return this.idleFrame(base, p, time);
     const run = p.pace >= WALK_PACE;
     const f = ((p.gait / (run ? GAIT_STEP : WALK_STEP)) | 0) % GAIT_N;
-    return 'heroes/' + p.hero + (run ? '-run-' : '-walk-') + f;
+    return base + (run ? '-run-' : '-walk-') + f;
   }
 
   /* The stick.
@@ -497,13 +736,15 @@ export class Delve extends Phaser.Scene {
   syncLoot(time) {
     const pool = this.lootImgs;
     while (pool.length < loot.length) {
-      pool.push(this.add.image(0, 0, 'art', 'misc/loot').setScale(1 / SS).setDepth(-380));
+      const im = this.add.image(0, 0, 'art', 'misc/loot').setDepth(-380);
+      this.wearFrame(im, 'misc/loot');
+      pool.push(im);
     }
     for (let i = 0; i < pool.length; i++) {
       const im = pool[i], l = loot[i];
       if (!l) { im.setVisible(false); continue; }
       const key = l.value > 1 ? 'misc/loot-big' : 'misc/loot';
-      if (im.frame.name !== key && this.textures.getFrame('art', key)) im.setFrame(key);
+      this.wearFrame(im, key);
       im.setVisible(true).setPosition(l.x, l.y).setRotation(l.spin || 0);
     }
   }
@@ -548,10 +789,11 @@ export class Delve extends Phaser.Scene {
     // assumes add() appends to the very array getChildren() handed back -- and
     // when it does not, the loop never terminates and the page simply stops,
     // which is a hang with no error and nothing in the log.
-    const live = this.stepping ? enemies.filter(e => e.hp > 0) : [];
+    const live = this.stepping ? enemies.filter(e => this.showBody(e, time)) : [];
     const pool = this.pool;
     while (pool.length < live.length) {
-      const s = this.add.sprite(0, 0, 'art', 'bestiary/thrall-rest').setScale(1 / SS);
+      const s = this.add.sprite(0, 0, 'art', 'bestiary/thrall-rest');
+      this.wearFrame(s, 'bestiary/thrall-rest');
       pool.push(s);
     }
     while (this.shadows.length < live.length) {
@@ -569,9 +811,9 @@ export class Delve extends Phaser.Scene {
     for (let i = 0; i < pool.length; i++) {
       const s = pool[i], e = live[i];
       if (!e) { s.setVisible(false); continue; }
-      const key = this.bodyFrame(e);
+      const key = this.bodyFrame(e, time);
       s.setVisible(true).setPosition(e.x, e.y).setDepth(e.y);
-      if (s.frame.name !== key && this.textures.getFrame('art', key)) s.setFrame(key);
+      this.wearFrame(s, key);
       s.setFlipX(e.face < 0);
       // Struck bodies flash, calcifying ones sit under a shell of light.
       s.setTint(e.hitFlash > 0 ? 0xffffff : (e.calcify > 0 ? 0x9fd8e8 : 0xffffff));
@@ -579,8 +821,8 @@ export class Delve extends Phaser.Scene {
     }
 
     if (!this.stepping) return;
-    const hk = this.heroFrame(player);
-    if (this.hero.frame.name !== hk && this.textures.getFrame('art', hk)) this.hero.setFrame(hk);
+    const hk = this.heroFrame(player, time);
+    this.wearFrame(this.hero, hk);
     this.hero.setPosition(player.x, player.y).setFlipX(player.face < 0)
         .setDepth(player.y);
     this.heroShadow.setPosition(player.x + LIGHT.x * LIGHT.body,

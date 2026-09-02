@@ -381,6 +381,7 @@ export function asText(d) {
     // thing at full effects and quite another with them already shed, and the
     // dump used to report the number without the flag.
     d.fx ? 'effects    ' + d.fx : null,
+    d.bake ? 'bake       ' + d.bake : null,
     f ? 'frames     ' + f.frames + ' sampled' : 'frames     ' + d.frame,
     f ? 'fps        ' + f.fps + '  (median ' + f.p50 + 'ms)' : '',
     f ? 'p90/p99    ' + f.p90 + 'ms / ' + f.p99 + 'ms' : '',

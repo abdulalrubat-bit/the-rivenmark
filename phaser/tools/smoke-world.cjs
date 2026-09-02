@@ -240,6 +240,22 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   // shaft "ended" 56 rows lower and the check flaked. Counting how much of the
   // strip lit up asks the question the eye asks.
   const HEAD = 34;             // rows a worn shaft (54 tall) cannot reach
+  /* How much light the shaft adds, summed -- not how many pixels cross a line.
+   *
+   * Counting pixels over a threshold puts a cliff in the middle of the
+   * measurement, and this strip is the FAINT top of the shaft, which is
+   * exactly where the cliff bites. Whether those last bands clear the bar
+   * depends on what they are lit over, and the drop lands somewhere different
+   * every seed: measured, the same mythic shaft counted ~700 pixels over dark
+   * floor and ~260-320 over brighter stone, and the check was a coin toss on
+   * about a quarter of runs. (It is not the beacon's own pulse: sampling the
+   * peak across a full 2.4s period did not help, and one dim run came back
+   * lower than any single shot had.)
+   *
+   * Summing the delta has no cliff. A faint band still contributes what it is
+   * worth instead of counting as nothing, so the answer degrades smoothly with
+   * the background rather than falling off it.
+   */
   const headLit = async id => {
     await p.evaluate(([w, r]) => {
       drops.length = 0;
@@ -248,24 +264,24 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     }, [stage.dropW, id]);
     await sleep(400);
     const now = await shot(stage.dropAt, 90);
-    let n = 0;
+    let sum = 0;
     for (let y = 0; y < HEAD; y++) {
       for (let x = 0; x < 180; x++) {
         const i = (y * 180 + x) * 4;
-        // A lower bar than `moved` uses: this is the faint end of the shaft,
-        // which is the whole point of measuring up here.
-        if (Math.abs(now.data[i] - drop.base.data[i]) +
-            Math.abs(now.data[i + 1] - drop.base.data[i + 1]) +
-            Math.abs(now.data[i + 2] - drop.base.data[i + 2]) > 9) n++;
+        sum += Math.abs(now.data[i] - drop.base.data[i]) +
+               Math.abs(now.data[i + 1] - drop.base.data[i + 1]) +
+               Math.abs(now.data[i + 2] - drop.base.data[i + 2]);
       }
     }
-    return n;
+    return sum;
   };
   const tall = await headLit('mythic');
   const short = await headLit('worn');
   await p.evaluate(() => { drops.length = 0; });
-  ck('and its height is its rarity', tall > short + 400,
-     'a mythic shaft lights ' + tall + ' pixels of the top ' + HEAD +
+  // A ratio, not a difference: the absolute totals move with the background,
+  // the ratio between the two rarities over the SAME ground does not.
+  ck('and its height is its rarity', tall > short * 3 + 500,
+     'a mythic shaft puts ' + tall + ' units of light into the top ' + HEAD +
      ' rows, a worn one ' + short);
 
   // --- the corpse ----------------------------------------------------------

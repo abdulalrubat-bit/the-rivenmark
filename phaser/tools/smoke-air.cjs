@@ -183,6 +183,20 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
    */
   const lampClip = { x: Math.max(0, light.at[0] - 70), y: Math.max(0, light.at[1] - 70),
                      width: 140, height: 140 };
+  /* The bodies come out first, the same way the lamps do.
+   *
+   * The subject here is LIGHT ON STONE, and a body standing in the box is not
+   * stone: since bodies breathe on a clock while they stand still, an unlit
+   * box with a shaman in it is never still, and the floor read 348 pixels on
+   * one seed and 735 on another depending on whether anything happened to be
+   * standing near the lamp the camera picked. That is not a flaky threshold to
+   * widen, it is a different thing being measured. Take them out, and both the
+   * floor and the torch's own contribution are about the room.
+   */
+  await p.evaluate(async () => {
+    window.__bodies = enemies.slice(); enemies.length = 0;
+    for (let i = 0; i < 6; i++) await new Promise(r => requestAnimationFrame(r));
+  });
   const lampOn = await shot(lampClip);
   await p.evaluate(async () => {
     const sc = window.__game.scene.getScene('delve');
@@ -210,6 +224,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   const cull = await p.evaluate(async () => {
     const sc = window.__game.scene.getScene('delve');
     lamps.push(...window.__lamps);
+    enemies.push(...window.__bodies);
     lowFx = false;                               // the mood back on for what follows
     for (let i = 0; i < 8; i++) await new Promise(r => requestAnimationFrame(r));
     return { lamps: lamps.length, lit: sc.air.litCount };

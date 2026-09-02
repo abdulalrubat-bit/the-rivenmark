@@ -119,8 +119,15 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
      R.heroAt.join(',') + ' against ' + R.playerAt.join(','));
 
   // The gait. Walk one body a long way by hand and watch the frame change with
-  // the distance -- then hold it still and watch it stop. A clock-driven
-  // animation would keep cycling while standing.
+  // the distance -- then hold it still and watch the WALK stop.
+  //
+  // What is asserted about standing is that the gait stops contributing, not
+  // that the sprite goes perfectly rigid: a kind with authored idle art
+  // breathes on a clock while stopped, which is a different mechanism and
+  // smoke-art's business. Pinning this to '-rest' would have made giving any
+  // kind an idle loop look like a gait regression. So: the clock is held
+  // fixed, and the claim is that walking a stopped body's gait forward changes
+  // nothing and it is no longer wearing a run pose.
   const gait = await p.evaluate(async () => {
     const sc = window.__game.scene.getScene('delve');
     const e = enemies.find(b => b.hp > 0 && b.kind === 'thrall');
@@ -131,17 +138,21 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
       const x0 = e.x, y0 = e.y;
       e.x += 12;                       // a stride's worth of ground per step
       advanceGait(e, x0, y0, 1 / 60);
-      seen.add(sc.bodyFrame(e));
+      seen.add(sc.bodyFrame(e, 0));
     }
     const moving = [...seen];
-    // Now stand still: pace decays and the frame should settle on the rest pose.
+    // Now stand still: pace decays and the gait stops driving the frame.
     for (let i = 0; i < 120; i++) advanceGait(e, e.x, e.y, 1 / 60);
-    return { moving, still: sc.bodyFrame(e), pace: +e.pace.toFixed(3) };
+    const still = sc.bodyFrame(e, 0);
+    for (let i = 0; i < 120; i++) advanceGait(e, e.x, e.y, 1 / 60);
+    return { moving, still, again: sc.bodyFrame(e, 0), pace: +e.pace.toFixed(3) };
   });
   ck('a walking body cycles its gait', !gait.none && gait.moving.length >= 4,
      gait.none ? 'no thrall found' : gait.moving.length + ' distinct frames over 720 units');
-  ck('and a standing one does not', !gait.none && /-rest$/.test(gait.still),
-     gait.none ? '' : 'settled on ' + gait.still + ' at pace ' + gait.pace);
+  ck('and a standing one stops walking', !gait.none && !/-run-\d+$/.test(gait.still) &&
+     gait.still === gait.again,
+     gait.none ? '' : 'settled on ' + gait.still + ' at pace ' + gait.pace +
+                 ', unchanged after 2s more of standing');
 
   const perf = await p.evaluate(() => {
     const s = window.__game.scene.getScene('delve').log.stats();

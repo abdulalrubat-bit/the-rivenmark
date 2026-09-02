@@ -24,17 +24,33 @@ import { PNG } from 'pngjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ART  = path.join(here, '..', '..', 'art');
+/* Authored art, which WINS over the forged art of the same name.
+ *
+ * The forge output in art/ is programmer art: generated from index.html, good
+ * enough to ship and never going to be better than the code that draws it.
+ * Replacing it is the point of art-custom/ -- but replacing 244 frames before
+ * anything renders is not a project anyone finishes, so this overrides frame
+ * by frame. Drop in one thrall and the delve has one authored thrall in it
+ * and 243 forged ones, and it still runs.
+ *
+ * Same folder names, same frame names, any resolution: a file here at twice
+ * the forged frame's size is 4x art, and the scale it should be drawn at
+ * travels in the manifest rather than being assumed.
+ */
+const CUSTOM = path.join(here, '..', '..', 'art-custom');
 const OUT  = path.join(here, '..', 'public');
 
 const PAD = 2;              // bleed guard: stops a neighbour's edge sampling in
 
-function readAll(dir, prefix, into) {
+function readAll(dir, prefix, into, authored) {
   if (!fs.existsSync(dir)) return;
   for (const f of fs.readdirSync(dir).sort()) {
     if (!f.endsWith('.png')) continue;
     const png = PNG.sync.read(fs.readFileSync(path.join(dir, f)));
-    into.push({ name: prefix + path.basename(f, '.png'),
-                w: png.width, h: png.height, png });
+    const name = prefix + path.basename(f, '.png');
+    const at = into.findIndex(fr => fr.name === name);
+    const frame = { name, w: png.width, h: png.height, png, authored: !!authored };
+    if (at >= 0) into[at] = frame; else into.push(frame);
   }
 }
 
@@ -55,12 +71,130 @@ function pack(frames, maxW) {
 }
 
 const frames = [];
+const DIRS = ['heroes', 'bestiary', 'props', 'chests', 'misc', 'walls'];
 // Folder name becomes the frame prefix, so "bestiary/thrall-run-0" is unique
 // against "heroes/isaac-run-0" without any renaming.
-for (const d of ['heroes', 'bestiary', 'props', 'chests', 'misc', 'walls'])
-  readAll(path.join(ART, d), d + '/', frames);
+for (const d of DIRS) readAll(path.join(ART, d), d + '/', frames);
 // cycles/ is contact strips for looking at, not for drawing. Excluding it
 // keeps a megabyte of duplicated pixels out of GPU memory.
+
+// The forged size of each frame, remembered BEFORE the overrides land, so a
+// replacement can be measured against what it replaces.
+const forgedSize = new Map(frames.map(f => [f.name, [f.w, f.h]]));
+for (const d of DIRS) readAll(path.join(CUSTOM, d), d + '/', frames, true);
+
+/* What scale each authored frame should be drawn at.
+ *
+ * Everything forged is exported at `supersample` (2), and the game draws it at
+ * 1/2. Authored art has no reason to be at that resolution -- a 4x thrall is a
+ * better thrall -- so any override whose size differs from the frame it
+ * replaces gets its ratio recorded, and the host divides by it. Nothing
+ * downstream has to know which frames are authored; it just asks how big this
+ * one is meant to be.
+ */
+const frameScale = {};
+const odd = [];
+for (const f of frames) {
+  if (!f.authored) continue;
+  const was = forgedSize.get(f.name);
+  if (was) {
+    const sx = f.w / was[0], sy = f.h / was[1];
+    // A replacement that changes the aspect ratio will not sit where the forged
+    // one sat -- it is a different shape in a game that positions by centre and
+    // sorts by foot. Named rather than silently accepted.
+    if (Math.abs(sx - sy) > 0.02) odd.push(f.name + ' ' + f.w + 'x' + f.h +
+                                           ' replacing ' + was[0] + 'x' + was[1]);
+    if (Math.abs(sx - 1) > 0.001) frameScale[f.name] = +sx.toFixed(4);
+    continue;
+  }
+
+  /* A pose that has no forged counterpart at all -- an idle loop, say, which
+   * the forged bestiary simply does not have.
+   *
+   * "Nothing to scale against, so leave it alone" was wrong, and wrong in the
+   * exact way this whole table exists to prevent: with no entry the host draws
+   * at 1/2, so a 176px idle authored against an 88px rest stood at twice the
+   * height of the body it belongs to -- and only while STANDING STILL, so it
+   * grew when it stopped and shrank when it charged.
+   *
+   * So fall back to the kind's -rest, which is what import-art.js already
+   * sizes new poses against. The two agreeing is the point: whatever the
+   * importer measured is what the packer divides by.
+   *
+   * By HEIGHT alone, not by width or by the larger of the two. A standing
+   * figure is read by how tall it is, so height is what the importer matches
+   * and height is what the canvas preserves exactly; the width is free, and a
+   * broad pose gets a broader canvas rather than being shrunk to fit a square
+   * cut for a narrow body. Reading the scale off the width would then squash
+   * exactly the creatures that needed the room. For the same reason a new pose
+   * is not reported as an odd aspect ratio.
+   */
+  const slash = f.name.indexOf('/');
+  const kind = f.name.slice(slash + 1).split('-')[0];
+  const rest = forgedSize.get(f.name.slice(0, slash + 1) + kind + '-rest');
+  if (!rest) continue;                      // not a pose of anything forged
+  const k = f.h / rest[1];
+  if (Math.abs(k - 1) > 0.001) frameScale[f.name] = +k.toFixed(4);
+}
+
+/* Does an idle cycle loop, or does it go there and come back?
+ *
+ * A breath is an OPEN PATH: the body rises from one extreme to the other, and
+ * the last frame is further from the first than any two neighbours are from
+ * each other. Played as a ring it snaps back at the wrap, once per cycle,
+ * which is the most visible thing in the animation. Played forwards then
+ * backwards it breathes.
+ *
+ * A true cycle -- a guttering flame, a turning orb -- is a RING: its wrap step
+ * is just another step, no bigger than the rest, and reversing it would be
+ * wrong. So the two are told apart by the one measurement that distinguishes
+ * them: whether the wrap is larger than the largest step inside the chain.
+ * 1.25x of it, for margin. Measured on the imported flayer breath: steps of
+ * 17k to 75k differing pixels, wrap of 111k -- an open path by a clear margin.
+ *
+ * Decided here rather than by whoever drops the files in, because this is the
+ * one place that has already decoded every frame and can simply look.
+ */
+const idleCycles = new Map();
+for (const f of frames) {
+  const m = /^(.*)-idle-(\d+)$/.exec(f.name);
+  if (!m) continue;
+  if (!idleCycles.has(m[1])) idleCycles.set(m[1], []);
+  idleCycles.get(m[1])[+m[2]] = f;
+}
+const pingpong = [];
+const cycleNote = [];
+for (const [base, list] of idleCycles) {
+  let n = 0;
+  while (list[n]) n++;                       // contiguous from zero, as drawn
+  if (n < 3) continue;                       // two frames alternate either way
+  const cut = list.slice(0, n);
+  if (cut.some(f => f.w !== cut[0].w || f.h !== cut[0].h)) continue;   // not comparable
+  const diff = (a, b) => {
+    let d = 0;
+    for (let k = 0; k < a.png.data.length; k += 4) {
+      if (Math.abs(a.png.data[k + 3] - b.png.data[k + 3]) > 16 ||
+          Math.abs(a.png.data[k] - b.png.data[k]) > 16 ||
+          Math.abs(a.png.data[k + 1] - b.png.data[k + 1]) > 16 ||
+          Math.abs(a.png.data[k + 2] - b.png.data[k + 2]) > 16) d++;
+    }
+    return d;
+  };
+  let worst = 0;
+  for (let i = 1; i < n; i++) worst = Math.max(worst, diff(cut[i - 1], cut[i]));
+  const wrap = diff(cut[n - 1], cut[0]);
+  const open = wrap > worst * 1.25;
+  if (open) pingpong.push(base);
+  // The ratio is printed, not just the verdict: this is one threshold standing
+  // between a breath and a twitch, and the margin narrows on small frames --
+  // the same flayer breath measures 1.48 at reference size and 1.33 once
+  // resampled down to 202px. A call near 1.25 is worth looking at.
+  cycleNote.push('    ' + base + '  ' + n + ' frames, ' +
+                 (open ? 'there and back' : 'looping') +
+                 '  (wrap/worst step = ' + (wrap / (worst || 1)).toFixed(2) +
+                 ', threshold 1.25)');
+}
+pingpong.sort();
 
 if (!frames.length) {
   console.error('no PNGs under ' + ART + ' — run `node tools/export-art.js` in the repo root first');
@@ -105,8 +239,59 @@ fs.writeFileSync(path.join(OUT, 'atlas.json'), JSON.stringify(json) + '\n');
 // The stat block travels with the art, so the game does not need a second
 // source of truth for what a thrall is.
 const man = path.join(ART, 'manifest.json');
-if (fs.existsSync(man)) fs.copyFileSync(man, path.join(OUT, 'manifest.json'));
+if (fs.existsSync(man)) {
+  const m = JSON.parse(fs.readFileSync(man, 'utf8'));
+  // Travels with the art so the game needs no second source of truth for how
+  // big an authored frame is meant to be drawn.
+  m.frame_scale = frameScale;
+  m.authored = frames.filter(f => f.authored).map(f => f.name).sort();
+  m.idle_pingpong = pingpong;
+  fs.writeFileSync(path.join(OUT, 'manifest.json'), JSON.stringify(m, null, 2) + '\n');
+}
 
 const kb = n => (n / 1024).toFixed(0) + 'kB';
+const authored = frames.filter(f => f.authored).length;
 console.log('atlas ' + size.w + 'x' + size.h + '  ' + frames.length + ' frames  ' +
-            kb(fs.statSync(path.join(OUT, 'atlas.png')).size));
+            kb(fs.statSync(path.join(OUT, 'atlas.png')).size) +
+            '   ' + authored + ' authored, ' + (frames.length - authored) + ' forged');
+if (cycleNote.length) {
+  console.log('\n  idle cycles:');
+  for (const c of cycleNote) console.log(c);
+}
+if (odd.length) {
+  console.log('\n  these change shape, not just resolution — they will not sit ' +
+              'where the forged frame sat:');
+  for (const o of odd.slice(0, 12)) console.log('    ' + o);
+}
+
+/* Half-dressed kinds.
+ *
+ * The coherent unit of art is a KIND, not a pose. Author a body's idle loop
+ * and leave its run cycle forged and the thing changes art style the instant
+ * it takes a step -- which is not a subtle regression, it is a different
+ * creature. Sizes and foot lines are checked to the pixel elsewhere; nothing
+ * checked whether the drawing was by the same hand, and that is the failure
+ * anyone would notice first.
+ *
+ * Not an error. Importing one pose at a time is exactly how art-custom/ is
+ * meant to be used, and a half-dressed kind is a normal state to pass through.
+ * It is just a state worth being told you are in.
+ */
+const dressed = new Map();
+for (const f of frames) {
+  const slash = f.name.indexOf('/');
+  const dir = f.name.slice(0, slash);
+  if (dir !== 'bestiary' && dir !== 'heroes') continue;
+  const kind = dir + '/' + f.name.slice(slash + 1).split('-')[0];
+  const d = dressed.get(kind) || { yes: 0, no: 0 };
+  d[f.authored ? 'yes' : 'no']++;
+  dressed.set(kind, d);
+}
+const mixed = [...dressed].filter(([, d]) => d.yes && d.no);
+if (mixed.length) {
+  console.log('\n  these wear authored art for some poses and forged art for the ' +
+              'rest — they will change style as they move:');
+  for (const [k, d] of mixed) {
+    console.log('    ' + k + '  ' + d.yes + ' authored, ' + d.no + ' forged');
+  }
+}
