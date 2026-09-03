@@ -5599,6 +5599,35 @@ function hurtPlayerBy(dmg, fx, fy) {
   if (player.hp <= 0) { player.hp = 0; endRun(false); }
 }
 
+/* --- WEIGHT ----------------------------------------------------------------
+   Measured, and it is why the fight felt weightless. Every freeze() and
+   shake() in this file sat inside an ability handler; damageEnemy -- the one
+   path the ordinary swing travels down, and 55 of the hero's 60 dps in a
+   measured delve -- did a hit-flash, a damage number and two particles, and
+   nothing else. No recoil, no camera, no hit-stop. The blow you land all the
+   time was the only blow with nothing behind it.
+
+   Given back here rather than at the call sites, because the call sites are
+   the crescent, five abilities, a husk going off and a shattering calcify,
+   and all of them are blows landing on a body.
+
+   Scaled by the SHARE OF THE BODY the blow took, not by the number: twenty-two
+   off a thrall is most of it and off the avatar it is a scratch, and they must
+   not land alike. Mass divides the recoil on top, so the same crescent throws
+   a thrall and barely turns a gorger.
+
+   ON THE HIT-STOP. It is spent on the KILL and not on the hit. At the measured
+   rate -- two and a half landings a second against about four fifths of a kill
+   -- a freeze per landing is a stutter you feel as a bad frame rate, where a
+   freeze per kill is punctuation. Same reasoning as HITSTOP_MAX: the pause has
+   to punctuate the fight, not stall it.
+   ------------------------------------------------------------------------ */
+const HIT_KNOCK   = 190;    // recoil on a blow that takes the whole body
+const HIT_SHAKE   = 3.2;    // ...and the camera, above HEAVY_HIT only
+const HEAVY_HIT   = 0.34;   // the floater's own threshold for calling one heavy
+const KILL_FREEZE = 0.045;  // the beat a body breaking is worth
+const KILL_SHAKE  = 4;
+
 /* `fx, fy` is where the blow came FROM, and it is the only reason this takes
  * more than a body and a number: a recoil has to go somewhere, and guessing
  * "away from the player" would be wrong for a hazard underfoot, a totem, or a
@@ -5640,6 +5669,15 @@ function damageEnemy(e, dmg, fx, fy) {
     const dx = e.x - fx, dy = e.y - fy, m = Math.hypot(dx, dy);
     if (m > 0.001) { e.hitX = dx / m; e.hitY = dy / m; }
   }
+  // What share of this body the blow just took. Everything below is scaled by
+  // it, so the same swing reads as a killing blow on a thrall and as a
+  // scratch on the avatar.
+  const weight = clamp(dmg / Math.max(1, e.maxHp), 0, 1);
+  // The recoil. A braced anchor does not take one -- it cannot move or swing
+  // while the guard is up, and that is the whole of why backing off is the
+  // answer to it; pushing it around would say the opposite.
+  if (!e.braced && e.hitX !== undefined)
+    knock(e, Math.atan2(e.hitY, e.hitX), HIT_KNOCK * (0.3 + weight));
   // A heavy enough blow shatters a body that is closing. A scratch does not:
   // the point is that you have to commit to stopping it, not graze it once.
   if (e.calcify > 0 && dmg >= e.maxHp * CALCIFY_BREAK) breakCalcify(e, true);
@@ -5707,10 +5745,19 @@ function damageEnemy(e, dmg, fx, fy) {
       }
     }
     dropLoot(e);
-    burst(e.x, e.y, e.color, e.r > 18 ? 14 : 7, 190);
-    if (e.r > 18) shake(3);
+    // The beat. A big body is worth a longer one, and the ring gives the
+    // break an edge that expands rather than a puff that fades.
+    const big = e.r > 18;
+    freeze(KILL_FREEZE * (big ? 1.6 : 1));
+    shake(KILL_SHAKE * (big ? 2 : 1));
+    burst(e.x, e.y, e.color, big ? 18 : 10, 210);
+    ring(e.x, e.y, e.color, 3, e.r * 2.4, 0.22);
   } else {
-    burst(e.x, e.y, '#e6d8bc', 2, 90);
+    // A landing that did not kill still has to look like one. The spray grows
+    // with the share it took; the camera only answers a heavy one, or a fight
+    // against thralls -- which die in two -- would never let it settle.
+    burst(e.x, e.y, '#e6d8bc', 2 + ((weight * 6) | 0), 90 + weight * 150);
+    if (weight >= HEAVY_HIT) shake(HIT_SHAKE * weight);
   }
 }
 

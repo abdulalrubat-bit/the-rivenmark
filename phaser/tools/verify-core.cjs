@@ -20,7 +20,8 @@ const { spawn } = require('child_process');
 
 const SUITES = (process.env.SUITES ||
   'horde roles packs terrain ramp lieuts bosses invader newkinds eco deceiver crescent ' +
-  'extract stash gear vendor loadout prog hall layout combat2 combat3 zayd kit hub bag gait'
+  'extract stash gear vendor loadout prog hall layout combat2 combat3 zayd kit hub bag gait ' +
+  'weight'
 ).split(/\s+/).filter(Boolean);
 
 /* Which suites can meaningfully be compared.
