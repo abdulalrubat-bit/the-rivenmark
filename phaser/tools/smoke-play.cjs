@@ -87,6 +87,46 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   }));
   ck('the HUD shows the run', /\d+ \/ \d+/.test(hud.life) && /slag/.test(hud.slag),
      hud.life+'   '+hud.slag);
+  /* A cooldown you can read without reading.
+   *
+   * It used to replace the ability's mark with a number, which took away the
+   * one thing that says WHICH ability this is at exactly the moment you are
+   * waiting for it. The mark stays now and the time is a wedge draining round
+   * the button. So: the marks survive a cooldown, and the wedge actually
+   * tracks it.
+   */
+  const wedge = await p.evaluate(async () => {
+    const btns = () => [...document.querySelectorAll('#hud .kit button')];
+    const marksIdle = btns().map(b => b.querySelector('.mark').textContent).join('');
+    /* Cast an ability with a REAL cooldown of its own -- Isaac's first two are
+     * cd 0 and gated by the beat alone, so firing one of those never put a
+     * number where a mark had been and the check could not see the thing it
+     * is about. `mass` is 12 seconds. */
+    const own = ABILITIES[player.hero].find(a => a.cd > 0) || ABILITIES[player.hero][0];
+    player.charges = CHARGE_MAX; player.tension = TENSION_MAX;  // cost is not the blocker
+    player.gcd = 0;                                             // nor the beat
+    const why = abilityBlock(own);
+    castAbility(own.id);
+    await new Promise(r => setTimeout(r, 220));
+    const hot = btns().map(b => +(b.style.getPropertyValue('--cd') || 0));
+    const marksHot = btns().map(b => b.querySelector('.mark').textContent).join('');
+    await new Promise(r => setTimeout(r, 700));
+    const later = btns().map(b => +(b.style.getPropertyValue('--cd') || 0));
+    // Did anything actually go on its own cooldown? Without this the check
+    // passes on a kit where nothing was cooling, which is no check at all.
+    const cooled = ABILITIES[player.hero].some(a => a.cd > 0 && (player.cds || {})[a.id] > 0);
+    return { marksIdle, marksHot, hot, later, cooled, tried: own.id, why: why || 'nothing' };
+  });
+  ck('an ability keeps its mark while it cools',
+     wedge.marksHot === wedge.marksIdle && wedge.marksIdle.length >= 3 && wedge.cooled,
+     'idle "' + wedge.marksIdle + '" vs cooling "' + wedge.marksHot + '"' +
+     (wedge.cooled ? ' (' + wedge.tried + ' cooling)'
+                   : ' — ' + wedge.tried + ' never went on cooldown, blocked by "' +
+                     wedge.why + '", so this proves nothing'));
+  ck('and the wedge drains as it does',
+     wedge.hot.every(v => v > 0.2) && wedge.later.every((v, i) => v < wedge.hot[i]),
+     'just cast ' + wedge.hot.join(' ') + '  ->  0.7s later ' + wedge.later.join(' '));
+
   ck('with a button for every ability and a swap',
      hud.buttons===5 && hud.swap && hud.pips===3,
      hud.buttons+' buttons, '+hud.pips+' charge pips');
