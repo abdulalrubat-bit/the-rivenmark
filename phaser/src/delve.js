@@ -152,6 +152,7 @@ export class Delve extends Phaser.Scene {
     }
     this.frameScale = this.man.frame_scale || {};
     this.buildCycleTable(this.man.idle_pingpong || []);
+    this.warned = Object.create(null);
 
     this.cameras.main.setBackgroundColor(PAL.floor || '#1a1512');
     this.cameras.main.setBounds(0, 0, WORLD.w, WORLD.h);
@@ -500,8 +501,30 @@ export class Delve extends Phaser.Scene {
    * sprite at the default scale -- and an authored 4x frame then stood at
    * twice the size of the horde around it.
    */
+  /* `has`, not `getFrame`.
+   *
+   * textures.getFrame(key, name) does NOT return null for a name the atlas
+   * does not hold: it falls back to the texture's FIRST frame and returns
+   * that. So this guard asked a question that always answered yes, setFrame
+   * fell back to the same first frame, and a body wearing a pose that does not
+   * exist came out dressed as `walls/course-0-1` -- a piece of wall. Reported
+   * from a real run as "the deceiver turned into a column, so I was fighting a
+   * piece of scenery", which is exactly what it was.
+   *
+   * Texture.has answers the question that was meant. And a miss is now said
+   * out loud rather than silently drawn as scenery: nothing should ever ask
+   * for a frame that is not there, so if anything does, that is a bug and the
+   * log is where it belongs.
+   */
   wearFrame(sp, key) {
-    if (sp.frame.name !== key && this.textures.getFrame('art', key)) sp.setFrame(key);
+    if (sp.frame.name !== key) {
+      if (this.textures.get('art').has(key)) sp.setFrame(key);
+      else if (!this.warned[key]) {
+        this.warned[key] = 1;
+        console.error('no such frame in the atlas: ' + key +
+                      ' — the sprite keeps ' + sp.frame.name);
+      }
+    }
     const want = this.artScale(sp.frame.name);
     // Guarded on scaleY, not scaleX: the breath moves scaleX every frame a
     // body stands still, so testing that one would rebuild the scale on every
@@ -656,15 +679,30 @@ export class Delve extends Phaser.Scene {
     }
 
     if (e.pace < GAIT_STILL || e.braced) return this.idleFrame(base, e, time);
-    const f = ((e.gait / GAIT_STEP) | 0) % GAIT_N;
-    return base + '-run-' + f;
+    /* Only if the kind HAS a run cycle.
+     *
+     * The Deceiver and his mirages do not: they blink rather than walk, so the
+     * forge gives them one pose and no gait at all. The canvas build has said
+     * `SPR[kind + 'r' + f] || SPR[kind]` since the beginning and the port
+     * dropped the fallback -- and a blink is a large jump in one frame, which
+     * is a large PACE, so the one body in the game with no run cycle was also
+     * the one most certain to ask for one.
+     *
+     * Modulo the frames that exist rather than GAIT_N, so a kind drawn with a
+     * shorter cycle wraps around its own rather than off the end of it.
+     */
+    const n = this.cycleN[base + '-run'];
+    if (!n) return base + '-rest';
+    return base + '-run-' + (((e.gait / GAIT_STEP) | 0) % n);
   }
   heroFrame(p, time) {
     const base = 'heroes/' + p.hero;
     if (p.pace < GAIT_STILL) return this.idleFrame(base, p, time);
     const run = p.pace >= WALK_PACE;
-    const f = ((p.gait / (run ? GAIT_STEP : WALK_STEP)) | 0) % GAIT_N;
-    return base + (run ? '-run-' : '-walk-') + f;
+    const pose = run ? '-run' : '-walk';
+    const n = this.cycleN[base + pose];
+    if (!n) return base + '-rest';
+    return base + pose + '-' + (((p.gait / (run ? GAIT_STEP : WALK_STEP)) | 0) % n);
   }
 
   /* The stick.

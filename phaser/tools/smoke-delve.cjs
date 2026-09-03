@@ -112,6 +112,76 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
      cull.here.stray + ' stray here, ' + cull.away.stray + ' stray across the world');
   ck('and the cull follows the camera', cull.here.key !== cull.away.key,
      cull.here.on + ' visible here against ' + cull.away.on + ' across the world');
+  /* NOBODY IS WEARING SOMEBODY ELSE'S FRAME.
+   *
+   * Reported from a real run: "the deceiver turned into a column, so I was
+   * fighting a piece of scenery". He was -- he was drawn as `walls/course-0-1`.
+   * Two faults met. The Deceiver and his mirages blink rather than walk, so the
+   * forge gives them one pose and no run cycle, and a blink is a large jump in
+   * one frame, which reads as a large pace: the one body in the game with no
+   * run cycle was the one most certain to ask for one. And
+   * textures.getFrame(key, name) does not return null for a name the atlas
+   * lacks -- it returns the texture's FIRST frame -- so the existence guard
+   * always passed and setFrame fell back to the same wall.
+   *
+   * Every check the suites had went through bodyFrame or a synthetic body.
+   * This one reads what is actually ON SCREEN, in a running delve, and asks
+   * whether each sprite belongs to the body it is standing on. That is the
+   * question the player asks, and it is the one nothing was asking.
+   */
+  const dressed = await p.evaluate(async () => {
+    const sc = window.__game.scene.getScene('delve');
+    // Drive every kind through the moving path, which is where the fault was:
+    // standing bodies wear -rest and -rest always exists.
+    for (const e of enemies) { if (e.hp > 0) { e.pace = 1; e.gait = Math.random() * 400; } }
+    // And PLANT the kinds a shallow delve does not spawn. Left to what turns
+    // up, this ran over four kinds and the one that was broken -- the one with
+    // no run cycle at all -- was never among them.
+    const planted = ['deceiver', 'mirage', 'lieutenant', 'gorger'];
+    const live0 = enemies.filter(x => x.hp > 0);
+    // Everything is put back before returning: this probe runs before the gait
+    // and breath checks, and leaving a delve full of sprinting mirages made
+    // them measure a world this one had rearranged.
+    const undo = live0.map(e => ({ e, kind: e.kind, pace: e.pace, gait: e.gait }));
+    planted.forEach((k, i) => { if (live0[i]) live0[i].kind = k; });
+    for (let i = 0; i < 4; i++) await new Promise(r => requestAnimationFrame(r));
+    const live = enemies.filter(x => sc.showBody(x));
+    const wrong = [];
+    const kinds = new Set();
+    for (let i = 0; i < live.length; i++) {
+      const sp = sc.pool[i];
+      if (!sp || !sp.visible) continue;
+      kinds.add(live[i].kind);
+      if (!sp.frame.name.startsWith('bestiary/' + live[i].kind + '-')) {
+        wrong.push(live[i].kind + ' wearing ' + sp.frame.name);
+      }
+    }
+    const out = { wrong: [...new Set(wrong)], n: live.length, kinds: [...kinds] };
+    for (const u of undo) { u.e.kind = u.kind; u.e.pace = u.pace; u.e.gait = u.gait; }
+    for (let i = 0; i < 2; i++) await new Promise(r => requestAnimationFrame(r));
+    return out;
+  });
+  ck('every body wears a frame of its own kind, walking',
+     dressed.wrong.length === 0,
+     dressed.wrong.length ? dressed.wrong.slice(0, 4).join('; ')
+       : dressed.n + ' bodies across ' + dressed.kinds.length + ' kinds');
+
+  // Including the one that has no walk at all.
+  const blink = await p.evaluate(async () => {
+    const sc = window.__game.scene.getScene('delve');
+    const e = enemies.find(x => x.hp > 0);
+    if (!e) return { none: true };
+    const was = e.kind;
+    e.kind = 'deceiver'; e.pace = 1; e.gait = 3 * 21;
+    const asked = sc.bodyFrame(e, 0);
+    e.kind = was;
+    return { asked, exists: sc.textures.get('art').has(asked) };
+  });
+  ck('and a kind with no run cycle asks for the pose it does have',
+     !blink.none && blink.asked === 'bestiary/deceiver-rest' && blink.exists,
+     blink.none ? 'no body' : 'a moving deceiver asks for ' + blink.asked +
+       (blink.exists ? '' : ' — WHICH DOES NOT EXIST'));
+
   ck('a sprite exists for every body', R.pool >= R.bodies,
      R.pool + ' sprites for ' + R.bodies + ' bodies');
   ck('the hero sprite tracks the hero',
