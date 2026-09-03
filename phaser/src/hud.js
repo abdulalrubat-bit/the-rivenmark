@@ -22,14 +22,32 @@ const g = window;   // ONLY for the functions -- see the note in delve.js: a
 const CSS = `
 #hud{position:fixed;inset:0;pointer-events:none;font:12px ui-monospace,Menlo,monospace;
      color:#cebe9e;-webkit-user-select:none;user-select:none}
-#hud .top{position:absolute;left:8px;right:8px;top:8px;display:flex;gap:8px;align-items:center}
-#hud .life{flex:1;height:16px;background:#12100d;border:1px solid #4a3f30;border-radius:3px;
+/* One band, not a red slab with text floating beside it. The frame, the inset
+   and the stone colour are the boss bar's, so the two read as the same object
+   in two sizes rather than as two different games' HUDs. */
+#hud .top{position:absolute;left:8px;right:8px;top:8px;display:flex;gap:6px;align-items:stretch;
+     background:rgba(16,13,10,.72);border:1px solid #4a3f30;border-radius:4px;padding:3px}
+#hud .life{flex:1;height:16px;background:#0d0b09;border:1px solid #3a3226;border-radius:2px;
      overflow:hidden;position:relative}
-#hud .life i{display:block;height:100%;background:linear-gradient(#c0392b,#7c2018);
+#hud .life i{display:block;height:100%;background:linear-gradient(#d1503c,#7c2018);
      transition:width .12s linear}
+/* Quarter ticks, exactly as the boss bar has them: a bar that moves slowly
+   still shows that it moved. */
+#hud .life:after{content:'';position:absolute;inset:0;pointer-events:none;
+     background:repeating-linear-gradient(90deg,transparent 0 24.6%,rgba(8,6,4,.5) 24.6% 25%)}
 #hud .life b{position:absolute;inset:0;display:grid;place-items:center;font-weight:600;
-     text-shadow:0 1px 2px #000}
-#hud .slag{min-width:92px;text-align:right;text-shadow:0 1px 2px #000}
+     font-size:11px;text-shadow:0 1px 2px #000;z-index:1}
+/* Low. The bar is the one number worth interrupting the player for, and a red
+   bar on a dark red background is not a warning. */
+#hud .life.low i{background:linear-gradient(#ff6a4d,#a52a12)}
+#hud .life.low{animation:lifepulse .9s ease-in-out infinite}
+@keyframes lifepulse{0%,100%{box-shadow:0 0 0 rgba(255,106,77,0)}
+     50%{box-shadow:0 0 7px rgba(255,106,77,.55)}}
+#hud .slag{min-width:86px;display:flex;align-items:center;justify-content:flex-end;gap:4px;
+     padding-right:3px;font-size:11px;text-shadow:0 1px 2px #000;white-space:nowrap}
+#hud .slag u{width:7px;height:7px;background:#c99a3e;border:1px solid #7c5f24;
+     transform:rotate(45deg);text-decoration:none;flex:none}
+#hud .slag.met{color:#e8c060}
 /* The kit sits bottom-right in two rows of three. Its own bottom edge, the
    swap beside it rather than above it, and the resource meter over it are all
    placed so nothing lands on anything else -- measured in the play test, not
@@ -39,9 +57,25 @@ const CSS = `
      grid-template-columns:repeat(3,56px);pointer-events:auto}
 #hud button{width:56px;height:56px;border-radius:50%;background:#161310;color:#e8dcc0;
      border:2px solid #6a5a42;font:16px/1 ui-monospace,monospace;padding:0;
-     display:grid;place-items:center;touch-action:manipulation}
-#hud button .cd{position:absolute;font-size:11px;color:#ffd870}
-#hud button:disabled{opacity:.42}
+     display:grid;place-items:center;touch-action:manipulation;position:relative;
+     overflow:hidden}
+/* THE SWEEP. A cooldown used to replace the ability's mark with a number,
+   which took the one thing that says WHICH ability this is away at exactly the
+   moment you are waiting for it. The mark stays now and the time is shown as a
+   wedge draining clockwise -- readable without reading, which is what a hand
+   in a fight has time for. The number stays too, small, under the mark, for
+   when a second matters. */
+#hud button .sweep{position:absolute;inset:0;border-radius:50%;pointer-events:none;
+     background:conic-gradient(from -90deg,rgba(6,5,3,.66) calc(var(--cd,0) * 360deg),
+     transparent 0)}
+#hud button .cd{position:absolute;bottom:5px;font:600 9px/1 ui-monospace,monospace;
+     color:#ffd870;text-shadow:0 1px 2px #000}
+#hud button .mark{position:relative;z-index:1}
+/* Cooling and CANNOT are different states and used to look the same. Cooling
+   keeps its colour and shows the wedge; blocked -- no charges, nothing in
+   reach -- goes flat and grey, because no amount of waiting fixes it. */
+#hud button:disabled{opacity:.5;border-color:#4a4034;color:#9a8f7c}
+#hud button.cooling{opacity:1;border-color:#6a5a42;color:#e8dcc0}
 #hud button.ready{border-color:#d6b26e;box-shadow:0 0 10px rgba(214,178,110,.35)}
 #hud button:active{background:#2a2419}
 #hud .swap{position:absolute;right:204px;bottom:16px;pointer-events:auto}
@@ -126,6 +160,7 @@ export class Hud {
     document.body.appendChild(root);
 
     this.root = root;
+    this.lifeBox  = root.querySelector('.life');
     this.lifeFill = root.querySelector('.life i');
     this.lifeText = root.querySelector('.life b');
     this.slag = root.querySelector('.slag');
@@ -154,7 +189,8 @@ export class Hud {
       b.type = 'button';
       b.dataset.id = a.id;
       b.title = a.name + ' — ' + a.note;
-      b.innerHTML = '<span>' + a.mark + '</span>';
+      b.innerHTML = '<span class="sweep"></span><span class="mark">' + a.mark +
+                    '</span><span class="cd"></span>';
       // pointerdown, not click: a click waits for the pointer to come back up,
       // which on a touch screen is a beat you can feel in a fight.
       b.addEventListener('pointerdown', e => { e.preventDefault(); g.castAbility(a.id); });
@@ -172,7 +208,15 @@ export class Hud {
     const f = Math.max(0, p.hp) / p.maxHp;
     this.lifeFill.style.width = (f * 100).toFixed(1) + '%';
     this.lifeText.textContent = Math.ceil(Math.max(0, p.hp)) + ' / ' + Math.round(p.maxHp);
-    this.slag.textContent = (run.tech | 0) + ' / ' + LEVEL.quota + ' slag';
+    const tech = run.tech | 0;
+    this.lifeBox.classList.toggle('low', f <= 0.3);
+    if (this.slagSig !== tech) {
+      this.slagSig = tech;
+      // The icon marks it; the word still names it. An icon alone leaves a
+      // number on screen that nobody new can read.
+      this.slag.innerHTML = '<u></u>' + tech + ' / ' + LEVEL.quota + ' slag';
+      this.slag.classList.toggle('met', tech >= LEVEL.quota);
+    }
 
     // The resource: Isaac counts charges, Zayd fills a pool. Rebuilt only when
     // the shape changes, so a bar that ticks every frame does not rewrite the
@@ -203,8 +247,23 @@ export class Hud {
         b.__s = s;
         b.disabled = !!why && why !== 'gcd';
         b.classList.toggle('ready', !why);
-        b.querySelector('span').textContent = cd > 0 ? Math.ceil(cd) : a.mark;
+        // Cooling is not the same as blocked: one resolves by waiting and the
+        // other does not, and they used to look identical.
+        b.classList.toggle('cooling', why === 'gcd' || cd > 0);
+        b.querySelector('.cd').textContent = cd >= 1 ? Math.ceil(cd) : '';
       }
+      /* The wedge, every frame -- it is one custom property and the browser
+       * paints the gradient, so it costs nothing to keep smooth, and a
+       * cooldown that only redraws when its whole second ticks over judders. */
+      /* The LONGER of the two waits, because an ability is unavailable until
+       * both are done. Reading only its own cooldown left an ability that has
+       * one but is currently just on the beat showing no wedge at all while
+       * every button beside it showed the beat -- five buttons, three
+       * different-looking answers to the same question. */
+      const own = a.cd > 0 && cd > 0 ? cd / a.cd : 0;
+      const beat = (p.gcdMax || 0) > 0 ? (p.gcd || 0) / p.gcdMax : 0;
+      const frac = Math.max(0, Math.min(1, Math.max(own, beat)));
+      if (b.__cd !== frac) { b.__cd = frac; b.style.setProperty('--cd', frac.toFixed(3)); }
     }
     const swapWhy = g.swapBlocked();
     this.swapBtn.disabled = !!swapWhy && swapWhy !== 'gcd';

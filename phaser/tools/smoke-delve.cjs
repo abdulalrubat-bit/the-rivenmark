@@ -182,6 +182,29 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
      blink.none ? 'no body' : 'a moving deceiver asks for ' + blink.asked +
        (blink.exists ? '' : ' — WHICH DOES NOT EXIST'));
 
+  /* The frame readout is not on unless it is asked for.
+   *
+   * It used to be drawn always, so a shipped build ran with four lines of
+   * counters over the floor for the whole delve. The DOM dot that switches it
+   * is checked in smoke.cjs; this is the half that only exists here.
+   */
+  const dbg = await p.evaluate(() => {
+    const sc = window.__game.scene.getScene('delve');
+    const before = sc.dbg.visible;
+    document.documentElement.classList.add('diag-on');
+    return { before, has: !!sc.dbg };
+  });
+  await sleep(250);
+  const dbgOn = await p.evaluate(() => {
+    const sc = window.__game.scene.getScene('delve');
+    const on = sc.dbg.visible;
+    document.documentElement.classList.remove('diag-on');
+    return on;
+  });
+  ck('the frame readout stays off until the dot is on',
+     dbg.has && dbg.before === false && dbgOn === true,
+     'drawn by default ' + dbg.before + ', drawn when switched on ' + dbgOn);
+
   ck('a sprite exists for every body', R.pool >= R.bodies,
      R.pool + ' sprites for ' + R.bodies + ' bodies');
   ck('the hero sprite tracks the hero',

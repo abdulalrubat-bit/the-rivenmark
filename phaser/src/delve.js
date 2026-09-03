@@ -224,9 +224,12 @@ export class Delve extends Phaser.Scene {
     // Bottom-left, not top-left. The top strip belongs to the life bar, the
     // boss bar and the toast, and the readout sat under all three; the kit
     // owns bottom-right, so bottom-left is the only corner nothing wants.
+    // Hidden until the diagnostics dot is switched on. It used to be on
+    // always, which meant a shipped build had four lines of frame counters
+    // over the floor for the whole run.
     this.dbg = this.add.text(8, 0, '', {
       fontFamily: 'ui-monospace, monospace', fontSize: '12px', color: '#cebe9e'
-    }).setOrigin(0, 1).setScrollFactor(0).setDepth(1e6);
+    }).setOrigin(0, 1).setScrollFactor(0).setDepth(1e6).setVisible(false);
     const placeDbg = () => this.dbg.setPosition(8, this.scale.height - 96);
     placeDbg();
     this.scale.on('resize', placeDbg);
@@ -922,7 +925,11 @@ export class Delve extends Phaser.Scene {
     if (this.profLast) this.prof.tick(time - this.profLast);
     this.profLast = time;
     const st = this.log.stats();
-    if (st && (time | 0) % 8 === 0) {
+    // The dot owns whether this is on screen. Checked here rather than kept in
+    // sync from the button, so there is one answer and it is the DOM's.
+    const wantDbg = document.documentElement.classList.contains('diag-on');
+    if (this.dbg.visible !== wantDbg) this.dbg.setVisible(wantDbg);
+    if (st && wantDbg && (time | 0) % 8 === 0) {
       this.dbg.setText(
         LEVEL.name + '\n' +
         'slag ' + (run.tech | 0) + '/' + LEVEL.quota + '\n' +

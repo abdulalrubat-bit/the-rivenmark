@@ -82,6 +82,34 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   // needs a secure context and a phone reaching another machine over plain
   // http is not one.
   const ctxHasClipboard = await p.evaluate(()=>!!(navigator.clipboard && window.isSecureContext));
+
+  /* Collapsed until asked for.
+   *
+   * These were two labelled buttons pinned over the play area and NOTHING
+   * gated them, so a real phone build ran the whole delve with "copy
+   * diagnostics" sitting on the minimap. They are behind a dot now, and the
+   * suite goes through the dot because that is what a hand has to do.
+   */
+  // This suite runs the PROVING scene, so it asserts the DOM half only. The
+  // in-scene readout is the delve's and is checked in smoke-delve, where the
+  // delve actually exists -- asking about it here read `undefined` as "not
+  // drawn" and passed for the wrong reason.
+  const chrome = await p.evaluate(() => {
+    const el = document.getElementById('diagTog');
+    const r = el && el.getBoundingClientRect();
+    return { dot: !!(r && r.width > 0 && r.height > 0),
+             size: r ? Math.round(r.width) : 0,
+             panelHidden: document.getElementById('diagPanel').hidden };
+  });
+  ck('the diagnostics chrome is out of the way until asked for',
+     chrome.dot && chrome.panelHidden,
+     'a ' + chrome.size + 'px dot, panel hidden ' + chrome.panelHidden);
+
+  await p.click('#diagTog');
+  await sleep(250);
+  const opened = await p.evaluate(() => document.getElementById('diagPanel').hidden);
+  ck('and one tap brings it back', opened === false, 'panel hidden ' + opened);
+
   await p.click('#diagBtn');
   await sleep(300);
   const dump = await p.evaluate(async ()=>{

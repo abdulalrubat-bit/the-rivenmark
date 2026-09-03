@@ -405,9 +405,23 @@ export function asText(d) {
 export function mountButton(getReport, onProfile, profLabel) {
   const wrap = document.createElement('div');
   wrap.id = 'diag';
+  /* COLLAPSED BY DEFAULT.
+   *
+   * These were two full-width labelled buttons pinned over the play area, and
+   * they shipped: nothing gated them, so a real phone build had "copy
+   * diagnostics" sitting on top of the minimap for the whole run. A developer
+   * affordance is not worth a corner of the screen.
+   *
+   * So: one small dot, and everything else behind it. It stays one tap away --
+   * which matters, because reading it back is how this build gets measured on
+   * hardware nobody here has -- while the run gets its screen.
+   */
   wrap.innerHTML =
-    '<button id="diagBtn" type="button">copy diagnostics</button>' +
-    (onProfile ? '<button id="profBtn" type="button">profile</button>' : '') +
+    '<button id="diagTog" type="button" title="diagnostics" aria-label="diagnostics">◔</button>' +
+    '<div id="diagPanel" hidden>' +
+      '<button id="diagBtn" type="button">copy diagnostics</button>' +
+      (onProfile ? '<button id="profBtn" type="button">profile</button>' : '') +
+    '</div>' +
     '<div id="diagOut" hidden><textarea readonly rows="14"></textarea>' +
     '<div id="diagHint">clipboard unavailable — select all and copy</div></div>';
   const css = document.createElement('style');
@@ -417,6 +431,14 @@ export function mountButton(getReport, onProfile, profLabel) {
     // not worth a control you cannot press.
     '#diag{position:fixed;right:8px;top:34px;z-index:50;font:12px ui-monospace,monospace;' +
       'display:flex;flex-direction:column;gap:6px;align-items:flex-end}' +
+    // The dot: small, dim, and out of the way until it is wanted. Still a
+    // 32px target -- under a thumb's 44px, deliberately, because pressing it
+    // by accident mid-fight costs more than missing it does.
+    '#diagTog{width:32px;height:32px;border-radius:50%;background:rgba(20,17,14,.55);' +
+      'color:#7d7159;border:1px solid rgba(74,63,48,.8);font:14px/1 ui-monospace,monospace;' +
+      'padding:0;display:grid;place-items:center}' +
+    '#diagTog.on{color:#e8dcc0;background:#1b1712;border-color:#6a5a42}' +
+    '#diagPanel{display:flex;flex-direction:column;gap:6px;align-items:flex-end}' +
     '#profBtn{background:#1b1712;color:#cebe9e;border:1px solid #4a3f30;border-radius:6px;' +
       'padding:10px 12px;font:inherit;min-height:44px;min-width:44px}' +
     '#profBtn:active{background:#2a2419}' +
@@ -431,6 +453,16 @@ export function mountButton(getReport, onProfile, profLabel) {
     '#diag [hidden]{display:none!important}';   // an attribute loses to any display rule
   document.head.appendChild(css);
   document.body.appendChild(wrap);
+
+  const tog = wrap.querySelector('#diagTog');
+  const panel = wrap.querySelector('#diagPanel');
+  tog.addEventListener('click', () => {
+    panel.hidden = !panel.hidden;
+    tog.classList.toggle('on', !panel.hidden);
+    // The live readout belongs to the same switch: it is the same information
+    // and it was the other half of what was covering the screen.
+    document.documentElement.classList.toggle('diag-on', !panel.hidden);
+  });
 
   const pbtn = wrap.querySelector('#profBtn');
   if (pbtn) {
