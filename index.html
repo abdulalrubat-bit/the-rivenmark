@@ -1740,6 +1740,16 @@ const MAX_DT        = 0.05;  // clamp after tab-switches / long frames
 // shadow in the game is derived from it, so masonry, bodies and loot all agree
 // about where the light is -- which is most of what sells depth in a flat view.
 const LIGHT = { x: 0.62, y: 0.78, wall: 11, body: 5 };
+
+/* The rim: what colour, how wide, how strong.
+ *
+ * Pale and barely warm rather than a colour of its own -- it has to read as
+ * LIGHT falling on eleven creatures painted in greens, purples, golds and
+ * bone, and a rim with an opinion tints every one of them towards itself.
+ * Width is in world units, so it is the same apparent thickness on a thrall
+ * as on the avatar rather than scaling with the body.
+ */
+const RIM_HUE = 'rgb(228,220,196)', RIM_W = 0.85, RIM_A = 0.5;
 const HUD_H           = 78;   // canvas UI clears the HUD panel by this much
 // Holding the gate is the delve's second act, and the only part of a run that
 // can be stretched: a delve itself is bounded at roughly two minutes because a
@@ -6821,11 +6831,79 @@ function forge(span, paint) {
   return c;
 }
 
-function blit(spr, x, y, rot, alpha, scale, flip) {
+/* A single bright edge along the lit side of a finished sprite.
+ *
+ * The bodies are painted about as dark as the room they stand in, which is
+ * honest -- it IS a dark room -- and costs the one thing a top-down crowd
+ * needs most: you cannot tell where one body ends and the floor begins. A rim
+ * is the cheapest fix there is. It adds no silhouette (it is drawn strictly
+ * inside the one already there, so nothing moves, resizes, or stops lining up
+ * with its own shadow) and it is baked once per sprite rather than costing
+ * anything per frame.
+ *
+ * Built by subtraction, not by stroking: the sprite is punched out of itself
+ * offset DOWN-LIGHT, and what survives is the crescent facing the light. That
+ * works on every creature without knowing anything about how it was drawn --
+ * eleven hand-painted bodies and two heroes, none of which share a path.
+ *
+ * LIGHT is the same direction the shadows already use, so the rim and the
+ * shadow agree about where the light is. They had better: a body lit from the
+ * left throwing a shadow to the left is worse than no rim at all.
+ */
+function rimLight(c, colour, width, alpha) {
+  const px = c.width;
+  const dx = LIGHT.x * width * SS, dy = LIGHT.y * width * SS;
+  const g = c.getContext('2d');
+
+  /* The SOLID body, not everything on the canvas.
+   *
+   * A sprite carries its own contact shadow, painted underneath at 0.4 alpha,
+   * and a bright crescent along the top of a shadow is a light source beneath
+   * the floor. So the silhouette is taken above that: alpha is remapped so
+   * anything at shadow strength falls away and the body keeps its edge
+   * softness instead of being cut to a hard stencil.
+   */
+  const CUT = 160;
+  const src = g.getImageData(0, 0, px, px);
+  const sil = newCanvas(px, px);
+  const gs = sil.getContext('2d');
+  const im = gs.createImageData(px, px);
+  for (let i = 3; i < src.data.length; i += 4) {
+    const a = src.data[i];
+    if (a <= CUT) continue;
+    im.data[i] = ((a - CUT) / (255 - CUT)) * 255;
+  }
+  gs.putImageData(im, 0, 0);
+
+  const m = newCanvas(px, px);
+  const gm = m.getContext('2d');
+  gm.drawImage(sil, 0, 0);
+  gm.globalCompositeOperation = 'destination-out';
+  gm.drawImage(sil, dx, dy);               // leaves the up-light crescent
+  gm.globalCompositeOperation = 'source-in';
+  gm.fillStyle = colour;
+  gm.fillRect(0, 0, px, px);
+
+  g.save();
+  // forge() left a translate+scale on this context and the crescent is
+  // already in device pixels, so it goes down under the identity.
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalAlpha = alpha;
+  g.drawImage(m, 0, 0);
+  g.restore();
+  return c;
+}
+
+// `sx` widens the sprite without touching its height, which is how a standing
+// body breathes. Only x, so the feet stay exactly where they were planted --
+// a vertical squash would need to know where the feet sit inside each sprite,
+// and they sit somewhere different in every one of them.
+function blit(spr, x, y, rot, alpha, scale, flip, sx) {
   const s = spr.span * (scale || 1);
+  const w = s * (sx || 1);
   if (!rot && !flip) {
     if (alpha !== undefined && alpha !== 1) ctx.globalAlpha = alpha;
-    ctx.drawImage(spr, x - s / 2, y - s / 2, s, s);
+    ctx.drawImage(spr, x - w / 2, y - s / 2, w, s);
     if (alpha !== undefined && alpha !== 1) ctx.globalAlpha = 1;
     return;
   }
@@ -6834,7 +6912,7 @@ function blit(spr, x, y, rot, alpha, scale, flip) {
   if (rot) ctx.rotate(rot);
   if (flip) ctx.scale(-1, 1);
   if (alpha !== undefined && alpha !== 1) ctx.globalAlpha = alpha;
-  ctx.drawImage(spr, -s / 2, -s / 2, s, s);
+  ctx.drawImage(spr, -w / 2, -s / 2, w, s);
   ctx.restore();
 }
 
@@ -6843,10 +6921,10 @@ function blit(spr, x, y, rot, alpha, scale, flip) {
 // one pose per body; at a whole gait cycle each it is half the atlas. Black
 // outlines add nothing to themselves, so they stay black, which is what the
 // baked version did too.
-function blitFlash(spr, x, y, flip, scale) {
+function blitFlash(spr, x, y, flip, scale, sx) {
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
-  blit(spr, x, y, 0, 0.55, scale, flip);
+  blit(spr, x, y, 0, 0.55, scale, flip, sx);
   ctx.restore();
 }
 
@@ -6921,6 +6999,7 @@ function gaitPose(i, sw) {
 }
 const GAIT_REST = { swing: 0, lift: 0, liftB: 0, arm: 0, bob: 0, roll: 0, lean: 0 };
 
+
 // Book the ground a body just covered against its stride, and keep a smoothed
 // reading of how hard it is travelling. Pace is what picks walk from run and
 // what tells a body it has stopped: gait alone cannot, because a body held up
@@ -6930,6 +7009,57 @@ function advanceGait(e, x0, y0, dt) {
   e.gait += moved;
   const want = dt > 0 ? Math.min(1.4, (moved / dt) / (e.speed || 1)) : 0;
   e.pace += (want - e.pace) * Math.min(1, dt * 9);
+}
+
+/* Standing still, breathing.
+ *
+ * The gait advances by DISTANCE TRAVELLED, which is what makes a walk read as
+ * walking whether the body is hurrying or trudging -- and it is also why a
+ * body that stops moving stops animating entirely. A room of stopped bodies is
+ * a room of statues, and that is the single largest reason the delve reads as
+ * static.
+ *
+ * Done as a TRANSFORM rather than as posed frames, which is the whole point.
+ * Six forged idle poses per creature was tried first and measured 3.95MB --
+ * a third of the entire sprite budget, on a phone, to say that a body is
+ * alive. It was also worse animation than it looked: a breath driven by one
+ * sine is symmetric, so frames 1 and 2 came out identical, as did 4 and 5, and
+ * six frames of texture held three poses.
+ *
+ * A horizontal swell costs nothing, is continuous rather than stepped, and
+ * needs no vertical compensation -- scaling only in x leaves the feet exactly
+ * where they were planted, which is the property every other animation here
+ * had to work for. It applies to whatever frame a standing body is wearing, so
+ * authored idle art (which the atlas still supports) breathes on top of its
+ * own cycle rather than instead of it.
+ *
+ * The phase is per-body and drawn once, for the same reason newBody starts the
+ * gait somewhere random: a pack breathing in unison looks more mechanical than
+ * a pack not breathing at all.
+ */
+const BREATH_MS = 2600;   // one slow breath
+const BREATH = 0.03;      // and how far the chest moves
+const BREATH_STEP = 64;   // and how often it is worth recomputing
+
+/* Quantised, deliberately.
+ *
+ * A 2.6-second breath has no detail at sixty frames a second, and every change
+ * to the value is a transform rebuilt on every standing body in the room --
+ * which in a delve is most of them. Measured on the Phaser build, updating it
+ * every frame cost enough that the layer profiler could no longer tell layers
+ * apart, reporting a whole 16.7ms display frame against layers that had not
+ * been touched.
+ *
+ * At 64ms the value moves about fifteen times a second, which over a 3% range
+ * is four hundredths of a percent per step -- far below a pixel on anything
+ * this draws -- and the renderers skip the write when it has not moved. Bodies
+ * hold different phases, so their steps fall on different frames rather than
+ * the whole room re-scaling at once.
+ */
+function breathScale(e) {
+  if (e.breathPhase === undefined) e.breathPhase = Math.random() * BREATH_MS;
+  const t = Math.round((performance.now() + e.breathPhase) / BREATH_STEP) * BREATH_STEP;
+  return 1 + BREATH * Math.sin(t / BREATH_MS * TAU);
 }
 
 // Which sprite a body wears this frame. Below GAIT_STILL it is standing.
@@ -6961,7 +7091,7 @@ function forgeEnemy(kind, r, color, P) {
 
   // Bounds sized to the figure (widest extent is the shadow at 1.28u), not a
   // round number: at 340 bodies in a delve the padding is pure fill cost.
-  return forge(u * 2.9, g => {
+  return rimLight(forge(u * 2.9, g => {
     g0 = g;
     g.lineJoin = 'round';
     g.lineCap = 'round';
@@ -7801,7 +7931,7 @@ function forgeEnemy(kind, r, color, P) {
     g.fillStyle = 'rgba(0,0,0,.4)';
     g.beginPath(); g.ellipse(0, u * 1.06, u * 0.66, u * 0.22, 0, 0, TAU); g.fill();
     g.globalCompositeOperation = 'source-over';
-  });
+  }), RIM_HUE, RIM_W, RIM_A);
 }
 
 // Mal-Ghorath's avatar on earth. The compendium gives him two properties that
@@ -7818,7 +7948,7 @@ function forgeDeceiver(kind) {
                                 // still looms without wedging in corridors
   const mirage = kind === 'mirage';
   const lit = (a, b, c) => 'rgb(' + a + ',' + b + ',' + c + ')';
-  return forge(u * 3.0, g => {
+  return rimLight(forge(u * 3.0, g => {
     g.lineJoin = 'round'; g.lineCap = 'round';
 
     // Robe, hanging to nothing
@@ -7889,7 +8019,7 @@ function forgeDeceiver(kind) {
     g.fillStyle = 'rgba(0,0,0,.4)';
     g.beginPath(); g.ellipse(0, u * 1.0, u * 0.6, u * 0.2, 0, 0, TAU); g.fill();
     g.globalCompositeOperation = 'source-over';
-  });
+  }), RIM_HUE, RIM_W, RIM_A);
 }
 
 // The Guided Vanguard. Both fight unhelmeted -- the compendium is explicit
@@ -8112,7 +8242,7 @@ function forgeHero(id, P) {
   const lfA = -u * P.lift, lfB = -u * P.liftB;
   const arA = u * P.arm;
 
-  return forge(u * 4.0, g => {
+  return rimLight(forge(u * 4.0, g => {
     g.lineJoin = 'round'; g.lineCap = 'round';
     g.save();
     g.translate(0, u * P.bob);
@@ -8272,7 +8402,7 @@ function forgeHero(id, P) {
     g.fillStyle = 'rgba(0,0,0,.42)';
     g.beginPath(); g.ellipse(0, u * 1.3, u * 0.84, u * 0.28, 0, 0, TAU); g.fill();
     g.globalCompositeOperation = 'source-over';
-  });
+  }), RIM_HUE, RIM_W, RIM_A);
 }
 
 // Essence: a mote of light bound in a shard.
@@ -10260,9 +10390,12 @@ function drawEnemy(e) {
   const swell = e.fuse > 0 ? 1 - e.fuse / HUSK_FUSE : 0;
   // A dormant body is not walking, but it is not a statue either: it sways
   // where it stands, off the drowse clock it already keeps.
+  // Standing bodies breathe. Not walking ones: the gait already says they are
+  // alive, and a body that swells while it runs reads as short of breath.
+  const bs = (e.pace < GAIT_STILL || e.braced) ? breathScale(e) : 1;
   blit(spr, e.x, e.y, e.awake ? 0 : Math.sin(e.drowse) * 0.035,
-       1, 1 + swell * 0.3, flip);
-  if (e.hitFlash > 0) blitFlash(spr, e.x, e.y, flip);
+       1, 1 + swell * 0.3, flip, bs);
+  if (e.hitFlash > 0) blitFlash(spr, e.x, e.y, flip, 1, bs);
   if (swell > 0) {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
@@ -10358,8 +10491,9 @@ function drawPlayer(t) {
     lunge = (1 - r) * S.lunge * 0.35;
   }
   const bx = p.x + dir * lunge;
-  blit(spr, bx, p.y, 0, 1, 1, p.face < 0);
-  if (hurt) blitFlash(spr, bx, p.y, p.face < 0);
+  const hbs = p.pace < GAIT_STILL ? breathScale(p) : 1;
+  blit(spr, bx, p.y, 0, 1, 1, p.face < 0, hbs);
+  if (hurt) blitFlash(spr, bx, p.y, p.face < 0, 1, hbs);
   drawWeapon(p, bx, dir, ang, f, S);
 
 }

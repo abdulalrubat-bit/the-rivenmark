@@ -59,56 +59,45 @@ that lowers contrast between a body and the floor.
 
 ## What "more alive" means here — and the honest gap
 
-**The game can now animate a standing body, and almost nothing uses it.**
+**Every standing body breathes.** The gait advances by distance travelled, so a
+body that stopped moving used to stop animating and a room of stopped bodies
+was a room of statues. Standing bodies now swell horizontally about 3% over a
+2.6-second cycle, each starting somewhere different in it so a pack does not
+breathe in unison.
 
-It could not before: the gait advances by DISTANCE TRAVELLED, so a body that
-stopped moving stopped animating, and `bestiary/<kind>-rest` — one image — was
-what it held. That is fixed. Drop `bestiary/<kind>-idle-0.png`,
-`-idle-1.png`, … into `art-custom/bestiary/` and that kind breathes on a clock
-whenever it is standing still, at 420ms a frame, each body starting somewhere
-different in the loop so a pack does not breathe in unison. A kind with no
-idle frames still holds its one rest pose, exactly as before, so this arrives
-one creature at a time.
+It is a transform, not artwork, and deliberately so. Six forged idle poses per
+creature was tried first and measured **3.95MB — a third of the whole sprite
+budget** — to say that a body is alive; it also animated worse than it looked,
+because a breath driven by one sine is symmetric and six frames held three
+distinct poses. Scaling only in x costs nothing, is continuous rather than
+stepped, and needs no vertical compensation: the feet stay exactly where they
+were planted. Authored `-idle-` frames still work and breathe on top of their
+own cycle.
 
-The shaman has a ten-frame breath, a three-frame cast and a five-frame death;
-three other kinds have a two-frame pulse. Everything else is still a frozen
-frame, and that is still the single biggest reason the scene reads as static.
+**Every body has a rim light.** A single pale edge along the lit side, built by
+punching the silhouette out of itself offset down-light, so it works on eleven
+hand-painted creatures that share no paths. Measured on the light-facing
+boundary, contrast against the floor went from **1.07:1 to 2.39:1** — and five
+of the eleven had a lit edge *darker than the floor they stand on*, which is to
+say they read as holes rather than bodies. The gorger was the worst at 0.18:1.
 
-Two things the cycle player works out for itself, so nothing has to be
-declared:
+What is still missing, roughly in order of value for effort:
 
-- **How fast to run.** What is held constant is the length of the breath
-  (~2.8s), not the length of a frame. A ten-frame cycle at a two-frame cycle's
-  pace would take seven and a half seconds — not a creature resting, a creature
-  in a coma. Short cycles keep the old 420ms a frame; long ones speed up.
-- **Whether to loop or to go there and back.** A breath is an open path: the
-  body rises from one extreme to the other, and playing it as a ring snaps
-  back once a cycle. A true cycle — a guttering flame, a turning orb — is a
-  ring, and reversing it would be wrong. The packer tells them apart by
-  measuring whether the wrap is bigger than the largest step inside the chain,
-  and prints the ratio it used every time it runs.
-
-What would fix the rest, roughly in order of value for effort:
-
-1. **Idles for the other seven kinds, and longer ones for the three on two
-   frames.** 4–6 frames of breathing, weight shift, a hood stirring. Two
-   frames reads as a pulse; ten reads as breath — the shaman is the proof.
-   `thrall`, `breaker`, `gorger`, `flayer`, `lieutenant`, `mirage`,
-   `deceiver` have none at all, and neither hero does.
-2. **Secondary motion in the run.** Capes, hems, chains and hair that lag
+1. **Material separation.** Metal should read as metal, cloth as cloth, bone as
+   bone. Right now a breaker's plate and a thrall's rags take light the same
+   way.
+2. **Wear.** Chipped edges, rust, stained hems, moss on the low stone. The
+   walls already do this and the bodies do not, so the bodies look newer than
+   the room they are in.
+3. **Secondary motion in the run.** Capes, hems, chains and hair that lag
    behind the body. The current run cycles move the whole figure rigidly.
-3. **A hit pose.** Bodies currently flash white when struck. A one-frame
-   recoil reads far better.
-3b. **Cast poses for the cantor.** `<kind>-cast-0..N` plays across a body's
-   wind-up, driven by how far through it is rather than by a clock — so the
-   last frame lands as the blow does, and a caster wound back up by a null
-   zone visibly loses ground. The shaman has one. The cantor's bolt
-   (`casting`, 0.55s) has the state and no art.
-4. **Death frames for everything else.** `<kind>-die-0..N` plays over 480ms
-   from the killing blow and the body is then gone — gone rather than lying
-   there, because a floor of corpses is a different game. A kind with no die
-   art still vanishes on the frame it dies, which is what every kind did
-   before. Only the shaman has one.
+4. **A hit pose.** Bodies flash white when struck; a one-frame recoil reads far
+   better.
+5. **Cast and death poses.** `<kind>-cast-0..N` plays across a wind-up (driven
+   by how far through it is, so the last frame lands as the blow does) and
+   `<kind>-die-0..N` over 480ms from the killing blow. Both mechanisms work and
+   no forged creature has either. The core already knows — `casting` on the
+   cantor, `chanting` on the shaman.
 
 ## The palette
 

@@ -58,6 +58,10 @@ const CAST_N = 4;
 // over and then go. Three frames: enough for a start, a middle and a last one
 // that has to be held rather than wrapped round.
 const DIE_N = 3;
+// A cycle long enough for the pacing rule to clamp, planted rather than hoped
+// for: it used to measure whatever authored art happened to be in the tree,
+// and reported "nothing to measure" the day that art was dropped.
+const LONG = { kind: 'gorger', n: 10 };
 
 (async () => {
   const forgedDir = path.join(ROOT, 'art', 'bestiary');
@@ -110,7 +114,8 @@ const DIE_N = 3;
     }
     for (let i = 0; i < CAST_N; i++) plant(KIND, 'cast-' + i, 'rest', 0);
     for (let i = 0; i < DIE_N; i++) plant(KIND, 'die-' + i, 'rest', i * 4);
-    ck('authored frames can be dropped in', made.length >= 22,
+    for (let i = 0; i < LONG.n; i++) plant(LONG.kind, 'idle-' + i, 'rest', i);
+    ck('authored frames can be dropped in', made.length >= 32,
        made.length + ' poses at 4x under art-custom/bestiary/');
 
     const packed = execFileSync(process.execPath, [path.join(__dirname, 'pack-atlas.js')],
@@ -247,6 +252,10 @@ const DIE_N = 3;
         // all the day standing still started animating.
         const mine = new RegExp('^bestiary/' + kind + '-');
         const sp = sc.pool.find(s => s.visible && mine.test(s.frame.name));
+        // scaleY, not scaleX: a standing body breathes by widening, so scaleX
+        // carries a few per cent of breath on top of the draw scale and is not
+        // the number this is about. scaleY is the draw scale, untouched.
+
         // "Forged" means the packer recorded no scale for it -- not merely
         // "some other kind". There is real authored art in the tree now, and
         // comparing against it proves nothing about frames nobody replaced.
@@ -259,7 +268,7 @@ const DIE_N = 3;
                                     !mine.test(s.frame.name) &&
                                     sc.frameScale[s.frame.name] === undefined);
         let forgedName = forgedSp && forgedSp.frame.name;
-        let forgedScale = forgedSp && +forgedSp.scaleX.toFixed(4);
+        let forgedScale = forgedSp && +forgedSp.scaleY.toFixed(4);
         if (!forgedName) {
           forgedName = Object.keys(sc.textures.get('art').frames)
                              .find(n => /^bestiary\/.*-rest$/.test(n) &&
@@ -269,8 +278,8 @@ const DIE_N = 3;
         const tex = sp ? window.__game.textures.getFrame('art', sp.frame.name) : null;
         return {
           worn: sp ? sp.frame.name : null,
-          scale: sp ? +sp.scaleX.toFixed(4) : null,
-          shown: sp ? Math.round(sp.displayWidth) : null,
+          scale: sp ? +sp.scaleY.toFixed(4) : null,
+          shown: sp ? Math.round(sp.frame.width * sp.scaleY) : null,
           texW: tex ? tex.width : null,
           forgedScale,
           forgedName,

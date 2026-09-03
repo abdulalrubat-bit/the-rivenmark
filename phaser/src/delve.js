@@ -100,7 +100,7 @@ const STANDING = { pillar: 26, barrel: 12, crate: 11, urn: 10, banner: 16,
           swapHero, swapBlocked, abilityBlock, ABILITIES, ABILITY_BY_ID,
           CHARGE_MAX, TENSION_MAX,
           WORLD, PAL, LEVEL, LEVELS, GAIT_N, GAIT_STEP, GAIT_STILL, lamps,
-          BOLT_WIND, CHANT_WIND,
+          BOLT_WIND, CHANT_WIND, breathScale,
           lowFx,
           WALK_STEP, WALK_PACE, update, startRun, loadStash */
 
@@ -503,7 +503,10 @@ export class Delve extends Phaser.Scene {
   wearFrame(sp, key) {
     if (sp.frame.name !== key && this.textures.getFrame('art', key)) sp.setFrame(key);
     const want = this.artScale(sp.frame.name);
-    if (sp.scaleX !== want) sp.setScale(want);
+    // Guarded on scaleY, not scaleX: the breath moves scaleX every frame a
+    // body stands still, so testing that one would rebuild the scale on every
+    // body on every frame and then flatten the breath doing it.
+    if (sp.scaleY !== want) sp.setScale(want);
   }
 
   /* Every numbered cycle in the atlas, and how many frames long it is.
@@ -815,6 +818,19 @@ export class Delve extends Phaser.Scene {
       s.setVisible(true).setPosition(e.x, e.y).setDepth(e.y);
       this.wearFrame(s, key);
       s.setFlipX(e.face < 0);
+      /* Standing bodies breathe; walking ones do not need to be told they are
+       * alive. Only x, so the feet stay where they were planted.
+       *
+       * Written only when it CHANGES. Assigning scaleX unconditionally dirties
+       * the transform of every body on every frame -- a hundred and thirty of
+       * them -- for the majority that are walking and whose breath is exactly
+       * 1. Measured: it cost enough that the layer profiler stopped being able
+       * to tell layers apart, reporting a whole 16.7ms display frame against
+       * layers that had not changed.
+       */
+      const bx = s.scaleY * ((e.hp > 0 && (e.pace < GAIT_STILL || e.braced))
+                             ? breathScale(e) : 1);
+      if (s.scaleX !== bx) s.scaleX = bx;
       // Struck bodies flash, calcifying ones sit under a shell of light.
       s.setTint(e.hitFlash > 0 ? 0xffffff : (e.calcify > 0 ? 0x9fd8e8 : 0xffffff));
       s.setAlpha(e.calcify > 0 ? 0.85 : 1);
@@ -825,6 +841,9 @@ export class Delve extends Phaser.Scene {
     this.wearFrame(this.hero, hk);
     this.hero.setPosition(player.x, player.y).setFlipX(player.face < 0)
         .setDepth(player.y);
+    const hx = this.hero.scaleY *
+        (player.pace < GAIT_STILL ? breathScale(player) : 1);
+    if (this.hero.scaleX !== hx) this.hero.scaleX = hx;
     this.heroShadow.setPosition(player.x + LIGHT.x * LIGHT.body,
                                 player.y + LIGHT.y * LIGHT.body + 13 * 0.42);
 
