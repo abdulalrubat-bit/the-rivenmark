@@ -12,7 +12,7 @@
  * the game lives inside a function named draw, forge or paint, and those are
  * dropped here.
  *
- * 501 statements kept; 15 drawing functions and 47 page-bound statements dropped.
+ * 504 statements kept; 15 drawing functions and 47 page-bound statements dropped.
  * Re-run `npm run core` after changing ../index.html.
  */
 /* =============================================================================
@@ -6249,6 +6249,51 @@ function breathScale(e) {
   if (e.breathPhase === undefined) e.breathPhase = Math.random() * BREATH_MS;
   const t = Math.round((performance.now() + e.breathPhase) / BREATH_STEP) * BREATH_STEP;
   return 1 + BREATH * Math.sin(t / BREATH_MS * TAU);
+}
+
+/* Falling over.
+ *
+ * A body used to stop being drawn on the frame its hp reached zero, which is
+ * the cheapest possible death and reads as one: a thrall does not die, it is
+ * deleted. The core never removes a dead body from `enemies` -- everything
+ * simply skips hp <= 0 -- so all of this is presentation and the simulation
+ * never learns it happened.
+ *
+ * A TRANSFORM, not frames, for the reason the breath is: posed art for this
+ * costs texture per creature and there are eleven of them, and a topple is a
+ * rigid rotation, which is exactly what a transform does well.
+ *
+ * PIVOTED ON THE FEET. A body rotated about the middle of its sprite swings
+ * its legs out from under it and looks thrown rather than felled. Both
+ * renderers turn about the sprite centre, so the compensation is done here
+ * instead: rotating the foot vector (0, f) by rot moves the foot to
+ * (-f sin rot, f cos rot), and offsetting the whole sprite by the difference
+ * puts it back where it fell. Shared rather than written twice, because the
+ * two builds have to agree on it exactly.
+ *
+ * The fade is late and quick -- a body that starts dissolving as it begins to
+ * fall reads as a summon being dismissed, not as something being killed.
+ */
+const DIE_MS = 480;
+const DIE_TILT = 1.15;     // radians it comes to rest at, a bit past sixty degrees
+function deathPose(e) {
+  if (e.hp > 0) {
+    if (e.dieAt !== undefined) e.dieAt = undefined;
+    return null;
+  }
+  const now = performance.now();
+  if (e.dieAt === undefined) e.dieAt = now;
+  const t = (now - e.dieAt) / DIE_MS;
+  if (t >= 1) return { done: true };
+  const ease = 1 - (1 - t) * (1 - t);            // fast off the mark, settling
+  const rot = ease * DIE_TILT * (e.face < 0 ? -1 : 1);
+  const f = (e.r || 13) * 1.10;                  // the feet, below the centre
+  return {
+    done: false, t, rot,
+    dx: f * Math.sin(rot),
+    dy: f * (1 - Math.cos(rot)) + ease * (e.r || 13) * 0.12,
+    alpha: t < 0.55 ? 1 : 1 - (t - 0.55) / 0.45
+  };
 }
 
 // Which sprite a body wears this frame. Below GAIT_STILL it is standing.

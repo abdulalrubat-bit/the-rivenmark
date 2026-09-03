@@ -100,7 +100,7 @@ const STANDING = { pillar: 26, barrel: 12, crate: 11, urn: 10, banner: 16,
           swapHero, swapBlocked, abilityBlock, ABILITIES, ABILITY_BY_ID,
           CHARGE_MAX, TENSION_MAX,
           WORLD, PAL, LEVEL, LEVELS, GAIT_N, GAIT_STEP, GAIT_STILL, lamps,
-          BOLT_WIND, CHANT_WIND, breathScale,
+          BOLT_WIND, CHANT_WIND, breathScale, deathPose, DIE_MS,
           lowFx,
           WALK_STEP, WALK_PACE, update, startRun, loadStash */
 
@@ -557,14 +557,9 @@ export class Delve extends Phaser.Scene {
    * sees that within a frame. Cleared again if the body somehow comes back,
    * so a revived body does not inherit a stale clock.
    */
-  showBody(e, time) {
-    if (e.hp > 0) {
-      if (e.dieAt !== undefined) e.dieAt = undefined;
-      return true;
-    }
-    if (!this.cycleN['bestiary/' + e.kind + '-die']) return false;
-    if (e.dieAt === undefined) e.dieAt = time;
-    return time - e.dieAt < DIE_MS;
+  showBody(e) {
+    const d = deathPose(e);
+    return !d || !d.done;
   }
 
   /* How far through a wind-up a body is: 0 as it starts, 1 as the blow lands,
@@ -628,11 +623,14 @@ export class Delve extends Phaser.Scene {
 
     // Falling over outranks everything else a body could be doing, including
     // the cast it was halfway through when it was killed.
+    /* Dead: authored frames if the kind has them, otherwise the rest pose,
+     * which the draw loop then topples. Every kind falls over now; die art
+     * only changes what it falls over WITH. */
     if (e.hp <= 0) {
       const dn = this.cycleN[base + '-die'];
       if (!dn) return base + '-rest';
-      const t = (time === undefined ? this.time.now : time) - (e.dieAt || 0);
-      return base + '-die-' + Math.min(dn - 1, ((t / DIE_MS) * dn) | 0);
+      const d = deathPose(e);
+      return base + '-die-' + Math.min(dn - 1, (((d ? d.t : 1)) * dn) | 0);
     }
 
     // A calcifying body is stone under a shell of light. Stone does not
@@ -792,7 +790,7 @@ export class Delve extends Phaser.Scene {
     // assumes add() appends to the very array getChildren() handed back -- and
     // when it does not, the loop never terminates and the page simply stops,
     // which is a hang with no error and nothing in the log.
-    const live = this.stepping ? enemies.filter(e => this.showBody(e, time)) : [];
+    const live = this.stepping ? enemies.filter(e => this.showBody(e)) : [];
     const pool = this.pool;
     while (pool.length < live.length) {
       const s = this.add.sprite(0, 0, 'art', 'bestiary/thrall-rest');
@@ -810,6 +808,12 @@ export class Delve extends Phaser.Scene {
         .setDisplaySize(r * 2.05, r * 1.05)
         .setPosition(e.x + LIGHT.x * LIGHT.body,
                      e.y + LIGHT.y * LIGHT.body + r * 0.42);
+      // A shadow stays on the ground while the body above it falls over, but
+      // it goes when the body goes -- a shadow outliving what cast it is worse
+      // than no shadow at all.
+      const sd = deathPose(e);
+      const sa = sd ? sd.alpha : 1;
+      if (sh.alpha !== sa) sh.setAlpha(sa);
     }
     for (let i = 0; i < pool.length; i++) {
       const s = pool[i], e = live[i];
@@ -831,9 +835,20 @@ export class Delve extends Phaser.Scene {
       const bx = s.scaleY * ((e.hp > 0 && (e.pace < GAIT_STILL || e.braced))
                              ? breathScale(e) : 1);
       if (s.scaleX !== bx) s.scaleX = bx;
+
+      /* Falling over. The offsets pivot the turn onto the feet -- Phaser turns
+       * a sprite about its origin, which is its centre, and a body rotated
+       * about its middle swings its legs out from under it and looks thrown
+       * rather than felled. deathPose works the compensation out so both
+       * builds do it the same way. */
+      const d = deathPose(e);
+      const rot = d ? d.rot : 0;
+      if (s.rotation !== rot) s.setRotation(rot);       // guarded: see scaleX
+      const al = d ? d.alpha : (e.calcify > 0 ? 0.85 : 1);
+      if (s.alpha !== al) s.setAlpha(al);
+      if (d) s.setPosition(e.x + d.dx, e.y + d.dy);
       // Struck bodies flash, calcifying ones sit under a shell of light.
       s.setTint(e.hitFlash > 0 ? 0xffffff : (e.calcify > 0 ? 0x9fd8e8 : 0xffffff));
-      s.setAlpha(e.calcify > 0 ? 0.85 : 1);
     }
 
     if (!this.stepping) return;

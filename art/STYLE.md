@@ -98,6 +98,19 @@ own shadow.
 It costs 190ms at boot (65ms → 257ms for every body and hero), paid once when
 the pixel ratio is settled, not per run and not per frame.
 
+**Every killed body falls over.** A body used to stop being drawn on the frame
+its hp reached zero, which is the cheapest possible death and reads as one: a
+thrall did not die, it was deleted. It now topples over 480ms — pivoted on the
+FEET, because a body turned about the middle of its sprite swings its legs out
+from under it and looks thrown rather than felled — holds its colour until it
+is most of the way down, and is then gone. Gone rather than lying there: a
+floor of corpses is a different game and a different culling cost.
+
+A transform again, for the same reason the breath is one, and it needs no art
+at all — so every kind gets it, including the Deceiver and his mirages, who
+are forged by a different function entirely. `<kind>-die-0..N` still works and
+only changes what a body falls over *with*.
+
 What is still missing, roughly in order of value for effort:
 
 1. **Wear.** Chipped edges, rust, stained hems, moss on the low stone. The
@@ -108,12 +121,11 @@ What is still missing, roughly in order of value for effort:
 2. **Secondary motion in the run.** Capes, hems, chains and hair that lag
    behind the body. The current run cycles move the whole figure rigidly.
 4. **A hit pose.** Bodies flash white when struck; a one-frame recoil reads far
-   better.
-5. **Cast and death poses.** `<kind>-cast-0..N` plays across a wind-up (driven
-   by how far through it is, so the last frame lands as the blow does) and
-   `<kind>-die-0..N` over 480ms from the killing blow. Both mechanisms work and
-   no forged creature has either. The core already knows — `casting` on the
-   cantor, `chanting` on the shaman.
+   better. (Being *killed* is handled — see below.)
+5. **A cast pose.** `<kind>-cast-0..N` plays across a wind-up, driven by how
+   far through it is rather than by a clock, so the last frame lands as the
+   blow does. The mechanism works and no forged creature has one; the core
+   already knows — `casting` on the cantor, `chanting` on the shaman.
 
 ## The palette
 

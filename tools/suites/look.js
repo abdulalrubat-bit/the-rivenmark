@@ -101,6 +101,63 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
                                    R.out[k].lit.box).join('; ')
      : kinds.length + ' bounding boxes identical lit and unlit');
 
+  /* And a killed body falls over rather than being deleted.
+   *
+   * The two builds share deathPose, so this is the canvas side of the same
+   * check the Phaser suite makes: the fall is a rigid rotation pivoted onto
+   * the feet, and the compensation that puts the pivot there is the part
+   * worth asserting -- a body turned about the middle of its sprite swings its
+   * legs out from under it and looks thrown rather than felled.
+   */
+  const D = await p.evaluate(() => {
+    const e = { hp: 0, r: 20, face: 1 };
+    const at = f => { e.dieAt = performance.now() - DIE_MS * f; return deathPose(e); };
+    const walk = [0, 0.25, 0.5, 0.75, 0.99].map(f => {
+      const d = at(f);
+      // Guarded rather than trusted: a deathPose that reports `done` partway
+      // through the fall is exactly the regression this is here to catch, and
+      // reading .rot off it would throw -- which aborts the run and diagnoses
+      // nothing instead of failing the one check that is wrong.
+      if (!d || d.done) return { over: true, at: f };
+      // Where the FEET end up. Rotating (0, fo) by rot puts them at
+      // (-fo sin, fo cos); the offsets should bring that back to (0, fo).
+      const fo = e.r * 1.10;
+      return { rot: +d.rot.toFixed(3), a: +d.alpha.toFixed(2),
+               footX: +(d.dx - fo * Math.sin(d.rot)).toFixed(2),
+               footY: +(d.dy + fo * Math.cos(d.rot) - fo).toFixed(2) };
+    });
+    e.dieAt = performance.now() - DIE_MS * 1.2;
+    const over = deathPose(e);
+    e.hp = 5;
+    const alive = deathPose(e);
+    // Which way it goes should follow which way it was facing.
+    const left = { hp: 0, r: 20, face: -1, dieAt: performance.now() - DIE_MS * 0.5 };
+    const lp = deathPose(left);
+    return { walk, done: over.done, alive, leftRot: lp && lp.rot };
+  });
+
+  const early = D.walk.filter(w => w.over);
+  ck('a killed body falls over', early.length === 0 && D.walk[0].rot === 0 &&
+     D.walk.every((w, i) => i === 0 || w.rot > D.walk[i-1].rot) &&
+     D.walk[4].rot > 1,
+     early.length ? 'already over ' + early.length + ' of 5 samples in, first at ' +
+                    early[0].at + ' of the fall'
+                  : 'tilt: ' + D.walk.map(w => w.rot).join(' '));
+  // Sideways drift must be exactly nothing. Downward drift must be exactly the
+  // sink deathPose adds on purpose (ease * r * 0.12, so 2.4 at r 20) and not a
+  // pixel more -- a loose bound here would pass a pivot that was merely close.
+  ck('and turns on its feet, not its middle',
+     early.length === 0 && D.walk.every(w => Math.abs(w.footX) < 0.01 && w.footY >= 0 && w.footY <= 2.41),
+     'feet drift across the fall: ' +
+       D.walk.map(w => w.over ? 'over' : w.footX + '/' + w.footY).join('  '));
+  ck('and falls the way it was facing',
+     D.leftRot < 0 && !D.walk[2].over && Math.abs(D.leftRot + D.walk[2].rot) < 0.01,
+     'facing left tilts ' + (D.leftRot === undefined ? 'nothing' : D.leftRot.toFixed(3)) +
+     ', facing right ' + D.walk[2].rot);
+  ck('and is gone once it lands', D.done === true, 'done: ' + D.done);
+  ck('while a living body is not falling over at all',
+     D.alive === null, 'deathPose of a live body: ' + JSON.stringify(D.alive));
+
   ck('no console errors', errs.length===0, errs.slice(0,3).join(' | '));
   console.log('\nPASS '+pass.length+'\n  '+pass.join('\n  '));
   console.log('\nFAIL '+fail.length+(fail.length?'\n  '+fail.join('\n  '):''));

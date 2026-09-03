@@ -401,22 +401,34 @@ const LONG = { kind: 'gorger', n: 10 };
          * notices, times the fall itself, and then drops the body. Sampled
          * through the whole fall and past the end of it.
          */
+        /* Dying, watched from the killing blow.
+         *
+         * deathPose runs off the wall clock rather than a passed-in time, so
+         * the walk is sampled by moving the body's OWN start time backwards --
+         * which is what the renderer sees when a body has been dead for that
+         * long, and avoids waiting half a second in a test.
+         */
         const dead = body(kind);
         dead.hp = 0;
+        sc.showBody(dead);                       // stamps dieAt
+        const born = dead.dieAt;
         const dieWalk = [], dieShown = [];
         for (let i = 0; i <= 6; i++) {
-          const t = 480 * (i / 6) + (i === 6 ? 1 : 0);
-          // showBody is what stamps the clock and what decides it is over.
-          dieShown.push(sc.showBody(dead, (dead.dieAt || 0) + t));
-          dieWalk.push(sc.bodyFrame(dead, (dead.dieAt || 0) + t));
+          dead.dieAt = born - 480 * (i / 6) - (i === 6 ? 2 : 0);
+          const d = deathPose(dead);
+          dieShown.push(sc.showBody(dead));
+          dieWalk.push(d && !d.done
+            ? [+d.rot.toFixed(3), +d.alpha.toFixed(2)] : null);
         }
-        // A kind with no die art keeps vanishing on the frame it dies.
+        // A kind with no die ART still falls over -- the topple is a
+        // transform, so it needs nothing drawn for it.
         const plain = body('nosuchkind');
         plain.hp = 0;
-        const plainShown = sc.showBody(plain, 0);
+        const plainShown = sc.showBody(plain);
+        const plainFrame = sc.bodyFrame(plain, 0);
         // And a body that comes back does not inherit a stale clock.
         dead.hp = 10;
-        const revived = sc.showBody(dead, 1e9);
+        const revived = sc.showBody(dead);
         const restKey = 'bestiary/' + kind + '-rest';
         const idleKey = 'bestiary/' + kind + '-idle-0';
         const wF = k => { const f = sc.textures.getFrame('art', k); return f ? f.width : 0; };
@@ -429,8 +441,9 @@ const LONG = { kind: 'gorger', n: 10 };
           notCasting: notCasting.replace('bestiary/' + kind + '-', ''),
           castN: sc.cycleN['bestiary/' + kind + '-cast'] || 0,
           dieN: sc.cycleN['bestiary/' + kind + '-die'] || 0,
-          dieWalk: dieWalk.map(n => n.replace('bestiary/' + kind + '-', '')),
-          dieShown, plainShown, revived, revivedClock: dead.dieAt === undefined,
+          dieWalk, dieShown, plainShown, revived,
+          plainFrame: plainFrame.replace('bestiary/', ''),
+          revivedClock: dead.dieAt === undefined,
           longBase, longPeriod,
           longMs: mid && mid.length ? mid[mid.length >> 1] : null,
           idle: across(body(kind)),
@@ -482,16 +495,27 @@ const LONG = { kind: 'gorger', n: 10 };
       ck('while a body that is not casting is back to standing',
          /^idle-\d+$/.test(D.notCasting), D.notCasting);
 
+      // It topples, monotonically, and comes to rest short of flat.
+      const rots = D.dieWalk.filter(Boolean).map(w => w[0]);
       ck('a body falls over instead of being deleted',
-         D.dieN === 3 && D.dieWalk.slice(0, 6).join(' ') === 'die-0 die-0 die-1 die-1 die-2 die-2',
-         D.dieN + ' frames: ' + D.dieWalk.join(' '));
+         rots.length >= 6 && rots[0] === 0 &&
+         rots.every((r, i) => i === 0 || r > rots[i - 1]) &&
+         rots[rots.length - 1] > 0.9 && rots[rots.length - 1] <= 1.15,
+         'tilt over the fall: ' + rots.join(' '));
+      // And fades late: a body dissolving as it starts to fall reads as a
+      // summon being dismissed, not as something being killed.
+      const alphas = D.dieWalk.filter(Boolean).map(w => w[1]);
+      ck('and holds its colour until it is most of the way down',
+         alphas[0] === 1 && alphas[2] === 1 && alphas[alphas.length - 1] < 0.5,
+         'alpha over the fall: ' + alphas.join(' '));
       // Drawn for exactly as long as the fall, then gone -- a floor of corpses
       // is a different game.
       ck('and is drawn until it lands, then not after',
          D.dieShown.slice(0, 6).every(Boolean) && D.dieShown[6] === false,
          'shown at each sample: ' + D.dieShown.join(' '));
-      ck('while a kind with no death art still vanishes on the blow',
-         D.plainShown === false, 'shown: ' + D.plainShown);
+      ck('while a kind with no death art falls over all the same',
+         D.plainShown === true && /-rest$/.test(D.plainFrame),
+         'shown ' + D.plainShown + ' wearing ' + D.plainFrame);
       ck('and a body brought back does not carry a stale death clock',
          D.revived === true && D.revivedClock,
          'shown ' + D.revived + ', clock cleared ' + D.revivedClock);
