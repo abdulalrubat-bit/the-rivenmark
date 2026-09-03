@@ -117,6 +117,11 @@ const CORE_RANGES = [
 const RENDER_INCLUDE = new Set(['advanceGait', 'GAIT_N', 'GAIT_STEP',
                                 'WALK_STEP', 'WALK_PACE', 'GAIT_STILL',
                                 'indexBreakables',
+  // The breath a standing body takes. Presentational, but it belongs on THIS
+  // side of the seam for the same reason the gait constants do: both builds
+  // have to agree about it exactly, and the way they agree is by sharing it
+  // rather than by each keeping a copy that drifts.
+                                'BREATH_MS', 'BREATH', 'BREATH_STEP', 'breathScale',
   // Game state that happens to be declared under RENDERING. LEVEL is read in
   // forty places -- it is which delve you are in -- and REGION in seven. The
   // strike forms and the recovery time are rules of the swing. lowFx is an

@@ -12,7 +12,7 @@
  * the game lives inside a function named draw, forge or paint, and those are
  * dropped here.
  *
- * 494 statements kept; 15 drawing functions and 47 page-bound statements dropped.
+ * 499 statements kept; 15 drawing functions and 47 page-bound statements dropped.
  * Re-run `npm run core` after changing ../index.html.
  */
 /* =============================================================================
@@ -91,6 +91,16 @@ const MAX_DT        = 0.05;  // clamp after tab-switches / long frames
 // shadow in the game is derived from it, so masonry, bodies and loot all agree
 // about where the light is -- which is most of what sells depth in a flat view.
 const LIGHT = { x: 0.62, y: 0.78, wall: 11, body: 5 };
+
+/* The rim: what colour, how wide, how strong.
+ *
+ * Pale and barely warm rather than a colour of its own -- it has to read as
+ * LIGHT falling on eleven creatures painted in greens, purples, golds and
+ * bone, and a rim with an opinion tints every one of them towards itself.
+ * Width is in world units, so it is the same apparent thickness on a thrall
+ * as on the avatar rather than scaling with the body.
+ */
+const RIM_HUE = 'rgb(228,220,196)', RIM_W = 0.85, RIM_A = 0.5;
 const HUD_H           = 78;   // canvas UI clears the HUD panel by this much
 // Holding the gate is the delve's second act, and the only part of a run that
 // can be stretched: a delve itself is bounded at roughly two minutes because a
@@ -6173,6 +6183,7 @@ const GAIT_STEP = 21;        // world units of travel per pose at a run
 const WALK_STEP = 13;        // and at a walk, which is a shorter, quicker one
 const WALK_PACE = 0.62;      // above this fraction of top speed, he is running
 
+
 // Book the ground a body just covered against its stride, and keep a smoothed
 // reading of how hard it is travelling. Pace is what picks walk from run and
 // what tells a body it has stopped: gait alone cannot, because a body held up
@@ -6182,6 +6193,57 @@ function advanceGait(e, x0, y0, dt) {
   e.gait += moved;
   const want = dt > 0 ? Math.min(1.4, (moved / dt) / (e.speed || 1)) : 0;
   e.pace += (want - e.pace) * Math.min(1, dt * 9);
+}
+
+/* Standing still, breathing.
+ *
+ * The gait advances by DISTANCE TRAVELLED, which is what makes a walk read as
+ * walking whether the body is hurrying or trudging -- and it is also why a
+ * body that stops moving stops animating entirely. A room of stopped bodies is
+ * a room of statues, and that is the single largest reason the delve reads as
+ * static.
+ *
+ * Done as a TRANSFORM rather than as posed frames, which is the whole point.
+ * Six forged idle poses per creature was tried first and measured 3.95MB --
+ * a third of the entire sprite budget, on a phone, to say that a body is
+ * alive. It was also worse animation than it looked: a breath driven by one
+ * sine is symmetric, so frames 1 and 2 came out identical, as did 4 and 5, and
+ * six frames of texture held three poses.
+ *
+ * A horizontal swell costs nothing, is continuous rather than stepped, and
+ * needs no vertical compensation -- scaling only in x leaves the feet exactly
+ * where they were planted, which is the property every other animation here
+ * had to work for. It applies to whatever frame a standing body is wearing, so
+ * authored idle art (which the atlas still supports) breathes on top of its
+ * own cycle rather than instead of it.
+ *
+ * The phase is per-body and drawn once, for the same reason newBody starts the
+ * gait somewhere random: a pack breathing in unison looks more mechanical than
+ * a pack not breathing at all.
+ */
+const BREATH_MS = 2600;   // one slow breath
+const BREATH = 0.03;      // and how far the chest moves
+const BREATH_STEP = 64;   // and how often it is worth recomputing
+
+/* Quantised, deliberately.
+ *
+ * A 2.6-second breath has no detail at sixty frames a second, and every change
+ * to the value is a transform rebuilt on every standing body in the room --
+ * which in a delve is most of them. Measured on the Phaser build, updating it
+ * every frame cost enough that the layer profiler could no longer tell layers
+ * apart, reporting a whole 16.7ms display frame against layers that had not
+ * been touched.
+ *
+ * At 64ms the value moves about fifteen times a second, which over a 3% range
+ * is four hundredths of a percent per step -- far below a pixel on anything
+ * this draws -- and the renderers skip the write when it has not moved. Bodies
+ * hold different phases, so their steps fall on different frames rather than
+ * the whole room re-scaling at once.
+ */
+function breathScale(e) {
+  if (e.breathPhase === undefined) e.breathPhase = Math.random() * BREATH_MS;
+  const t = Math.round((performance.now() + e.breathPhase) / BREATH_STEP) * BREATH_STEP;
+  return 1 + BREATH * Math.sin(t / BREATH_MS * TAU);
 }
 
 // Which sprite a body wears this frame. Below GAIT_STILL it is standing.

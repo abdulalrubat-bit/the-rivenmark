@@ -149,6 +149,42 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   });
   ck('a walking body cycles its gait', !gait.none && gait.moving.length >= 4,
      gait.none ? 'no thrall found' : gait.moving.length + ' distinct frames over 720 units');
+  /* And breathes while it stands.
+   *
+   * Done as a horizontal scale rather than as posed frames: six forged idle
+   * poses per creature measured 3.95MB, a third of the whole sprite budget,
+   * to say that a body is alive. So the thing to assert is that scaleX moves
+   * over time while scaleY does not -- a body that grew in both would be
+   * getting bigger, not breathing, and its feet would leave the floor.
+   */
+  const breath = await p.evaluate(async () => {
+    const sc = window.__game.scene.getScene('delve');
+    const e = enemies.find(b => b.hp > 0 && b.kind === 'thrall');
+    if (!e) return { none: true };
+    e.pace = 0; e.braced = false;
+    const xs = [], ys = [];
+    for (let i = 0; i < 30; i++) {
+      await new Promise(r => requestAnimationFrame(r));
+      const sp = sc.pool.find(s => s.visible && /-rest$/.test(s.frame.name));
+      if (sp) { xs.push(+sp.scaleX.toFixed(5)); ys.push(+sp.scaleY.toFixed(5)); }
+    }
+    const span = a => Math.max(...a) - Math.min(...a);
+    // Two bodies started at different points in the cycle, or a pack breathes
+    // in unison and reads as one machine.
+    const two = enemies.filter(b => b.hp > 0).slice(0, 12).map(b => b.breathPhase);
+    return { n: xs.length, dx: span(xs), dy: span(ys), mid: ys[0],
+             phases: new Set(two.filter(v => v !== undefined)).size,
+             bodies: two.length };
+  });
+  ck('and breathes while it stands',
+     !breath.none && breath.n > 5 && breath.dx > 0.0005 && breath.dy < 1e-6,
+     breath.none ? 'no thrall' : 'scaleX moved ' + breath.dx.toFixed(4) +
+       ' over ' + breath.n + ' frames, scaleY ' + breath.dy.toFixed(6) +
+       ' (fixed at ' + breath.mid + ')');
+  ck('and not in unison with the body beside it',
+     !breath.none && breath.phases > 1,
+     breath.none ? '' : breath.phases + ' distinct phases across ' + breath.bodies + ' bodies');
+
   ck('and a standing one stops walking', !gait.none && !/-run-\d+$/.test(gait.still) &&
      gait.still === gait.again,
      gait.none ? '' : 'settled on ' + gait.still + ' at pace ' + gait.pace +
