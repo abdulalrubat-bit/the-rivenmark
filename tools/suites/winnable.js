@@ -204,6 +204,42 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
       run.banner = 0;
       const hp0 = Math.round(player.maxHp), dmg0 = +player.damage.toFixed(1);
 
+      /* Where the damage came from, attributed by CALLER.
+       *
+       * The reason this is here and not in a scratch file: the note that
+       * started all of it -- "the attack button feels meaningless" -- is a
+       * question about the SHARE of a delve's damage the buttons carry, and
+       * the only harness that plays a whole delve is this one. Attribution by
+       * the size of the number does not work: comparing against player.damage
+       * credited the kit with husk bursts and calcify shatters, and a bot that
+       * pressed nothing still scored two thousand "kit" damage.
+       *
+       * updateArcs is the crescent, which is the auto-attack. castAbility is
+       * the bar. Everything else -- a husk going off, a body shattering out of
+       * its calcify, a hazard -- is the delve itself.
+       */
+      const bill = { auto: 0, kit: 0, delve: 0 };
+      if (!window.__billed) {
+        window.__billed = 1;
+        const tag = (name, src) => {
+          const of = window[name];
+          window[name] = function () {
+            const prev = window.__src; window.__src = src;
+            try { return of.apply(this, arguments); } finally { window.__src = prev; }
+          };
+        };
+        tag('updateArcs', 'auto');
+        tag('castAbility', 'kit');
+        const dmgOf = window.damageEnemy;
+        window.damageEnemy = function (e, dmg, fx, fy) {
+          const before = e.hp;
+          const r = dmgOf.apply(this, arguments);
+          if (window.__bill) window.__bill[window.__src || 'delve'] += Math.max(0, before - e.hp);
+          return r;
+        };
+      }
+      window.__bill = bill;
+
       const DT = 1 / 30, CAP = 30 * 60 * 12;         // twelve sim-minutes
       let steps = 0, repath = 0, target = null, mode = '';
       const shun = new Set();
@@ -283,7 +319,9 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
       return { out: state === 'play' ? 'ran out of time' : (player.hp > 0 ? 'extracted' : 'slain'),
                mins: +(steps * DT / 60).toFixed(1), tech: run.tech, quota: LEVEL.quota,
                bossDown: !!run.bossDown, kills: run.kills,
-               power: power0, want: L.power, hp0, dmg0 };
+               power: power0, want: L.power, hp0, dmg0,
+               auto: Math.round(bill.auto), kit: Math.round(bill.kit),
+               delveDmg: Math.round(bill.delve) };
     };
   });
 
@@ -296,14 +334,22 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
     const quota = rs.filter(r => r.tech >= r.quota).length;
     const stuck = rs.filter(r => r.out === 'ran out of time').length;
     const med = a => a.slice().sort((x, y) => x - y)[a.length >> 1];
+    const sum = k => rs.reduce((a, r) => a + r[k], 0);
+    const auto = sum('auto'), kit = sum('kit'), dlv = sum('delveDmg');
+    const all = Math.max(1, auto + kit + dlv);
     curve.push({ idx, won, quota, stuck, n: TRIES,
+                 autoPct: Math.round(100 * auto / all),
+                 kitPct: Math.round(100 * kit / all),
+                 delvePct: Math.round(100 * dlv / all),
                  slag: med(rs.map(r => r.tech)), need: rs[0].quota,
                  mins: med(rs.map(r => r.mins)),
                  power: rs[0].power, want: rs[0].want });
   }
   const say = c => 'rung ' + String(c.idx).padStart(2) + ' (power ' + c.power + ')  ' +
     c.won + '/' + c.n + ' out, quota met ' + c.quota + '/' + c.n +
-    ', median ' + c.slag + '/' + c.need + ' slag in ' + c.mins + ' min';
+    ', median ' + c.slag + '/' + c.need + ' slag in ' + c.mins + ' min' +
+    '\n              damage: ' + c.autoPct + '% the swing, ' + c.kitPct +
+    '% the bar, ' + c.delvePct + '% the delve itself';
   const tot = curve.reduce((a, c) => a + c.won, 0), att = curve.length * TRIES;
   console.log('\n   THE REFERENCE PLAYER, ' + TRIES + ' delves a rung.');
   console.log('   An instrument, not a tripwire: the bot does not kite and does');
@@ -358,6 +404,21 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
   ck('the ladder as a whole is neither a wall nor a walk',
      tot > att * 0.08 && tot < att * 0.85,
      tot + ' of ' + att + ' delves ended at the gate');
+  /* THE BAR'S SHARE. The note that started this was "the attack button feels
+   * meaningless", and this is the number behind it: what fraction of a delve's
+   * damage the six buttons actually carry against the swing that happens on
+   * its own. Reported per rung above; guarded here on the whole sample, since
+   * a bar worth pressing is a property of the design and not of one rung.
+   *
+   * The bar is NOT asked to beat the swing -- an auto-attack that does nothing
+   * is a different game -- only to be a real share of the fight. */
+  const barShare = Math.round(curve.reduce((a, c) => a + c.kitPct, 0) / curve.length);
+  const swingShare = Math.round(curve.reduce((a, c) => a + c.autoPct, 0) / curve.length);
+  // A third is the design target, and it was a sixth before the swing was cut
+  // to a share of the ward. Twenty-five is the floor: below it the bar has
+  // drifted back to being something you press between the parts that matter.
+  ck('the bar is worth pressing', barShare >= 25,
+     barShare + '% of the damage against the swing’s ' + swingShare + '%');
   ck('and no rung hangs the run', curve.every(c => c.stuck === 0),
      curve.filter(c => c.stuck).map(c => 'rung ' + c.idx + ' ' + c.stuck).join(' ') || 'none timed out');
 

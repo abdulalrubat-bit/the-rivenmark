@@ -12,7 +12,7 @@
  * the game lives inside a function named draw, forge or paint, and those are
  * dropped here.
  *
- * 511 statements kept; 15 drawing functions and 47 page-bound statements dropped.
+ * 512 statements kept; 15 drawing functions and 47 page-bound statements dropped.
  * Re-run `npm run core` after changing ../index.html.
  */
 /* =============================================================================
@@ -142,10 +142,27 @@ const PORTAL_R        = 62;
 // sweep mows a broader swathe rather than punching through one more body.
 const BASE_PLAYER = {
   r: 14, maxHp: 100, speed: 205,
-  damage: 22, fireDelay: 0.50, range: 186, arcSpeed: 1550,
+  damage: 22, fireDelay: 0.56, range: 186, arcSpeed: 1550,
   sweep: 28, shots: 1, magnet: 118, regen: 0,
   iframe: 0.45
 };
+
+/* WHAT THE SWING IS WORTH ON ITS OWN.
+ *
+ * The blade swings by itself -- it always has, and on a game played with one
+ * thumb it has to. What it should not do is win the fight by itself, and it
+ * was: measured over ninety-six whole delves, seven tenths of every point of
+ * damage came off the automatic swing and a sixth off the six buttons, and
+ * the bar's share FELL with depth, from 22% on the first rung to 10% on the
+ * forty-fourth. The deeper you went the more the game played itself.
+ *
+ * So the crescent carries a share of the ward rather than all of it, and it
+ * comes round slower. `damage` still means what it always meant -- it is what
+ * the kit multiplies, so a ring that bites deeper bites deeper everywhere --
+ * and this is the one place the automatic swing is written down as less than
+ * the whole of you.
+ */
+const AUTO_BITE = 0.62;
 
 // Enemy archetypes. `weight` is the spawn share, ramped by `from` (seconds).
 // role decides how a body fights, not how hard. Until now every kind pressed
@@ -313,14 +330,14 @@ const HEROES = {
            magic:'#ffc24d', trim:'rgba(196,142,44,.9)', cape:[86,32,26],
            blurb:'The vanguard’s anchor. Sun-Gold magic, a sun-emblazoned shield, ' +
                  'and no purchase for the Deceiver’s illusions.',
-           maxHp:125, speed:196, damage:22, fireDelay:0.56,
+           maxHp:125, speed:196, damage:22, fireDelay:0.62,
            range:178, sweep:33, arcSpeed:1480 },
   zayd:  { id:'zayd', name:'Zayd', title:'The Piercing Truth',
            order:'Frost-Scholars of Kael', school:'Azure',
            magic:'#5fd0ff', trim:'rgba(70,150,196,.9)', cape:[30,44,72],
            blurb:'A tactician of Kael. The Sapphire Glaive severs hive-mind tethers, ' +
                  'and inverted ley-lines hold no confusion for him.',
-           maxHp:92, speed:228, damage:17, fireDelay:0.42,
+           maxHp:92, speed:228, damage:17, fireDelay:0.48,
            range:206, sweep:21, arcSpeed:1720 }
 };
 
@@ -2457,7 +2474,7 @@ function releaseCrescent(a, delay) {
     x: player.x + Math.cos(a) * (player.r + 8),
     y: player.y + Math.sin(a) * (player.r + 8),
     dx: Math.cos(a), dy: Math.sin(a), a: a,
-    speed: player.arcSpeed, dmg: player.damage,
+    speed: player.arcSpeed, dmg: player.damage * AUTO_BITE,
     half: half, bow: bow, band: 11,
     delay: delay || 0,
     life: player.range / player.arcSpeed,
@@ -3135,9 +3152,14 @@ const VULN_MULT  = 5;      // and what the Guillotine does to a body under it
 
 const ABILITIES = {
   isaac: [
+    // THE BLOW. Not a poke on the way to the real abilities: it is where a
+    // Hearth-Warden's damage comes from now, and it is on a shorter beat than
+    // everything else on the bar so pressing it is a rhythm rather than a
+    // once-a-second decision you make between other decisions. Sixty-two units
+    // was inside a thrall's own swing; ninety-six is a step, not a hug.
     { id: 'anchor', name: 'Anchoring Strike', mark: '✦',
-      note: 'A shield bash, close enough to touch. Builds a Charge.',
-      cd: 0, gcd: 1, build: 1, reach: 62, dmg: 2.4 },
+      note: 'A shield bash that breaks a guard. Builds a Charge.',
+      cd: 0, gcd: 0.8, build: 1, reach: 96, dmg: 3.4 },
     { id: 'aegis', name: 'Aegis of Tor-Varden', mark: '◉',
       note: 'Spends three. A ring of Sun-Gold, and a moment behind the guard.',
       cd: 0, gcd: 1, cost: CHARGE_MAX, radius: 150, dmg: 3.2, mitigate: 2 },
@@ -3152,9 +3174,12 @@ const ABILITIES = {
       cd: 0, gcd: 1.25, cost: CHARGE_MAX, reach: 96, dmg: 7 }
   ],
   zayd: [
+    // Zayd's is the same decision in his own idiom: a line rather than a bash,
+    // and it stays a line -- three hundred and forty units of it, through
+    // everything standing in the way. Same shorter beat, same reason.
     { id: 'truth', name: 'Piercing Truth', mark: '↠',
       note: 'A line of Azure through everything standing in it. Builds Tension.',
-      cd: 0, gcd: 1, build: 14, reach: 340, dmg: 1.5 },
+      cd: 0, gcd: 0.8, build: 14, reach: 340, dmg: 2.2 },
     { id: 'nullzone', name: 'Null-Zone Eruption', mark: '◍',
       note: 'Spends two fifths. A pool that slows what stands in it and eats what it is casting.',
       cd: 0, gcd: 1, costPct: 0.40, radius: 96, life: 7 },
@@ -3226,10 +3251,21 @@ const ABILITY_DO = {
     player.angle = Math.atan2(t.y - player.y, t.x - player.x);
     if (Math.abs(Math.cos(player.angle)) > 0.25)
       player.face = Math.cos(player.angle) < 0 ? -1 : 1;
+    // It breaks a guard. An anchor braces on a rhythm and eats most of what
+    // lands while it does, and the answer used to be only "wait" -- which is
+    // an answer, but it is the one the player was already giving. A shield
+    // bash is the other answer, and it is the reason to walk INTO the thing
+    // rather than round it.
+    const guarded = !!t.braced;
+    if (guarded) {
+      t.braced = false;
+      toast('Guard broken', '#ffd870');
+      ring(t.x, t.y, '#ffe6a8', 5, 58, 0.3);
+    }
     damageEnemy(t, player.damage * a.dmg, player.x, player.y);
-    knock(t, player.angle, 200);
-    freeze(0.03);
-    shake(5);
+    knock(t, player.angle, guarded ? 420 : 300);
+    freeze(guarded ? 0.05 : 0.04);
+    shake(guarded ? 8 : 6);
     burst(t.x, t.y, '#ffd870', 10, 190);
     ring(t.x, t.y, '#ffd870', 6, 44, 0.26);
     gainCharge(a.build);
