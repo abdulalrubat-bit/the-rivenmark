@@ -29,26 +29,34 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   const R = await p.evaluate(() => {
     const o = {};
     stash = blankStash(); saveStash();
-    startRun('isaac', LEVELS[10].id, 'riven');
-    run.banner = 0;
-    player.hp = player.maxHp = 1e7;
 
     // Open floor with room on every side. Not "room around the player" -- the
     // first version asked that and put the body seventy units east with twenty
     // units of floor behind it, so the very first recoil pushed it into rock
     // and every recoil after that measured zero. The clearance has to cover
     // where the BODY stands and where a recoil sends it.
+    //
+    // A delve is cut fresh every time and some cuts simply have no hall this
+    // open in them, so this asks for a new one rather than reporting failure
+    // on a roll of the dice -- the first version did, and failed the suite one
+    // run in a handful with "NO CLEAR FLOOR".
     let spot = null;
-    for (const c of openCells) {
-      let clear = true;
-      for (let a = 0; a < 16 && clear; a++) {
-        const th = a * (Math.PI / 8);
-        for (const d of [60, 110, 170]) {
-          if (pointInWalls(c.x + Math.cos(th) * d, c.y + Math.sin(th) * d, 26))
-            { clear = false; break; }
+    for (let cut = 1; cut <= 8 && !spot; cut++) {
+      o.cuts = cut;
+      startRun('isaac', LEVELS[10].id, 'riven');
+      run.banner = 0;
+      player.hp = player.maxHp = 1e7;
+      for (const c of openCells) {
+        let clear = true;
+        for (let a = 0; a < 16 && clear; a++) {
+          const th = a * (Math.PI / 8);
+          for (const d of [60, 115]) {
+            if (pointInWalls(c.x + Math.cos(th) * d, c.y + Math.sin(th) * d, 24))
+              { clear = false; break; }
+          }
         }
+        if (clear) { spot = c; break; }
       }
-      if (clear) { spot = c; break; }
     }
     o.room = !!spot;
     if (!spot) return o;                       // no floor: report it, prove nothing
@@ -210,7 +218,8 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   });
 
   ck('there is open floor to test on', R.room === true,
-     R.room ? '' : 'NO CLEAR FLOOR — every check below proves nothing');
+     R.room ? 'found it in cut ' + R.cuts + ' of 8'
+            : 'NO CLEAR FLOOR IN EIGHT CUTS — every check below proves nothing');
 
   ck('a landing recoils the body along the blow', R.knock > 1 && R.knockFirst > 1,
      R.knockFirst + ' units east on the first, ' + R.knock + ' on the second');

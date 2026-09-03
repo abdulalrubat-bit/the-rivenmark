@@ -5769,6 +5769,18 @@ function resetRun(heroId, levelId, diffId) {
   cam.shake = 0;
 
   recomputeStats();
+  // ...and go down whole.
+  //
+  // makePlayer fills to the HERO'S OWN maxHp -- Isaac's 125, Zayd's 92 --
+  // because at that point that is all a hero is. recomputeStats then adds the
+  // levels, the Ward-Stone and eight pieces of gear on top, and ends with
+  // `p.hp = Math.min(p.hp, p.maxHp)`, which is there so a +life ring cannot be
+  // swapped in as a free heal. Between them, every point of life ever earned
+  // was life the hero did not have when he stepped in: forty-four rungs down
+  // Isaac descended at 125 of 438, and Zayd at 92 of 405. The clamp is right
+  // where it lives; the start of a delve is simply not a stat recomputation,
+  // it is a hero arriving.
+  player.hp = player.maxHp;
   placePacks(spawn);
   placeChests(spawn, portal);
   flowFrom = -1;
