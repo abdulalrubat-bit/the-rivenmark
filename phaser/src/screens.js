@@ -11,7 +11,7 @@
  */
 
 /* global player, run, stash, state, LEVELS, LEVEL, LEVEL_BY_ID, HEROES,
-          startRun, endRun, stepThrough, blankStash, el, stashPower,
+          startRun, endRun, stepThrough, blankStash, el, stashPower, resumeRun,
           SLOTS, SLOT_BY_ID, RARITY, itemPower, affixText, saveStash,
           VENDOR, vendorCost, canAfford, vendorBuy, HALL, hallTier,
           HALL_MAX, hallBuy, vaultCap */
@@ -40,6 +40,13 @@ const CSS = `
 #screens .go{width:100%;min-height:48px;border-radius:8px;background:#2a2015;
   color:#f0e2c2;border:1px solid #d6b26e;font:15px Georgia,serif}
 #screens .go:active{background:#3a2c1c}
+/* The second way out of a card. Same size and same target -- a 44px rule does
+   not stop applying because a button is the lesser of two -- but it does not
+   take the gold, so a glance still finds the one you probably want. */
+#screens .alt{width:100%;min-height:48px;border-radius:8px;background:#191510;
+  color:#a89878;border:1px solid #4a3f30;font:14px Georgia,serif;margin-top:8px}
+#screens .alt:active{background:#241d15}
+#screens .seal{display:block;font-size:22px;color:#8c6830;margin:0 0 2px}
 #screens .purse{display:flex;justify-content:space-between;margin:0 0 10px;color:#a89878}
 #screens .tabs{display:flex;gap:6px;margin:0 0 12px}
 #screens .tabs button{flex:1;min-height:40px;border-radius:6px;background:#1a1712;
@@ -53,12 +60,17 @@ const CSS = `
 `;
 
 export class Screens {
-  constructor(onDescend) {
+  /* onDescend(hero, levelId) starts a delve; onAbandon() throws the current
+   * one away and comes back up. Both belong to the scene rather than here:
+   * beginning or ending a delve means destroying and rebuilding every sprite
+   * in it, and a menu has no business knowing that. */
+  constructor(onDescend, onAbandon) {
     const style = document.createElement('style');
     style.textContent = CSS;
     document.head.appendChild(style);
 
     this.onDescend = onDescend;
+    this.onAbandon = onAbandon || (() => {});
     this.root = document.createElement('div');
     this.root.id = 'screens';
     document.body.appendChild(this.root);
@@ -68,18 +80,46 @@ export class Screens {
 
   show(name) {
     this.name = name;
-    if (!name || name === 'paused') { this.root.classList.remove('up'); return; }
+    if (!name) { this.root.classList.remove('up'); return; }
     this.root.classList.add('up');
-    if (name === 'over') this.renderOver();
+    if (name === 'paused') this.renderPaused();
+    else if (name === 'over') this.renderOver();
     else if (name === 'gear') this.renderForge();
     else if (name === 'vendor') this.renderVendor();
     else if (name === 'hall') this.renderHall();
     else this.renderGatehouse();
   }
 
+  /* Held. The delve is still standing behind this -- the scene keeps drawing
+   * it, the core simply stops being stepped -- so the card says so and offers
+   * the two things a stopped run can do. Abandoning is deliberately the lesser
+   * button and deliberately says what it costs: nothing is banked.
+   */
+  renderPaused() {
+    this.root.innerHTML =
+      '<div class="card">' +
+        '<span class="seal">\u2620\ufe0e</span>' +   // FE0E: the glyph, not the emoji
+        '<h1>Held</h1>' +
+        '<p class="sub">The delve waits. It does not wait kindly.</p>' +
+        '<button class="go" type="button">Press on</button>' +
+        '<button class="alt" type="button">Abandon the delve</button>' +
+      '</div>';
+    this.root.querySelector('.go').addEventListener('click', () => {
+      if (typeof resumeRun === 'function') resumeRun();
+      else this.show(null);
+    });
+    this.root.querySelector('.alt').addEventListener('click', () => this.onAbandon());
+  }
+
   /* The outcome. Every word of it was written by endRun -- which knows what
    * was banked, what the corpse kept and whether an older one was lost -- and
-   * read back out of the store the host gives it. */
+   * read back out of the store the host gives it.
+   *
+   * Two ways off it. "To the gate-house" was the only one, which made going
+   * again a three-tap trip through a menu you had just been told the result
+   * of; and the gate-house was the only way back to a menu at all, because
+   * until now there was no leaving a delve except by dying or extracting.
+   */
   renderOver() {
     const title = (el.overTitle && el.overTitle.innerHTML) || 'The delve ends';
     const sub = (el.overSub && el.overSub.textContent) || '';
@@ -89,9 +129,20 @@ export class Screens {
         '<h1>' + title + '</h1>' +
         '<p class="sub">' + sub + '</p>' +
         '<div class="stats">' + stats + '</div>' +
-        '<button class="go" type="button">To the gate-house</button>' +
+        '<button class="go" type="button">Descend again</button>' +
+        '<button class="alt" type="button">To the gate-house</button>' +
       '</div>';
-    this.root.querySelector('.go').addEventListener('click', () => this.show('splash'));
+    // The same delve and the same hero the run that just ended used. run is
+    // still the finished run at this point -- endRun banks it, it does not
+    // clear it -- so it is the only place that answers "again" correctly.
+    const hero = (run && run.hero) || this.pick.hero;
+    const lvl = (run && run.level_id) || this.pick.level;
+    this.root.querySelector('.go').addEventListener('click', () => {
+      this.pick.hero = hero;
+      if (lvl) this.pick.level = lvl;
+      this.onDescend(hero, lvl);
+    });
+    this.root.querySelector('.alt').addEventListener('click', () => this.show('splash'));
   }
 
   /* Which delve, and who goes down. The ladder is long, so this shows the

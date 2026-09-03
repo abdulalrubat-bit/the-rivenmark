@@ -48,6 +48,14 @@ const CSS = `
 #hud .slag u{width:7px;height:7px;background:#c99a3e;border:1px solid #7c5f24;
      transform:rotate(45deg);text-decoration:none;flex:none}
 #hud .slag.met{color:#e8c060}
+/* The way out. Top-LEFT, under the strip: the top-right corner is the map and
+   the bottom two are thumbs, and this is a button you must never press by
+   accident in a fight -- so it goes in the one corner a hand does not visit.
+   Understated on purpose. It is not a control you use, it is one you find. */
+#hud .hold{position:absolute;left:10px;top:40px;pointer-events:auto}
+#hud .hold button{width:34px;height:34px;border-radius:50%;background:rgba(20,17,14,.55);
+     border:1px solid rgba(74,63,48,.8);color:#9a8f7c;font:12px/1 ui-monospace,monospace}
+#hud .hold button:active{background:#2a2419;color:#e8dcc0}
 /* The kit sits bottom-right in two rows of three. Its own bottom edge, the
    swap beside it rather than above it, and the resource meter over it are all
    placed so nothing lands on anything else -- measured in the play test, not
@@ -149,6 +157,7 @@ export class Hud {
       '</div>' +
       '<div class="res"></div>' +
       '<div class="swap"><button type="button" title="swap">⇄</button></div>' +
+      '<div class="hold"><button type="button" title="hold" aria-label="hold">❙❙</button></div>' +
       '<div class="kit"></div>' +
       '<div class="boss" hidden>' +
         '<div class="line"><div class="name"></div><div class="count"></div></div>' +
@@ -176,6 +185,10 @@ export class Hud {
     this.toast = root.querySelector('.toast');
     this.swapBtn = root.querySelector('.swap button');
     this.swapBtn.addEventListener('click', () => g.swapHero());
+    // click, not pointerdown: unlike an ability, being a beat late to pause is
+    // free, and a pointerdown here would fire on a thumb that only brushed it.
+    this.holdBtn = root.querySelector('.hold button');
+    this.holdBtn.addEventListener('click', () => g.pauseRun());
 
     this.hero = null;      // which kit is currently built
     this.sig = '';         // last rendered button state, to skip DOM churn
