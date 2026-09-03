@@ -12,7 +12,7 @@
  * the game lives inside a function named draw, forge or paint, and those are
  * dropped here.
  *
- * 499 statements kept; 15 drawing functions and 47 page-bound statements dropped.
+ * 501 statements kept; 15 drawing functions and 47 page-bound statements dropped.
  * Re-run `npm run core` after changing ../index.html.
  */
 /* =============================================================================
@@ -101,6 +101,11 @@ const LIGHT = { x: 0.62, y: 0.78, wall: 11, body: 5 };
  * as on the avatar rather than scaling with the body.
  */
 const RIM_HUE = 'rgb(228,220,196)', RIM_W = 0.85, RIM_A = 0.5;
+
+/* The specular. Narrower and hotter than the rim, and banded to the materials
+ * that would carry one: above the cloth, below anything already glowing. */
+const SHEEN_HUE = 'rgb(255,248,232)', SHEEN_W = 0.45, SHEEN_A = 0.5;
+const SHEEN_LO = 62, SHEEN_HI = 190, SHEEN_SAT = 0.65;
 const HUD_H           = 78;   // canvas UI clears the HUD panel by this much
 // Holding the gate is the delve's second act, and the only part of a run that
 // can be stretched: a delve itself is bounded at roughly two minutes because a

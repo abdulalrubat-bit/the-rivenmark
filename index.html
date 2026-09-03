@@ -1750,6 +1750,11 @@ const LIGHT = { x: 0.62, y: 0.78, wall: 11, body: 5 };
  * as on the avatar rather than scaling with the body.
  */
 const RIM_HUE = 'rgb(228,220,196)', RIM_W = 0.85, RIM_A = 0.5;
+
+/* The specular. Narrower and hotter than the rim, and banded to the materials
+ * that would carry one: above the cloth, below anything already glowing. */
+const SHEEN_HUE = 'rgb(255,248,232)', SHEEN_W = 0.45, SHEEN_A = 0.5;
+const SHEEN_LO = 62, SHEEN_HI = 190, SHEEN_SAT = 0.65;
 const HUD_H           = 78;   // canvas UI clears the HUD panel by this much
 // Holding the gate is the delve's second act, and the only part of a run that
 // can be stretched: a delve itself is bounded at roughly two minutes because a
@@ -6831,73 +6836,133 @@ function forge(span, paint) {
   return c;
 }
 
-/* A single bright edge along the lit side of a finished sprite.
+/* Light a finished sprite: a rim along its lit edge, and a sharper highlight
+ * on the materials that would carry one.
  *
- * The bodies are painted about as dark as the room they stand in, which is
- * honest -- it IS a dark room -- and costs the one thing a top-down crowd
- * needs most: you cannot tell where one body ends and the floor begins. A rim
- * is the cheapest fix there is. It adds no silhouette (it is drawn strictly
- * inside the one already there, so nothing moves, resizes, or stops lining up
- * with its own shadow) and it is baked once per sprite rather than costing
- * anything per frame.
+ * WHY BOTH IN ONE PASS. Each needs to know something per-pixel -- the rim
+ * needs the solid silhouette, the sheen needs luminance and saturation -- and
+ * the way to know that is getImageData, which is a GPU-to-CPU readback. Run as
+ * two functions it was two readbacks and two full-image loops per sprite, and
+ * it took forgeAll from 65ms to 451ms: seven times the load cost of every body
+ * and hero in the game, to light them. One readback, one loop, two masks.
  *
- * Built by subtraction, not by stroking: the sprite is punched out of itself
- * offset DOWN-LIGHT, and what survives is the crescent facing the light. That
- * works on every creature without knowing anything about how it was drawn --
- * eleven hand-painted bodies and two heroes, none of which share a path.
+ * THE RIM. Built by subtraction: the silhouette punched out of itself offset
+ * down-light, leaving the crescent that faces the light. That works on eleven
+ * hand-painted creatures that share no paths, and it adds nothing outside the
+ * silhouette already there -- measured, all eleven bounding boxes came back
+ * identical, so nothing moved, resized, or parted company with its own shadow.
  *
- * LIGHT is the same direction the shadows already use, so the rim and the
- * shadow agree about where the light is. They had better: a body lit from the
- * left throwing a shadow to the left is worse than no rim at all.
+ * It follows the SOLID body: a sprite carries its own contact shadow painted
+ * underneath at 0.4 alpha, and a bright crescent along the top of a shadow is
+ * a light source beneath the floor. Alpha is remapped rather than thresholded
+ * so the body keeps its edge softness instead of being cut to a stencil.
+ *
+ * THE SHEEN. Plate and rag read alike at fifty pixels because every material
+ * here is a soft top-to-bottom ramp, and a soft ramp is matte. What says METAL
+ * is a narrow specular; what says CLOTH is the absence of one. The forge cannot
+ * be asked which path was armour, but it does not need to be: in this bestiary
+ * the armour IS the light-valued material -- the breaker's helm ramps to 112
+ * where its rags sit at 34 -- so the rule is stated as exactly that.
+ *
+ * Banded three ways. Below LO is cloth and stays matte. Above HI is something
+ * already emitting, and a specular on a light source is a blown highlight.
+ * And by SATURATION, which is what really separates reflecting from emitting
+ * here: the void-brand every body carries is orange at luminance 135, sitting
+ * squarely inside the value band, and it came out with a white highlight down
+ * a glowing rune. Plate, bone and stone are near-grey; brands and embers are
+ * not. Gold trim sits at 0.59 and stays, which is right -- it is metal.
  */
-function rimLight(c, colour, width, alpha) {
-  const px = c.width;
-  const dx = LIGHT.x * width * SS, dy = LIGHT.y * width * SS;
+/* Scratch canvases, reused.
+ *
+ * lightPass wants working surfaces and there are a hundred and thirty-odd
+ * sprites, so allocating them fresh is five hundred canvases at load for no
+ * reason: they are written and read inside one call and never escape it.
+ *
+ * Handed back in a KNOWN STATE, which is the whole difficulty with pooling a
+ * canvas. Clearing the pixels is not enough -- a context remembers its
+ * composite operation and its alpha, and the caller here sets both. Without
+ * the reset the second user of a surface inherited 'source-in' from the first
+ * and composited into nothing: the rim silently stopped being drawn on every
+ * sprite after the first, and the art came back byte-identical at the lit edge
+ * to art with no lighting at all.
+ */
+const _scr = [];
+function scratch(i, px) {
+  let c = _scr[i];
+  if (!c) c = _scr[i] = newCanvas(px, px);
+  else if (c.width !== px || c.height !== px) { c.width = px; c.height = px; }
+  else c.getContext('2d').clearRect(0, 0, px, px);
   const g = c.getContext('2d');
+  g.globalCompositeOperation = 'source-over';
+  g.globalAlpha = 1;
+  return c;
+}
 
-  /* The SOLID body, not everything on the canvas.
-   *
-   * A sprite carries its own contact shadow, painted underneath at 0.4 alpha,
-   * and a bright crescent along the top of a shadow is a light source beneath
-   * the floor. So the silhouette is taken above that: alpha is remapped so
-   * anything at shadow strength falls away and the body keeps its edge
-   * softness instead of being cut to a hard stencil.
-   */
+function lightPass(c) {
+  const px = c.width;
+  const g = c.getContext('2d');
+  const src = g.getImageData(0, 0, px, px).data;
+
+  const body = scratch(0, px), mat = scratch(1, px);
+  const gb = body.getContext('2d'), gt = mat.getContext('2d');
+  const ib = gb.createImageData(px, px), it = gt.createImageData(px, px);
   const CUT = 160;
-  const src = g.getImageData(0, 0, px, px);
-  const sil = newCanvas(px, px);
-  const gs = sil.getContext('2d');
-  const im = gs.createImageData(px, px);
-  for (let i = 3; i < src.data.length; i += 4) {
-    const a = src.data[i];
+  for (let i = 0; i < src.length; i += 4) {
+    const a = src[i + 3];
     if (a <= CUT) continue;
-    im.data[i] = ((a - CUT) / (255 - CUT)) * 255;
+    ib.data[i + 3] = ((a - CUT) / (255 - CUT)) * 255;
+    if (a < 200) continue;
+    const r = src[i], gg = src[i + 1], b = src[i + 2];
+    const L = 0.2126 * r + 0.7152 * gg + 0.0722 * b;
+    if (L < SHEEN_LO || L > SHEEN_HI) continue;
+    const mx = Math.max(r, gg, b);
+    if (mx > 0 && (mx - Math.min(r, gg, b)) / mx > SHEEN_SAT) continue;
+    it.data[i + 3] = 255;
   }
-  gs.putImageData(im, 0, 0);
+  gb.putImageData(ib, 0, 0);
+  gt.putImageData(it, 0, 0);
 
-  const m = newCanvas(px, px);
-  const gm = m.getContext('2d');
-  gm.drawImage(sil, 0, 0);
-  gm.globalCompositeOperation = 'destination-out';
-  gm.drawImage(sil, dx, dy);               // leaves the up-light crescent
-  gm.globalCompositeOperation = 'source-in';
-  gm.fillStyle = colour;
-  gm.fillRect(0, 0, px, px);
+  // The up-light edge of a mask: itself, minus itself shifted away from the
+  // light. For the body that is its outline; for the material it is a line
+  // along the top of every plate, which is where a highlight sits.
+  /* At least one pixel wide, whatever the display.
+   *
+   * The widths are in world units and scale by SS, which is right -- a rim
+   * should be the same apparent thickness on a phone as on a desktop. But at
+   * SS 1 that comes to 0.53 x 0.66 pixels, and a sub-pixel subtraction leaves
+   * a crescent so faint it is not there: measured at dpr 1, eight of eleven
+   * bodies came back no brighter at the lit edge than unlit ones. The shipped
+   * atlas is exported at 2x and never saw it; a low-dpr display would have.
+   */
+  const edge = (mask, colour, width) => {
+    let ox = LIGHT.x * width * SS, oy = LIGHT.y * width * SS;
+    const len = Math.hypot(ox, oy);
+    if (len < 1.25) { ox *= 1.25 / len; oy *= 1.25 / len; }
+    const k = scratch(2, px), gk = k.getContext('2d');
+    gk.drawImage(mask, 0, 0);
+    gk.globalCompositeOperation = 'destination-out';
+    gk.drawImage(mask, ox, oy);
+    gk.globalCompositeOperation = 'source-in';
+    gk.fillStyle = colour;
+    gk.fillRect(0, 0, px, px);
+    return k;
+  };
 
   g.save();
-  // forge() left a translate+scale on this context and the crescent is
-  // already in device pixels, so it goes down under the identity.
+  // forge() left a translate+scale on this context; the crescents are already
+  // in device pixels, so they go down under the identity.
   g.setTransform(1, 0, 0, 1, 0, 0);
-  g.globalAlpha = alpha;
-  g.drawImage(m, 0, 0);
+  // Drawn one at a time: both edges share a scratch surface, so the specular
+  // has to be down before the rim is built over the top of it. The specular
+  // goes first either way -- the rim owns the outermost edge.
+  g.globalAlpha = SHEEN_A;
+  g.drawImage(edge(mat, SHEEN_HUE, SHEEN_W), 0, 0);
+  g.globalAlpha = RIM_A;
+  g.drawImage(edge(body, RIM_HUE, RIM_W), 0, 0);
   g.restore();
   return c;
 }
 
-// `sx` widens the sprite without touching its height, which is how a standing
-// body breathes. Only x, so the feet stay exactly where they were planted --
-// a vertical squash would need to know where the feet sit inside each sprite,
-// and they sit somewhere different in every one of them.
 function blit(spr, x, y, rot, alpha, scale, flip, sx) {
   const s = spr.span * (scale || 1);
   const w = s * (sx || 1);
@@ -7079,7 +7144,10 @@ function heroFrame(p) {
 
 // One body in one pose. `P` is a gait pose (GAIT_REST for the standing frame);
 // the hit flash is no longer baked in, it is an additive pass at draw time.
-function forgeEnemy(kind, r, color, P) {
+// `bare` forges the body without the light pass. Only the look suite passes it,
+// and it is there so that suite can prove the pass is what lights a body
+// rather than asserting a number and hoping.
+function forgeEnemy(kind, r, color, P, bare) {
   const u = r * 1.16;
   const outline = (w) => { g0.strokeStyle = 'rgba(0,0,0,.82)'; g0.lineWidth = w; g0.stroke(); };
   let g0 = null;
@@ -7091,7 +7159,7 @@ function forgeEnemy(kind, r, color, P) {
 
   // Bounds sized to the figure (widest extent is the shadow at 1.28u), not a
   // round number: at 340 bodies in a delve the padding is pure fill cost.
-  return rimLight(forge(u * 2.9, g => {
+  return (bare ? (x => x) : lightPass)(forge(u * 2.9, g => {
     g0 = g;
     g.lineJoin = 'round';
     g.lineCap = 'round';
@@ -7931,7 +7999,7 @@ function forgeEnemy(kind, r, color, P) {
     g.fillStyle = 'rgba(0,0,0,.4)';
     g.beginPath(); g.ellipse(0, u * 1.06, u * 0.66, u * 0.22, 0, 0, TAU); g.fill();
     g.globalCompositeOperation = 'source-over';
-  }), RIM_HUE, RIM_W, RIM_A);
+  }));
 }
 
 // Mal-Ghorath's avatar on earth. The compendium gives him two properties that
@@ -7948,7 +8016,7 @@ function forgeDeceiver(kind) {
                                 // still looms without wedging in corridors
   const mirage = kind === 'mirage';
   const lit = (a, b, c) => 'rgb(' + a + ',' + b + ',' + c + ')';
-  return rimLight(forge(u * 3.0, g => {
+  return lightPass(forge(u * 3.0, g => {
     g.lineJoin = 'round'; g.lineCap = 'round';
 
     // Robe, hanging to nothing
@@ -8019,7 +8087,7 @@ function forgeDeceiver(kind) {
     g.fillStyle = 'rgba(0,0,0,.4)';
     g.beginPath(); g.ellipse(0, u * 1.0, u * 0.6, u * 0.2, 0, 0, TAU); g.fill();
     g.globalCompositeOperation = 'source-over';
-  }), RIM_HUE, RIM_W, RIM_A);
+  }));
 }
 
 // The Guided Vanguard. Both fight unhelmeted -- the compendium is explicit
@@ -8242,7 +8310,7 @@ function forgeHero(id, P) {
   const lfA = -u * P.lift, lfB = -u * P.liftB;
   const arA = u * P.arm;
 
-  return rimLight(forge(u * 4.0, g => {
+  return lightPass(forge(u * 4.0, g => {
     g.lineJoin = 'round'; g.lineCap = 'round';
     g.save();
     g.translate(0, u * P.bob);
@@ -8402,7 +8470,7 @@ function forgeHero(id, P) {
     g.fillStyle = 'rgba(0,0,0,.42)';
     g.beginPath(); g.ellipse(0, u * 1.3, u * 0.84, u * 0.28, 0, 0, TAU); g.fill();
     g.globalCompositeOperation = 'source-over';
-  }), RIM_HUE, RIM_W, RIM_A);
+  }));
 }
 
 // Essence: a mote of light bound in a shard.

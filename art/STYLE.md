@@ -74,22 +74,38 @@ stepped, and needs no vertical compensation: the feet stay exactly where they
 were planted. Authored `-idle-` frames still work and breathe on top of their
 own cycle.
 
-**Every body has a rim light.** A single pale edge along the lit side, built by
-punching the silhouette out of itself offset down-light, so it works on eleven
-hand-painted creatures that share no paths. Measured on the light-facing
-boundary, contrast against the floor went from **1.07:1 to 2.39:1** — and five
-of the eleven had a lit edge *darker than the floor they stand on*, which is to
-say they read as holes rather than bodies. The gorger was the worst at 0.18:1.
+**Every body is lit.** One pass over each finished sprite adds two things,
+both built by punching a mask out of itself offset down-light — which works on
+eleven hand-painted creatures that share no paths, and adds nothing outside the
+silhouette already there, so nothing moves, resizes or parts company with its
+own shadow.
+
+- **A rim** along the lit edge. Measured on the light-facing boundary, contrast
+  against the floor went from **1.07:1 to 2.44:1** — and five of the eleven had
+  a lit edge *darker than the floor they stand on*, which is to say they read
+  as holes rather than as bodies. The gorger was worst at 0.18:1.
+- **A sharper highlight on the materials that would carry one.** Plate and rag
+  read alike at fifty pixels because every material here is a soft
+  top-to-bottom ramp, and a soft ramp is matte. The forge cannot be asked which
+  path was armour, but it does not need to be: in this bestiary the armour IS
+  the light-valued material — the breaker's helm ramps to 112 where its rags
+  sit at 34 — so the rule is stated as exactly that. Banded below by cloth,
+  above by anything already emitting, and by saturation, which is what really
+  separates reflecting from emitting: the void-brand sits at luminance 135,
+  squarely inside the value band, and came out with a white highlight down a
+  glowing rune. Value range inside the silhouette went **107 to 127**.
+
+It costs 190ms at boot (65ms → 257ms for every body and hero), paid once when
+the pixel ratio is settled, not per run and not per frame.
 
 What is still missing, roughly in order of value for effort:
 
-1. **Material separation.** Metal should read as metal, cloth as cloth, bone as
-   bone. Right now a breaker's plate and a thrall's rags take light the same
-   way.
-2. **Wear.** Chipped edges, rust, stained hems, moss on the low stone. The
+1. **Wear.** Chipped edges, rust, stained hems, moss on the low stone. The
    walls already do this and the bodies do not, so the bodies look newer than
-   the room they are in.
-3. **Secondary motion in the run.** Capes, hems, chains and hair that lag
+   the room they are in. Unlike the rim and the highlight this cannot be a
+   global pass — wear is *placed*, and a uniform noise over everything is the
+   busy texture this document already says to resist. It is per-creature work.
+2. **Secondary motion in the run.** Capes, hems, chains and hair that lag
    behind the body. The current run cycles move the whole figure rigidly.
 4. **A hit pose.** Bodies flash white when struck; a one-frame recoil reads far
    better.
