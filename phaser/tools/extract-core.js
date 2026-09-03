@@ -123,6 +123,7 @@ const RENDER_INCLUDE = new Set(['advanceGait', 'GAIT_N', 'GAIT_STEP',
   // rather than by each keeping a copy that drifts.
                                 'BREATH_MS', 'BREATH', 'BREATH_STEP', 'breathScale',
                                 'DIE_MS', 'DIE_TILT', 'deathPose',
+                                'FLINCH', 'flinchOffset',
   // Game state that happens to be declared under RENDERING. LEVEL is read in
   // forty places -- it is which delve you are in -- and REGION in seven. The
   // strike forms and the recovery time are rules of the swing. lowFx is an

@@ -12,7 +12,7 @@
  * the game lives inside a function named draw, forge or paint, and those are
  * dropped here.
  *
- * 504 statements kept; 15 drawing functions and 47 page-bound statements dropped.
+ * 506 statements kept; 15 drawing functions and 47 page-bound statements dropped.
  * Re-run `npm run core` after changing ../index.html.
  */
 /* =============================================================================
@@ -2820,7 +2820,7 @@ function blastAt(x, y, r, dmg, hue, pierce) {
     if (e.hp <= 0) continue;
     const d = Math.hypot(e.x - x, e.y - y);
     if (d > r + e.r) continue;
-    damageEnemy(e, dmg * (1 - Math.min(0.6, d / (r * 2))));
+    damageEnemy(e, dmg * (1 - Math.min(0.6, d / (r * 2))), x, y);
   }
   if (dist2(player.x, player.y, x, y) < r * r) {
     if (pierce === false) {
@@ -3226,7 +3226,7 @@ const ABILITY_DO = {
     player.angle = Math.atan2(t.y - player.y, t.x - player.x);
     if (Math.abs(Math.cos(player.angle)) > 0.25)
       player.face = Math.cos(player.angle) < 0 ? -1 : 1;
-    damageEnemy(t, player.damage * a.dmg);
+    damageEnemy(t, player.damage * a.dmg, player.x, player.y);
     knock(t, player.angle, 200);
     freeze(0.03);
     shake(5);
@@ -3246,7 +3246,7 @@ const ABILITY_DO = {
       const e = _near[i];
       if (e.hp <= 0) continue;
       if (dist2(player.x, player.y, e.x, e.y) > a.radius * a.radius) continue;
-      damageEnemy(e, player.damage * a.dmg);
+      damageEnemy(e, player.damage * a.dmg, player.x, player.y);
       knock(e, Math.atan2(e.y - player.y, e.x - player.x), 240);
     }
     player.mitigate = a.mitigate;
@@ -3279,7 +3279,7 @@ const ABILITY_DO = {
     shake(vuln ? 16 : 11);
     ring(t.x, t.y, vuln ? '#fff2c8' : '#ffd870', 8, vuln ? 190 : 120, 0.5);
     burst(t.x, t.y, '#fff2c8', vuln ? 40 : 22, 380);
-    damageEnemy(t, player.damage * a.dmg * (vuln ? VULN_MULT : 1));
+    damageEnemy(t, player.damage * a.dmg * (vuln ? VULN_MULT : 1), player.x, player.y);
     if (vuln) toast('The guard is broken', '#fff2c8');
   },
 
@@ -3300,7 +3300,7 @@ const ABILITY_DO = {
       // struck rather than only what the beam's centre passes through.
       if (segDist(player.x, player.y, ex, ey, e.x, e.y) > e.r + 10) continue;
       if (!clearShot(player.x, player.y, e.x, e.y)) continue;
-      damageEnemy(e, player.damage * a.dmg);
+      damageEnemy(e, player.damage * a.dmg, player.x, player.y);
       burst(e.x, e.y, '#5fd0ff', 6, 150);
       hits++;
     }
@@ -3732,7 +3732,13 @@ function hurtPlayerBy(dmg, fx, fy) {
   if (player.hp <= 0) { player.hp = 0; endRun(false); }
 }
 
-function damageEnemy(e, dmg) {
+/* `fx, fy` is where the blow came FROM, and it is the only reason this takes
+ * more than a body and a number: a recoil has to go somewhere, and guessing
+ * "away from the player" would be wrong for a hazard underfoot, a totem, or a
+ * blade swung past. Every caller knows its own source -- the blast centre, the
+ * arc's position, the hero -- so each one says. Omitted, the body still flashes
+ * and simply does not flinch. */
+function damageEnemy(e, dmg, fx, fy) {
   if (e.hp <= 0) return;
   if (!e.awake) wakeEnemy(e);          // struck from the dark: everyone hears
   // He is held up by his escort. Hitting him through it is not forbidden, just
@@ -3760,6 +3766,13 @@ function damageEnemy(e, dmg) {
   }
   e.hp -= dmg;
   e.hitFlash = 0.12;
+  // The direction the blow travelled, as a unit vector, for the recoil to ride.
+  // A blow landing exactly on a body's own centre has no direction to give, so
+  // the flinch keeps whichever it had rather than snapping to due east.
+  if (fx !== undefined) {
+    const dx = e.x - fx, dy = e.y - fy, m = Math.hypot(dx, dy);
+    if (m > 0.001) { e.hitX = dx / m; e.hitY = dy / m; }
+  }
   // A heavy enough blow shatters a body that is closing. A scratch does not:
   // the point is that you have to commit to stopping it, not graze it once.
   if (e.calcify > 0 && dmg >= e.maxHp * CALCIFY_BREAK) breakCalcify(e, true);
@@ -4472,7 +4485,7 @@ function updateArcs(dt) {
         const e = _near[k];
         if (e.hp <= 0 || b.hit.indexOf(e) !== -1) continue;
         if (!inCrescent(b, e)) continue;
-        damageEnemy(e, b.dmg);
+        damageEnemy(e, b.dmg, b.x, b.y);
         b.hit.push(e);
       }
       // A totem is a thing standing on the floor and the blade cuts it like
@@ -6294,6 +6307,34 @@ function deathPose(e) {
     dy: f * (1 - Math.cos(rot)) + ease * (e.r || 13) * 0.12,
     alpha: t < 0.55 ? 1 : 1 - (t - 0.55) / 0.45
   };
+}
+
+/* Flinching.
+ *
+ * A struck body flashes white and is otherwise unmoved, which says THAT it was
+ * hit and nothing about how hard or from where. A recoil says both, and it is
+ * the difference between a number appearing over a statue and a body taking a
+ * blow.
+ *
+ * Rides `hitFlash`, which the core already keeps and already counts down, so
+ * this needs no clock of its own and cannot drift out of step with the flash
+ * it accompanies. Out fast and back slower -- a flinch is a shove and a
+ * recovery, not a wobble -- and the whole thing is over in 0.12s, which is
+ * why it is a shove of a few units rather than a lunge: at that length
+ * anything larger reads as the body being teleported.
+ *
+ * It moves the SPRITE, never the body. Where a body actually is belongs to the
+ * simulation, and a renderer that quietly moved things would put a hitbox
+ * somewhere the player cannot see.
+ */
+const FLINCH = 3.4;        // world units, at the top of the shove
+function flinchOffset(e) {
+  const f = (e.hitFlash || 0) / 0.12;                 // 1 fresh -> 0 recovered
+  if (f <= 0 || e.hitX === undefined) return null;
+  // Peaks a third of the way in: out in 0.04s, back over the remaining 0.08.
+  const k = f > 0.66 ? (1 - f) / 0.34 : f / 0.66;
+  const d = FLINCH * k;
+  return { x: e.hitX * d, y: e.hitY * d };
 }
 
 // Which sprite a body wears this frame. Below GAIT_STILL it is standing.

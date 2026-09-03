@@ -520,6 +520,70 @@ const LONG = { kind: 'gorger', n: 10 };
          D.revived === true && D.revivedClock,
          'shown ' + D.revived + ', clock cleared ' + D.revivedClock);
 
+      /* Flinching. A struck body should be shoved AWAY from what hit it,
+       * out fast and back slower, and it should never move the body itself --
+       * a renderer that quietly moved things would put a hitbox somewhere the
+       * player cannot see. */
+      const D2 = await p.evaluate(() => {
+        const e = { x: 100, y: 100, r: 20, hitFlash: 0.12, hitX: 1, hitY: 0 };
+        const walk = [1, 0.66, 0.4, 0.1, 0].map(f => {
+          e.hitFlash = 0.12 * f;
+          const o = flinchOffset(e);
+          return o ? +o.x.toFixed(2) : 0;
+        });
+        // Away from the blow, whichever side it came from -- sampled AT THE
+        // PEAK. Sampled at the start it is zero on both sides, which is true
+        // and says nothing.
+        const back = { x: 100, y: 100, r: 20, hitFlash: 0.12 * 0.66, hitX: -1, hitY: 0 };
+        // A blow with no recorded source flashes but does not flinch.
+        const none = { x: 100, y: 100, r: 20, hitFlash: 0.12 };
+        // Read through a guard, not straight off the result. A flinchOffset
+        // that returns null when it should not is exactly the regression this
+        // exists to catch, and reading .x off it throws -- which aborts the
+        // run and diagnoses nothing instead of failing the one wrong check.
+        const bo = flinchOffset(back);
+
+        /* And the whole way through, from a blow landing to a body flinching.
+         *
+         * Everything above builds its own body with hitX already set, which
+         * tests the flinch and nothing about how a body comes to know which
+         * way it was hit. damageEnemy is what records that, and it takes the
+         * source from six different call sites -- so drive it.
+         */
+        const live = enemies.find(x => x.hp > 0 && x.kind !== 'deceiver' && !x.braced);
+        let landed = null;
+        if (live) {
+          delete live.hitX; delete live.hitY;
+          const was = { x: live.x, y: live.y, hp: live.hp };
+          damageEnemy(live, 1, live.x - 50, live.y);   // struck from its left
+          landed = { hx: live.hitX, hy: live.hitY, flash: live.hitFlash,
+                     stayed: live.x === was.x && live.y === was.y };
+          live.hp = was.hp;
+        }
+        return { walk, backX: bo ? bo.x : null, landed,
+                 none: flinchOffset(none), moved: [e.x, e.y] };
+      });
+      ck('a struck body flinches away from the blow',
+         D2.walk[0] === 0 && D2.walk[1] > 3 && D2.walk[4] === 0 &&
+         D2.walk[2] < D2.walk[1] && D2.walk[3] < D2.walk[2],
+         'offset over the flinch: ' + D2.walk.join(' '));
+      ck('and flinches the other way from the other side',
+         D2.backX !== null && D2.backX < -3 && Math.abs(D2.backX + D2.walk[1]) < 0.01,
+         D2.backX === null ? 'no flinch at all from the left'
+           : 'peak going left ' + D2.backX.toFixed(2) +
+             ' against ' + D2.walk[1] + ' going right');
+      ck('and a blow that lands records which way it came from',
+         !!D2.landed && D2.landed.hx === 1 && D2.landed.hy === 0 &&
+         D2.landed.flash > 0 && D2.landed.stayed,
+         !D2.landed ? 'no body to hit'
+           : 'struck from the left -> ' + D2.landed.hx + ',' + D2.landed.hy +
+             ', flash ' + D2.landed.flash + ', body unmoved ' + D2.landed.stayed);
+
+      ck('while a blow with no source flashes but does not shove',
+         D2.none === null, 'offset: ' + JSON.stringify(D2.none));
+      ck('and it never moves the body itself',
+         D2.moved[0] === 100 && D2.moved[1] === 100, 'body at ' + D2.moved.join(','));
+
       ck('a kind with no idle art still holds its one rest frame',
          D.none.length === 1 && D.none[0] === 'bestiary/nosuchkind-rest',
          D.none.join(' '));

@@ -100,7 +100,7 @@ const STANDING = { pillar: 26, barrel: 12, crate: 11, urn: 10, banner: 16,
           swapHero, swapBlocked, abilityBlock, ABILITIES, ABILITY_BY_ID,
           CHARGE_MAX, TENSION_MAX,
           WORLD, PAL, LEVEL, LEVELS, GAIT_N, GAIT_STEP, GAIT_STILL, lamps,
-          BOLT_WIND, CHANT_WIND, breathScale, deathPose, DIE_MS,
+          BOLT_WIND, CHANT_WIND, breathScale, deathPose, DIE_MS, flinchOffset,
           lowFx,
           WALK_STEP, WALK_PACE, update, startRun, loadStash */
 
@@ -846,7 +846,11 @@ export class Delve extends Phaser.Scene {
       if (s.rotation !== rot) s.setRotation(rot);       // guarded: see scaleX
       const al = d ? d.alpha : (e.calcify > 0 ? 0.85 : 1);
       if (s.alpha !== al) s.setAlpha(al);
+      // Falling over, or flinching from a blow. Not both: a body that has
+      // just been killed is going down, and a shove on the way is noise.
+      const fl = d ? null : flinchOffset(e);
       if (d) s.setPosition(e.x + d.dx, e.y + d.dy);
+      else if (fl) s.setPosition(e.x + fl.x, e.y + fl.y);
       // Struck bodies flash, calcifying ones sit under a shell of light.
       s.setTint(e.hitFlash > 0 ? 0xffffff : (e.calcify > 0 ? 0x9fd8e8 : 0xffffff));
     }

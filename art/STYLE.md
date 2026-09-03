@@ -111,6 +111,22 @@ at all — so every kind gets it, including the Deceiver and his mirages, who
 are forged by a different function entirely. `<kind>-die-0..N` still works and
 only changes what a body falls over *with*.
 
+**And a struck body flinches.** It used to flash white and be otherwise
+unmoved, which says *that* it was hit and nothing about from where. It now
+shoves a few units away from the blow and recovers — out in 0.04s, back over
+the next 0.08 — riding `hitFlash`, which the core already counts down, so it
+cannot drift out of step with the flash it accompanies.
+
+The direction is *recorded*, not guessed: `damageEnemy` takes where the blow
+came from, and all six call sites say — the blast centre, the arc's position,
+the hero. Guessing "away from the player" would be wrong for a hazard
+underfoot or a blade swung past. A blow with no recorded source still flashes
+and simply does not flinch.
+
+It moves the **sprite**, never the body. Where a body actually is belongs to
+the simulation, and a renderer that quietly moved things would put a hitbox
+somewhere the player cannot see — which the fixture asserts directly.
+
 What is still missing, roughly in order of value for effort:
 
 1. **Wear.** Chipped edges, rust, stained hems, moss on the low stone. The
@@ -120,8 +136,8 @@ What is still missing, roughly in order of value for effort:
    busy texture this document already says to resist. It is per-creature work.
 2. **Secondary motion in the run.** Capes, hems, chains and hair that lag
    behind the body. The current run cycles move the whole figure rigidly.
-4. **A hit pose.** Bodies flash white when struck; a one-frame recoil reads far
-   better. (Being *killed* is handled — see below.)
+4. **Wear on the bodies to match the room.** See above — this is now the top of
+   the list.
 5. **A cast pose.** `<kind>-cast-0..N` plays across a wind-up, driven by how
    far through it is rather than by a clock, so the last frame lands as the
    blow does. The mechanism works and no forged creature has one; the core
