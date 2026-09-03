@@ -74,30 +74,74 @@ stepped, and needs no vertical compensation: the feet stay exactly where they
 were planted. Authored `-idle-` frames still work and breathe on top of their
 own cycle.
 
-**Every body has a rim light.** A single pale edge along the lit side, built by
-punching the silhouette out of itself offset down-light, so it works on eleven
-hand-painted creatures that share no paths. Measured on the light-facing
-boundary, contrast against the floor went from **1.07:1 to 2.39:1** — and five
-of the eleven had a lit edge *darker than the floor they stand on*, which is to
-say they read as holes rather than bodies. The gorger was the worst at 0.18:1.
+**Every body is lit.** One pass over each finished sprite adds two things,
+both built by punching a mask out of itself offset down-light — which works on
+eleven hand-painted creatures that share no paths, and adds nothing outside the
+silhouette already there, so nothing moves, resizes or parts company with its
+own shadow.
+
+- **A rim** along the lit edge. Measured on the light-facing boundary, contrast
+  against the floor went from **1.07:1 to 2.44:1** — and five of the eleven had
+  a lit edge *darker than the floor they stand on*, which is to say they read
+  as holes rather than as bodies. The gorger was worst at 0.18:1.
+- **A sharper highlight on the materials that would carry one.** Plate and rag
+  read alike at fifty pixels because every material here is a soft
+  top-to-bottom ramp, and a soft ramp is matte. The forge cannot be asked which
+  path was armour, but it does not need to be: in this bestiary the armour IS
+  the light-valued material — the breaker's helm ramps to 112 where its rags
+  sit at 34 — so the rule is stated as exactly that. Banded below by cloth,
+  above by anything already emitting, and by saturation, which is what really
+  separates reflecting from emitting: the void-brand sits at luminance 135,
+  squarely inside the value band, and came out with a white highlight down a
+  glowing rune. Value range inside the silhouette went **107 to 127**.
+
+It costs 190ms at boot (65ms → 257ms for every body and hero), paid once when
+the pixel ratio is settled, not per run and not per frame.
+
+**Every killed body falls over.** A body used to stop being drawn on the frame
+its hp reached zero, which is the cheapest possible death and reads as one: a
+thrall did not die, it was deleted. It now topples over 480ms — pivoted on the
+FEET, because a body turned about the middle of its sprite swings its legs out
+from under it and looks thrown rather than felled — holds its colour until it
+is most of the way down, and is then gone. Gone rather than lying there: a
+floor of corpses is a different game and a different culling cost.
+
+A transform again, for the same reason the breath is one, and it needs no art
+at all — so every kind gets it, including the Deceiver and his mirages, who
+are forged by a different function entirely. `<kind>-die-0..N` still works and
+only changes what a body falls over *with*.
+
+**And a struck body flinches.** It used to flash white and be otherwise
+unmoved, which says *that* it was hit and nothing about from where. It now
+shoves a few units away from the blow and recovers — out in 0.04s, back over
+the next 0.08 — riding `hitFlash`, which the core already counts down, so it
+cannot drift out of step with the flash it accompanies.
+
+The direction is *recorded*, not guessed: `damageEnemy` takes where the blow
+came from, and all six call sites say — the blast centre, the arc's position,
+the hero. Guessing "away from the player" would be wrong for a hazard
+underfoot or a blade swung past. A blow with no recorded source still flashes
+and simply does not flinch.
+
+It moves the **sprite**, never the body. Where a body actually is belongs to
+the simulation, and a renderer that quietly moved things would put a hitbox
+somewhere the player cannot see — which the fixture asserts directly.
 
 What is still missing, roughly in order of value for effort:
 
-1. **Material separation.** Metal should read as metal, cloth as cloth, bone as
-   bone. Right now a breaker's plate and a thrall's rags take light the same
-   way.
-2. **Wear.** Chipped edges, rust, stained hems, moss on the low stone. The
+1. **Wear.** Chipped edges, rust, stained hems, moss on the low stone. The
    walls already do this and the bodies do not, so the bodies look newer than
-   the room they are in.
-3. **Secondary motion in the run.** Capes, hems, chains and hair that lag
+   the room they are in. Unlike the rim and the highlight this cannot be a
+   global pass — wear is *placed*, and a uniform noise over everything is the
+   busy texture this document already says to resist. It is per-creature work.
+2. **Secondary motion in the run.** Capes, hems, chains and hair that lag
    behind the body. The current run cycles move the whole figure rigidly.
-4. **A hit pose.** Bodies flash white when struck; a one-frame recoil reads far
-   better.
-5. **Cast and death poses.** `<kind>-cast-0..N` plays across a wind-up (driven
-   by how far through it is, so the last frame lands as the blow does) and
-   `<kind>-die-0..N` over 480ms from the killing blow. Both mechanisms work and
-   no forged creature has either. The core already knows — `casting` on the
-   cantor, `chanting` on the shaman.
+4. **Wear on the bodies to match the room.** See above — this is now the top of
+   the list.
+5. **A cast pose.** `<kind>-cast-0..N` plays across a wind-up, driven by how
+   far through it is rather than by a clock, so the last frame lands as the
+   blow does. The mechanism works and no forged creature has one; the core
+   already knows — `casting` on the cantor, `chanting` on the shaman.
 
 ## The palette
 

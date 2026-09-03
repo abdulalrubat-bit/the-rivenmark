@@ -100,7 +100,7 @@ const STANDING = { pillar: 26, barrel: 12, crate: 11, urn: 10, banner: 16,
           swapHero, swapBlocked, abilityBlock, ABILITIES, ABILITY_BY_ID,
           CHARGE_MAX, TENSION_MAX,
           WORLD, PAL, LEVEL, LEVELS, GAIT_N, GAIT_STEP, GAIT_STILL, lamps,
-          BOLT_WIND, CHANT_WIND, breathScale,
+          BOLT_WIND, CHANT_WIND, breathScale, deathPose, DIE_MS, flinchOffset,
           lowFx,
           WALK_STEP, WALK_PACE, update, startRun, loadStash */
 
@@ -152,6 +152,7 @@ export class Delve extends Phaser.Scene {
     }
     this.frameScale = this.man.frame_scale || {};
     this.buildCycleTable(this.man.idle_pingpong || []);
+    this.warned = Object.create(null);
 
     this.cameras.main.setBackgroundColor(PAL.floor || '#1a1512');
     this.cameras.main.setBounds(0, 0, WORLD.w, WORLD.h);
@@ -500,8 +501,30 @@ export class Delve extends Phaser.Scene {
    * sprite at the default scale -- and an authored 4x frame then stood at
    * twice the size of the horde around it.
    */
+  /* `has`, not `getFrame`.
+   *
+   * textures.getFrame(key, name) does NOT return null for a name the atlas
+   * does not hold: it falls back to the texture's FIRST frame and returns
+   * that. So this guard asked a question that always answered yes, setFrame
+   * fell back to the same first frame, and a body wearing a pose that does not
+   * exist came out dressed as `walls/course-0-1` -- a piece of wall. Reported
+   * from a real run as "the deceiver turned into a column, so I was fighting a
+   * piece of scenery", which is exactly what it was.
+   *
+   * Texture.has answers the question that was meant. And a miss is now said
+   * out loud rather than silently drawn as scenery: nothing should ever ask
+   * for a frame that is not there, so if anything does, that is a bug and the
+   * log is where it belongs.
+   */
   wearFrame(sp, key) {
-    if (sp.frame.name !== key && this.textures.getFrame('art', key)) sp.setFrame(key);
+    if (sp.frame.name !== key) {
+      if (this.textures.get('art').has(key)) sp.setFrame(key);
+      else if (!this.warned[key]) {
+        this.warned[key] = 1;
+        console.error('no such frame in the atlas: ' + key +
+                      ' — the sprite keeps ' + sp.frame.name);
+      }
+    }
     const want = this.artScale(sp.frame.name);
     // Guarded on scaleY, not scaleX: the breath moves scaleX every frame a
     // body stands still, so testing that one would rebuild the scale on every
@@ -557,14 +580,9 @@ export class Delve extends Phaser.Scene {
    * sees that within a frame. Cleared again if the body somehow comes back,
    * so a revived body does not inherit a stale clock.
    */
-  showBody(e, time) {
-    if (e.hp > 0) {
-      if (e.dieAt !== undefined) e.dieAt = undefined;
-      return true;
-    }
-    if (!this.cycleN['bestiary/' + e.kind + '-die']) return false;
-    if (e.dieAt === undefined) e.dieAt = time;
-    return time - e.dieAt < DIE_MS;
+  showBody(e) {
+    const d = deathPose(e);
+    return !d || !d.done;
   }
 
   /* How far through a wind-up a body is: 0 as it starts, 1 as the blow lands,
@@ -628,11 +646,14 @@ export class Delve extends Phaser.Scene {
 
     // Falling over outranks everything else a body could be doing, including
     // the cast it was halfway through when it was killed.
+    /* Dead: authored frames if the kind has them, otherwise the rest pose,
+     * which the draw loop then topples. Every kind falls over now; die art
+     * only changes what it falls over WITH. */
     if (e.hp <= 0) {
       const dn = this.cycleN[base + '-die'];
       if (!dn) return base + '-rest';
-      const t = (time === undefined ? this.time.now : time) - (e.dieAt || 0);
-      return base + '-die-' + Math.min(dn - 1, ((t / DIE_MS) * dn) | 0);
+      const d = deathPose(e);
+      return base + '-die-' + Math.min(dn - 1, (((d ? d.t : 1)) * dn) | 0);
     }
 
     // A calcifying body is stone under a shell of light. Stone does not
@@ -658,15 +679,30 @@ export class Delve extends Phaser.Scene {
     }
 
     if (e.pace < GAIT_STILL || e.braced) return this.idleFrame(base, e, time);
-    const f = ((e.gait / GAIT_STEP) | 0) % GAIT_N;
-    return base + '-run-' + f;
+    /* Only if the kind HAS a run cycle.
+     *
+     * The Deceiver and his mirages do not: they blink rather than walk, so the
+     * forge gives them one pose and no gait at all. The canvas build has said
+     * `SPR[kind + 'r' + f] || SPR[kind]` since the beginning and the port
+     * dropped the fallback -- and a blink is a large jump in one frame, which
+     * is a large PACE, so the one body in the game with no run cycle was also
+     * the one most certain to ask for one.
+     *
+     * Modulo the frames that exist rather than GAIT_N, so a kind drawn with a
+     * shorter cycle wraps around its own rather than off the end of it.
+     */
+    const n = this.cycleN[base + '-run'];
+    if (!n) return base + '-rest';
+    return base + '-run-' + (((e.gait / GAIT_STEP) | 0) % n);
   }
   heroFrame(p, time) {
     const base = 'heroes/' + p.hero;
     if (p.pace < GAIT_STILL) return this.idleFrame(base, p, time);
     const run = p.pace >= WALK_PACE;
-    const f = ((p.gait / (run ? GAIT_STEP : WALK_STEP)) | 0) % GAIT_N;
-    return base + (run ? '-run-' : '-walk-') + f;
+    const pose = run ? '-run' : '-walk';
+    const n = this.cycleN[base + pose];
+    if (!n) return base + '-rest';
+    return base + pose + '-' + (((p.gait / (run ? GAIT_STEP : WALK_STEP)) | 0) % n);
   }
 
   /* The stick.
@@ -792,7 +828,7 @@ export class Delve extends Phaser.Scene {
     // assumes add() appends to the very array getChildren() handed back -- and
     // when it does not, the loop never terminates and the page simply stops,
     // which is a hang with no error and nothing in the log.
-    const live = this.stepping ? enemies.filter(e => this.showBody(e, time)) : [];
+    const live = this.stepping ? enemies.filter(e => this.showBody(e)) : [];
     const pool = this.pool;
     while (pool.length < live.length) {
       const s = this.add.sprite(0, 0, 'art', 'bestiary/thrall-rest');
@@ -810,6 +846,12 @@ export class Delve extends Phaser.Scene {
         .setDisplaySize(r * 2.05, r * 1.05)
         .setPosition(e.x + LIGHT.x * LIGHT.body,
                      e.y + LIGHT.y * LIGHT.body + r * 0.42);
+      // A shadow stays on the ground while the body above it falls over, but
+      // it goes when the body goes -- a shadow outliving what cast it is worse
+      // than no shadow at all.
+      const sd = deathPose(e);
+      const sa = sd ? sd.alpha : 1;
+      if (sh.alpha !== sa) sh.setAlpha(sa);
     }
     for (let i = 0; i < pool.length; i++) {
       const s = pool[i], e = live[i];
@@ -831,9 +873,24 @@ export class Delve extends Phaser.Scene {
       const bx = s.scaleY * ((e.hp > 0 && (e.pace < GAIT_STILL || e.braced))
                              ? breathScale(e) : 1);
       if (s.scaleX !== bx) s.scaleX = bx;
+
+      /* Falling over. The offsets pivot the turn onto the feet -- Phaser turns
+       * a sprite about its origin, which is its centre, and a body rotated
+       * about its middle swings its legs out from under it and looks thrown
+       * rather than felled. deathPose works the compensation out so both
+       * builds do it the same way. */
+      const d = deathPose(e);
+      const rot = d ? d.rot : 0;
+      if (s.rotation !== rot) s.setRotation(rot);       // guarded: see scaleX
+      const al = d ? d.alpha : (e.calcify > 0 ? 0.85 : 1);
+      if (s.alpha !== al) s.setAlpha(al);
+      // Falling over, or flinching from a blow. Not both: a body that has
+      // just been killed is going down, and a shove on the way is noise.
+      const fl = d ? null : flinchOffset(e);
+      if (d) s.setPosition(e.x + d.dx, e.y + d.dy);
+      else if (fl) s.setPosition(e.x + fl.x, e.y + fl.y);
       // Struck bodies flash, calcifying ones sit under a shell of light.
       s.setTint(e.hitFlash > 0 ? 0xffffff : (e.calcify > 0 ? 0x9fd8e8 : 0xffffff));
-      s.setAlpha(e.calcify > 0 ? 0.85 : 1);
     }
 
     if (!this.stepping) return;

@@ -1750,6 +1750,11 @@ const LIGHT = { x: 0.62, y: 0.78, wall: 11, body: 5 };
  * as on the avatar rather than scaling with the body.
  */
 const RIM_HUE = 'rgb(228,220,196)', RIM_W = 0.85, RIM_A = 0.5;
+
+/* The specular. Narrower and hotter than the rim, and banded to the materials
+ * that would carry one: above the cloth, below anything already glowing. */
+const SHEEN_HUE = 'rgb(255,248,232)', SHEEN_W = 0.45, SHEEN_A = 0.5;
+const SHEEN_LO = 62, SHEEN_HI = 190, SHEEN_SAT = 0.65;
 const HUD_H           = 78;   // canvas UI clears the HUD panel by this much
 // Holding the gate is the delve's second act, and the only part of a run that
 // can be stretched: a delve itself is bounded at roughly two minutes because a
@@ -4550,7 +4555,7 @@ function blastAt(x, y, r, dmg, hue, pierce) {
     if (e.hp <= 0) continue;
     const d = Math.hypot(e.x - x, e.y - y);
     if (d > r + e.r) continue;
-    damageEnemy(e, dmg * (1 - Math.min(0.6, d / (r * 2))));
+    damageEnemy(e, dmg * (1 - Math.min(0.6, d / (r * 2))), x, y);
   }
   if (dist2(player.x, player.y, x, y) < r * r) {
     if (pierce === false) {
@@ -5014,7 +5019,7 @@ const ABILITY_DO = {
     player.angle = Math.atan2(t.y - player.y, t.x - player.x);
     if (Math.abs(Math.cos(player.angle)) > 0.25)
       player.face = Math.cos(player.angle) < 0 ? -1 : 1;
-    damageEnemy(t, player.damage * a.dmg);
+    damageEnemy(t, player.damage * a.dmg, player.x, player.y);
     knock(t, player.angle, 200);
     freeze(0.03);
     shake(5);
@@ -5034,7 +5039,7 @@ const ABILITY_DO = {
       const e = _near[i];
       if (e.hp <= 0) continue;
       if (dist2(player.x, player.y, e.x, e.y) > a.radius * a.radius) continue;
-      damageEnemy(e, player.damage * a.dmg);
+      damageEnemy(e, player.damage * a.dmg, player.x, player.y);
       knock(e, Math.atan2(e.y - player.y, e.x - player.x), 240);
     }
     player.mitigate = a.mitigate;
@@ -5067,7 +5072,7 @@ const ABILITY_DO = {
     shake(vuln ? 16 : 11);
     ring(t.x, t.y, vuln ? '#fff2c8' : '#ffd870', 8, vuln ? 190 : 120, 0.5);
     burst(t.x, t.y, '#fff2c8', vuln ? 40 : 22, 380);
-    damageEnemy(t, player.damage * a.dmg * (vuln ? VULN_MULT : 1));
+    damageEnemy(t, player.damage * a.dmg * (vuln ? VULN_MULT : 1), player.x, player.y);
     if (vuln) toast('The guard is broken', '#fff2c8');
   },
 
@@ -5088,7 +5093,7 @@ const ABILITY_DO = {
       // struck rather than only what the beam's centre passes through.
       if (segDist(player.x, player.y, ex, ey, e.x, e.y) > e.r + 10) continue;
       if (!clearShot(player.x, player.y, e.x, e.y)) continue;
-      damageEnemy(e, player.damage * a.dmg);
+      damageEnemy(e, player.damage * a.dmg, player.x, player.y);
       burst(e.x, e.y, '#5fd0ff', 6, 150);
       hits++;
     }
@@ -5594,7 +5599,13 @@ function hurtPlayerBy(dmg, fx, fy) {
   if (player.hp <= 0) { player.hp = 0; endRun(false); }
 }
 
-function damageEnemy(e, dmg) {
+/* `fx, fy` is where the blow came FROM, and it is the only reason this takes
+ * more than a body and a number: a recoil has to go somewhere, and guessing
+ * "away from the player" would be wrong for a hazard underfoot, a totem, or a
+ * blade swung past. Every caller knows its own source -- the blast centre, the
+ * arc's position, the hero -- so each one says. Omitted, the body still flashes
+ * and simply does not flinch. */
+function damageEnemy(e, dmg, fx, fy) {
   if (e.hp <= 0) return;
   if (!e.awake) wakeEnemy(e);          // struck from the dark: everyone hears
   // He is held up by his escort. Hitting him through it is not forbidden, just
@@ -5622,6 +5633,13 @@ function damageEnemy(e, dmg) {
   }
   e.hp -= dmg;
   e.hitFlash = 0.12;
+  // The direction the blow travelled, as a unit vector, for the recoil to ride.
+  // A blow landing exactly on a body's own centre has no direction to give, so
+  // the flinch keeps whichever it had rather than snapping to due east.
+  if (fx !== undefined) {
+    const dx = e.x - fx, dy = e.y - fy, m = Math.hypot(dx, dy);
+    if (m > 0.001) { e.hitX = dx / m; e.hitY = dy / m; }
+  }
   // A heavy enough blow shatters a body that is closing. A scratch does not:
   // the point is that you have to commit to stopping it, not graze it once.
   if (e.calcify > 0 && dmg >= e.maxHp * CALCIFY_BREAK) breakCalcify(e, true);
@@ -6334,7 +6352,7 @@ function updateArcs(dt) {
         const e = _near[k];
         if (e.hp <= 0 || b.hit.indexOf(e) !== -1) continue;
         if (!inCrescent(b, e)) continue;
-        damageEnemy(e, b.dmg);
+        damageEnemy(e, b.dmg, b.x, b.y);
         b.hit.push(e);
       }
       // A totem is a thing standing on the floor and the blade cuts it like
@@ -6831,73 +6849,133 @@ function forge(span, paint) {
   return c;
 }
 
-/* A single bright edge along the lit side of a finished sprite.
+/* Light a finished sprite: a rim along its lit edge, and a sharper highlight
+ * on the materials that would carry one.
  *
- * The bodies are painted about as dark as the room they stand in, which is
- * honest -- it IS a dark room -- and costs the one thing a top-down crowd
- * needs most: you cannot tell where one body ends and the floor begins. A rim
- * is the cheapest fix there is. It adds no silhouette (it is drawn strictly
- * inside the one already there, so nothing moves, resizes, or stops lining up
- * with its own shadow) and it is baked once per sprite rather than costing
- * anything per frame.
+ * WHY BOTH IN ONE PASS. Each needs to know something per-pixel -- the rim
+ * needs the solid silhouette, the sheen needs luminance and saturation -- and
+ * the way to know that is getImageData, which is a GPU-to-CPU readback. Run as
+ * two functions it was two readbacks and two full-image loops per sprite, and
+ * it took forgeAll from 65ms to 451ms: seven times the load cost of every body
+ * and hero in the game, to light them. One readback, one loop, two masks.
  *
- * Built by subtraction, not by stroking: the sprite is punched out of itself
- * offset DOWN-LIGHT, and what survives is the crescent facing the light. That
- * works on every creature without knowing anything about how it was drawn --
- * eleven hand-painted bodies and two heroes, none of which share a path.
+ * THE RIM. Built by subtraction: the silhouette punched out of itself offset
+ * down-light, leaving the crescent that faces the light. That works on eleven
+ * hand-painted creatures that share no paths, and it adds nothing outside the
+ * silhouette already there -- measured, all eleven bounding boxes came back
+ * identical, so nothing moved, resized, or parted company with its own shadow.
  *
- * LIGHT is the same direction the shadows already use, so the rim and the
- * shadow agree about where the light is. They had better: a body lit from the
- * left throwing a shadow to the left is worse than no rim at all.
+ * It follows the SOLID body: a sprite carries its own contact shadow painted
+ * underneath at 0.4 alpha, and a bright crescent along the top of a shadow is
+ * a light source beneath the floor. Alpha is remapped rather than thresholded
+ * so the body keeps its edge softness instead of being cut to a stencil.
+ *
+ * THE SHEEN. Plate and rag read alike at fifty pixels because every material
+ * here is a soft top-to-bottom ramp, and a soft ramp is matte. What says METAL
+ * is a narrow specular; what says CLOTH is the absence of one. The forge cannot
+ * be asked which path was armour, but it does not need to be: in this bestiary
+ * the armour IS the light-valued material -- the breaker's helm ramps to 112
+ * where its rags sit at 34 -- so the rule is stated as exactly that.
+ *
+ * Banded three ways. Below LO is cloth and stays matte. Above HI is something
+ * already emitting, and a specular on a light source is a blown highlight.
+ * And by SATURATION, which is what really separates reflecting from emitting
+ * here: the void-brand every body carries is orange at luminance 135, sitting
+ * squarely inside the value band, and it came out with a white highlight down
+ * a glowing rune. Plate, bone and stone are near-grey; brands and embers are
+ * not. Gold trim sits at 0.59 and stays, which is right -- it is metal.
  */
-function rimLight(c, colour, width, alpha) {
-  const px = c.width;
-  const dx = LIGHT.x * width * SS, dy = LIGHT.y * width * SS;
+/* Scratch canvases, reused.
+ *
+ * lightPass wants working surfaces and there are a hundred and thirty-odd
+ * sprites, so allocating them fresh is five hundred canvases at load for no
+ * reason: they are written and read inside one call and never escape it.
+ *
+ * Handed back in a KNOWN STATE, which is the whole difficulty with pooling a
+ * canvas. Clearing the pixels is not enough -- a context remembers its
+ * composite operation and its alpha, and the caller here sets both. Without
+ * the reset the second user of a surface inherited 'source-in' from the first
+ * and composited into nothing: the rim silently stopped being drawn on every
+ * sprite after the first, and the art came back byte-identical at the lit edge
+ * to art with no lighting at all.
+ */
+const _scr = [];
+function scratch(i, px) {
+  let c = _scr[i];
+  if (!c) c = _scr[i] = newCanvas(px, px);
+  else if (c.width !== px || c.height !== px) { c.width = px; c.height = px; }
+  else c.getContext('2d').clearRect(0, 0, px, px);
   const g = c.getContext('2d');
+  g.globalCompositeOperation = 'source-over';
+  g.globalAlpha = 1;
+  return c;
+}
 
-  /* The SOLID body, not everything on the canvas.
-   *
-   * A sprite carries its own contact shadow, painted underneath at 0.4 alpha,
-   * and a bright crescent along the top of a shadow is a light source beneath
-   * the floor. So the silhouette is taken above that: alpha is remapped so
-   * anything at shadow strength falls away and the body keeps its edge
-   * softness instead of being cut to a hard stencil.
-   */
+function lightPass(c) {
+  const px = c.width;
+  const g = c.getContext('2d');
+  const src = g.getImageData(0, 0, px, px).data;
+
+  const body = scratch(0, px), mat = scratch(1, px);
+  const gb = body.getContext('2d'), gt = mat.getContext('2d');
+  const ib = gb.createImageData(px, px), it = gt.createImageData(px, px);
   const CUT = 160;
-  const src = g.getImageData(0, 0, px, px);
-  const sil = newCanvas(px, px);
-  const gs = sil.getContext('2d');
-  const im = gs.createImageData(px, px);
-  for (let i = 3; i < src.data.length; i += 4) {
-    const a = src.data[i];
+  for (let i = 0; i < src.length; i += 4) {
+    const a = src[i + 3];
     if (a <= CUT) continue;
-    im.data[i] = ((a - CUT) / (255 - CUT)) * 255;
+    ib.data[i + 3] = ((a - CUT) / (255 - CUT)) * 255;
+    if (a < 200) continue;
+    const r = src[i], gg = src[i + 1], b = src[i + 2];
+    const L = 0.2126 * r + 0.7152 * gg + 0.0722 * b;
+    if (L < SHEEN_LO || L > SHEEN_HI) continue;
+    const mx = Math.max(r, gg, b);
+    if (mx > 0 && (mx - Math.min(r, gg, b)) / mx > SHEEN_SAT) continue;
+    it.data[i + 3] = 255;
   }
-  gs.putImageData(im, 0, 0);
+  gb.putImageData(ib, 0, 0);
+  gt.putImageData(it, 0, 0);
 
-  const m = newCanvas(px, px);
-  const gm = m.getContext('2d');
-  gm.drawImage(sil, 0, 0);
-  gm.globalCompositeOperation = 'destination-out';
-  gm.drawImage(sil, dx, dy);               // leaves the up-light crescent
-  gm.globalCompositeOperation = 'source-in';
-  gm.fillStyle = colour;
-  gm.fillRect(0, 0, px, px);
+  // The up-light edge of a mask: itself, minus itself shifted away from the
+  // light. For the body that is its outline; for the material it is a line
+  // along the top of every plate, which is where a highlight sits.
+  /* At least one pixel wide, whatever the display.
+   *
+   * The widths are in world units and scale by SS, which is right -- a rim
+   * should be the same apparent thickness on a phone as on a desktop. But at
+   * SS 1 that comes to 0.53 x 0.66 pixels, and a sub-pixel subtraction leaves
+   * a crescent so faint it is not there: measured at dpr 1, eight of eleven
+   * bodies came back no brighter at the lit edge than unlit ones. The shipped
+   * atlas is exported at 2x and never saw it; a low-dpr display would have.
+   */
+  const edge = (mask, colour, width) => {
+    let ox = LIGHT.x * width * SS, oy = LIGHT.y * width * SS;
+    const len = Math.hypot(ox, oy);
+    if (len < 1.25) { ox *= 1.25 / len; oy *= 1.25 / len; }
+    const k = scratch(2, px), gk = k.getContext('2d');
+    gk.drawImage(mask, 0, 0);
+    gk.globalCompositeOperation = 'destination-out';
+    gk.drawImage(mask, ox, oy);
+    gk.globalCompositeOperation = 'source-in';
+    gk.fillStyle = colour;
+    gk.fillRect(0, 0, px, px);
+    return k;
+  };
 
   g.save();
-  // forge() left a translate+scale on this context and the crescent is
-  // already in device pixels, so it goes down under the identity.
+  // forge() left a translate+scale on this context; the crescents are already
+  // in device pixels, so they go down under the identity.
   g.setTransform(1, 0, 0, 1, 0, 0);
-  g.globalAlpha = alpha;
-  g.drawImage(m, 0, 0);
+  // Drawn one at a time: both edges share a scratch surface, so the specular
+  // has to be down before the rim is built over the top of it. The specular
+  // goes first either way -- the rim owns the outermost edge.
+  g.globalAlpha = SHEEN_A;
+  g.drawImage(edge(mat, SHEEN_HUE, SHEEN_W), 0, 0);
+  g.globalAlpha = RIM_A;
+  g.drawImage(edge(body, RIM_HUE, RIM_W), 0, 0);
   g.restore();
   return c;
 }
 
-// `sx` widens the sprite without touching its height, which is how a standing
-// body breathes. Only x, so the feet stay exactly where they were planted --
-// a vertical squash would need to know where the feet sit inside each sprite,
-// and they sit somewhere different in every one of them.
 function blit(spr, x, y, rot, alpha, scale, flip, sx) {
   const s = spr.span * (scale || 1);
   const w = s * (sx || 1);
@@ -7062,6 +7140,79 @@ function breathScale(e) {
   return 1 + BREATH * Math.sin(t / BREATH_MS * TAU);
 }
 
+/* Falling over.
+ *
+ * A body used to stop being drawn on the frame its hp reached zero, which is
+ * the cheapest possible death and reads as one: a thrall does not die, it is
+ * deleted. The core never removes a dead body from `enemies` -- everything
+ * simply skips hp <= 0 -- so all of this is presentation and the simulation
+ * never learns it happened.
+ *
+ * A TRANSFORM, not frames, for the reason the breath is: posed art for this
+ * costs texture per creature and there are eleven of them, and a topple is a
+ * rigid rotation, which is exactly what a transform does well.
+ *
+ * PIVOTED ON THE FEET. A body rotated about the middle of its sprite swings
+ * its legs out from under it and looks thrown rather than felled. Both
+ * renderers turn about the sprite centre, so the compensation is done here
+ * instead: rotating the foot vector (0, f) by rot moves the foot to
+ * (-f sin rot, f cos rot), and offsetting the whole sprite by the difference
+ * puts it back where it fell. Shared rather than written twice, because the
+ * two builds have to agree on it exactly.
+ *
+ * The fade is late and quick -- a body that starts dissolving as it begins to
+ * fall reads as a summon being dismissed, not as something being killed.
+ */
+const DIE_MS = 480;
+const DIE_TILT = 1.15;     // radians it comes to rest at, a bit past sixty degrees
+function deathPose(e) {
+  if (e.hp > 0) {
+    if (e.dieAt !== undefined) e.dieAt = undefined;
+    return null;
+  }
+  const now = performance.now();
+  if (e.dieAt === undefined) e.dieAt = now;
+  const t = (now - e.dieAt) / DIE_MS;
+  if (t >= 1) return { done: true };
+  const ease = 1 - (1 - t) * (1 - t);            // fast off the mark, settling
+  const rot = ease * DIE_TILT * (e.face < 0 ? -1 : 1);
+  const f = (e.r || 13) * 1.10;                  // the feet, below the centre
+  return {
+    done: false, t, rot,
+    dx: f * Math.sin(rot),
+    dy: f * (1 - Math.cos(rot)) + ease * (e.r || 13) * 0.12,
+    alpha: t < 0.55 ? 1 : 1 - (t - 0.55) / 0.45
+  };
+}
+
+/* Flinching.
+ *
+ * A struck body flashes white and is otherwise unmoved, which says THAT it was
+ * hit and nothing about how hard or from where. A recoil says both, and it is
+ * the difference between a number appearing over a statue and a body taking a
+ * blow.
+ *
+ * Rides `hitFlash`, which the core already keeps and already counts down, so
+ * this needs no clock of its own and cannot drift out of step with the flash
+ * it accompanies. Out fast and back slower -- a flinch is a shove and a
+ * recovery, not a wobble -- and the whole thing is over in 0.12s, which is
+ * why it is a shove of a few units rather than a lunge: at that length
+ * anything larger reads as the body being teleported.
+ *
+ * It moves the SPRITE, never the body. Where a body actually is belongs to the
+ * simulation, and a renderer that quietly moved things would put a hitbox
+ * somewhere the player cannot see.
+ */
+const FLINCH = 3.4;        // world units, at the top of the shove
+function flinchOffset(e) {
+  const f = (e.hitFlash || 0) / 0.12;                 // 1 fresh -> 0 recovered
+  if (f <= 0 || e.hitX === undefined) return null;
+  // Peaks a third of the way in: out in 0.04s, back over the remaining 0.08.
+  const k = f > 0.66 ? (1 - f) / 0.34 : f / 0.66;
+  const d = FLINCH * k;
+  return { x: e.hitX * d, y: e.hitY * d };
+}
+
 // Which sprite a body wears this frame. Below GAIT_STILL it is standing.
 const GAIT_STILL = 0.16;
 function bodyFrame(e) {
@@ -7079,7 +7230,10 @@ function heroFrame(p) {
 
 // One body in one pose. `P` is a gait pose (GAIT_REST for the standing frame);
 // the hit flash is no longer baked in, it is an additive pass at draw time.
-function forgeEnemy(kind, r, color, P) {
+// `bare` forges the body without the light pass. Only the look suite passes it,
+// and it is there so that suite can prove the pass is what lights a body
+// rather than asserting a number and hoping.
+function forgeEnemy(kind, r, color, P, bare) {
   const u = r * 1.16;
   const outline = (w) => { g0.strokeStyle = 'rgba(0,0,0,.82)'; g0.lineWidth = w; g0.stroke(); };
   let g0 = null;
@@ -7091,7 +7245,7 @@ function forgeEnemy(kind, r, color, P) {
 
   // Bounds sized to the figure (widest extent is the shadow at 1.28u), not a
   // round number: at 340 bodies in a delve the padding is pure fill cost.
-  return rimLight(forge(u * 2.9, g => {
+  return (bare ? (x => x) : lightPass)(forge(u * 2.9, g => {
     g0 = g;
     g.lineJoin = 'round';
     g.lineCap = 'round';
@@ -7931,7 +8085,7 @@ function forgeEnemy(kind, r, color, P) {
     g.fillStyle = 'rgba(0,0,0,.4)';
     g.beginPath(); g.ellipse(0, u * 1.06, u * 0.66, u * 0.22, 0, 0, TAU); g.fill();
     g.globalCompositeOperation = 'source-over';
-  }), RIM_HUE, RIM_W, RIM_A);
+  }));
 }
 
 // Mal-Ghorath's avatar on earth. The compendium gives him two properties that
@@ -7948,7 +8102,7 @@ function forgeDeceiver(kind) {
                                 // still looms without wedging in corridors
   const mirage = kind === 'mirage';
   const lit = (a, b, c) => 'rgb(' + a + ',' + b + ',' + c + ')';
-  return rimLight(forge(u * 3.0, g => {
+  return lightPass(forge(u * 3.0, g => {
     g.lineJoin = 'round'; g.lineCap = 'round';
 
     // Robe, hanging to nothing
@@ -8019,7 +8173,7 @@ function forgeDeceiver(kind) {
     g.fillStyle = 'rgba(0,0,0,.4)';
     g.beginPath(); g.ellipse(0, u * 1.0, u * 0.6, u * 0.2, 0, 0, TAU); g.fill();
     g.globalCompositeOperation = 'source-over';
-  }), RIM_HUE, RIM_W, RIM_A);
+  }));
 }
 
 // The Guided Vanguard. Both fight unhelmeted -- the compendium is explicit
@@ -8242,7 +8396,7 @@ function forgeHero(id, P) {
   const lfA = -u * P.lift, lfB = -u * P.liftB;
   const arA = u * P.arm;
 
-  return rimLight(forge(u * 4.0, g => {
+  return lightPass(forge(u * 4.0, g => {
     g.lineJoin = 'round'; g.lineCap = 'round';
     g.save();
     g.translate(0, u * P.bob);
@@ -8402,7 +8556,7 @@ function forgeHero(id, P) {
     g.fillStyle = 'rgba(0,0,0,.42)';
     g.beginPath(); g.ellipse(0, u * 1.3, u * 0.84, u * 0.28, 0, 0, TAU); g.fill();
     g.globalCompositeOperation = 'source-over';
-  }), RIM_HUE, RIM_W, RIM_A);
+  }));
 }
 
 // Essence: a mote of light bound in a shard.
@@ -10040,7 +10194,8 @@ function drawStanding(t, x0, y0, x1, y1) {
   }
   for (let i = 0; i < enemies.length; i++) {
     const e = enemies[i];
-    if (e.hp <= 0) continue;
+    // Dead bodies stay in the list while they are still falling over.
+    if (e.hp <= 0) { const d = deathPose(e); if (!d || d.done) continue; }
     if (e.x < x0 || e.x > x1 || e.y < y0 || e.y > y1) continue;
     _sortable.push(e);
   }
@@ -10393,9 +10548,17 @@ function drawEnemy(e) {
   // Standing bodies breathe. Not walking ones: the gait already says they are
   // alive, and a body that swells while it runs reads as short of breath.
   const bs = (e.pace < GAIT_STILL || e.braced) ? breathScale(e) : 1;
-  blit(spr, e.x, e.y, e.awake ? 0 : Math.sin(e.drowse) * 0.035,
+  const fl = flinchOffset(e);
+  const fx = fl ? fl.x : 0, fy = fl ? fl.y : 0;
+  const dead = deathPose(e);
+  if (dead) {
+    // Falling over. No breath, no flash: it is done being alive.
+    blit(spr, e.x + dead.dx, e.y + dead.dy, dead.rot, dead.alpha, 1, flip);
+    return;
+  }
+  blit(spr, e.x + fx, e.y + fy, e.awake ? 0 : Math.sin(e.drowse) * 0.035,
        1, 1 + swell * 0.3, flip, bs);
-  if (e.hitFlash > 0) blitFlash(spr, e.x, e.y, flip, 1, bs);
+  if (e.hitFlash > 0) blitFlash(spr, e.x + fx, e.y + fy, flip, 1, bs);
   if (swell > 0) {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
