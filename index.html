@@ -1804,7 +1804,7 @@ const PORTAL_R        = 62;
 const BASE_PLAYER = {
   r: 14, maxHp: 100, speed: 205,
   damage: 22, fireDelay: 0.56, range: 186, arcSpeed: 1550,
-  sweep: 28, shots: 1, magnet: 118, regen: 0,
+  sweep: 28, shots: 1, fan: 0, magnet: 118, regen: 0,
   iframe: 0.45
 };
 
@@ -2561,6 +2561,49 @@ const AFFIX_BY_ID = {};
 for (const a of AFFIXES) AFFIX_BY_ID[a.id] = a;
 
 // Which affixes a slot can roll. Keeps a blade feeling like a blade.
+/* BRANDS: what a Riven piece does, as opposed to what it adds up to.
+ *
+ * Every affix above moves one number in one direction, so the best item in the
+ * game is the one with the biggest numbers and there is nothing to think
+ * about. A brand moves two, against each other, and one of them changes how
+ * the blade behaves rather than how hard it hits. It is a decision: the fan
+ * clears a room and cannot fight one thing, the reaving edge fights one thing
+ * across the hall and cannot clear a room.
+ *
+ * Mechanically they are affixes -- same {id, v} shape on the item, same
+ * AFFIX_BY_ID lookup, same fold in recomputeStats -- so nothing that reads,
+ * validates, saves, tempers or prices an item has to learn a second kind. The
+ * only new thing is that a brand carries an `add`/`mul` BUNDLE instead of a
+ * single stat, and `v` is a roll on how strong the bundle is.
+ *
+ * They roll only on Riven, only on the slot they belong to, and only ever one
+ * to a piece: two brands on one item is two mechanics arguing.
+ */
+const BRANDS = [
+  { id: 'fan', slot: 'blade', name: 'Sundering',
+    word: 'three crescents in a fan, and half again the swing time',
+    lo: 1, hi: 1, add: { shots: 2, fan: 1 }, mul: { fireDelay: 0.5 } },
+  { id: 'reave', slot: 'blade', name: 'Reaving',
+    word: 'crescents carry twice as far, and cut a third as wide',
+    lo: 1, hi: 1, mul: { range: 1.0, sweep: -0.66 } },
+  { id: 'headlong', slot: 'boots', name: 'Headlong',
+    word: 'a third again the stride, at a fifth of your life',
+    lo: 1, hi: 1, mul: { speed: 0.34, maxHp: -0.20 } },
+  { id: 'covet', slot: 'girdle', name: 'Covetous',
+    word: 'the delve comes to you — triple draw, at a seventh of your life',
+    lo: 1, hi: 1, mul: { magnet: 2.0, maxHp: -0.14 } }
+];
+// Brands go into AFFIX_BY_ID beside the ordinary affixes, so validItem,
+// affixText, the temper, the vault and the save file all treat one as an affix
+// and none of them has to know what it is. Registered HERE rather than up with
+// the affix table, which runs before this declaration and cannot see it.
+for (const b of BRANDS) { b.brand = true; AFFIX_BY_ID[b.id] = b; }
+const BRAND_BY_SLOT = {};
+for (const b of BRANDS) (BRAND_BY_SLOT[b.slot] = BRAND_BY_SLOT[b.slot] || []).push(b);
+// Odds a Riven piece in a branded slot is branded. Not every one: a Riven
+// blade that is always Sundering or Reaving is two items rather than a tier.
+const BRAND_ODDS = 0.55;
+
 const SLOT_AFFIXES = {
   blade:   ['damage','damageP','reach','sweep','cadence'],
   offhand: ['ward','life','damageP','sweep','regen'],
@@ -2617,6 +2660,14 @@ function rollItem(depth, slotId) {
     v = a.dp ? +v.toFixed(a.dp) : (Math.abs(a.lo) >= 1 ? Math.max(1, Math.round(v)) : v);
     affixes.push({ id, v });
   }
+  // The brand REPLACES a rolled affix rather than being added to them, so a
+  // branded Riven is not simply a Riven with a sixth line on it -- the trade
+  // costs a slot as well as a stat.
+  const brands = rarity.id === 'riven' && BRAND_BY_SLOT[slot];
+  if (brands && affixes.length && Math.random() < BRAND_ODDS) {
+    const br = brands[(Math.random() * brands.length) | 0];
+    affixes[0] = { id: br.id, v: br.lo + Math.random() * (br.hi - br.lo) };
+  }
   return { uid: ++itemSeq, slot, base, rarity: rarity.id, affixes,
            name: affixes.length ? AFFIX_BY_ID[affixes[0].id].name + ' ' + base : base };
 }
@@ -2624,6 +2675,9 @@ function rollItem(depth, slotId) {
 function affixText(af, hero) {
   const a = AFFIX_BY_ID[af.id];
   if (!a) return '';
+  // A brand's word is the whole sentence: there is no single number to
+  // substitute into it, because it moves two in opposite directions.
+  if (a.brand) return a.word;
   let v;
   // An additive affix whose roll is a fraction has to say so, or it prints the
   // float: the synergy ward is `isaacWard`, so keying the percentage off the
@@ -2680,6 +2734,14 @@ function recomputeStats() {
       // An affix forged for this Vanguard pays more in their hands.
       const k = (a.hero && a.hero === p.hero) ? SYNERGY_BONUS : 1;
       const v = af.v * k;
+      // A brand carries a bundle rather than a stat, and `v` scales it. Same
+      // two piles, so the order it was equipped in still cannot matter.
+      if (a.brand) {
+        for (const st in (a.add || {})) add[st] = (add[st] || 0) + a.add[st] * v;
+        for (const st in (a.mul || {}))
+          mul[st] = (mul[st] === undefined ? 1 : mul[st]) * (1 + a.mul[st] * v);
+        continue;
+      }
       if (a.mul) mul[a.stat] = (mul[a.stat] === undefined ? 1 : mul[a.stat]) * (1 + v);
       else add[a.stat] = (add[a.stat] || 0) + v;
     }
@@ -4149,9 +4211,16 @@ function fire() {
   // Extra crescents stagger behind the first rather than fanning out: two
   // blades of light chasing the same line reads as a combination strike, where
   // a spread reads as a shotgun.
+  // Extra crescents normally stagger behind the first down the same line --
+  // two blades of light chasing one target reads as a combination strike where
+  // a spread reads as a shotgun. A FAN is the deliberate exception: the
+  // Sundering brand buys width with cadence, so its crescents go wide and
+  // together, which is the whole of what it is for.
+  const fan = (player.fan || 0) > 0;
+  const step = fan ? 0.34 : 0.15;
   for (let i = 0; i < player.shots; i++) {
-    const a = base + (i === 0 ? 0 : (i % 2 ? 1 : -1) * 0.15 * Math.ceil(i / 2));
-    releaseCrescent(a, i * 0.055);
+    const a = base + (i === 0 ? 0 : (i % 2 ? 1 : -1) * step * Math.ceil(i / 2));
+    releaseCrescent(a, fan ? 0 : i * 0.055);
   }
   player.swing    = SWING_TIME;
   player.recov    = 0;
@@ -13204,8 +13273,15 @@ function vendorBuy(v, arg) {
     const it = arg && stash.gear[arg];
     if (!it || it.set === SET_ID) return false;      // the Regalia is fixed
     const pool = SLOT_AFFIXES[it.slot].slice();
-    const n = it.affixes.length;
-    it.affixes = [];
+    // THE BRAND SURVIVES THE FIRE. A temper rerolls from SLOT_AFFIXES, which
+    // brands are deliberately not in -- so without this it quietly replaced
+    // the one thing that made a Riven piece worth owning with an ordinary
+    // affix, and charged for it. The brand is what the piece IS; the temper is
+    // everything else about it, which is also the reason not to refuse the
+    // sale outright the way the Regalia does.
+    const kept = it.affixes.filter(a => AFFIX_BY_ID[a.id] && AFFIX_BY_ID[a.id].brand);
+    const n = it.affixes.length - kept.length;
+    it.affixes = kept;
     for (let i = 0; i < n && pool.length; i++) {
       const id = pool.splice((Math.random() * pool.length) | 0, 1)[0];
       const a = AFFIX_BY_ID[id];

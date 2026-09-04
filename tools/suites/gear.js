@@ -37,6 +37,9 @@ async function beginRun(p, hero, diff) {
 }
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push(n+(note?'  ['+note+']':''));
+const BRANDS_TEXT_OK = B => Object.keys(B).every(k =>
+  B[k].text && B[k].text.length > 20 && !/^[+-]?\d/.test(B[k].text));
+
 (async()=>{
   const b=await chromium.launch();
   const p=await (await b.newContext({viewport:{width:430,height:900}})).newPage();
@@ -59,7 +62,13 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push(n+(note?'  ['+n
       for(const a of it.affixes){
         if(seen[a.id]) o.bad.push('dup '+a.id+' on '+it.slot);
         seen[a.id]=1;
-        if(SLOT_AFFIXES[it.slot].indexOf(a.id)<0) o.bad.push('illegal '+a.id+' on '+it.slot);
+        // A brand is legal for the slot it belongs to and nowhere else. It is
+        // deliberately NOT in SLOT_AFFIXES -- that pool is what a temper
+        // rerolls from, and a brand must not be rerolled into existence.
+        const def = AFFIX_BY_ID[a.id];
+        const ok = def && def.brand ? def.slot === it.slot
+                                    : SLOT_AFFIXES[it.slot].indexOf(a.id) >= 0;
+        if(!ok) o.bad.push('illegal '+a.id+' on '+it.slot);
         if(!isFinite(a.v)) o.bad.push('non-finite '+a.id);
         if(!affixText(a) || /NaN|undefined/.test(affixText(a))) o.bad.push('bad text '+a.id);
       }
@@ -226,6 +235,163 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push(n+(note?'  ['+n
      await p.evaluate(()=>!stash.gear.blade && stash.vault.length===2));
   await p.click('#gearClose'); await sleep(200);
   ck('closing returns to the gate-house', await p.evaluate(()=>state)==='menu');
+
+  /* --- BRANDS: what a Riven piece DOES ------------------------------------
+   * Every ordinary affix moves one number one way, so the best item is the one
+   * with the biggest numbers and there is nothing to decide. A brand moves two
+   * against each other and one of them changes how the blade behaves. What has
+   * to hold: the trade is real in both directions, it costs an affix slot
+   * rather than adding a sixth line, it cannot appear below Riven or in a slot
+   * it does not belong to, and it survives being written to disk.
+   */
+  const brand = await p.evaluate(() => {
+    const o = {};
+    const bare = () => { stash = blankStash(); saveStash();
+                         startRun('isaac', LEVELS[20].id, 'riven');
+                         return snap(); };
+    const snap = () => ({ shots: player.shots, fan: player.fan || 0,
+      fireDelay: +player.fireDelay.toFixed(3), range: Math.round(player.range),
+      sweep: +player.sweep.toFixed(1), speed: Math.round(player.speed),
+      maxHp: Math.round(player.maxHp), magnet: Math.round(player.magnet) });
+    const wear = id => {
+      const br = BRANDS.find(b => b.id === id);
+      stash = blankStash();
+      const it = { uid: 1, slot: br.slot, base: 'Proof', rarity: 'riven',
+                   affixes: [{ id, v: 1 }], name: 'Proof' };
+      stash.gear[br.slot] = it; saveStash();
+      startRun('isaac', LEVELS[20].id, 'riven');
+      // Round-tripped through the save file, not just held in memory: a brand
+      // that cannot be loaded back is a brand that vanishes overnight.
+      const back = loadStash();
+      return { now: snap(), text: affixText({ id, v: 1 }, 'isaac'),
+               kept: !!(back.gear[br.slot] &&
+                        back.gear[br.slot].affixes.some(a => a.id === id)) };
+    };
+    o.bare = bare();
+    o.each = {};
+    for (const br of BRANDS) o.each[br.id] = wear(br.id);
+
+    // Where they roll, and where they must not.
+    let riven = 0, branded = 0, belowRiven = 0, wrongSlot = 0, doubled = 0, affixN = {};
+    for (let i = 0; i < 6000; i++) {
+      const slot = SLOTS[(Math.random() * SLOTS.length) | 0].id;
+      const it = rollItem(1, slot);
+      const brs = it.affixes.filter(a => AFFIX_BY_ID[a.id] && AFFIX_BY_ID[a.id].brand);
+      if (brs.length > 1) doubled++;
+      if (it.rarity === 'riven' && slot === 'blade') { riven++; if (brs.length) branded++; }
+      if (brs.length && it.rarity !== 'riven') belowRiven++;
+      if (brs.length && brs.some(a => AFFIX_BY_ID[a.id].slot !== slot)) wrongSlot++;
+      if (it.rarity === 'riven')
+        (affixN[brs.length ? 'branded' : 'plain'] =
+          affixN[brs.length ? 'branded' : 'plain'] || []).push(it.affixes.length);
+    }
+    const mean = a => a && a.length ? +(a.reduce((x, y) => x + y, 0) / a.length).toFixed(2) : 0;
+    o.riven = riven; o.branded = branded; o.belowRiven = belowRiven;
+    o.wrongSlot = wrongSlot; o.doubled = doubled;
+    o.affixesBranded = mean(affixN.branded); o.affixesPlain = mean(affixN.plain);
+
+    // The fan, measured as a trade rather than described as one. Crescents a
+    // second at ONE body against crescents a second across a crowd.
+    const rate = () => {
+      const swings = 1 / player.fireDelay;
+      return { single: +(swings * 1).toFixed(2),      // one line, one crescent lands
+               crowd:  +(swings * player.shots).toFixed(2) };
+    };
+    stash = blankStash(); saveStash(); startRun('isaac', LEVELS[20].id, 'riven');
+    o.plainRate = rate();
+    wear('fan'); o.fanRate = rate();
+
+    // And it actually fans: three crescents at distinct angles, together.
+    arcs.length = 0; player.angle = 0;
+    for (let i = 0; i < player.shots; i++) {
+      const a = 0 + (i === 0 ? 0 : (i % 2 ? 1 : -1) * ((player.fan || 0) > 0 ? 0.34 : 0.15) * Math.ceil(i / 2));
+      releaseCrescent(a, (player.fan || 0) > 0 ? 0 : i * 0.055);
+    }
+    o.fanAngles = arcs.map(x => +x.a.toFixed(2));
+    o.fanDelays = arcs.map(x => +x.delay.toFixed(3));
+    // The control: the same loop with the fan off.
+    stash = blankStash(); saveStash(); startRun('isaac', LEVELS[20].id, 'riven');
+    player.shots = 3;
+    arcs.length = 0;
+    for (let i = 0; i < player.shots; i++) {
+      const a = 0 + (i === 0 ? 0 : (i % 2 ? 1 : -1) * 0.15 * Math.ceil(i / 2));
+      releaseCrescent(a, i * 0.055);
+    }
+    o.stackAngles = arcs.map(x => +x.a.toFixed(2));
+    o.stackDelays = arcs.map(x => +x.delay.toFixed(3));
+    return o;
+  });
+
+  const B = brand.each;
+  ck('the Sundering blade buys width with cadence',
+     B.fan.now.shots === brand.bare.shots + 2 && B.fan.now.fan > 0 &&
+     B.fan.now.fireDelay > brand.bare.fireDelay,
+     brand.bare.shots + ' crescent at ' + brand.bare.fireDelay + 's → ' +
+     B.fan.now.shots + ' at ' + B.fan.now.fireDelay + 's');
+  ck('the Reaving blade buys reach with sweep',
+     B.reave.now.range > brand.bare.range * 1.8 && B.reave.now.sweep < brand.bare.sweep * 0.4,
+     'reach ' + brand.bare.range + '→' + B.reave.now.range +
+     ', sweep ' + brand.bare.sweep + '→' + B.reave.now.sweep);
+  ck('Headlong boots buy stride with life',
+     B.headlong.now.speed > brand.bare.speed * 1.3 && B.headlong.now.maxHp < brand.bare.maxHp,
+     'stride ' + brand.bare.speed + '→' + B.headlong.now.speed +
+     ', life ' + brand.bare.maxHp + '→' + B.headlong.now.maxHp);
+  ck('a Covetous girdle buys draw with life',
+     B.covet.now.magnet > brand.bare.magnet * 2.5 && B.covet.now.maxHp < brand.bare.maxHp,
+     'draw ' + brand.bare.magnet + '→' + B.covet.now.magnet +
+     ', life ' + brand.bare.maxHp + '→' + B.covet.now.maxHp);
+  ck('each of them says its whole sentence rather than a number',
+     BRANDS_TEXT_OK(B), Object.keys(B).map(k => '“' + B[k].text + '”').join(' '));
+  ck('and each survives being written to disk',
+     Object.keys(B).every(k => B[k].kept),
+     Object.keys(B).filter(k => !B[k].kept).join(', ') || 'all four load back');
+
+  ck('a brand only rolls on Riven', brand.belowRiven === 0,
+     brand.belowRiven + ' found below Riven in 6000 rolls');
+  ck('and only in the slot it belongs to', brand.wrongSlot === 0);
+  ck('never two to a piece', brand.doubled === 0);
+  ck('but not on every Riven — a tier, not two items',
+     brand.branded > 0 && brand.branded < brand.riven,
+     brand.branded + ' of ' + brand.riven + ' Riven blades');
+  ck('and it costs an affix slot rather than adding a line',
+     Math.abs(brand.affixesBranded - brand.affixesPlain) < 0.01,
+     brand.affixesBranded + ' affixes branded against ' + brand.affixesPlain + ' plain');
+
+  ck('the fan trades single-target throughput for crowd',
+     brand.fanRate.single < brand.plainRate.single &&
+     brand.fanRate.crowd > brand.plainRate.crowd,
+     'one body: ' + brand.plainRate.single + '→' + brand.fanRate.single +
+     ' a second; a crowd: ' + brand.plainRate.crowd + '→' + brand.fanRate.crowd);
+  ck('and it really fans — wide, and all at once',
+     new Set(brand.fanAngles).size === 3 &&
+     Math.max(...brand.fanAngles) - Math.min(...brand.fanAngles) >
+     Math.max(...brand.stackAngles) - Math.min(...brand.stackAngles) &&
+     brand.fanDelays.every(d => d === 0) && brand.stackDelays.some(d => d > 0),
+     'fan ' + brand.fanAngles.join('/') + ' at ' + brand.fanDelays.join('/') +
+     's, stacked ' + brand.stackAngles.join('/') + ' at ' + brand.stackDelays.join('/') + 's');
+
+  const fire = await p.evaluate(() => {
+    stash = blankStash();
+    stash.coins = 99999;
+    const it = { uid: 1, slot: 'blade', base: 'Proof', rarity: 'riven',
+                 affixes: [{ id: 'fan', v: 1 }, { id: 'damage', v: 3 },
+                           { id: 'reach', v: 0.1 }, { id: 'sweep', v: 0.1 },
+                           { id: 'cadence', v: -0.1 }], name: 'Proof' };
+    stash.gear.blade = it; saveStash();
+    startRun('isaac', LEVELS[20].id, 'riven');
+    const before = it.affixes.map(a => a.id).join(',');
+    const ok = vendorBuy(VENDOR.find(v => v.id === 'temper'), 'blade');
+    const after = stash.gear.blade.affixes;
+    return { ok, before, after: after.map(a => a.id).join(','),
+             kept: after.some(a => a.id === 'fan'),
+             n: after.length, rerolled: after.filter(a => a.id !== 'fan')
+               .some(a => ['damage','reach','sweep','cadence'].indexOf(a.id) >= 0) };
+  });
+  ck('the fire took the piece', fire.ok, fire.before + ' → ' + fire.after);
+  ck('and the brand survived it', fire.kept && fire.n === 5,
+     fire.kept ? fire.n + ' affixes, brand intact'
+               : 'THE TEMPER ATE THE BRAND — a Riven piece rerolled into an ordinary one');
+  ck('while everything else about it was rerolled', fire.rerolled);
 
   ck('no console errors', errs.length===0, errs.slice(0,2).join(' | '));
   console.log('\nPASS '+pass.length+'\n  '+pass.join('\n  '));

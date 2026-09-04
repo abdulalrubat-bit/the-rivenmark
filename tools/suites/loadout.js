@@ -48,11 +48,19 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push(n+(note?'  ['+n
     const isaacBase = HEROES.isaac.range, zaydBase = HEROES.zayd.range;
     o.zaydGain = zaydOwn/zaydBase;
     o.isaacGain = player.range/isaacBase;
-    // and the affix pool must only offer a slot's legal affixes
-    let bad=0;
+    // and the affix pool must only offer a slot's legal affixes.
+    // A BRAND is legal for its own slot and is deliberately not in
+    // SLOT_AFFIXES -- that pool is what a temper rerolls from, and a brand
+    // must never be rerolled into existence -- so it is excused by its own
+    // rule rather than by loosening this one.
+    let bad=0, brands=0;
     for(let i=0;i<2500;i++){ const it=rollItem(Math.random());
-      for(const a of it.affixes) if(SLOT_AFFIXES[it.slot].indexOf(a.id)<0) bad++; }
-    o.pool = bad;
+      for(const a of it.affixes){
+        const def = AFFIX_BY_ID[a.id];
+        if(def && def.brand){ brands++; if(def.slot!==it.slot) bad++; continue; }
+        if(SLOT_AFFIXES[it.slot].indexOf(a.id)<0) bad++;
+      } }
+    o.pool = bad; o.brands = brands;
     // text mentions the hero it favours
     o.text = affixText({id:'zaydReach', v:0.2}, 'zayd');
     return o;
@@ -66,7 +74,12 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push(n+(note?'  ['+n
      Math.abs(contrib - 1.5) < 0.02,
      'contribution x' + contrib.toFixed(3) + '  (zayd x' + syn.zaydGain.toFixed(3) +
      ' vs isaac x' + syn.isaacGain.toFixed(3) + ')');
-  ck('synergy affixes stay inside their slot pools', syn.pool===0, syn.pool+' violations');
+  ck('affixes stay inside their slot pools, brands included', syn.pool===0,
+     syn.pool+' violations across 2500 rolls, '+syn.brands+' of them branded');
+  // The control: if no brand ever rolled, the line above proved nothing about
+  // brands and would keep passing after they broke.
+  ck('and brands did roll, so that meant something', syn.brands > 0,
+     syn.brands+' branded pieces in 2500 rolls');
   ck('the tooltip names the hero it favours', /Zayd/.test(syn.text), syn.text);
 
   // ---- vacuum loot --------------------------------------------------------
