@@ -1698,7 +1698,13 @@ let MAX_ENEMIES     = 340;   // measured: population is ~0.4ms of update at any
 // The delve is populated at generation time and cleared by walking into it,
 // rather than having waves pushed at the player forever. Packs sit dormant
 // until something wakes them, so pressure comes from what you walk into.
-const PACK_SAFE     = 430;   // no pack closer than this to the spawn pocket
+// No pack closer than this to the spawn pocket. It was 430 -- more than a
+// phone screen's width -- and with the spawn at the centre of the map that
+// emptied a fifth of every delve's floor, the fifth you start in and walk out
+// through. It is the dead space you notice, because it is the first thing you
+// see. Three hundred and sixty still means you can see the nearest pack from
+// where you land and it cannot see you.
+const PACK_SAFE     = 360;
 const PACK_APART    = 250;   // minimum spacing between pack sites
 // Slag placed on the map, as a multiple of the level's own quota. A fixed
 // budget was the old shape and it made the deep ladder unwinnable: the quota
@@ -1718,7 +1724,13 @@ const ALERT_DELAY   = 0.18;  // ...one beat later, so a pack rouses in sequence
 // Applied to bodies AWAKE it gives the same wall of meat in front of you and
 // leaves the delve full behind it. Past the cap a pack still rouses when you
 // walk into it; what stops is the chain running on across the map.
-const HORDE_LIVE    = 54;
+// Opening the delve to the rim gave it a fifth more floor, and floor is the
+// horde's ally: the cap on bodies AWAKE did not move, but on open ground far
+// more of the same fifty-four actually reach you instead of piling up behind
+// rock. Measured on the reference player, the same delves went from three in
+// ten ending at the gate to under two. The cap comes down by what the floor
+// went up, so more room to fight in does not quietly mean more to fight.
+const HORDE_LIVE    = 46;
 const ELITE_CHANCE  = 0.16;  // share of packs led by a branded champion
 // Odds a pack site gets pitch beside it. Lives here with the other placement
 // knobs rather than down with the scenery it describes, because buildLevels
@@ -2867,15 +2879,33 @@ function carveHalls() {
   // twenty-eight by twenty-seven that swallowed a quarter of the map each, and
   // the result read as open ground with rocks in it rather than as rooms. A
   // large leaf now holds a normal room with a lot of rock around it.
+  /* MARGIN is rock kept between a room and the edge of its leaf, so that two
+   * rooms in neighbouring leaves are not cut into one. At the OUTSIDE of the
+   * map there is no neighbouring leaf -- there is the end of the world -- and
+   * the only thing needed there is a course of rock to draw a wall on. Two
+   * cells were being kept anyway, on top of the one the split already leaves,
+   * so every delve was cut inside a three-cell dead border: measured, the
+   * floor of a delve spanned cells 3 to 46 of fifty, which is 77% of the map
+   * by area and a hundred and twenty units of nothing on every side.
+   *
+   * No margin at all at the rim, MARGIN everywhere else: carveRect already
+   * refuses cells 0 and GW-1, so the course of rock the wall is drawn on is
+   * kept whatever this asks for. The floor of a delve spans 1 to 48 now.
+   */
+  const RIM = 0;
   const halls = [];
   for (const L of leaves) {
-    const maxW = Math.min(MAXR, L.w - MARGIN * 2);
-    const maxH = Math.min(MAXR, L.h - MARGIN * 2);
+    const mL = L.x <= 1 ? RIM : MARGIN;
+    const mT = L.y <= 1 ? RIM : MARGIN;
+    const mR = L.x + L.w >= GW - 1 ? RIM : MARGIN;
+    const mB = L.y + L.h >= GH - 1 ? RIM : MARGIN;
+    const maxW = Math.min(MAXR, L.w - mL - mR);
+    const maxH = Math.min(MAXR, L.h - mT - mB);
     if (maxW < MINR || maxH < MINR) continue;
     const w = MINR + ((Math.random() * (maxW - MINR + 1)) | 0);
     const h = MINR + ((Math.random() * (maxH - MINR + 1)) | 0);
-    const x = L.x + MARGIN + ((Math.random() * (L.w - MARGIN * 2 - w + 1)) | 0);
-    const y = L.y + MARGIN + ((Math.random() * (L.h - MARGIN * 2 - h + 1)) | 0);
+    const x = L.x + mL + ((Math.random() * (L.w - mL - mR - w + 1)) | 0);
+    const y = L.y + mT + ((Math.random() * (L.h - mT - mB - h + 1)) | 0);
     carveRect(x, y, x + w - 1, y + h - 1);
     halls.push({ x, y, w, h, cx: x + (w >> 1), cy: y + (h >> 1) });
   }
@@ -4388,7 +4418,10 @@ const CHEST_ROW = { coffer: 0, warded: 1 };
 const CHEST_OPEN = 0.45;        // seconds the lid takes to come up
 let chestImg = null;
 const CHEST_REACH = 30;
-const CHEST_SAFE  = 320;    // never this near the spawn pocket
+// Never this near the spawn pocket -- but near enough that the ground you
+// cross on the way out has something in it. A coffer in the approach is the
+// cheapest thing that turns walking into exploring.
+const CHEST_SAFE  = 250;
 const CHEST_APART = 300;    // nor this near each other
 
 // Every coffer in a delve, opened, comes to about a third of what the whole
