@@ -11615,6 +11615,26 @@ function draw(t) {
 
 /* ---------------------------------------------------------------------------
    10. UI, STATE MACHINE & BOOT
+
+   THIS SECTION IS FROZEN, AND ON PURPOSE.
+
+   The Phaser build is the game -- it is what the APK carries and what is
+   deployed -- and its HUD, menus and screens live in phaser/src/hud.js and
+   phaser/src/screens.js. Those have moved on: a pause screen with a way to
+   abandon a delve, a boss bar that does not write over itself, a kit cut from
+   the same stone as the rest of the frame, forged stations. None of it is
+   here, and none of it is coming here.
+
+   That is a decision rather than a backlog. Every UI change made twice is a
+   second implementation of the same judgement, in a renderer no player will
+   ever see, and the two would drift anyway. What this build is for is the
+   SIMULATION -- everything above section 9 is lifted out of this file whole by
+   phaser/tools/extract-core.js and proved identical by `npm run verify` -- and
+   for being one document that opens from file:// with no toolchain when a bug
+   needs reproducing.
+
+   So: change how the game BEHAVES here. Change how it LOOKS in phaser/src.
+   What follows is kept because thirty of the canvas suites drive it.
    ------------------------------------------------------------------------ */
 
 const $ = id => document.getElementById(id);
