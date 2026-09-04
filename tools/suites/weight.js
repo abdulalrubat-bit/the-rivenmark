@@ -50,8 +50,14 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
         let clear = true;
         for (let a = 0; a < 16 && clear; a++) {
           const th = a * (Math.PI / 8);
-          for (const d of [60, 115]) {
-            if (pointInWalls(c.x + Math.cos(th) * d, c.y + Math.sin(th) * d, 24))
+            // Sampled where the bodies ACTUALLY stand and where a recoil sends
+          // them -- seventy units out, radius up to twenty-six, pushed a
+          // handful further. Two rings at sixty and a hundred and fifteen left
+          // a gap at ninety, and one run in a few dozen put the breaker's
+          // landing spot in stone: the recoil measured zero and the check
+          // correctly reported that its own control had proved nothing.
+          for (const d of [55, 80, 105, 130]) {
+            if (pointInWalls(c.x + Math.cos(th) * d, c.y + Math.sin(th) * d, 28))
               { clear = false; break; }
           }
         }

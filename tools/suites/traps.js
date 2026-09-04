@@ -95,6 +95,11 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
       // the alert chains -- and a pack roused by the floor while the player is
       // somewhere else is the one thing this game's packs exist not to do.
       const dozing = put(onAt); dozing.awake = false;
+      // And the avatar's escort, awake and standing on the same plate. His
+      // fight has one rule -- break the Lieutenants to reach him -- and a
+      // spike field under them breaks it for you.
+      const lieut = newBody('lieutenant', onAt[0], onAt[1], 0);
+      lieut.awake = true; lieut.hp = lieut.maxHp = 1e6; enemies.push(lieut);
       updateEnemies(0.001);
       o.pairHeld = Math.hypot(on.x - onAt[0], on.y - onAt[1]) < 2 &&
                    Math.hypot(off.x - offAt[0], off.y - offAt[1]) < 2 &&
@@ -106,6 +111,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
       // One whole cycle.
       for (let i = 0; i < Math.ceil(SPIKE_CYCLE * 60); i++) updateTraps(1 / 60);
       o.bitDozing = Math.round(1e6 - dozing.hp);
+      o.bitLieut = Math.round(1e6 - lieut.hp);
       o.dozingWoke = !!dozing.awake;
       o.bitOnPlate = Math.round(1e6 - on.hp);
       o.bitBeside = Math.round(1e6 - off.hp);
@@ -205,6 +211,9 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   ck('and a body asleep on one is left alone',
      R.bitDozing === 0 && R.dozingWoke === false,
      R.bitDozing ? 'the floor woke a dormant pack' : 'still asleep, still whole');
+  ck('and the avatar’s escort is not ground down by the room',
+     R.bitLieut === 0,
+     R.bitLieut ? 'the floor was fighting his fight for him' : 'his fight stays his');
   ck('once per rising, not once per frame',
      R.whileStanding === 0 && R.whileStandingTicks > 10,
      R.whileStanding + ' more over ' + R.whileStandingTicks + ' frames of standing spikes');

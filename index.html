@@ -4355,9 +4355,12 @@ function clearShot(x0, y0, x1, y1) {
 }
 
 function dropLoot(e) {
+  // One lump, so the ring is a single angle -- but through the same spill, or
+  // a coffer and a body would throw their slag differently for no reason a
+  // player could name.
+  const s = spill(e.x, e.y, 1, 0, 1);
   loot.push({
-    x: e.x, y: e.y,
-    vx: rand(-38, 38), vy: rand(-38, 38),
+    x: s.x, y: s.y, vx: s.vx * 0.45, vy: s.vy * 0.45,
     value: e.tech, r: 6, spin: Math.random() * TAU, life: 0, pulled: false
   });
   maybeDropItem(e);
@@ -4609,9 +4612,9 @@ const CHEST_APART = 300;    // nor this near each other
 // feel robbed, and the gear the warded ones carry is on top of it.
 const CHEST_KINDS = {
   coffer: { coin: [34, 74],  gear: 0.34, floor: 0,    name: 'A coffer',
-            colour: '#c9a24a' },
+            slag: [4, 7],  colour: '#c9a24a' },
   warded: { coin: [112, 205], gear: 1,   floor: 0.62, name: 'A warded coffer',
-            colour: '#8fb8ff' }
+            slag: [9, 14], colour: '#8fb8ff' }
 };
 
 function placeChests(spawn, portal) {
@@ -4655,6 +4658,27 @@ function placeChests(spawn, portal) {
   }
 }
 
+/* THE FOUNTAIN.
+ *
+ * A coffer used to hand you a number and drop one thing ten units away. What
+ * came out of it read as a transaction; what should come out of it is a
+ * spill. Everything leaves the chest on a RING -- an angle each, evenly spaced
+ * with a little jitter, at a speed that carries it a body's length -- so the
+ * eye sees a fountain rather than a heap, and so the walk back to pick it all
+ * up is a beat of its own.
+ *
+ * Evenly spaced rather than randomly angled: eight random angles cluster, and
+ * a cluster is the heap again. The jitter is what keeps it from reading as a
+ * clock face.
+ */
+const SPILL_SPEED = [150, 260];
+function spill(x, y, n, i, total) {
+  const a = (i / Math.max(1, total)) * TAU + rand(-0.22, 0.22);
+  const v = rand(SPILL_SPEED[0], SPILL_SPEED[1]);
+  return { x: x + Math.cos(a) * 6, y: y + Math.sin(a) * 6,
+           vx: Math.cos(a) * v, vy: Math.sin(a) * v };
+}
+
 function openChest(ch) {
   if (ch.open) return;
   ch.open = true;
@@ -4669,17 +4693,32 @@ function openChest(ch) {
   ring(ch.x, ch.y, K.colour, 8, 46, 0.4);
   floatDmg(ch.x, ch.y - 12, coin, 'coin');
 
+  // SLAG, in a cluster. Coin is banked the instant the lid comes up and is
+  // therefore not a reason to walk anywhere; slag has to be picked up off the
+  // floor, which is what makes a coffer somewhere you go rather than something
+  // you touch. It is the same pickup a body leaves, so nothing new has to
+  // learn to collect it.
+  const lumps = K.slag[0] + ((Math.random() * (K.slag[1] - K.slag[0] + 1)) | 0);
+  const worth = Math.max(1, Math.round((1 + depth * 2.2) * lootMult()));
+  const gear = Math.random() < K.gear * lootMult()
+    ? [rollItem(Math.max(depth, K.floor))] : [];
+  const total = lumps + gear.length;
+  let seat = 0;
+  for (let i = 0; i < lumps; i++) {
+    const s = spill(ch.x, ch.y, lumps, seat++, total);
+    loot.push({ x: s.x, y: s.y, vx: s.vx, vy: s.vy, value: worth,
+                r: 6, spin: Math.random() * TAU, life: 0, pulled: false });
+  }
   // Gear lands on the floor as an ordinary drop, so a full bag behaves the
   // same way here as it does everywhere else rather than silently eating it.
-  if (Math.random() < K.gear * lootMult()) {
-    const it = rollItem(Math.max(depth, K.floor));
-    drops.push({ x: ch.x + rand(-10, 10), y: ch.y + rand(-10, 10),
-                 vx: rand(-40, 40), vy: rand(-40, 40),
+  for (const it of gear) {
+    const s = spill(ch.x, ch.y, 1, seat++, total);
+    drops.push({ x: s.x, y: s.y, vx: s.vx, vy: s.vy,
                  item: it, r: 9, life: 0, pulled: false });
-    toast(K.name + ' — ' + it.name, rarityOf(it).colour);
-  } else {
-    toast(K.name + ' — ' + coin + ' coin', K.colour);
   }
+  toast(gear.length ? K.name + ' \u2014 ' + gear[0].name
+                    : K.name + ' \u2014 ' + coin + ' coin',
+        gear.length ? rarityOf(gear[0]).colour : K.colour);
 }
 
 function updateChests(dt) {
@@ -4791,6 +4830,20 @@ function spikePhase(t) {
 const onPlate = (x, y) =>
   ((Math.floor(x / CELL_W) + Math.floor(y / CELL_W)) & 1) === 0;
 
+/* Who the floor is allowed to touch. The horde, and only the horde.
+ *
+ * The avatar and his escort are excluded because his fight has one rule --
+ * break the Lieutenants to reach him -- and a spike field under them breaks it
+ * for you. Parking him on a trap is not a tactic, it is a way of not having
+ * the encounter. It also broke deceiver.js, which found his escort ground down
+ * by the room before the cleave it was measuring could land.
+ *
+ * And nothing asleep: damageEnemy wakes what it hits and the alert chains, so
+ * a field over a dormant pack roused it and then roused its neighbours.
+ */
+const trapBites = e => e.hp > 0 && e.awake &&
+                       e.kind !== 'deceiver' && e.kind !== 'lieutenant';
+
 function placeTraps() {
   traps = [];
   for (const rm of rooms) {
@@ -4825,13 +4878,7 @@ function updateTraps(dt) {
         enemyGrid.query(tr.x, tr.y, tr.r, _near);
         for (let k = 0; k < _near.length; k++) {
           const e = _near[k];
-          // NOT the sleeping. damageEnemy wakes what it hits and the alert
-          // chains outward, so a field standing over a dormant pack roused it
-          // and then roused its neighbours -- twenty-nine bodies awake while
-          // the player stood still at the spawn, which is the one thing this
-          // game's packs exist not to do. It is the better rule anyway: a trap
-          // quietly killing a pack you never met is loot you never earn.
-          if (e.hp <= 0 || !e.awake || !onPlate(e.x, e.y)) continue;
+          if (!trapBites(e) || !onPlate(e.x, e.y)) continue;
           if (dist2(e.x, e.y, tr.x, tr.y) > tr.r * tr.r) continue;
           // From below, so the recoil the weight pass rides has nowhere
           // sideways to go and the body simply drops where it stood.
@@ -4851,7 +4898,7 @@ function updateTraps(dt) {
       enemyGrid.query(tr.x, tr.y, tr.r, _near);
       for (let k = 0; k < _near.length; k++) {
         const e = _near[k];
-        if (e.hp <= 0 || !e.awake) continue;      // see the spikes, above
+        if (!trapBites(e)) continue;
         if (dist2(e.x, e.y, tr.x, tr.y) > tr.r * tr.r) continue;
         damageEnemy(e, e.maxHp * POOL_DPS * TRAP_TICK, e.x, e.y);
       }
