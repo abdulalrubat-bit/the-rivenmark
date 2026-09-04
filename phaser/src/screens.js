@@ -21,9 +21,33 @@ const CSS = `
   background:rgba(8,7,6,.86);font:13px ui-monospace,Menlo,monospace;color:#cebe9e;
   -webkit-user-select:none;user-select:none;overflow:auto}
 #screens.up{display:grid}
-#screens .card{width:min(340px,92vw);background:#12100d;border:1px solid #4a3f30;
-  border-radius:10px;padding:16px;box-shadow:0 12px 40px rgba(0,0,0,.6);margin:16px 0}
-#screens h1{font:22px Georgia,"Times New Roman",serif;color:#eee0c0;margin:0 0 4px}
+/* CUT FROM THE SAME STONE AS THE DELVE.
+ *
+ * These were flat dark boxes with a hairline round them, which was fine while
+ * the HUD was flat dark discs -- and stopped being fine the moment the kit
+ * grew a bronze band and a slate face. Everything the player looks at is one
+ * object now: a band of bronze lit from the north-west, a dark line, and a
+ * slate face under it.
+ *
+ * Done with a transparent border and two background layers rather than a
+ * wrapper element, so the markup of four stations does not have to change:
+ * the face is clipped to the padding box and the band to the border box, so
+ * the border IS the band and the radius follows both.
+ */
+#screens .card{width:min(340px,92vw);border:3px solid transparent;border-radius:10px;
+  /* The face must be OPAQUE. Half-transparent, the band underneath shows
+     straight through it -- the band is painted over the whole border box, and
+     the face only clips WHERE it lands, not what is beneath -- so the top of
+     the card came out bright bronze instead of dark stone. */
+  background-image:linear-gradient(#241f18,#15120e 40%,#100e0b),
+    linear-gradient(#e2b96a,#a67c3a 34%,#6d4d22 70%,#3a2610);
+  background-origin:border-box;background-clip:padding-box,border-box;
+  padding:16px;box-shadow:0 12px 40px rgba(0,0,0,.6),inset 0 1px 0 rgba(150,172,200,.18);
+  margin:16px 0}
+/* The title takes the rule the gate-house plates have. */
+#screens h1{font:22px Georgia,"Times New Roman",serif;color:#eee0c0;margin:0 0 10px;
+  padding-bottom:8px;border-bottom:1px solid rgba(166,124,58,.45);
+  box-shadow:0 1px 0 rgba(0,0,0,.6)}
 #screens h1 em{font-style:normal;color:#d6b26e}
 #screens h1 span{color:#c0392b}
 #screens .sub{color:#a89878;font-style:italic;margin:0 0 12px;line-height:1.45}
@@ -31,31 +55,63 @@ const CSS = `
 #screens .stats div{background:#1a1712;border:1px solid #33291f;border-radius:5px;
   padding:6px 8px;display:flex;justify-content:space-between}
 #screens .stats b{color:#eee0c0}
-#screens .rows{display:grid;gap:6px;margin:0 0 14px;max-height:44vh;overflow:auto}
+/* A scrolling list cut off mid-row reads as a bug rather than as more below,
+   so the last few pixels fade out. Sticky rather than fixed: the fade belongs
+   to the bottom of the viewport of this list, wherever that has scrolled to. */
+#screens .rows{display:grid;gap:6px;margin:0 0 14px;max-height:44vh;overflow:auto;
+  position:relative;
+  -webkit-mask-image:linear-gradient(#000 calc(100% - 22px),transparent);
+  mask-image:linear-gradient(#000 calc(100% - 22px),transparent)}
 #screens .row{display:flex;justify-content:space-between;align-items:center;gap:8px;
   background:#1a1712;border:1px solid #33291f;border-radius:6px;padding:9px 10px;
   text-align:left;color:inherit;font:inherit;min-height:44px}
-#screens .row.on{border-color:#d6b26e;background:#231d15}
+#screens .row.on{border:2px solid transparent;
+  background-image:linear-gradient(rgba(44,36,22,.95),rgba(24,19,12,.98)),
+    linear-gradient(#e2b96a,#a67c3a 34%,#6d4d22 70%,#3a2610);
+  background-origin:border-box;background-clip:padding-box,border-box;
+  box-shadow:inset 0 1px 0 rgba(214,178,110,.22)}
 #screens .row small{color:#8c8168;display:block}
-#screens .go{width:100%;min-height:48px;border-radius:8px;background:#2a2015;
-  color:#f0e2c2;border:1px solid #d6b26e;font:15px Georgia,serif}
-#screens .go:active{background:#3a2c1c}
+/* The one button that does the thing, on the same plate as an ability. */
+#screens .go{width:100%;min-height:48px;border-radius:8px;
+  border:2px solid transparent;
+  background-image:linear-gradient(rgba(58,44,24,.92),rgba(28,20,11,.96)),
+    linear-gradient(#e2b96a,#a67c3a 34%,#6d4d22 70%,#3a2610);
+  background-origin:border-box;background-clip:padding-box,border-box;
+  color:#f0e2c2;font:15px Georgia,serif;
+  box-shadow:inset 0 1px 0 rgba(214,178,110,.3)}
+#screens .go:active{background-image:linear-gradient(rgba(78,60,34,.95),rgba(44,32,18,.98)),
+    linear-gradient(#e2b96a,#a67c3a 34%,#6d4d22 70%,#3a2610)}
 /* The second way out of a card. Same size and same target -- a 44px rule does
    not stop applying because a button is the lesser of two -- but it does not
    take the gold, so a glance still finds the one you probably want. */
 #screens .alt{width:100%;min-height:48px;border-radius:8px;background:#191510;
-  color:#a89878;border:1px solid #4a3f30;font:14px Georgia,serif;margin-top:8px}
+  color:#a89878;border:1px solid #6d4d22;font:14px Georgia,serif;margin-top:8px;
+  box-shadow:inset 0 1px 0 rgba(150,172,200,.1)}
 #screens .alt:active{background:#241d15}
 #screens .seal{display:block;font-size:22px;color:#8c6830;margin:0 0 2px}
 #screens .purse{display:flex;justify-content:space-between;margin:0 0 10px;color:#a89878}
 #screens .tabs{display:flex;gap:6px;margin:0 0 12px}
 #screens .tabs button{flex:1;min-height:40px;border-radius:6px;background:#1a1712;
   color:#a89878;border:1px solid #33291f;font:inherit}
-#screens .tabs button.on{color:#f0e2c2;border-color:#d6b26e;background:#231d15}
-#screens .item{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+/* The station you are in wears the band; the others are plain, so the rail
+   reads as one object with a piece of it lit rather than as four boxes. */
+#screens .tabs button.on{color:#f0e2c2;border:2px solid transparent;
+  background-image:linear-gradient(rgba(48,38,22,.95),rgba(26,20,12,.98)),
+    linear-gradient(#e2b96a,#a67c3a 34%,#6d4d22 70%,#3a2610);
+  background-origin:border-box;background-clip:padding-box,border-box}
+#screens .item{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+/* The name and its affixes are one column and must own the space they need,
+   or the piece's power and the word for what tapping does drift left and land
+   at the end of the affix line -- "+13% damage take off" read as one phrase. */
+#screens .item>span:first-child{flex:1;min-width:0}
 #screens .item .aff{color:#8c8168;font-size:11px;display:block;margin-top:2px;line-height:1.35}
-#screens .pw{color:#d6b26e;white-space:nowrap;text-align:right}
-#screens .act{display:block;color:#8c8168;font-size:11px;margin-top:2px}
+#screens .pw{color:#d6b26e;white-space:nowrap;text-align:right;flex:none}
+/* And the word is a tag, not more text. It is the only part of a row that
+   says what happens if you touch it, so it is the part that must not look
+   like the affixes it was sitting beside. */
+#screens .act{display:block;color:#a89878;font-size:10px;margin-top:4px;
+  letter-spacing:.5px;padding:2px 6px;border:1px solid #4a3f30;border-radius:3px;
+  background:rgba(20,17,14,.6)}
 #screens .empty{color:#6a6154;font-style:italic}
 `;
 
