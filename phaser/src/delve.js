@@ -103,7 +103,27 @@ const STANDING = { pillar: 26, barrel: 12, crate: 11, urn: 10, banner: 16,
           BOLT_WIND, CHANT_WIND, breathScale, deathPose, DIE_MS, flinchOffset,
           lowFx,
           WALK_STEP, WALK_PACE, update, startRun, resetRun, loadStash,
-          hardcore, loadHardcoreMode */
+          hardcore, loadHardcoreMode, ENEMY_TYPES */
+
+/* A body drawn with another body's art, and how much bigger it is than the
+ * thing it borrowed from. Derived from the two radii rather than typed in, so
+ * retuning either kind keeps the drawing in proportion with the collision by
+ * itself -- a hand-written 1.73 here would be a boss whose sprite and hitbox
+ * quietly disagreed the next time someone touched ENEMY_TYPES.
+ */
+function bodyLookScale(e) {
+  const d = ENEMY_TYPES[e.kind];
+  if (!d || !d.look) return 1;
+  const src = ENEMY_TYPES[d.look];
+  return src && src.r ? d.r / src.r : 1;
+}
+
+/* And what colour it wears, so a Crucible-Mass is not read as three gorgers
+ * standing very close together. Warm rather than saturated: the frame is a
+ * dark body with a molten mouth, and a flat orange over the whole of it loses
+ * the body and keeps only the glow.
+ */
+const LOOK_TINT = { crucible: 0xffab7a };
 
 export class Delve extends Phaser.Scene {
   constructor() { super('delve'); }
@@ -549,7 +569,11 @@ export class Delve extends Phaser.Scene {
    * for a frame that is not there, so if anything does, that is a bug and the
    * log is where it belongs.
    */
-  wearFrame(sp, key) {
+  /* `mult` is for a kind drawn with another kind's art at another kind's size.
+   * Guarded on scaleY like the rest, and stable per kind, so the guard still
+   * holds: the multiplier is derived from the two bodies' radii, not typed in,
+   * so retuning either one keeps them in proportion by itself. */
+  wearFrame(sp, key, mult) {
     if (sp.frame.name !== key) {
       if (this.textures.get('art').has(key)) sp.setFrame(key);
       else if (!this.warned[key]) {
@@ -558,7 +582,7 @@ export class Delve extends Phaser.Scene {
                       ' — the sprite keeps ' + sp.frame.name);
       }
     }
-    const want = this.artScale(sp.frame.name);
+    const want = this.artScale(sp.frame.name) * (mult || 1);
     // Guarded on scaleY, not scaleX: the breath moves scaleX every frame a
     // body stands still, so testing that one would rebuild the scale on every
     // body on every frame and then flatten the breath doing it.
@@ -675,7 +699,11 @@ export class Delve extends Phaser.Scene {
    * forged canvases.
    */
   bodyFrame(e, time) {
-    const base = 'bestiary/' + e.kind;
+    // A kind with a `look` wears another kind's frames. The canvas build does
+    // the same thing in its sprite forge; this is that table on the atlas
+    // side, read off the same field so the two cannot drift apart.
+    const d = ENEMY_TYPES[e.kind];
+    const base = 'bestiary/' + ((d && d.look) || e.kind);
 
     // Falling over outranks everything else a body could be doing, including
     // the cast it was halfway through when it was killed.
@@ -891,7 +919,7 @@ export class Delve extends Phaser.Scene {
       if (!e) { s.setVisible(false); continue; }
       const key = this.bodyFrame(e, time);
       s.setVisible(true).setPosition(e.x, e.y).setDepth(e.y);
-      this.wearFrame(s, key);
+      this.wearFrame(s, key, bodyLookScale(e));
       s.setFlipX(e.face < 0);
       /* Standing bodies breathe; walking ones do not need to be told they are
        * alive. Only x, so the feet stay where they were planted.
@@ -922,8 +950,12 @@ export class Delve extends Phaser.Scene {
       const fl = d ? null : flinchOffset(e);
       if (d) s.setPosition(e.x + d.dx, e.y + d.dy);
       else if (fl) s.setPosition(e.x + fl.x, e.y + fl.y);
-      // Struck bodies flash, calcifying ones sit under a shell of light.
-      s.setTint(e.hitFlash > 0 ? 0xffffff : (e.calcify > 0 ? 0x9fd8e8 : 0xffffff));
+      // Struck bodies flash, calcifying ones sit under a shell of light, and a
+      // body wearing borrowed art carries its own colour so it is not mistaken
+      // for three of the thing it is drawn as.
+      s.setTint(e.hitFlash > 0 ? 0xffffff
+                : e.calcify > 0 ? 0x9fd8e8
+                : (LOOK_TINT[e.kind] || 0xffffff));
     }
 
     if (!this.stepping) return;

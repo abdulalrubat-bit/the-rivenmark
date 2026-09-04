@@ -173,6 +173,13 @@ const CSS = `
 #hud .boss .held s{text-decoration:none;letter-spacing:1px}
 #hud .boss .held span{width:6px;height:6px;border-radius:50%;background:#c2352a;
      border:1px solid #e8c060;flex:none}
+/* The Crucible-Mass is held for the opposite reason and has to read that way:
+   the Deceiver's bar will not fall, and this one climbs back up. Green, which
+   is the totem's own colour, so the pips point at the thing to go and cut. */
+#hud .boss .bar.mend i{background-image:repeating-linear-gradient(45deg,
+     rgba(14,20,8,.5) 0 3px,transparent 3px 8px),linear-gradient(#ff8a3c,#8a4418)}
+#hud .boss .held.mend{color:#9dbb5a;border-color:rgba(157,187,90,.55)}
+#hud .boss .held.mend span{background:#9dbb5a;border-color:#cfe08a}
 /* What you just picked up, in its rarity colour. Left-aligned and clipped
    rather than centred at its natural width: an item name is long enough that
    a centred box grew into the map, and it did. */
@@ -386,19 +393,31 @@ export class Hud {
     const f = Math.max(0, Math.min(1, bs.hp / bs.maxHp));
     this.bossFill.style.width = (f * 100).toFixed(1) + '%';
 
-    const held = !bs.invader && g.escortAlive && g.escortAlive();
-    this.bossBar.classList.toggle('held', !!held);
+    /* Both avatars have an escort and both look like a broken bar without a
+     * word for it, but they are held for opposite reasons: the Deceiver's bar
+     * will not fall while a Lieutenant stands, and the Crucible-Mass's climbs
+     * back up while a totem does. Same shape, different verb and colour, and
+     * the pips count whichever thing is doing it. */
+    const mass = bs.kind === 'crucible';
+    const held = !bs.invader &&
+                 (mass ? (bs.tended || 0) > 0 : (g.escortAlive && g.escortAlive()));
+    this.bossBar.classList.toggle('held', !!held && !mass);
+    this.bossBar.classList.toggle('mend', !!held && mass);
+    this.bossHeld.classList.toggle('mend', mass);
     if (!held) { this.bossHeld.hidden = true; this.heldPips = -1; return; }
     let live = 0;
-    for (const e of enemies) if (e.kind === 'lieutenant' && e.hp > 0) live++;
+    if (mass) live = bs.tended || 0;
+    else for (const e of enemies) if (e.kind === 'lieutenant' && e.hp > 0) live++;
     // In the name line, beside the count, not across the bar. It was written
     // over the bar's own hatching in gold on gold and could not be read at
     // all -- and it is the one line that says why his health is not moving.
     // The sentence goes with it: HELD and two red pips says the same thing in
     // the space a glance has, and the banner explains it once on arrival.
-    if (this.heldPips !== live) {
-      this.heldPips = live;
-      this.bossHeld.innerHTML = '<s>HELD</s>' + '<span></span>'.repeat(live);
+    const stamp = (mass ? 'm' : 'h') + live;
+    if (this.heldPips !== stamp) {
+      this.heldPips = stamp;
+      this.bossHeld.innerHTML = '<s>' + (mass ? 'MENDING' : 'HELD') + '</s>' +
+                                '<span></span>'.repeat(live);
     }
     this.bossHeld.hidden = false;
   }

@@ -234,10 +234,22 @@ Four behaviours that turn a horde into a system rather than a wall of meat:
 
 ---
 
-## 7. The Gilded Deceiver
+## 7. The avatars
 
-The avatar the hive-mind wears to be believed. He arrives when the quota is
-met, and the gate does not open until he is broken.
+Two of them, and they ask opposite questions. Both arrive when the quota is
+met, and the gate does not open until the one waiting for you is broken.
+
+|  | **The Gilded Deceiver** | **The Crucible-Mass** |
+|---|---|---|
+| The question | *What are you hitting?* | *Where are you standing?* |
+| Moves | blinks across the room | rooted, permanently |
+| Held by | Lieutenants — he takes nothing while one stands | totems — it mends while one stands |
+| Rungs | 37 of 52, and the whole teaching ramp | every third rung past the ramp |
+| Epithets | seven, rolled per rung | none — it is one fight |
+
+### The Gilded Deceiver
+
+The avatar the hive-mind wears to be believed.
 
 - **The Euphoric Tether.** While a Lieutenant stands he takes **nothing at
   all**. This used to be a 14% soak so the rule was one you could break — but a
@@ -264,6 +276,60 @@ than usual) · *the Unblinking* (this one does not step away — it walks) · *t
 Ravenous* (he eats what dies near him) · *the Riftborn* (the ground does not
 close behind him) · *the Unbroken* (he gathers himself, and for a moment almost
 nothing touches him)
+
+### The Crucible-Mass
+
+The second avatar, built almost entirely out of parts that already existed —
+the breaker's bracing, the gorger's slam, the shaman's totems — and drawn as a
+gorger at 45 units instead of 26, which is three times the footprint, tinted
+hotter. No new art, no new systems.
+
+- **The Anchor.** It never moves. The Anchoring Strike breaks its guard and
+  lands its damage but cannot relocate it, and this is stated in `knock()`
+  rather than left to fall out of a large mass — "it cannot be moved" is a
+  rule of the encounter, not a consequence of a number someone may retune.
+- **The Furnace.** Every ~5.4s it shatters **a ring, not a disc**: 7 blocks of
+  96 units thrown at a radius of 250, each leaving the floor burning. A disc
+  centred on something that cannot chase you says *stand further away*, which
+  is not a fight, it is a wait. A ring says the floor at melee range is on
+  fire and so is the floor at bow range, and **the gaps turn every cast**, so
+  the safe arc is somewhere else each time.
+- **The eye is clear of the fire and is not safe.** Measured: 25 seconds on
+  the ring costs 224, in the eye costs 0 — and 682 if the boss is left
+  switched on, because the eye is inside its reach. Neither the middle nor
+  the edge is the answer.
+- **The totem escort.** It calls shamans — up to three — who plant **on the
+  ring**, inside the fire it is throwing, so the errand out to cut one goes
+  through the hazard. Each standing totem mends it **9.5% of its own life a
+  second**.
+
+The mend rate is solved, not guessed. A Vanguard geared to a rung's own power,
+standing in reach and swinging with the bar on cooldown, does this much of the
+boss's pool per second:
+
+| rung 8 | rung 26 | rung 50 |
+|---|---|---|
+| 11.3%/s | 16.6%/s | 24.7%/s |
+
+So the window is above 24.7/3 = 8.2% and below 11.3%. At **9.5%** a single
+totem is never enough to save it at any rung, and three out-mend the Vanguard
+outright at the rung the fight is first met on. Cutting two of three is a win,
+which matters — cutting all three while the ring is turning is not always on
+offer.
+
+> **At the deep end the escort is a drag, not a wall.** Sampling seven gear
+> rolls rather than one, a rung-50 hero's damage against it runs **18–47%** of
+> its pool a second, with the full escort's 28.5% sitting inside that spread.
+> Whether three totems out-heal you at rung 50 depends on what your gear
+> rolled.
+>
+> This is §11's valley showing up inside a single encounter: the boss's life
+> scales at `(1 + d × 1.6)` and the hero's damage scales faster, so the escort
+> is worth less every rung exactly as the horde is. It is **recorded rather
+> than tuned away**, because no value of `CRUCIBLE_MEND` fixes it — lifting it
+> far enough to beat a lucky deep hero puts a *single* totem above a shallow
+> one, and the errand stops being finishable at the rung that teaches it.
+> `tools/suites/crucible.js` asserts what is true and prints the spread.
 
 ### The uninvited
 
@@ -480,6 +546,7 @@ than conjuring back a piece that was sold, tempered away or left in a delve.
 | Regions in the pool | `1 + floor(d × 5)` |
 | Enemy **health** | `× (1 + d × 1.6)` |
 | Enemy **damage** | flat — see the note below |
+| Which avatar waits | the Deceiver, except every third rung past the ramp |
 
 ### The teaching ramp
 
@@ -527,6 +594,56 @@ epithet appears while it is still teaching.
 > patch quietly. `tools/suites/winnable.js` names those three rungs and is
 > shaped to fail if the spike spreads *or* if someone fixes it without saying
 > so. The overall rate, 21–31% across runs, is the one Riven advertises.
+
+### What a deep delve buys with its depth
+
+Three environmental terms scale with `d`, on the reasoning that raising the
+horde's flat damage would make **ward** — a flat share off every blow — worth
+less every rung you carried it:
+
+| | at rung 0 | at rung 51 |
+|---|---|---|
+| `ALERT_GROWTH` — how far a woken body carries the alarm | 155 units | 240 |
+| `AFFLICT_GROWTH` — how long a bleed, ember or broken floor lasts | ×1 | ×2 |
+| the spike beat — and the rest between risings | 3.4s / 1.7s | 2.6s / 0.9s |
+
+The spike's **tell (0.7s) and standing (1.0s) never move**: they are the part
+the player reads and dodges, and every second the beat loses comes out of the
+rest. `tools/suites/traps.js` fails if that stops being true, and holds the
+rest above the time it takes to cross a plate — a hall you cannot cross is a
+wall, not a harder hall.
+
+> ### ⚠ They work, and they do not fix the valley
+>
+> The alert chain measures dramatically: at rung 44 a roused pack now brings
+> **46 bodies at once against 12** before it — four times the horde, and the
+> whole of `HORDE_LIVE`. Ablated and guarded in `tools/suites/packs.js`.
+>
+> The reference player's rate moved by nothing.
+>
+> ```
+> rung   0    3    9   17   30   44   overall
+> before 4/16 0/16 0/16 0/16 8/16 12/16  24/96
+> after  7/16 0/16 0/16 0/16 6/16 13/16  26/96
+> ```
+>
+> Rung 0 has no depth and so no lever on it at all, and it moved 4 → 7. That
+> is the noise floor, and every other delta is inside it.
+>
+> **The finding is worth more than the change.** Quadrupling the horde at the
+> deepest rung does not make the deepest rung harder. What is broken is not
+> how *many* chances the delve gets to hurt you, it is how *big* each one is.
+> A flat blow, a flat 7 DPS wound, 46 bodies instead of 12 — all of it is
+> arithmetic against a health pool that ran 152 to 528 across the same ladder.
+> **Any lever that adds occurrences is dead on arrival here.**
+>
+> The game already has the term that would bite, and uses it in exactly one
+> place: the traps take `SPIKE_TOLL` and `POOL_DPS` as a **share of max life**,
+> so they are the only environmental damage in the build that does not decay
+> with depth. Note also that proportional damage costs `ward` nothing — ward
+> takes its share off the blow either way — so the reason flat scaling was
+> ruled out does not apply to it. That is the shape of the repair, and it is a
+> design decision, so it is written down rather than made quietly.
 
 ---
 
@@ -706,7 +823,9 @@ either side of a change and the difference *is* the change.
   capped interstitials. Not game code: an SDK in the Android shell, a
   JS-to-native bridge, and a consent flow (UMP/GDPR, and Play's families policy
   if the app is ever family-designated). Needs the network chosen first.
-- **The difficulty valley** in §11, which is a design decision rather than a
-  patch.
-- **The second boss.** Every rung names its boss and the Deceiver is the only
-  one built, so a level with no boss simply opens its gate on quota.
+- **The difficulty valley** in §11. Three environmental levers were built and
+  measured against it and did not move it; §11 records what that ruled out and
+  what would actually work. The repair touches the damage model, so it is a
+  decision to make rather than a patch to apply.
+- **A third boss.** Two are built (§7). Every rung names one, and a rung whose
+  boss is unknown simply opens its gate on quota.

@@ -106,7 +106,10 @@ export class Effects {
         g.strokeCircle(tr.x, tr.y, tr.r * w);
         continue;
       }
-      const ph = spikePhase(tr.t);
+      // The beat comes off the trap: it is compressed by the delve's depth,
+      // and a renderer reading the constant would draw one rhythm over the
+      // damage of another.
+      const ph = spikePhase(tr.t, tr.cycle);
       // Down and quiet: the plates still show, or the room gives no warning
       // at all until the first time it kills you.
       const out = ph.phase === 'out', tell = ph.phase === 'tell';

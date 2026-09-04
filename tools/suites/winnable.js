@@ -261,8 +261,25 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
             target = best;
           } else if (!run.bossDown && run.boss && run.boss.hp > 0) {
             mode = 'boss';
-            // The escort first: while a Lieutenant stands he takes nothing.
-            target = enemies.find(e => e.kind === 'lieutenant' && e.hp > 0) || run.boss;
+            /* The escort first, whichever avatar it is. Both fights have the
+             * same shape -- something stands between you and the bar moving --
+             * and they differ only in which thing and in which direction the
+             * bar is stuck: a Lieutenant holds the Deceiver at almost no
+             * damage taken, and a totem mends the Crucible-Mass faster than
+             * this bot cuts.
+             *
+             * Without the second clause the bot walked up to the Crucible-Mass
+             * and hit it forever, and rung 44 came back "ran out of time" --
+             * correctly, because the encounter is built so that ignoring the
+             * totems means you cannot win. That is the game working; it was
+             * the yardstick that was broken, and a yardstick that cannot
+             * finish fifteen of fifty-two rungs is not measuring the ladder.
+             */
+            target = (run.boss.kind === 'crucible'
+                        ? (totems.find(t => t.tender && t.hp > 0) ||
+                           enemies.find(e => e.tender && e.hp > 0))
+                        : enemies.find(e => e.kind === 'lieutenant' && e.hp > 0))
+                     || run.boss;
           } else { mode = 'gate'; target = portal; }
           if (target) fieldTo(target.x, target.y);
         }
@@ -373,6 +390,46 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
    * so this records it instead of hiding it. The assertions are shaped to
    * catch it getting WORSE or SPREADING, and to fail if it is fixed, so that
    * whoever fixes it has to come here and say so.
+   *
+   * ---- ONE ATTEMPT, MEASURED AND KEPT -----------------------------------
+   *
+   * Three environmental terms were added to make a deep delve hostile
+   * without touching what a body hits for, on the reasoning that scaling
+   * enemy damage would make `ward` -- a flat share off every blow -- worth
+   * less every rung you carried it: ALERT_GROWTH (a roused pack reaches 155
+   * units at the top of the ladder and 240 at the bottom), AFFLICT_GROWTH
+   * (bleed, embers and broken ground last twice as long at the bottom), and
+   * the spike beat (3.4s down to 2.6s, all of it out of the rest between
+   * risings). All three work, and packs.js and traps.js hold them to it: at
+   * rung 44 the alert chain now brings 46 bodies at once against 12 before
+   * it, which is four times the horde and the whole of HORDE_LIVE.
+   *
+   * IT MOVED THIS SUITE BY NOTHING.
+   *
+   *     rung   0    3    9   17   30   44   overall
+   *     before 4/16 0/16 0/16 0/16 8/16 12/16  24/96
+   *     after  7/16 0/16 0/16 0/16 6/16 13/16  26/96
+   *
+   * Rung 0 has no depth and therefore no lever on it at all, and it moved
+   * 4 -> 7. That is the noise floor, and every other delta is inside it.
+   *
+   * The finding is worth more than the change: quadrupling the horde at the
+   * deepest rung does not make the deepest rung harder. What is broken is
+   * not how MANY chances the delve gets to hurt you, it is how BIG each one
+   * is. A flat blow, a flat 7 DPS wound, forty-six bodies instead of twelve
+   * -- all of it is arithmetic against a health pool that ran 152 to 528
+   * across the same ladder, and none of it is a threat. Any lever that adds
+   * occurrences is dead on arrival here; only a term that scales with the
+   * hero can bite.
+   *
+   * The game already has that term and uses it in exactly one place: the
+   * traps take SPIKE_TOLL and POOL_DPS as a SHARE OF MAX LIFE, so they are
+   * the only environmental damage in the build that does not decay with
+   * depth. Note also that proportional damage does not cost `ward` anything
+   * -- ward takes its share off the blow either way -- so the reason flat
+   * scaling was ruled out does not apply to it. That is the shape of the
+   * repair, and it is a design decision, so it is written here rather than
+   * made quietly.
    */
   const KNOWN_SPIKE = [3, 9, 17];
   const dead = curve.filter(c => c.won === 0);

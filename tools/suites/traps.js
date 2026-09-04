@@ -60,6 +60,42 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     o.phases = [...new Set(seq)].sort().join(',');
     o.unwarned = seq.filter((ph, i) => i > 0 && ph === 'out' && seq[i - 1] === 'down').length;
 
+    /* --- and the beat quickens as the ladder goes down --------------------
+     * The floor is one of the three terms that make a deep delve hostile
+     * without touching what a body hits for. What has to hold is not just
+     * "the cycle is shorter" -- it is that the shortening comes ENTIRELY out
+     * of the rest between risings, and that the tell and the standing, which
+     * are the parts the player reads and dodges, are the same at rung 51 as
+     * at rung 0. A trap that tells you faster is a trap you gamble on.
+     */
+    const beatAt = d => {
+      const c = spikeBeat(d);
+      const step = 0.005, span = [];
+      let cur = null, run0 = 0;
+      for (let t = 0; t < c; t += step) {
+        const ph = spikePhase(t, c).phase;
+        if (ph !== cur) { if (cur !== null) span.push([cur, t - run0]); cur = ph; run0 = t; }
+      }
+      span.push([cur, c - run0]);
+      const of = k => span.filter(x => x[0] === k).reduce((a, x) => a + x[1], 0);
+      return { cycle: +c.toFixed(3), tell: +of('tell').toFixed(2),
+               out: +of('out').toFixed(2), rest: +of('down').toFixed(2) };
+    };
+    o.beatTop = beatAt(0);
+    o.beatDeep = beatAt(1);
+    // What the delve itself actually builds, at both ends -- the constant
+    // being right proves nothing if placeTraps hands the field another one.
+    const cycleIn = idx => {
+      for (let i = 0; i < 40; i++) {
+        startRun('isaac', LEVELS[idx].id, 'riven');
+        const t = traps.find(t => t.kind === 'spike');
+        if (t) return +t.cycle.toFixed(3);
+      }
+      return null;
+    };
+    o.builtTop = cycleIn(0);
+    o.builtDeep = cycleIn(LEVEL_COUNT - 1);
+
     // --- a spike field, with a matched pair on it and beside it -----------
     let tr = null;
     for (let i = 0; i < 60 && !tr; i++) {
@@ -122,11 +158,11 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
       // 'out' when it is already out returns immediately, one frame from the
       // end, and the check below then passed on a single sample -- which is
       // the same vacuous pass it exists to catch.
-      while (spikePhase(tr.t).phase === 'out') updateTraps(1 / 60);
-      while (spikePhase(tr.t).phase !== 'out') updateTraps(1 / 60);
+      while (spikePhase(tr.t, tr.cycle).phase === 'out') updateTraps(1 / 60);
+      while (spikePhase(tr.t, tr.cycle).phase !== 'out') updateTraps(1 / 60);
       const held = on.hp;              // the rising, and its bite, have landed
       let ticks = 0;
-      while (spikePhase(tr.t).phase === 'out') { updateTraps(1 / 60); ticks++; }
+      while (spikePhase(tr.t, tr.cycle).phase === 'out') { updateTraps(1 / 60); ticks++; }
       o.whileStandingTicks = ticks;
       o.whileStanding = Math.round(held - on.hp);
 
@@ -195,6 +231,33 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   ck('the spikes have all three phases', R.phases === 'down,out,tell', R.phases);
   ck('and never come up without telling first', R.unwarned === 0,
      R.unwarned + ' risings with no tell before them');
+
+  // --- the beat against depth ---------------------------------------------
+  ck('the beat quickens with depth', R.beatDeep.cycle < R.beatTop.cycle - 0.5,
+     R.beatTop.cycle + 's at the mouth against ' + R.beatDeep.cycle + 's at the bottom');
+  // The control, and the whole point of the lever: every second the cycle
+  // loses comes out of the REST. If a future change takes it out of the tell
+  // or the standing instead, this is what says so.
+  ck('and every second of it comes out of the rest, not the tell or the standing',
+     Math.abs(R.beatDeep.tell - R.beatTop.tell) < 0.05 &&
+     Math.abs(R.beatDeep.out - R.beatTop.out) < 0.05,
+     'tell ' + R.beatTop.tell + '→' + R.beatDeep.tell +
+     ', standing ' + R.beatTop.out + '→' + R.beatDeep.out +
+     ', rest ' + R.beatTop.rest + '→' + R.beatDeep.rest);
+  // A hall you cannot cross is a wall, not a harder hall. A plate is one cell
+  // and the hero crosses about 210 units a second, so the rest has to stay
+  // long enough to walk off the checkerboard you are standing on.
+  ck('and the rest never falls below the time it takes to cross a plate',
+     R.beatDeep.rest > R.cell / 210,
+     R.beatDeep.rest + 's of rest against ' + (R.cell / 210).toFixed(2) +
+     's to cross a ' + R.cell + '-unit plate');
+  ck('and the delve builds its fields at the beat its own depth asks for',
+     R.builtTop !== null && R.builtDeep !== null &&
+     Math.abs(R.builtTop - R.beatTop.cycle) < 0.01 &&
+     Math.abs(R.builtDeep - R.beatDeep.cycle) < 0.01,
+     R.builtTop === null || R.builtDeep === null
+       ? 'NO HALL CUT AT ONE END — the check below proves nothing'
+       : 'rung 0 built ' + R.builtTop + 's, the last rung ' + R.builtDeep + 's');
 
   ck('the fixture found a hall to test in', R.foundSpike);
   ck('a body standing on a plate is spiked', R.bitOnPlate > 0,
