@@ -12,7 +12,7 @@
  * the game lives inside a function named draw, forge or paint, and those are
  * dropped here.
  *
- * 512 statements kept; 15 drawing functions and 47 page-bound statements dropped.
+ * 515 statements kept; 15 drawing functions and 47 page-bound statements dropped.
  * Re-run `npm run core` after changing ../index.html.
  */
 /* =============================================================================
@@ -805,8 +805,43 @@ const SET_BONUSES = [
   { at:8, text:'a second crescent with every strike', add:{ shots:1 } }
 ];
 
+/* WHERE EACH PIECE LIES.
+ *
+ * The Regalia was sundered across the Shattered Realm, and each region kept
+ * what fell in it. Farming one rung over and over for eight random slots is
+ * the shortest path to a player seeing the same corridor two hundred times;
+ * knowing that the rings are in the Rot-Weald is a reason to go somewhere
+ * else.
+ *
+ * The brief this came from asked for a Helm and Pauldrons in the Slag-Moors.
+ * There are no such slots -- the eight are blade, off-hand, mail, girdle,
+ * boots, amulet and two rings -- and the one the other four regions leave
+ * spare is the off-hand. That is the right answer anyway: the Unbroken Ward
+ * is a Hearth-Warden's shield and the Weeping Keep of Tor-Varden is where the
+ * Hearth-Wardens come from. Every slot is claimed exactly once.
+ */
+const REGION_RELIC = {
+  slag:    ['offhand'],            // The Weeping Keep of Tor-Varden
+  vaelk:   ['boots', 'girdle'],    // The Kael-Dorm Redoubt
+  kraggen: ['mail'],               // The Shatter-Gate of Ghor
+  weald:   ['ring1', 'ring2'],     // The Heart-Rot Clearing
+  firth:   ['blade', 'amulet']     // The Ash-Shoals
+};
+// Weighted, not locked. A region that ONLY ever yields its own pieces makes
+// the last slot of a set hostage to one delve a player may not be able to
+// beat, and the reliquary already exists as the pity valve for exactly that.
+// Seven times in ten it is what the ground keeps; the rest is anything.
+const RELIC_HERE = 0.7;
+
+function relicSlotFor(regionId) {
+  const here = REGION_RELIC[regionId];
+  if (here && here.length && Math.random() < RELIC_HERE)
+    return here[(Math.random() * here.length) | 0];
+  return SLOTS[(Math.random() * SLOTS.length) | 0].id;
+}
+
 function rollSetPiece(slotId) {
-  const slot = slotId || SLOTS[(Math.random() * SLOTS.length) | 0].id;
+  const slot = slotId || relicSlotFor(REGION && REGION.id);
   const def = SET_PIECES[slot];
   return { uid: ++itemSeq, slot, base: def.base, rarity: 'mythic', set: SET_ID,
            affixes: def.affixes.map(a => ({ id: a[0], v: a[1] })),
@@ -5142,6 +5177,9 @@ function blankStash() {
   for (const sl of SLOTS) g[sl.id] = null;
   return { gear: g, vault: [], hero: 'isaac', seq: 0, xp: 0, level: 1,
            coins: 0, pity: 0, loadouts: [], corpse: null,
+           // Which ground you asked to be cut into. null is "whatever the
+           // rung rolls", which is what it always did.
+           region: null,
            hall: { vault: 0, forge: 0, reliquary: 0, wardstone: 0 } };
 }
 
@@ -5782,9 +5820,18 @@ function resetRun(heroId, levelId, diffId) {
   const hero = heroId || (run && run.hero) || 'isaac';
   DIFF = DIFF_BY_ID[diffId || (run && run.diff_id) || DIFF.id] || DIFF_BY_ID.riven;
   LEVEL = LEVEL_BY_ID[levelId || (run && run.level_id) || LEVELS[0].id] || LEVELS[0];
-  // The level decides which regions it can be cut from; the delve rolls one.
+  // The level decides which regions it can be cut from, and the delve rolls
+  // one -- unless you asked for a particular one at the gate-house.
+  //
+  // That choice had to exist before naming a region's Regalia meant anything.
+  // A rung deep enough to reach the Rot-Weald can be cut from five regions,
+  // so "the rings are in the Rot-Weald" was advice you could not act on: you
+  // took the rung you could beat and the game rolled the ground. Asking for
+  // it is the whole of what makes the map worth reading.
   const pool = LEVEL.regions;
-  REGION = REGION_BY_ID[pool[(Math.random() * pool.length) | 0]] || REGIONS[0];
+  const want = stash && stash.region;
+  REGION = REGION_BY_ID[(want && pool.indexOf(want) >= 0 ? want
+                        : pool[(Math.random() * pool.length) | 0])] || REGIONS[0];
   PAL.stoneTop = REGION.stone[0];
   PAL.stoneMid = REGION.stone[1];
   PAL.stoneLow = REGION.stone[2];

@@ -12,6 +12,7 @@
 
 /* global player, run, stash, state, LEVELS, LEVEL, LEVEL_BY_ID, HEROES,
           startRun, endRun, stepThrough, blankStash, el, stashPower, resumeRun,
+          REGION_BY_ID, REGION_RELIC,
           SLOTS, SLOT_BY_ID, RARITY, itemPower, affixText, saveStash,
           VENDOR, vendorCost, canAfford, vendorBuy, HALL, hallTier,
           HALL_MAX, hallBuy, vaultCap */
@@ -167,6 +168,59 @@ export class Screens {
     this.root.querySelector('.alt').addEventListener('click', () => this.onAbandon());
   }
 
+  /* WHICH GROUND, and what it keeps.
+   *
+   * A rung deep enough to reach the Rot-Weald can be cut from five regions,
+   * and the delve used to roll one -- which made "the rings are in the
+   * Rot-Weald" advice nobody could act on. Asking for the ground is what turns
+   * the Regalia's scattering into a reason to go somewhere.
+   *
+   * Only shown where there is a choice. On the first rungs the pool is one
+   * region and a picker with one option in it is furniture.
+   */
+  ground() {
+    const L = LEVEL_BY_ID[this.pick.level];
+    if (!L || !L.regions || L.regions.length < 2) {
+      // Still say what the one region keeps -- that is the whole point of
+      // naming them, and it is true whether or not there is anything to pick.
+      const only = L && L.regions && L.regions[0];
+      const keeps = only && this.relicWord(only);
+      return keeps ? '<p class="sub">Cut from ' +
+        (REGION_BY_ID[only] || {}).name + ', which keeps ' + keeps + '.</p>' : '';
+    }
+    const want = stash.region;
+    const cell = (id, label, note) =>
+      '<button class="row' + ((want || 'any') === id ? ' on' : '') +
+      '" data-region="' + id + '" type="button"><span>' + label +
+      (note ? '<small>' + note + '</small>' : '') + '</span></button>';
+    return '<p class="sub">The ground, and what the Regalia left in it.</p>' +
+      '<div class="rows" id="regionRows">' +
+        cell('any', 'Whatever the rung offers', 'a region rolled per delve') +
+        L.regions.map(id => cell(id, (REGION_BY_ID[id] || {}).name || id,
+                                  this.relicWord(id))).join('') +
+      '</div>';
+  }
+
+  /* "the blade and the amulet", from the slots this region keeps. Written out
+   * rather than listed, because a row of slot ids is a database and this is a
+   * sentence about a place. */
+  relicWord(regionId) {
+    const slots = (typeof REGION_RELIC !== 'undefined' && REGION_RELIC[regionId]) || null;
+    if (!slots || !slots.length) return '';
+    const seen = [], names = [];
+    for (const id of slots) {
+      const sl = SLOT_BY_ID[id];
+      if (!sl || seen.indexOf(sl.name) >= 0) continue;   // both rings are "Ring"
+      seen.push(sl.name);
+      names.push(sl.name.toLowerCase());
+    }
+    if (!names.length) return '';
+    const many = slots.length > names.length;            // ring1 + ring2
+    const said = names.length === 1 ? 'the ' + names[0] + (many ? 's' : '')
+               : 'the ' + names.slice(0, -1).join(', the ') + ' and the ' + names[names.length - 1];
+    return said;
+  }
+
   /* The outcome. Every word of it was written by endRun -- which knows what
    * was banked, what the corpse kept and whether an older one was lost -- and
    * read back out of the store the host gives it.
@@ -250,6 +304,7 @@ export class Screens {
                        : l.power < power - 2 ? 'well within you' : 'an even match') +
             '</small></button>').join('') +
         '</div>' +
+        this.ground() +
         '<button class="go" type="button" id="descend">Descend</button>' +
       '</div>';
 
@@ -257,6 +312,13 @@ export class Screens {
       b.addEventListener('click', () => { this.pick.hero = b.dataset.hero; this.renderGatehouse(); }));
     this.root.querySelectorAll('[data-level]').forEach(b =>
       b.addEventListener('click', () => { this.pick.level = b.dataset.level; this.renderGatehouse(); }));
+    this.root.querySelectorAll('[data-region]').forEach(b =>
+      b.addEventListener('click', () => {
+        const id = b.dataset.region;
+        stash.region = id === 'any' ? null : id;
+        saveStash();
+        this.renderGatehouse();
+      }));
     this.wireTabs();
     this.root.querySelector('#descend').addEventListener('click', () => {
       this.root.classList.remove('up');

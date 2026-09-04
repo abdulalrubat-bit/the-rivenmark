@@ -203,6 +203,49 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   ck('the gate-house offers both heroes and a ladder',
      hall.heroes === 2 && hall.rungs >= 4, hall.heroes + ' heroes, ' + hall.rungs + ' rungs');
   ck('and the purse is shown', hall.purse);
+
+  /* --- ASKING FOR THE GROUND ---------------------------------------------
+   * The Regalia is scattered by region, which is advice nobody can act on
+   * unless the gate-house lets you ask for a region. Only offered where there
+   * is a choice: the first rungs are cut from one region and a picker with a
+   * single option in it is furniture.
+   */
+  const ground = await p.evaluate(async () => {
+    const sc = window.__game.scene.getScene('delve');
+    const deep = LEVELS.find(l => l.regions.length >= 3);
+    const shallow = LEVELS.find(l => l.regions.length === 1);
+    sc.screens.pick.level = shallow.id; sc.screens.show('splash');
+    const onOne = { rows: document.querySelectorAll('#regionRows').length,
+                    says: document.querySelector('#screens').textContent };
+    sc.screens.pick.level = deep.id; sc.screens.show('splash');
+    const rows = [...document.querySelectorAll('[data-region]')];
+    const before = stash.region;
+    const wanted = deep.regions[deep.regions.length - 1];
+    const btn = rows.find(r => r.dataset.region === wanted);
+    if (btn) btn.click();
+    await new Promise(r => setTimeout(r, 120));
+    const on = document.querySelector('[data-region].on');
+    return { onOne, offered: rows.length, pool: deep.regions.length,
+             names: rows.map(r => r.dataset.region),
+             before, after: stash.region, wanted,
+             lit: on && on.dataset.region,
+             keeps: (btn && btn.textContent) || '',
+             deepName: deep.name, shallowName: shallow.name,
+             shallowRegion: (REGION_BY_ID[shallow.regions[0]] || {}).name || '' };
+  });
+  ck('a one-region rung is not given a picker with one option in it',
+     ground.onOne.rows === 0, ground.shallowName + ' has ' + ground.onOne.rows + ' pickers');
+  ck('but it still says what its ground keeps',
+     ground.onOne.says.includes(ground.shallowRegion) &&
+     /keeps/.test(ground.onOne.says), ground.shallowRegion);
+  ck('a rung cut from several offers every one of them, and “whatever it rolls”',
+     ground.offered === ground.pool + 1,
+     ground.deepName + ': ' + ground.names.join(' '));
+  ck('asking for one records it', ground.after === ground.wanted && ground.lit === ground.wanted,
+     'was ' + JSON.stringify(ground.before) + ', now ' + JSON.stringify(ground.after));
+  ck('and the row says what that ground keeps', /the [a-z]/.test(ground.keeps),
+     JSON.stringify(ground.keeps.trim()));
+  await p.evaluate(() => { stash.region = null; saveStash(); });
   // Power reaching the screen as NaN compared false against every rung and
   // labelled the whole ladder "an even match" -- a wrong answer that looked
   // like a plausible one.
