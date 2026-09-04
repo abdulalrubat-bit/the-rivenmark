@@ -12,7 +12,7 @@
  * the game lives inside a function named draw, forge or paint, and those are
  * dropped here.
  *
- * 540 statements kept; 15 drawing functions and 52 page-bound statements dropped.
+ * 552 statements kept; 15 drawing functions and 52 page-bound statements dropped.
  * Re-run `npm run core` after changing ../index.html.
  */
 /* =============================================================================
@@ -3007,6 +3007,123 @@ const CHEST_DRAW = 48;
 const HAZARD_TICK = 0.4;   // how often standing in one costs you
 let hazards = [];
 
+/* --- TRAPS ----------------------------------------------------------------
+   Ground the ROOM keeps, as opposed to ground the Riftborn leaves. A hazard is
+   spent and gone; a trap is a permanent property of a place, and that is the
+   difference that makes it terrain you can use rather than weather you endure.
+
+   THE POINT OF THEM IS THAT THEY CUT BOTH WAYS. A trap only the player can
+   step in is a tax; a trap the horde can be put into is a weapon, and it is
+   the one weapon this game's controls can express without another button --
+   you already choose where you stand, and the Anchoring Strike already throws
+   what it hits. The bash and the spikes were built months apart and turn out
+   to be the same move.
+
+   Two, each cut to the room that already exists:
+
+     SPIKES in the pillared hall. Plates on a checkerboard, so half the floor
+     is always safe and the room is a question about footing rather than a
+     place you leave. They tell before they come, because a trap with no tell
+     is a dice roll.
+
+     A POOL in the cistern, which dressRooms deliberately leaves bare. Standing
+     water that was never only water.
+
+   Boss-left hazards stay player-only: the Deceiver poisoning his own horde
+   would read as the arena helping you, and his fight is not that fight.
+   ---------------------------------------------------------------------- */
+let traps = [];
+const SPIKE_CYCLE = 3.4;    // the whole beat
+const SPIKE_TELL  = 0.7;    // stone grinding, before anything is out
+const SPIKE_OUT   = 1.0;    // and how long they stand
+const SPIKE_BITE  = 0.34;   // share of what stands on them -- a HEAVY blow
+const SPIKE_TOLL  = 0.12;   // ...but a gentler share of the hero
+const POOL_DPS    = 0.11;   // share of max life a second, both sides
+const TRAP_TICK   = 0.35;
+
+// Which phase a spike field is in. One function so the drawing and the damage
+// cannot disagree about whether the spikes are out -- they did, in the first
+// version, by a frame.
+function spikePhase(t) {
+  const u = t % SPIKE_CYCLE;
+  if (u < SPIKE_CYCLE - SPIKE_OUT - SPIKE_TELL) return { phase: 'down', f: 0 };
+  if (u < SPIKE_CYCLE - SPIKE_OUT)
+    return { phase: 'tell', f: (u - (SPIKE_CYCLE - SPIKE_OUT - SPIKE_TELL)) / SPIKE_TELL };
+  return { phase: 'out', f: (u - (SPIKE_CYCLE - SPIKE_OUT)) / SPIKE_OUT };
+}
+// A plate, or the floor between them. Parity on the cell, so it is a
+// checkerboard however the room is shaped and costs one modulo to ask.
+const onPlate = (x, y) =>
+  ((Math.floor(x / CELL_W) + Math.floor(y / CELL_W)) & 1) === 0;
+
+function placeTraps() {
+  traps = [];
+  for (const rm of rooms) {
+    if (rm.kind === 'hall') {
+      traps.push({ kind: 'spike', x: rm.x, y: rm.y, r: rm.r,
+                   // Offset so two halls in one delve are not in lockstep.
+                   t: Math.random() * SPIKE_CYCLE, was: 'down', bit: [] });
+    } else if (rm.kind === 'cistern') {
+      traps.push({ kind: 'pool', x: rm.x, y: rm.y, r: Math.max(70, rm.r * 0.62),
+                   t: Math.random() * 6, tick: 0 });
+    }
+  }
+}
+
+function updateTraps(dt) {
+  for (let i = 0; i < traps.length; i++) {
+    const tr = traps[i];
+    tr.t += dt;
+    if (tr.kind === 'spike') {
+      const ph = spikePhase(tr.t).phase;
+      // Only on the EDGE into 'out', and only once per body per rising. A
+      // per-tick spike field would grind everything in the room to nothing
+      // while it stood, which is not a trap, it is a floor that kills.
+      if (ph === 'out' && tr.was !== 'out') {
+        tr.bit = [];
+        if (dist2(player.x, player.y, tr.x, tr.y) < tr.r * tr.r &&
+            onPlate(player.x, player.y)) {
+          const was = player.invuln; player.invuln = 0;
+          hurtPlayerBy(player.maxHp * SPIKE_TOLL, tr.x, tr.y);
+          player.invuln = Math.max(player.invuln, was);
+        }
+        enemyGrid.query(tr.x, tr.y, tr.r, _near);
+        for (let k = 0; k < _near.length; k++) {
+          const e = _near[k];
+          // NOT the sleeping. damageEnemy wakes what it hits and the alert
+          // chains outward, so a field standing over a dormant pack roused it
+          // and then roused its neighbours -- twenty-nine bodies awake while
+          // the player stood still at the spawn, which is the one thing this
+          // game's packs exist not to do. It is the better rule anyway: a trap
+          // quietly killing a pack you never met is loot you never earn.
+          if (e.hp <= 0 || !e.awake || !onPlate(e.x, e.y)) continue;
+          if (dist2(e.x, e.y, tr.x, tr.y) > tr.r * tr.r) continue;
+          // From below, so the recoil the weight pass rides has nowhere
+          // sideways to go and the body simply drops where it stood.
+          damageEnemy(e, e.maxHp * SPIKE_BITE, e.x, e.y);
+        }
+      }
+      tr.was = ph;
+    } else {
+      tr.tick -= dt;
+      if (tr.tick > 0) continue;
+      tr.tick = TRAP_TICK;
+      if (dist2(player.x, player.y, tr.x, tr.y) < tr.r * tr.r) {
+        const was = player.invuln; player.invuln = 0;
+        hurtPlayerBy(player.maxHp * POOL_DPS * TRAP_TICK, tr.x, tr.y);
+        player.invuln = Math.max(player.invuln, was);
+      }
+      enemyGrid.query(tr.x, tr.y, tr.r, _near);
+      for (let k = 0; k < _near.length; k++) {
+        const e = _near[k];
+        if (e.hp <= 0 || !e.awake) continue;      // see the spikes, above
+        if (dist2(e.x, e.y, tr.x, tr.y) > tr.r * tr.r) continue;
+        damageEnemy(e, e.maxHp * POOL_DPS * TRAP_TICK, e.x, e.y);
+      }
+    }
+  }
+}
+
 /* --- reactive scenery -----------------------------------------------------
    The player has a stick and an automatic blade, so the only tactical input
    they have is *where* they fight. That is what this is for: a room with a
@@ -5199,6 +5316,7 @@ function update(dt) {
   updateProps(dt);
   updateSlams(dt);
   updateHazards(dt);
+  updateTraps(dt);
   updateBeams(dt);
   updateNulls(dt);
   updateTotems(dt);
@@ -6120,6 +6238,7 @@ function resetRun(heroId, levelId, diffId) {
   player.hp = player.maxHp;
   placePacks(spawn);
   placeChests(spawn, portal);
+  placeTraps();
   flowFrom = -1;
   rebuildFlow();
   hudCache.hp = hudCache.tech = hudCache.time = hudCache.lvl = -1;

@@ -14,7 +14,7 @@
 
 import Phaser from 'phaser';
 
-/* global crescentHue,
+/* global crescentHue, traps, spikePhase, CELL_W, view,
           arcs, particles, rings, floaters, bolts, slams, hazards, nulls,
           totems, ruptures, player, cam, FLOAT_STYLE, FLOAT_LIFE, BOLT_R,
           TAU, HEROES, run, portal, drops, PORTAL_R, PAL, LEVEL, rarityOf,
@@ -77,9 +77,75 @@ export class Effects {
     this.numbers();
   }
 
+  /* TRAPS: the ground a room keeps.
+   *
+   * Drawn from the same spikePhase() the damage uses. The first version had
+   * its own copy of the arithmetic and the two disagreed by a frame, which is
+   * exactly long enough for a player to be hit by spikes that had not come up
+   * yet -- and there is no way to learn a trap that lies to you.
+   *
+   * Only the plates under the camera are drawn. A hall's field is a couple of
+   * hundred cells and all but a dozen of them are off screen.
+   */
+  traps(g, t) {
+    if (typeof traps === 'undefined') return;
+    const L = cam.x - 40, R = cam.x + view.w + 40;
+    const T = cam.y - 40, B = cam.y + view.h + 40;
+    for (const tr of traps) {
+      if (tr.x + tr.r < L || tr.x - tr.r > R ||
+          tr.y + tr.r < T || tr.y - tr.r > B) continue;
+      if (tr.kind === 'pool') {
+        // Standing water that was never only water. It breathes, so a still
+        // circle on the floor does not read as a decal.
+        const w = 1 + Math.sin(tr.t * 0.7) * 0.02;
+        g.fillStyle(0x16301f, 0.82);
+        g.fillCircle(tr.x, tr.y, tr.r * w);
+        g.fillStyle(0x2e6b3c, 0.22);
+        g.fillCircle(tr.x, tr.y, tr.r * w * 0.82);
+        g.lineStyle(2, 0x9dbb5a, 0.45);
+        g.strokeCircle(tr.x, tr.y, tr.r * w);
+        continue;
+      }
+      const ph = spikePhase(tr.t);
+      // Down and quiet: the plates still show, or the room gives no warning
+      // at all until the first time it kills you.
+      const out = ph.phase === 'out', tell = ph.phase === 'tell';
+      const c0 = Math.floor((Math.max(L, tr.x - tr.r)) / CELL_W);
+      const c1 = Math.floor((Math.min(R, tr.x + tr.r)) / CELL_W);
+      const r0 = Math.floor((Math.max(T, tr.y - tr.r)) / CELL_W);
+      const r1 = Math.floor((Math.min(B, tr.y + tr.r)) / CELL_W);
+      const rr = tr.r * tr.r;
+      for (let cy = r0; cy <= r1; cy++) {
+        for (let cx = c0; cx <= c1; cx++) {
+          if ((cx + cy) & 1) continue;                       // the safe squares
+          const px = cx * CELL_W + CELL_W / 2, py = cy * CELL_W + CELL_W / 2;
+          const dx = px - tr.x, dy = py - tr.y;
+          if (dx * dx + dy * dy > rr) continue;
+          const half = CELL_W * 0.34;
+          if (out) {
+            // Iron, up. Bright at the moment of rising and settling after.
+            const k = 1 - ph.f * 0.5;
+            g.fillStyle(0x3a3a42, 0.9);
+            g.fillRect(px - half, py - half, half * 2, half * 2);
+            g.lineStyle(2, 0xc8d0dc, 0.35 + 0.5 * k);
+            g.strokeRect(px - half, py - half, half * 2, half * 2);
+          } else {
+            // Slots in the floor. The tell brightens them and nothing else --
+            // a shake would be lost under a fight, a change of colour is not.
+            g.fillStyle(0x0e0c0a, 0.55);
+            g.fillRect(px - half, py - half, half * 2, half * 2);
+            g.lineStyle(1, tell ? 0xe2782c : 0x4a3f30, tell ? 0.35 + ph.f * 0.6 : 0.5);
+            g.strokeRect(px - half, py - half, half * 2, half * 2);
+          }
+        }
+      }
+    }
+  }
+
   /* Ground work. Everything here is a circle on the floor that means something
    * in play: standing in it costs you, or it is about to. */
   ground(g, t) {
+    this.traps(g, t);
     for (const h of hazards) {                 // burning floor
       const f = Math.max(0, h.life / h.max);
       g.fillStyle(hex(h.hue), 0.16 * f + 0.06);
