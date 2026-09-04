@@ -16,7 +16,14 @@
 (function () {
   const STORE_KEY = 'rivenmark.best.v1';
   const STASH_KEY = 'rivenmark.stash.v1';
+  const HC_STASH_KEY = 'rivenmark.hc.stash.v1';
+  const HONOURS_KEY = 'rivenmark.honours.v1';
+  const HC_MODE_KEY = 'rivenmark.hc.mode.v1';
   const noop = () => {};
+  // WHICH stash. Hardcore keeps its own, and the core decides which is live --
+  // asking it rather than reading a copy of the flag is what stops this file
+  // and the core disagreeing about whose gear is whose.
+  const key = () => (typeof stashKey === 'function' ? stashKey() : STASH_KEY);
 
   // --- persistence, real ---------------------------------------------------
   // Absent from the core only because they touch localStorage, which the rule
@@ -32,17 +39,41 @@
   window.saveStash = () => {
     try {
       stash.seq = itemSeq;
-      localStorage.setItem(STASH_KEY, JSON.stringify(stash));
+      localStorage.setItem(key(), JSON.stringify(stash));
     } catch (e) {}
   };
   // The canvas build's version migrates old saves; this is the part that
   // matters here — read it back if it is there, start clean if it is not.
   window.loadStash = () => {
     let st = null;
-    try { st = JSON.parse(localStorage.getItem(STASH_KEY)); } catch (e) {}
+    try { st = JSON.parse(localStorage.getItem(key())); } catch (e) {}
     if (!st || typeof st !== 'object') return blankStash();
     const base = blankStash();
     return Object.assign(base, st, { gear: Object.assign(base.gear, st.gear || {}) });
+  };
+
+  // Hardcore's own three. The honours are a separate key on purpose: they are
+  // the one thing that survives the wipe, so nothing that can be wiped may own
+  // them. dropHardcoreStash is the single page-bound line of the death hook --
+  // the rule around it lives in the core, where both builds run the same one.
+  window.loadHonours = () => {
+    try { return JSON.parse(localStorage.getItem(HONOURS_KEY)) || {}; }
+    catch (e) { return {}; }
+  };
+  window.saveHonours = h => {
+    try { localStorage.setItem(HONOURS_KEY, JSON.stringify(h)); } catch (e) {}
+  };
+  window.dropHardcoreStash = () => {
+    try { localStorage.removeItem(HC_STASH_KEY); } catch (e) {}
+  };
+  // Which mode was last taken up. Read once at boot -- a player who closed the
+  // app inside a Hardcore life must not come back to their softcore kit and
+  // find out which one they were in by dying in the wrong one.
+  window.rememberHardcore = on => {
+    try { localStorage.setItem(HC_MODE_KEY, on ? '1' : ''); } catch (e) {}
+  };
+  window.loadHardcoreMode = () => {
+    try { return !!localStorage.getItem(HC_MODE_KEY); } catch (e) { return false; }
   };
 
   // --- dressing, drawn by Phaser instead -----------------------------------

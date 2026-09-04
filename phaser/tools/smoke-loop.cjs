@@ -246,6 +246,54 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   ck('and the row says what that ground keeps', /the [a-z]/.test(ground.keeps),
      JSON.stringify(ground.keeps.trim()));
   await p.evaluate(() => { stash.region = null; saveStash(); });
+
+  /* --- ONE LIFE ------------------------------------------------------------
+   * Hardcore is a second stash rather than a setting on the first, so the
+   * gate-house toggle must put one kit down and pick another up without
+   * touching what it left. Two taps to go in, one to come back: the direction
+   * where the next death is final is the one worth a question.
+   */
+  const oneLife = await p.evaluate(async () => {
+    const sc = window.__game.scene.getScene('delve');
+    setHardcore(false);
+    stash = blankStash(); stash.coins = 404;
+    for (const sl of SLOTS) stash.gear[sl.id] = rollItem(0.5, sl.id);
+    saveStash();
+    sc.screens.hcArmed = false;
+    sc.screens.show('splash');
+    const t = () => document.querySelector('#hcToggle');
+    const said = () => (t() || {}).textContent || '';
+    const off = said();
+    t().click(); await new Promise(r => setTimeout(r, 80));
+    const armed = said();
+    t().click(); await new Promise(r => setTimeout(r, 80));
+    const on = { text: said(), hardcore, loot: lootMult(),
+                 coins: stash.coins,
+                 gear: SLOTS.filter(sl => stash.gear[sl.id]).length };
+    // ...and back out in ONE tap, with the ordinary kit exactly as it was.
+    t().click(); await new Promise(r => setTimeout(r, 80));
+    const back = { hardcore, coins: stash.coins,
+                   gear: SLOTS.filter(sl => stash.gear[sl.id]).length };
+    setHardcore(false);
+    // Put the stash back as it was found. This block furnishes one to prove
+    // the switch does not touch it, and eight pieces of gear left lying around
+    // sent the ladder check below "well within you" on every rung.
+    stash = blankStash(); saveStash();
+    sc.screens.show('splash');
+    return { off, armed, on, back };
+  });
+  ck('the gate-house offers one life, and asks twice before taking it',
+     /Tap again/.test(oneLife.armed) && !/Tap again/.test(oneLife.off) &&
+     oneLife.on.hardcore === true,
+     JSON.stringify(oneLife.off.slice(0, 40)) + ' → ' +
+     JSON.stringify(oneLife.armed.slice(0, 40)));
+  ck('taking it up hands you an empty stash at half again the loot',
+     oneLife.on.coins === 0 && oneLife.on.gear === 0 && oneLife.on.loot === 1.5,
+     oneLife.on.gear + ' pieces, ' + oneLife.on.coins + ' coin, loot ×' + oneLife.on.loot);
+  ck('and putting it down gives the ordinary kit straight back, in one tap',
+     oneLife.back.hardcore === false && oneLife.back.coins === 404 &&
+     oneLife.back.gear === 8,
+     oneLife.back.gear + ' pieces and ' + oneLife.back.coins + ' coin returned');
   // Power reaching the screen as NaN compared false against every rung and
   // labelled the whole ladder "an even match" -- a wrong answer that looked
   // like a plausible one.

@@ -2,12 +2,16 @@
   "saveStash",
   "showScreen",
   "syncBagBadge",
+  "loadHonours",
   "buildKit",
   "syncHeroSkin",
   "renderGear",
   "refreshKitLine",
   "buildStains",
   "hitFlashUI",
+  "rememberHardcore",
+  "loadStash",
+  "dropHardcoreStash",
   "minimapBox",
   "forgeGround",
   "forgeWallCourses",
@@ -19,5 +23,6 @@
   "renderVendor",
   "loadBest",
   "saveBest",
+  "saveHonours",
   "refreshBestLine"
 ]

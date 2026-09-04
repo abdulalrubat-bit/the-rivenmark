@@ -151,6 +151,8 @@ const RENDER_HOST = new Set(['canvas', 'ctx', 'SPR', 'wallGrads',
 // forgotten one.
 const HOST_OK = new Set([
   'saveStash', 'loadStash', 'loadBest', 'saveBest',      // persistence
+  'loadHonours', 'saveHonours', 'dropHardcoreStash',    // ...and Hardcore's
+  'rememberHardcore', 'loadHardcoreMode',
   'showScreen', 'buildKit', 'syncKit', 'syncHeroSkin',   // the DOM menus
   'renderGear', 'renderHall', 'renderVendor', 'renderLoadouts', 'renderDetail',
   'syncBagBadge', 'hitFlashUI', 'toastEl', '$', 'el', 'resize',

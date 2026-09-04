@@ -12,7 +12,7 @@
 
 /* global player, run, stash, state, LEVELS, LEVEL, LEVEL_BY_ID, HEROES,
           startRun, endRun, stepThrough, blankStash, el, stashPower, resumeRun,
-          REGION_BY_ID, REGION_RELIC,
+          REGION_BY_ID, REGION_RELIC, hardcore, setHardcore, honoured,
           SLOTS, SLOT_BY_ID, RARITY, itemPower, affixText, saveStash,
           VENDOR, vendorCost, canAfford, vendorBuy, HALL, hallTier,
           HALL_MAX, hallBuy, vaultCap */
@@ -168,6 +168,29 @@ export class Screens {
     this.root.querySelector('.alt').addEventListener('click', () => this.onAbandon());
   }
 
+  /* ONE LIFE.
+   *
+   * Hardcore is a second stash, not a setting on the first, so switching
+   * destroys nothing -- the other kit is put down and picked up again later.
+   * The two-tap confirm is only on the way IN, because that is the direction
+   * where the next death is final; coming back out is free and asking about
+   * it would only teach the player to tap through the question.
+   */
+  oneLife() {
+    const on = typeof hardcore !== 'undefined' && hardcore;
+    const won = typeof honoured === 'function' && honoured();
+    const arm = this.hcArmed && !on;
+    return '<button class="row' + (on ? ' on' : '') + '" id="hcToggle" type="button">' +
+      '<span>' + (on ? 'Hardcore' : 'One life') +
+        '<small>' + (arm
+          ? 'Tap again. One death ends everything this Vanguard owns.'
+          : on ? 'One death ends it. Loot and Regalia come half again as often.'
+               : 'A separate stash, and a separate life. Tap to take it up.') +
+        '</small></span>' +
+      (won ? '<small>\u25c8 crimson</small>' : (on ? '<small>\u00d71.5</small>' : '')) +
+      '</button>';
+  }
+
   /* WHICH GROUND, and what it keeps.
    *
    * A rung deep enough to reach the Rot-Weald can be cut from five regions,
@@ -305,6 +328,7 @@ export class Screens {
             '</small></button>').join('') +
         '</div>' +
         this.ground() +
+        this.oneLife() +
         '<button class="go" type="button" id="descend">Descend</button>' +
       '</div>';
 
@@ -312,6 +336,17 @@ export class Screens {
       b.addEventListener('click', () => { this.pick.hero = b.dataset.hero; this.renderGatehouse(); }));
     this.root.querySelectorAll('[data-level]').forEach(b =>
       b.addEventListener('click', () => { this.pick.level = b.dataset.level; this.renderGatehouse(); }));
+    const hc = this.root.querySelector('#hcToggle');
+    if (hc) hc.addEventListener('click', () => {
+      // Nothing is destroyed by switching: the two stashes are separate keys
+      // and the other one is simply put down. The confirmation is for turning
+      // Hardcore ON, where the next death is final, and not for coming back.
+      if (!hardcore && !this.hcArmed) { this.hcArmed = true; this.renderGatehouse(); return; }
+      this.hcArmed = false;
+      setHardcore(!hardcore);
+      this.pick.hero = stash.hero || this.pick.hero;
+      this.renderGatehouse();
+    });
     this.root.querySelectorAll('[data-region]').forEach(b =>
       b.addEventListener('click', () => {
         const id = b.dataset.region;

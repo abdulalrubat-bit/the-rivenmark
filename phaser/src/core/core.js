@@ -12,7 +12,7 @@
  * the game lives inside a function named draw, forge or paint, and those are
  * dropped here.
  *
- * 520 statements kept; 15 drawing functions and 47 page-bound statements dropped.
+ * 533 statements kept; 15 drawing functions and 52 page-bound statements dropped.
  * Re-run `npm run core` after changing ../index.html.
  */
 /* =============================================================================
@@ -2653,7 +2653,7 @@ function maybeDropItem(e) {
                e.elite               ? 0.85 :
                e.kind === 'breaker'  ? 0.22 :
                e.kind === 'mirage'   ? 0 : 0.055;
-  chance *= (1 + depth * 0.8) * DIFF.lootRate;
+  chance *= (1 + depth * 0.8) * lootMult();
   const n = e.kind === 'deceiver' ? 3 : e.elite ? 2 : 1;
 
   // Regalia pieces come off champions and the avatar only -- and an invader
@@ -2666,7 +2666,7 @@ function maybeDropItem(e) {
   const purse = e.kind === 'deceiver' ? 90 : e.elite ? 26 : e.kind === 'breaker' ? 9 : 2;
   if (purse) {
     run.coins += Math.round(purse * (0.7 + Math.random() * 0.7) *
-                            (1 + (LEVEL.depth || 0) * 1.4) * DIFF.lootRate);
+                            (1 + (LEVEL.depth || 0) * 1.4) * lootMult());
   }
 
   const push = it => drops.push({
@@ -2674,7 +2674,7 @@ function maybeDropItem(e) {
     vx: rand(-46, 46), vy: rand(-46, 46),
     item: it, r: 9, life: 0, pulled: false });
 
-  if (setOdds && Math.random() < setOdds * DIFF.setRate * setBoost()) {
+  if (setOdds && Math.random() < setOdds * relicMult() * setBoost()) {
     push(rollSetPiece());
     if (e.kind !== 'deceiver') return;      // one piece is the whole prize
   }
@@ -2891,7 +2891,7 @@ function openChest(ch) {
   ch.t = 0;                      // the lid takes CHEST_OPEN to come up
   const K = CHEST_KINDS[ch.kind];
   const depth = LEVEL.depth || 0;
-  const coin = Math.round(rand(K.coin[0], K.coin[1]) * (1 + depth * 1.4) * DIFF.lootRate);
+  const coin = Math.round(rand(K.coin[0], K.coin[1]) * (1 + depth * 1.4) * lootMult());
   run.coins += coin;
   run.chests = (run.chests || 0) + 1;
 
@@ -2901,7 +2901,7 @@ function openChest(ch) {
 
   // Gear lands on the floor as an ordinary drop, so a full bag behaves the
   // same way here as it does everywhere else rather than silently eating it.
-  if (Math.random() < K.gear * DIFF.lootRate) {
+  if (Math.random() < K.gear * lootMult()) {
     const it = rollItem(Math.max(depth, K.floor));
     drops.push({ x: ch.x + rand(-10, 10), y: ch.y + rand(-10, 10),
                  vx: rand(-40, 40), vy: rand(-40, 40),
@@ -5169,6 +5169,73 @@ const STORE_KEY = 'rivenmark.best.v1';
 const STASH_KEY = 'rivenmark.stash.v1';
 const VAULT_MAX = 60;
 
+/* --- HARDCORE ------------------------------------------------------------
+   One life. Everything the Vanguard owns goes with them.
+
+   THREE KEYS, and the reason for each. The Hardcore stash is a SECOND key
+   rather than a flag inside the first, because the death hook wipes it and a
+   wipe that has to reach into a shared record and remove exactly the right
+   half is a wipe that will one day take the wrong half. Two keys means the
+   ordinary game is safe by construction rather than by care.
+
+   The flag cannot live in the stash either -- it is what decides which stash
+   to load, so it has to be known before there is one. It is its own tiny
+   record, kept beside the honours.
+
+   And the HONOURS are a third key because they must survive the wipe. A
+   Regalia carried out of a Hardcore delve is the only thing in this game that
+   is permanent whatever happens next, which is the entire point of it: the
+   character dies, the trophy does not.
+   ---------------------------------------------------------------------- */
+const HC_STASH_KEY = 'rivenmark.hc.stash.v1';
+const HC_MODE_KEY  = 'rivenmark.hc.mode.v1';
+const HONOURS_KEY  = 'rivenmark.honours.v1';
+// What one life is worth. Applied to loot and to the Regalia both, on top of
+// whatever the difficulty already says.
+const HC_LOOT = 1.5;
+
+let hardcore = false;
+const stashKey = () => (hardcore ? HC_STASH_KEY : STASH_KEY);
+const lootMult = () => DIFF.lootRate * (hardcore ? HC_LOOT : 1);
+const relicMult = () => DIFF.setRate * (hardcore ? HC_LOOT : 1);
+// The blood-red sweep. Earned once, kept for ever, and worn in either mode --
+// a trophy nobody can see outside the room it was won in is not a trophy.
+const honoured = () => !!loadHonours().crimson;
+// The trophy, worn. A Vanguard who carried the whole Regalia out of one life
+// swings in crimson from then on, in either mode and for ever -- which is what
+// makes it a trophy rather than a line in a menu. Asked here by both builds so
+// they cannot disagree about what colour the blade is.
+const CRIMSON = '#e0563f';
+const crescentHue = heroId =>
+  (honoured() ? CRIMSON : (HEROES[heroId] || HEROES.isaac).magic);
+
+/* Putting one kit down and picking the other up. Nothing is destroyed: the two
+ * stashes are separate keys, so switching is only a matter of which one is
+ * live. Split the same way the wipe is -- the RULE here, the one page-bound
+ * line beside it -- because the core cannot reach localStorage and this must
+ * behave identically in both builds. */
+function setHardcore(on) {
+  if (hardcore === !!on) return;
+  hardcore = !!on;
+  rememberHardcore(hardcore);
+  stash = loadStash();
+  itemSeq = stash.seq || 0;
+}
+
+/* The death hook. Everything goes: the gear, the vault, the coin, the ranks.
+ * Not "reset to base gear" by hand -- blankStash IS base gear, and writing the
+ * wipe as anything other than "start again from nothing" leaves a field
+ * somebody adds later quietly surviving death.
+ *
+ * The honours are not touched, and the corpse is not written: there is nobody
+ * left to come back for it. */
+function wipeHardcore() {
+  dropHardcoreStash();          // the host owns the key; this owns the rule
+  stash = blankStash();
+  itemSeq = 0;
+  saveStash();
+}
+
 /* --- the gate-house -------------------------------------------------------
    Coin was worth exactly three things: a commissioned piece, a temper, and a
    reliquary. All three are consumables, so a good run bought a slightly better
@@ -6659,14 +6726,46 @@ function endRun(won) {
           items, coins: run.coins }
       : null;
   }
+  // THE TROPHY, before the wipe: eight pieces of the Regalia carried out of a
+  // Hardcore delve. Checked against what is WORN plus what is in the bag,
+  // because a set is only finished when the last piece is out of the ground,
+  // and it is banked here rather than in bankRun so that it is recorded from
+  // the same place the wipe is -- the two must never be able to disagree.
+  if (hardcore && won) {
+    const carriedSet = player.bag.filter(it => it.set === SET_ID).length;
+    if (setWorn(player) + carriedSet >= SLOTS.length) {
+      const h = loadHonours();
+      if (!h.crimson) {
+        h.crimson = 1;
+        h.crimsonAt = Date.now();
+        saveHonours(h);
+        run.banner = 4.0;
+        run.bannerText = 'The Regalia is whole';
+        run.bannerNote = 'Carried out of one life. The edge answers in crimson now.';
+      }
+    }
+  }
   bankRun(won);
+  // And one life means one. Everything the Vanguard owned goes with them --
+  // after the banking, so the last delve is scored before it is taken away,
+  // and after the trophy, which is the one thing death cannot reach.
+  if (hardcore && !won) wipeHardcore();
 
-  el.overTitle.innerHTML = won ? '<em>Escaped</em>' : '<span>Slain</span>';
+  el.overTitle.innerHTML = won ? '<em>Escaped</em>'
+                              : hardcore ? '<span>Ended</span>' : '<span>Slain</span>';
+  // A Hardcore death is not the ordinary one and must not read like it. The
+  // corpse branch below is right by accident -- the wipe cleared the corpse,
+  // so it falls through to the short line -- but "the hive-mind claimed
+  // another" is what it says every other time you die, and this time nothing
+  // is owed to you and there is nothing to descend for.
   el.overSub.textContent = won
     ? (carried ? 'The ley-gate held. You carried ' + carried +
                  (carried === 1 ? ' find' : ' finds') + ' out with the slag.'
                : 'The ley-gate held. You carried the slag out.')
-    : (stash.corpse
+    : hardcore
+      ? 'One life, and it is spent. Everything the Vanguard carried, wore and ' +
+        'banked is gone with them. Begin again.'
+      : (stash.corpse
         ? 'The hive-mind claimed another of the Clear-Sighted. ' +
           (carried ? carried + (carried === 1 ? ' find' : ' finds') + ' and ' : '') +
           run.coins + ' coin lie in ' + LEVEL.name + '. Descend again and take them back.' +
@@ -6689,15 +6788,19 @@ function endRun(won) {
    before the core is stepped; this list is generated, so it cannot drift out
    of date the way a hand-written one would.
 
-     saveStash            called from claimCorpse, hallBuy, bankRun +5
+     saveStash            called from claimCorpse, wipeHardcore, hallBuy +6
      showScreen           called from startRun, openGear, closeGear +5
      syncBagBadge         called from updateDrops, claimCorpse, resetRun +1
+     loadHonours          called from update, endRun
      buildKit             called from swapHero, startRun
      syncHeroSkin         called from swapHero, startRun
      renderGear           called from openGear, afterGearChange
      refreshKitLine       called from closeGear, refreshHubLines
      buildStains          called from generateWorld
      hitFlashUI           called from hurtPlayerBy
+     rememberHardcore     called from setHardcore
+     loadStash            called from setHardcore
+     dropHardcoreStash    called from wipeHardcore
      minimapBox           called from dawnCrystalRect
      forgeGround          called from resetRun
      forgeWallCourses     called from resetRun
@@ -6709,5 +6812,6 @@ function endRun(won) {
      renderVendor         called from openVendor
      loadBest             called from endRun
      saveBest             called from endRun
+     saveHonours          called from endRun
      refreshBestLine      called from endRun
    ------------------------------------------------------------------------ */

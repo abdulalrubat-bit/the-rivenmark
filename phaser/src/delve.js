@@ -102,7 +102,8 @@ const STANDING = { pillar: 26, barrel: 12, crate: 11, urn: 10, banner: 16,
           WORLD, PAL, LEVEL, LEVELS, GAIT_N, GAIT_STEP, GAIT_STILL, lamps,
           BOLT_WIND, CHANT_WIND, breathScale, deathPose, DIE_MS, flinchOffset,
           lowFx,
-          WALK_STEP, WALK_PACE, update, startRun, resetRun, loadStash */
+          WALK_STEP, WALK_PACE, update, startRun, resetRun, loadStash,
+          hardcore, loadHardcoreMode */
 
 export class Delve extends Phaser.Scene {
   constructor() { super('delve'); }
@@ -133,6 +134,11 @@ export class Delve extends Phaser.Scene {
     this.stepping = !/norun/.test(location.search);
     if (this.stepping) {
       state = 'play';
+      // Which life the player was last in, BEFORE the stash is read -- it is
+      // what decides which stash there is to read. A Hardcore player who
+      // closed the app must not come back to their softcore kit and discover
+      // which mode they were in by dying in the wrong one.
+      hardcore = loadHardcoreMode();
       stash = loadStash();
       const t0 = performance.now();
       startRun('isaac', LEVELS[3].id, 'riven');

@@ -14,7 +14,8 @@
 
 import Phaser from 'phaser';
 
-/* global arcs, particles, rings, floaters, bolts, slams, hazards, nulls,
+/* global crescentHue,
+          arcs, particles, rings, floaters, bolts, slams, hazards, nulls,
           totems, ruptures, player, cam, FLOAT_STYLE, FLOAT_LIFE, BOLT_R,
           TAU, HEROES, run, portal, drops, PORTAL_R, PAL, LEVEL, rarityOf,
           CORPSE_HUE, enemies, beams, AGONY_WIND, AGONY_ARC, AGONY_REACH,
@@ -360,7 +361,11 @@ export class Effects {
    * `half` how far around it reaches, `band` its thickness.
    */
   crescents(g, t) {
-    const colour = hex((HEROES[player.hero] || {}).magic || '#ffc24d');
+    // crescentHue, not HEROES[...].magic: a Vanguard who carried the whole
+    // Regalia out of one Hardcore life swings in crimson from then on, and
+    // that answer belongs in one place rather than two.
+    const colour = hex((typeof crescentHue === 'function'
+      ? crescentHue(player.hero) : (HEROES[player.hero] || {}).magic) || '#ffc24d');
     for (const c of arcs) {
       if (c.delay > 0) continue;
       const f = Math.max(0, Math.min(1, c.life / c.maxLife));
