@@ -13,6 +13,7 @@
 /* global player, run, stash, state, LEVELS, LEVEL, LEVEL_BY_ID, HEROES,
           startRun, endRun, stepThrough, blankStash, el, stashPower, resumeRun,
           REGION_BY_ID, REGION_RELIC, hardcore, setHardcore, honoured,
+          todaysBounty, bountyDone,
           SLOTS, SLOT_BY_ID, RARITY, itemPower, affixText, saveStash,
           VENDOR, vendorCost, canAfford, vendorBuy, HALL, hallTier,
           HALL_MAX, hallBuy, vaultCap */
@@ -166,6 +167,26 @@ export class Screens {
       else this.show(null);
     });
     this.root.querySelector('.alt').addEventListener('click', () => this.onAbandon());
+  }
+
+  /* THE DAILY.
+   *
+   * One delve a day, named in advance, on ground that has been changed. Both
+   * the twist and the rung fall out of the date, so there is nothing to
+   * synchronise and nothing to store except whether you have taken it.
+   */
+  daily() {
+    if (typeof todaysBounty !== 'function') return '';
+    const b = todaysBounty();
+    const done = bountyDone();
+    const armed = !done && stash.bountyArmed;
+    return '<p class="sub">Today\u2019s bounty.</p>' +
+      '<button class="row' + (armed ? ' on' : '') + '" id="bountyRow" type="button"' +
+        (done ? ' disabled' : '') + '><span>' + b.name +
+        '<small>' + b.note + '<br>' + b.level +
+        '</small></span><small>' +
+        (done ? 'paid' : armed ? 'taken' : 'a Hallowed piece') +
+      '</small></button>';
   }
 
   /* ONE LIFE.
@@ -327,6 +348,7 @@ export class Screens {
                        : l.power < power - 2 ? 'well within you' : 'an even match') +
             '</small></button>').join('') +
         '</div>' +
+        this.daily() +
         this.ground() +
         this.oneLife() +
         '<button class="go" type="button" id="descend">Descend</button>' +
@@ -336,6 +358,17 @@ export class Screens {
       b.addEventListener('click', () => { this.pick.hero = b.dataset.hero; this.renderGatehouse(); }));
     this.root.querySelectorAll('[data-level]').forEach(b =>
       b.addEventListener('click', () => { this.pick.level = b.dataset.level; this.renderGatehouse(); }));
+    const bt = this.root.querySelector('#bountyRow');
+    if (bt) bt.addEventListener('click', () => {
+      const b = todaysBounty();
+      if (bountyDone()) return;
+      stash.bountyArmed = !stash.bountyArmed;
+      // Taking it also takes you to its rung: a daily you have to go and find
+      // on the ladder is a daily half the people who took it never ran.
+      if (stash.bountyArmed) this.pick.level = b.level_id;
+      saveStash();
+      this.renderGatehouse();
+    });
     const hc = this.root.querySelector('#hcToggle');
     if (hc) hc.addEventListener('click', () => {
       // Nothing is destroyed by switching: the two stashes are separate keys

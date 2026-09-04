@@ -2469,6 +2469,74 @@ const SET_BONUSES = [
  * is a Hearth-Warden's shield and the Weeping Keep of Tor-Varden is where the
  * Hearth-Wardens come from. Every slot is claimed exactly once.
  */
+/* --- DAILY BOUNTIES ------------------------------------------------------
+   One delve a day, named in advance, on ground that has been changed.
+
+   The brief called these "mutators", and the game already has a thing by that
+   name -- the Deceiver's epithets, which are rolled per RUNG and are what make
+   the ladder learnable. These are a different animal: they change the DELVE
+   rather than the avatar, they last a day rather than for ever, and they are
+   the same for everybody. Naming them bounties keeps the two apart, which
+   matters more than matching the brief's word.
+
+   Deterministic from the day, so no state has to be stored to decide what the
+   bounty is -- only whether you have taken it. The same twist, on the same
+   rung, for everyone, until midnight.
+
+   Each is a TRADE rather than a difficulty setting: something worse, something
+   better. A bounty that is only harder is a chore with a prize on it.
+   ---------------------------------------------------------------------- */
+const BOUNTIES = [
+  { id: 'quickening', name: 'The Quickening',
+    note: 'Everything in it moves a quarter faster, and carries a third more slag.',
+    twist: { speed: 1.25, slag: 1.33 } },
+  { id: 'hoard', name: 'The Hoard',
+    note: 'Twice the coffers, and half the coin off a body.',
+    twist: { chests: 2, coin: 0.5 } },
+  { id: 'brittle', name: 'The Brittle Host',
+    note: 'A quarter less life in them, a quarter more in their blows.',
+    twist: { hp: 0.75, dmg: 1.25 } },
+  { id: 'teeming', name: 'The Teeming',
+    note: 'Half again as many of them, and each one worth less.',
+    twist: { slag: 1.5, tech: 0.7 } }
+];
+const BOUNTY_BY_ID = {};
+for (const b of BOUNTIES) BOUNTY_BY_ID[b.id] = b;
+
+// Days since the epoch, in LOCAL time -- a bounty that turns over at UTC
+// midnight turns over mid-evening for half the world.
+function dayStamp(now) {
+  const d = new Date(now === undefined ? Date.now() : now);
+  // The calendar date where the player is, turned into a day number. Built
+  // from the local Y/M/D through Date.UTC rather than by dividing the
+  // timestamp, so it does not slide by an hour twice a year.
+  return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000);
+}
+
+/* Which bounty, and where. Both fall out of the day, so nothing has to be
+ * stored or synchronised -- and the rung is drawn from the shallow half of the
+ * ladder, because a daily nobody can reach is a daily nobody does. */
+function todaysBounty(now) {
+  const day = dayStamp(now);
+  // Two different mixes of the same number, or the bounty and the rung would
+  // march up the ladder in lockstep.
+  const b = BOUNTIES[hash32(day * 2 + 1) % BOUNTIES.length];
+  const span = Math.max(1, Math.floor(LEVELS.length * 0.55));
+  const L = LEVELS[hash32(day * 40503 + 17) % span];
+  return { day, id: b.id, name: b.name, note: b.note, twist: b.twist,
+           level_id: L.id, level: L.name };
+}
+const bountyDone = () => !!(stash.bounty && stash.bounty.day === dayStamp() &&
+                            stash.bounty.done);
+
+/* What the delve is worth changing. Read through one function so a twist that
+ * is not armed costs exactly one property lookup, and so every place that
+ * bends to a bounty bends the same way. */
+function twist(k) {
+  const t = run && run.bounty && run.bounty.twist;
+  return (t && t[k] !== undefined) ? t[k] : 1;
+}
+
 const REGION_RELIC = {
   slag:    ['offhand'],            // The Weeping Keep of Tor-Varden
   vaelk:   ['boots', 'girdle'],    // The Kael-Dorm Redoubt
@@ -3786,13 +3854,19 @@ function typeWeights(t) {
 function placeEnemy(kind, x, y, depth) {
   if (enemies.length >= MAX_ENEMIES) return null;
   const d = ENEMY_TYPES[kind];
-  const scale = (1 + depth * PACK_DEPTH_HP) * DIFF.threat * (1 + (LEVEL.depth || 0) * 1.6);
+  const scale = (1 + depth * PACK_DEPTH_HP) * DIFF.threat *
+                (1 + (LEVEL.depth || 0) * 1.6) * twist('hp');
   // Same body newBody makes, then the things that only a placed one has: it is
   // asleep where the generator put it, it remembers that spot, and a heavy one
   // notices further off.
   const e = newBody(kind, x, y, 0);
   e.hp = e.maxHp = d.hp * scale;
-  e.dmg = d.dmg * DIFF.threat;
+  e.dmg = d.dmg * DIFF.threat * twist('dmg');
+  e.speed *= twist('speed');
+  // Slag is what the delve is FOR, so a bounty that changes how much of it
+  // there is has to change what a body carries as well as how many there are,
+  // or the quota moves without the fight moving with it.
+  e.tech = Math.max(1, Math.round(e.tech * twist('tech')));
   e.awake = false;
   e.home = { x, y };
   e.aggro = d.r >= 20 ? AGGRO_FAR : AGGRO_NEAR;
@@ -3907,7 +3981,7 @@ function placePacks(spawn) {
   const sites = [];
   const roster = LEVEL.horde;
 
-  const budget = Math.round((LEVEL.quota || 125) * SLAG_HEAD);
+  const budget = Math.round((LEVEL.quota || 125) * SLAG_HEAD * twist('slag'));
   // Reservoir of candidate sites, kept apart so packs read as separate groups.
   // A deep delve needs more of them to carry its larger budget, but they still
   // have to fit: the cap is a ceiling, and the loop stops early if the floor
@@ -4315,7 +4389,7 @@ function maybeDropItem(e) {
   const purse = e.kind === 'deceiver' ? 90 : e.elite ? 26 : e.kind === 'breaker' ? 9 : 2;
   if (purse) {
     run.coins += Math.round(purse * (0.7 + Math.random() * 0.7) *
-                            (1 + (LEVEL.depth || 0) * 1.4) * lootMult());
+                            (1 + (LEVEL.depth || 0) * 1.4) * lootMult() * twist('coin'));
   }
 
   const push = it => drops.push({
@@ -4544,7 +4618,7 @@ function placeChests(spawn, portal) {
   chests = [];
   if (!openCells.length) return;
   const depth = LEVEL.depth || 0;
-  const want = 3 + Math.round(depth * 3);
+  const want = Math.round((3 + Math.round(depth * 3)) * twist('chests'));
   const warded = Math.random() < 0.45 + depth * 0.4 ? 1 : 0;
 
   // Penned-in ground first. narrowGrid is 0 at a crossroads and 4 at a dead
@@ -11988,6 +12062,10 @@ function blankStash() {
            // Which ground you asked to be cut into. null is "whatever the
            // rung rolls", which is what it always did.
            region: null,
+           // The daily. `bounty` records the day it was claimed on, so it can
+           // be taken once; `bountyArmed` is only whether it is picked up
+           // right now, and is deliberately not persisted as an achievement.
+           bounty: null, bountyArmed: false,
            hall: { vault: 0, forge: 0, reliquary: 0, wardstone: 0 } };
 }
 
@@ -12011,6 +12089,11 @@ function loadStash() {
   out.coins = Math.max(0, +st.coins || 0);
   out.pity = clamp(+st.pity || 0, 0, 20);
   if (REGION_BY_ID[st.region]) out.region = st.region;
+  // Only today's claim is worth keeping. Yesterday's is not a record of
+  // anything, and a stale one that outlived its day would lock out the daily.
+  if (st.bounty && typeof st.bounty === 'object' && +st.bounty.day === dayStamp())
+    out.bounty = { day: +st.bounty.day, done: !!st.bounty.done };
+  out.bountyArmed = !!st.bountyArmed;
   // Tiers are the only thing on disk that cannot be re-earned, so they are
   // filtered as carefully as the gear: an id that no longer exists is dropped
   // rather than carried, and a tier above the ceiling is clamped to it.
@@ -13131,7 +13214,14 @@ function resetRun(heroId, levelId, diffId) {
   ruptures = [];
   enemyGrid = new SpatialHash(ENEMY_CELL);
 
+  // The bounty, if one was taken AND this is the rung it named. Checked here
+  // rather than trusted from the menu: an armed flag left over from yesterday,
+  // or from a different rung, must not quietly twist a delve it was not for.
+  const bty = todaysBounty();
+  const onBounty = !!(stash.bountyArmed && !bountyDone() && LEVEL.id === bty.level_id);
+
   run = { time: 0, tech: 0, kills: 0,
+          bounty: onBounty ? bty : null,
           // Where the one who is not on the ground keeps his wounds. Cleared
           // per run: swapping is not a heal, but a new delve is a new delve.
           pools: {},
@@ -13236,6 +13326,40 @@ function endRun(won) {
       }
     }
   }
+  // THE BOUNTY PAYS ON THE WAY OUT, and only on the way out -- it is the
+  // ley-gate that is the objective, the same as any other delve. Once a day:
+  // the claim is stamped with the day it was taken so tomorrow's is free.
+  // Recorded on the run, not only said in the outcome copy. The fact that the
+  // bounty was paid -- or held back because the vault was full -- belongs to
+  // the run; the sentence about it belongs to whichever build is drawing the
+  // card, and there are two of those.
+  run.bountyPaid = 0; run.bountyHeld = 0;
+  let bounty = 0, bountyHeld = 0;
+  if (won && run.bounty && !bountyDone()) {
+    // The vault has to have room for it FIRST. Stamping the claim and then
+    // finding nowhere to put the piece spends the day's bounty on nothing,
+    // and the player has no way to know that is what happened.
+    if (stash.vault.length >= vaultCap()) { bountyHeld = run.bountyHeld = 1; }
+    else {
+    stash.bounty = { day: run.bounty.day, done: true };
+    stash.bountyArmed = false;
+    const it = rollItem(0.9);
+    it.rarity = 'hallowed';                    // the promise is the tier
+    while (it.affixes.length < 4) {
+      const pool = SLOT_AFFIXES[it.slot].filter(
+        id => !it.affixes.some(a => a.id === id));
+      if (!pool.length) break;
+      const id = pool[(Math.random() * pool.length) | 0];
+      const a = AFFIX_BY_ID[id];
+      let v = (a.lo + Math.random() * (a.hi - a.lo)) * 1.2;
+      v = a.dp ? +v.toFixed(a.dp) : (Math.abs(a.lo) >= 1 ? Math.max(1, Math.round(v)) : v);
+      it.affixes.push({ id, v });
+    }
+    it.name = AFFIX_BY_ID[it.affixes[0].id].name + ' ' + it.base;
+    stash.vault.push(it);
+    bounty = run.bountyPaid = 1;
+    }
+  }
   bankRun(won);
   // And one life means one. Everything the Vanguard owned goes with them --
   // after the banking, so the last delve is scored before it is taken away,
@@ -13250,9 +13374,12 @@ function endRun(won) {
   // another" is what it says every other time you die, and this time nothing
   // is owed to you and there is nothing to descend for.
   el.overSub.textContent = won
-    ? (carried ? 'The ley-gate held. You carried ' + carried +
+    ? ((carried ? 'The ley-gate held. You carried ' + carried +
                  (carried === 1 ? ' find' : ' finds') + ' out with the slag.'
-               : 'The ley-gate held. You carried the slag out.')
+               : 'The ley-gate held. You carried the slag out.') +
+       (bounty ? ' The bounty is paid: a Hallowed piece waits in the vault.'
+        : bountyHeld ? ' The bounty is still owed \u2014 the vault is full, and ' +
+                       'it will not be paid into the ground.' : ''))
     : hardcore
       ? 'One life, and it is spent. Everything the Vanguard carried, wore and ' +
         'banked is gone with them. Begin again.'
