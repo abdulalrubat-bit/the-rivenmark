@@ -10,7 +10,7 @@
  * two calls the player is allowed to make: castAbility and swapHero.
  */
 
-import { bossShown, bossBarDrop } from './overlay.js';
+import { bossShown, bossBarDrop, minimapBox } from './overlay.js';
 
 /* global player, run, enemies, view, LEVEL, REGION, HUD_H, ABILITIES,
           ABILITY_BY_ID, CHARGE_MAX, TENSION_MAX */
@@ -48,6 +48,19 @@ const CSS = `
 #hud .slag u{width:7px;height:7px;background:#c99a3e;border:1px solid #7c5f24;
      transform:rotate(45deg);text-decoration:none;flex:none}
 #hud .slag.met{color:#e8c060}
+/* The way out. Top-LEFT, under the strip: the top-right corner is the map and
+   the bottom two are thumbs, and this is a button you must never press by
+   accident in a fight -- so it goes in the one corner a hand does not visit.
+   Understated on purpose. It is not a control you use, it is one you find. */
+#hud .hold{position:absolute;left:10px;top:40px;pointer-events:auto}
+/* Deliberately NOT the kit's plate. This is a control you find, not one you
+   use, and giving it the same bronze would put a sixth big gold disc on the
+   screen competing with the five that matter. */
+#hud .hold button{width:34px;height:34px;border-radius:50%;background:rgba(20,17,14,.55);
+     border:1px solid rgba(74,63,48,.8);color:#9a8f7c;font:12px/1 ui-monospace,monospace;
+     box-shadow:none}
+#hud .hold button:before{display:none}
+#hud .hold button:active{background:#2a2419;color:#e8dcc0}
 /* The kit sits bottom-right in two rows of three. Its own bottom edge, the
    swap beside it rather than above it, and the resource meter over it are all
    placed so nothing lands on anything else -- measured in the play test, not
@@ -55,17 +68,33 @@ const CSS = `
    kit and the diagnostics button on top of both. */
 #hud .kit{position:absolute;right:10px;bottom:16px;display:grid;gap:8px;
      grid-template-columns:repeat(3,56px);pointer-events:auto}
-#hud button{width:56px;height:56px;border-radius:50%;background:#161310;color:#e8dcc0;
-     border:2px solid #6a5a42;font:16px/1 ui-monospace,monospace;padding:0;
+/* CUT FROM THE SAME STONE.
+ *
+ * The kit was flat black discs with a hairline ring, and they are the largest
+ * things on the screen -- so the one part of the HUD a thumb lives on was the
+ * one part that did not look like the game. Everything else here is
+ * framePlate's object: a bronze band, a slate face lit from the north-west,
+ * and a dark line between them. A button is that object, round.
+ *
+ * The band is the button's own background and the face is ::before, because a
+ * border cannot carry a gradient. Everything above the face -- the sweep, the
+ * mark, the seconds -- is inset by the band's width so nothing draws over it.
+ */
+#hud button{width:56px;height:56px;border-radius:50%;color:#e8dcc0;border:0;
+     background:linear-gradient(#e2b96a,#a67c3a 34%,#6d4d22 70%,#3a2610);
+     font:16px/1 ui-monospace,monospace;padding:0;
      display:grid;place-items:center;touch-action:manipulation;position:relative;
-     overflow:hidden}
+     overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.55)}
+#hud button:before{content:'';position:absolute;inset:3px;border-radius:50%;
+     background:linear-gradient(rgba(44,54,70,.85),rgba(10,14,22,.96)),#161310;
+     box-shadow:inset 0 1px 0 rgba(150,172,200,.22),0 0 0 1px rgba(0,0,0,.85)}
 /* THE SWEEP. A cooldown used to replace the ability's mark with a number,
    which took the one thing that says WHICH ability this is away at exactly the
    moment you are waiting for it. The mark stays now and the time is shown as a
    wedge draining clockwise -- readable without reading, which is what a hand
    in a fight has time for. The number stays too, small, under the mark, for
    when a second matters. */
-#hud button .sweep{position:absolute;inset:0;border-radius:50%;pointer-events:none;
+#hud button .sweep{position:absolute;inset:4px;border-radius:50%;pointer-events:none;
      background:conic-gradient(from -90deg,rgba(6,5,3,.66) calc(var(--cd,0) * 360deg),
      transparent 0)}
 #hud button .cd{position:absolute;bottom:5px;font:600 9px/1 ui-monospace,monospace;
@@ -74,10 +103,15 @@ const CSS = `
 /* Cooling and CANNOT are different states and used to look the same. Cooling
    keeps its colour and shows the wedge; blocked -- no charges, nothing in
    reach -- goes flat and grey, because no amount of waiting fixes it. */
-#hud button:disabled{opacity:.5;border-color:#4a4034;color:#9a8f7c}
-#hud button.cooling{opacity:1;border-color:#6a5a42;color:#e8dcc0}
-#hud button.ready{border-color:#d6b26e;box-shadow:0 0 10px rgba(214,178,110,.35)}
-#hud button:active{background:#2a2419}
+/* Blocked loses the bronze as well as the colour: no amount of waiting fixes
+   it, so it should not look like a thing that is warming up. */
+#hud button:disabled{color:#9a8f7c;opacity:.62;
+     background:linear-gradient(#6a5f4c,#4a4034 40%,#332c22)}
+#hud button.cooling{opacity:1;color:#e8dcc0}
+#hud button.ready{box-shadow:0 0 12px rgba(214,178,110,.45),0 2px 6px rgba(0,0,0,.55)}
+#hud button.ready:before{box-shadow:inset 0 1px 0 rgba(214,178,110,.4),
+     0 0 0 1px rgba(0,0,0,.85)}
+#hud button:active:before{background:linear-gradient(rgba(64,74,90,.9),rgba(26,32,44,.96)),#2a2419}
 #hud .swap{position:absolute;right:204px;bottom:16px;pointer-events:auto}
 #hud .res{position:absolute;right:10px;bottom:148px;display:flex;gap:5px;
      align-items:center;justify-content:flex-end}
@@ -87,9 +121,15 @@ const CSS = `
 #hud .tension i{display:block;height:100%;background:#5fd0ff}
 #hud .beat{position:absolute;left:8px;right:110px;bottom:16px;height:5px;
      background:#12100d;border:1px solid #3a3226}
-#hud .banner{position:absolute;left:0;right:0;top:38%;text-align:center;font-size:19px;
+/* The banner announces a moment. The offset here is a fallback only -- sync()
+   sets it from where the map ends, since that is the one band on a phone
+   screen that is neither chrome nor the fight. See the note there. */
+#hud .banner{position:absolute;left:14px;right:14px;top:26%;text-align:center;font-size:19px;
      color:#eee0c0;text-shadow:0 2px 6px #000;font-family:Georgia,serif}
 #hud .banner small{display:block;font-size:12px;color:#a89878;margin-top:4px;font-style:italic}
+/* When the boss bar is already carrying his name, the banner is only the line
+   about what to do -- so that line IS the banner, not a subtitle under nothing. */
+#hud .banner b{display:block;font:400 italic 15px/1.4 Georgia,serif;color:#e2c48c}
 #hud .banner em{display:block;font:600 9px ui-monospace,Menlo,monospace;letter-spacing:2px;
      color:#968466;margin-bottom:6px;font-style:normal}
 /* The boss bar. Fixed to the top strip under the life bar, and the map drops
@@ -120,12 +160,19 @@ const CSS = `
    the wrong thing. */
 #hud .boss .bar.held i{background-image:repeating-linear-gradient(45deg,
      rgba(20,14,8,.5) 0 3px,transparent 3px 8px),linear-gradient(#e8c060,#806a34)}
-#hud .boss .held{position:absolute;left:8px;right:8px;bottom:2px;display:flex;
-     align-items:center;gap:6px;font:600 8px/9px ui-monospace,Menlo,monospace;
-     color:#e8c060}
-#hud .boss .held s{flex:1}
-#hud .boss .held span{width:7px;height:7px;border-radius:50%;background:#c2352a;
-     border:1px solid #e8c060}
+/* HELD sits in the name line beside the count. It used to be a strip across
+   the bottom of the plate, which put a gold sentence on top of the bar's own
+   gold hatching -- unreadable, and it is the one line that says why his health
+   is not moving. A word and a pip for each Lieutenant standing says the same
+   thing in the space a glance has; the banner explains it once on arrival. */
+#hud .boss .held{display:flex;align-items:center;gap:4px;flex:none;height:14px;
+     font:600 9px/12px ui-monospace,Menlo,monospace;color:#e8c060;
+     padding:0 5px;border:1px solid rgba(232,192,96,.5);border-radius:2px;
+     background:rgba(20,14,8,.55)}
+#hud .boss .held[hidden]{display:none}
+#hud .boss .held s{text-decoration:none;letter-spacing:1px}
+#hud .boss .held span{width:6px;height:6px;border-radius:50%;background:#c2352a;
+     border:1px solid #e8c060;flex:none}
 /* What you just picked up, in its rarity colour. Left-aligned and clipped
    rather than centred at its natural width: an item name is long enough that
    a centred box grew into the map, and it did. */
@@ -149,11 +196,13 @@ export class Hud {
       '</div>' +
       '<div class="res"></div>' +
       '<div class="swap"><button type="button" title="swap">⇄</button></div>' +
+      '<div class="hold"><button type="button" title="hold" aria-label="hold">❙❙</button></div>' +
       '<div class="kit"></div>' +
       '<div class="boss" hidden>' +
-        '<div class="line"><div class="name"></div><div class="count"></div></div>' +
+        '<div class="line"><div class="name"></div>' +
+          '<div class="held" hidden><s>HELD</s></div>' +
+          '<div class="count"></div></div>' +
         '<div class="bar"><i></i><u></u></div>' +
-        '<div class="held" hidden><s>HELD — BREAK THE LIEUTENANTS</s></div>' +
       '</div>' +
       '<div class="toast" hidden></div>' +
       '<div class="banner" hidden></div>';
@@ -176,6 +225,10 @@ export class Hud {
     this.toast = root.querySelector('.toast');
     this.swapBtn = root.querySelector('.swap button');
     this.swapBtn.addEventListener('click', () => g.swapHero());
+    // click, not pointerdown: unlike an ability, being a beat late to pause is
+    // free, and a pointerdown here would fire on a thumb that only brushed it.
+    this.holdBtn = root.querySelector('.hold button');
+    this.holdBtn.addEventListener('click', () => g.pauseRun());
 
     this.hero = null;      // which kit is currently built
     this.sig = '';         // last rendered button state, to skip DOM churn
@@ -277,9 +330,35 @@ export class Hud {
     if (run.banner > 0) {
       const tag = !run.bannerText && LEVEL.tag ? '<em>' + LEVEL.tag + '</em>' : '';
       const note = run.bannerNote || (!run.bannerText && (LEVEL.lesson || REGION.name)) || '';
-      const html = tag + (run.bannerText || LEVEL.name) +
-                   (note ? '<small>' + note + '</small>' : '');
+      // Do not say his name twice. The avatar arriving raises the banner AND
+      // the boss bar in the same frame, and both were writing out "The
+      // Deceiver, the Riftborn and the Sundering" -- once in 13px across the
+      // top of the screen and once in 19px serif across the middle of the
+      // fight. The bar is the one that stays, so the banner keeps only the
+      // line the bar cannot carry: what to do about him.
+      const owner = bossShown();
+      const echo = !!(owner && run.bannerText &&
+                      run.bannerText === (owner.title ||
+                        (owner.invader ? 'The Uninvited' : 'The Gilded Deceiver')));
+      const head = echo ? '' : (run.bannerText || LEVEL.name);
+      const html = tag + head +
+                   (note ? (head ? '<small>' + note + '</small>'
+                                 : '<b>' + note + '</b>') : '');
       if (this.bannerHtml !== html) { this.bannerHtml = html; this.banner.innerHTML = html; }
+      // Anchored under the map rather than at a percentage of the screen.
+      // 38% put a two-line announcement just above the hero, so its second
+      // line reached down into the pack he was fighting; and any percentage
+      // low enough to clear the fight is one the map can reach, because the
+      // map moves down when the boss bar appears -- which is when there is an
+      // announcement. Between the map and the fight is the band that is
+      // always free, and only the map knows where it starts. Same trick as
+      // bossBarDrop: ask the thing that owns the space where it ends.
+      const mb = minimapBox();
+      const under = Math.round(mb.y + mb.s + mb.over + 14);
+      if (this.bannerTop !== under) {
+        this.bannerTop = under;
+        this.banner.style.top = under + 'px';
+      }
       this.banner.hidden = false;
       // In, hold, out -- so the name does not simply appear and vanish.
       const a = Math.min(1, run.banner / 1.1) * Math.min(1, (4.2 - run.banner) / 0.5);
@@ -309,13 +388,17 @@ export class Hud {
 
     const held = !bs.invader && g.escortAlive && g.escortAlive();
     this.bossBar.classList.toggle('held', !!held);
-    if (!held) { this.bossHeld.hidden = true; return; }
+    if (!held) { this.bossHeld.hidden = true; this.heldPips = -1; return; }
     let live = 0;
     for (const e of enemies) if (e.kind === 'lieutenant' && e.hp > 0) live++;
+    // In the name line, beside the count, not across the bar. It was written
+    // over the bar's own hatching in gold on gold and could not be read at
+    // all -- and it is the one line that says why his health is not moving.
+    // The sentence goes with it: HELD and two red pips says the same thing in
+    // the space a glance has, and the banner explains it once on arrival.
     if (this.heldPips !== live) {
       this.heldPips = live;
-      this.bossHeld.innerHTML = '<s>HELD — BREAK THE LIEUTENANTS</s>' +
-        '<span></span>'.repeat(live);
+      this.bossHeld.innerHTML = '<s>HELD</s>' + '<span></span>'.repeat(live);
     }
     this.bossHeld.hidden = false;
   }

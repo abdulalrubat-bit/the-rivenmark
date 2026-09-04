@@ -212,8 +212,17 @@ const selected = p => p.$$eval('#hubtabs .tab',
       notice: px(mx, y0 + BOSS_BAR_H - 7),
       // and just past where the plate ends, which must be world again
       past:   px(mx, y0 + BOSS_BAR_H + 8),
-      // the map surround, which should be plate rather than world
-      map:    px(view.w - 22, HUD_H + 14 + view.safeT + bossBarDrop() + 6),
+      // The map's frame, and the map's own field. The old probe took one
+      // pixel at a hand-counted `view.w - 22`, which is not the surround at
+      // all -- it is a point INSIDE the map, and it passed only because the
+      // field under the map is dark blue. It failed whenever a plotted
+      // corridor happened to fall on that pixel, which is a coin toss per
+      // delve. Both halves are sampled where they actually are now: the band
+      // framePlate draws outside the panel, and the field inside it.
+      band:   (() => { const bx = minimapBox();
+                       return px(bx.x - 3, bx.y + bx.s * 0.5); })(),
+      field:  (() => { const bx = minimapBox();
+                       return px(bx.x + 3, bx.y + 3); })(),
       // and a patch of open floor, as the control
       floor:  px(mx, view.h * 0.62)
     };
@@ -226,7 +235,14 @@ const selected = p => p.$$eval('#hubtabs .tab',
      JSON.stringify(canv.notice) + ' -- the row HELD and the pips are written on');
   ck('and the plate stops after it', !cool(canv.past),
      JSON.stringify(canv.past) + ' -- a plate that never ends is not a plate');
-  ck('the map sits in a stone surround', cool(canv.map), JSON.stringify(canv.map));
+  // Bronze: bright and warm, r > g > b. The same band the gate-house plates
+  // and the avatar's bar are framed with, which is the point -- the map is cut
+  // from the same stone as everything else.
+  const bronze = c => c.r > 100 && c.r > c.g && c.g > c.b;
+  ck('the map is framed in the same bronze band as every other plate',
+     bronze(canv.band), JSON.stringify(canv.band));
+  ck('and its field is the dark one the corridors read against',
+     cool(canv.field) && canv.field.b < 90, JSON.stringify(canv.field));
 
   ck('no console errors', errs.length===0, errs.slice(0,3).join(' | '));
   console.log('\nPASS '+pass.length+'\n  '+pass.join('\n  '));

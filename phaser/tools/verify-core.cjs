@@ -20,10 +20,17 @@ const { spawn } = require('child_process');
 
 const SUITES = (process.env.SUITES ||
   'horde roles packs terrain ramp lieuts bosses invader newkinds eco deceiver crescent ' +
-  'extract stash gear vendor loadout prog hall layout combat2 combat3 zayd kit hub bag gait'
+  'extract stash gear vendor loadout prog hall layout combat2 combat3 zayd kit hub bag gait ' +
+  'weight regalia hardcore bounty traps'
 ).split(/\s+/).filter(Boolean);
 
-/* Which suites can meaningfully be compared.
+/* NOT in the list: winnable. It is the only stochastic suite in the tree --
+ * it plays ninety-six whole delves and reports a rate -- so "the same number
+ * of checks passed against both builds" is not a fact about the extraction,
+ * it is a fact about two runs of dice. Its simulation is already covered here
+ * by the deterministic suites it is built out of.
+ *
+ * Which suites can meaningfully be compared.
  *
  * A suite that drives the DOM menus, or asserts about where something is
  * drawn, cannot pass against a core with no menus and no renderer -- and

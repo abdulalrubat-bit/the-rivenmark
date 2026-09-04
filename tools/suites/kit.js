@@ -187,6 +187,56 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   });
   ck('the kit is put away outside a delve', away);
 
+  /* --- WHOSE DAMAGE IS IT ------------------------------------------------
+   * The swing happens by itself, and it was winning the fight by itself:
+   * measured over ninety-six whole delves, seven tenths of every point of
+   * damage came off it and a sixth off the six buttons. The crescent carries a
+   * share of the ward now, the primary carries the rest, and the primary is on
+   * a shorter beat than the rest of the bar so pressing it is a rhythm.
+   */
+  const own = await p.evaluate(()=>{
+    stash=blankStash(); saveStash(); startRun('isaac', LEVELS[6].id, 'riven');
+    run.banner=0; player.hp=player.maxHp=1e7;
+    // What one crescent is worth against what the ward is worth.
+    arcs.length=0; releaseCrescent(0,0);
+    const arc = arcs[0].dmg;
+    const anchor = ABILITY_BY_ID.anchor, aegis = ABILITY_BY_ID.aegis;
+    // A braced anchor, bashed. And the same body, cut by a crescent, as the
+    // control -- a guard that everything breaks is not a guard.
+    const put = () => { enemies.length=0;
+      const e = newBody('breaker', player.x+50, player.y, 0);
+      e.awake=true; e.hp=e.maxHp=1e6; e.braced=true; enemies.push(e);
+      updateEnemies(0.001); return e; };
+    const bashed = put();
+    const hp0 = bashed.hp;
+    castAbility('anchor');
+    const bashTook = hp0 - bashed.hp, bashedStill = !!bashed.braced;
+    const cut = put();
+    const hp1 = cut.hp;
+    damageEnemy(cut, player.damage, player.x, player.y);   // as a crescent does
+    const cutTook = hp1 - cut.hp, cutStill = !!cut.braced;
+    return { arc, ward: player.damage, AUTO_BITE,
+             beat: anchor.gcd, otherBeat: aegis.gcd,
+             bashTook: +bashTook.toFixed(1), bashedStill,
+             cutTook: +cutTook.toFixed(1), cutStill,
+             full: +(player.damage * anchor.dmg).toFixed(1),
+             soaked: +(player.damage * BRACE_SOAK).toFixed(1) };
+  });
+  ck('the automatic swing carries a share of the ward, not all of it',
+     own.arc < own.ward * 0.9 && own.arc > 0,
+     own.arc.toFixed(1)+' off a ward of '+own.ward+' ('+own.AUTO_BITE+'x)');
+  ck('and the primary is on a shorter beat than the rest of the bar',
+     own.beat < own.otherBeat,
+     own.beat+' against '+own.otherBeat+' -- '+(own.beat*1.2).toFixed(2)+'s a press');
+  ck('the bash breaks a guard', !own.bashedStill && own.cutStill,
+     !own.cutStill ? 'THE CRESCENT BROKE IT TOO — a guard everything breaks is not a guard'
+                   : 'braced before, open after; and still braced against an ordinary cut');
+  ck('and lands its whole blow through the broken one',
+     Math.abs(own.bashTook - own.full) < own.full*0.02,
+     own.bashTook+' of a possible '+own.full);
+  ck('where an ordinary cut is still soaked', Math.abs(own.cutTook - own.soaked) < 1,
+     own.cutTook+' off a '+own.ward+' cut, soaked to '+own.soaked);
+
   ck('no console errors', errs.length===0, errs.slice(0,3).join(' | '));
   console.log('\nPASS '+pass.length+'\n  '+pass.join('\n  '));
   console.log('\nFAIL '+fail.length+(fail.length?'\n  '+fail.join('\n  '):''));

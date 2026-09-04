@@ -102,7 +102,8 @@ const STANDING = { pillar: 26, barrel: 12, crate: 11, urn: 10, banner: 16,
           WORLD, PAL, LEVEL, LEVELS, GAIT_N, GAIT_STEP, GAIT_STILL, lamps,
           BOLT_WIND, CHANT_WIND, breathScale, deathPose, DIE_MS, flinchOffset,
           lowFx,
-          WALK_STEP, WALK_PACE, update, startRun, loadStash */
+          WALK_STEP, WALK_PACE, update, startRun, resetRun, loadStash,
+          hardcore, loadHardcoreMode */
 
 export class Delve extends Phaser.Scene {
   constructor() { super('delve'); }
@@ -133,6 +134,11 @@ export class Delve extends Phaser.Scene {
     this.stepping = !/norun/.test(location.search);
     if (this.stepping) {
       state = 'play';
+      // Which life the player was last in, BEFORE the stash is read -- it is
+      // what decides which stash there is to read. A Hardcore player who
+      // closed the app must not come back to their softcore kit and discover
+      // which mode they were in by dying in the wrong one.
+      hardcore = loadHardcoreMode();
       stash = loadStash();
       const t0 = performance.now();
       startRun('isaac', LEVELS[3].id, 'riven');
@@ -195,7 +201,8 @@ export class Delve extends Phaser.Scene {
     // The loop around a delve. showScreen is the core's own way of saying
     // "the run is over" or "you are back at the gate-house", so it is routed
     // here rather than second-guessed.
-    this.screens = new Screens((hero, level) => this.newRun(hero, level));
+    this.screens = new Screens((hero, level) => this.newRun(hero, level),
+                               () => this.abandonRun());
     window.showScreen = name => this.screens.show(name);
     this.wireInput();
     this.hud = new Hud();
@@ -268,6 +275,21 @@ export class Delve extends Phaser.Scene {
    * sprites, which are pooled and would otherwise show the last delve's dead.
    */
   newRun(hero, levelId) {
+    this.clearWorldArt();
+    state = 'play';
+    startRun(hero, levelId, 'riven');
+    run.banner = 0;
+    this.paintStatics();
+    this.hero.setPosition(player.x, player.y);
+    this.culledAt = null;
+    this.cameras.main.startFollow(this.hero, true, 0.18, 0.18);
+  }
+
+  /* Everything drawn from a delve, unmade. Its own method because two things
+   * end a delve now -- descending into the next one and walking out of this
+   * one -- and the second used to be impossible, so this lived inside the
+   * first. */
+  clearWorldArt() {
     if (this.wallGfx) this.wallGfx.destroy();
     for (const im of this.propImgs || []) im.destroy();
     for (const im of this.wallImgs || []) im.destroy();
@@ -279,14 +301,22 @@ export class Delve extends Phaser.Scene {
     this.propImgs = []; this.pool = []; this.shadows = [];
     this.fx.texts.forEach(t => t.destroy());
     this.fx.texts = [];
+  }
 
-    state = 'play';
-    startRun(hero, levelId, 'riven');
-    run.banner = 0;
+  /* Walking out. Nothing is banked -- that is what makes it abandoning rather
+   * than extracting -- so this does not go through endRun; it throws the run
+   * away exactly as the canvas build's "Abandon the delve" does, and rebuilds
+   * a world for the scene to sit on so the menu is not laid over the corpse of
+   * the last one.
+   */
+  abandonRun() {
+    this.clearWorldArt();
+    state = 'menu';
+    resetRun();
     this.paintStatics();
     this.hero.setPosition(player.x, player.y);
     this.culledAt = null;
-    this.cameras.main.startFollow(this.hero, true, 0.18, 0.18);
+    this.screens.show('splash');
   }
 
   /* Walls and scenery never move, so they go down once and are never touched

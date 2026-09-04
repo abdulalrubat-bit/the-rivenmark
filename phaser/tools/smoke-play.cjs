@@ -69,6 +69,11 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
     btn.dispatchEvent(new PointerEvent('pointerdown', {bubbles:true}));
     await new Promise(r=>setTimeout(r,60));
     return { charges: player.charges, gcd: +(player.gcd||0).toFixed(2),
+             // The beat this ability asks for, not a number typed in here.
+             // It used to be "> 1", which stopped being true the moment the
+             // primary was put on a shorter beat than the rest of the bar --
+             // and the fixture then reported a passing build as broken.
+             wants: +(GCD_TIME * ABILITY_BY_ID.anchor.gcd).toFixed(2),
              hurt: e.hp < e.maxHp, inReach };
   });
   ck('the fixture put a body in reach', !kit.noBtn && !kit.noSpot && kit.inReach,
@@ -76,7 +81,9 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   ck('an ability button casts', !kit.noBtn && kit.charges===1,
      kit.noBtn ? 'no button in the DOM' : 'built '+kit.charges+' charge, gcd '+kit.gcd);
   ck('and the blow lands', !kit.noBtn && kit.hurt);
-  ck('and it starts the beat', !kit.noBtn && kit.gcd > 1);
+  ck('and it starts the beat the ability asks for',
+     !kit.noBtn && kit.gcd > kit.wants - 0.12 && kit.gcd <= kit.wants,
+     'gcd ' + kit.gcd + ' of ' + kit.wants + 's');
 
   const hud = await p.evaluate(()=>({
     life: document.querySelector('#hud .life b').textContent,

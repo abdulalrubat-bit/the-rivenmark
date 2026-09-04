@@ -274,6 +274,76 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
      JSON.stringify(banner.raised.text));
   ck('and it goes when it is done', banner.gone);
 
+  /* --- NOT TWICE, AND NOT ON TOP OF ANYTHING ------------------------------
+   * Three pieces of chrome and three ways they were in each other's way, all
+   * found by looking at one screenshot of a boss fight on a phone:
+   *
+   *   the avatar's name was written twice in the same frame -- once in the
+   *   boss bar and once in nineteen-pixel serif across the middle of the
+   *   fight, because arriving raises the bar and the banner together;
+   *
+   *   HELD -- the line that says why his health is not moving -- was drawn
+   *   across the bar's own gold hatching, in gold;
+   *
+   *   and the banner sat at a fixed 38% of the screen, which is where the
+   *   map's bottom edge is exactly when the boss bar has pushed it down,
+   *   which is exactly when there is a banner.
+   */
+  const stacked = await p.evaluate(async () => {
+    run.bossCalled = true;
+    if (!run.boss || run.boss.hp <= 0) spawnBoss();
+    // Two Lieutenants standing, so the bar is HELD and the pips have a count.
+    for (let i = 0; i < 2; i++) {
+      const L = newBody('lieutenant', player.x + 150 + i * 40, player.y - 60, 0);
+      L.awake = true; enemies.push(L);
+    }
+    const bs = run.boss;
+    const title = (bs && bs.title) || 'The Gilded Deceiver';
+    run.bannerText = title;
+    run.bannerNote = 'His Lieutenants hold him. Break them first.';
+    run.banner = 3.0;
+    for (let i = 0; i < 8; i++) await new Promise(r => requestAnimationFrame(r));
+    const box = sel => { const e = document.querySelector(sel);
+      if (!e || e.hidden) return null; const r = e.getBoundingClientRect();
+      return { x: r.left, y: r.top, w: r.width, h: r.height, r: r.right, b: r.bottom }; };
+    const hit = (a, c) => !!(a && c && a.x < c.r && a.r > c.x && a.y < c.b && a.b > c.y);
+    const banner = box('#hud .banner');
+    const held = box('#hud .boss .held');
+    const bar = box('#hud .boss .bar');
+    const mb = window.__game.scene.getScene('delve').overlay ? null : null;
+    // The map is drawn by the scene, not the DOM, so its rect comes from the
+    // same function the scene uses -- which is the whole point of minimapBox.
+    const m = minimapBox();
+    const map = { x: m.x - m.over, y: m.y - m.over,
+                  r: m.x + m.s + m.over, b: m.y + m.s + m.over };
+    void mb;
+    return {
+      title,
+      bannerText: (document.querySelector('#hud .banner') || {}).textContent || '',
+      heldText: (document.querySelector('#hud .boss .held') || {}).textContent || '',
+      pips: document.querySelectorAll('#hud .boss .held span').length,
+      overBar: hit(held, bar),
+      overMap: hit(banner, map),
+      bannerShown: !!banner, heldShown: !!held,
+      barShown: !!bar
+    };
+  });
+  ck('the fixture has the bar, the held tag and the banner all up',
+     stacked.bannerShown && stacked.heldShown && stacked.barShown,
+     'banner ' + stacked.bannerShown + ', held ' + stacked.heldShown +
+     ', bar ' + stacked.barShown);
+  ck('the avatar’s name is written once, not twice',
+     stacked.heldShown && !stacked.bannerText.includes(stacked.title),
+     JSON.stringify(stacked.bannerText) + ' beside a bar already saying ' +
+     JSON.stringify(stacked.title));
+  ck('and the banner still says what to do about him',
+     /Lieutenants/.test(stacked.bannerText), JSON.stringify(stacked.bannerText));
+  ck('HELD is beside the bar, not written across it', !stacked.overBar,
+     stacked.heldText + ' with ' + stacked.pips + ' pip(s)');
+  ck('and one pip for each Lieutenant still standing', stacked.pips === 2,
+     stacked.pips + ' pips');
+  ck('the banner clears the map instead of running under it', !stacked.overMap);
+
   const perf = await p.evaluate(() => {
     const s = window.__game.scene.getScene('delve').log.stats();
     return s ? { p50: s.p50, p90: s.p90 } : null;

@@ -254,9 +254,19 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     const sc = window.__game.scene.getScene('delve');
     const e = enemies.find(b => b.hp > 0 && b.kind === 'thrall');
     if (!e) return { none: true };
+    // Stand the WHOLE pool down, not just this one. A sprite belongs to a
+    // body by its index in a list sorted by y, so there is no stable body ->
+    // sprite mapping to sample: "any sprite wearing -rest" found one in two
+    // frames of thirty in a busy delve, and the sample was too small to say
+    // anything. With nothing walking, every sprite rests and any of them is
+    // the measurement -- and the breath is phased per body, so a pack of them
+    // is still the right thing to look at.
+    for (const b of enemies) { if (b.hp > 0) { b.pace = 0; b.awake = false; b.braced = false; } }
     e.pace = 0; e.braced = false;
     const xs = [], ys = [];
-    for (let i = 0; i < 30; i++) {
+    // Long enough to cross a breath quantum. BREATH_STEP is 64ms, so a
+    // two-frame window can land inside one and measure no movement at all.
+    for (let i = 0; i < 40; i++) {
       await new Promise(r => requestAnimationFrame(r));
       const sp = sc.pool.find(s => s.visible && /-rest$/.test(s.frame.name));
       if (sp) { xs.push(+sp.scaleX.toFixed(5)); ys.push(+sp.scaleY.toFixed(5)); }
@@ -270,7 +280,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
              bodies: two.length };
   });
   ck('and breathes while it stands',
-     !breath.none && breath.n > 5 && breath.dx > 0.0005 && breath.dy < 1e-6,
+     !breath.none && breath.n > 20 && breath.dx > 0.0005 && breath.dy < 1e-6,
      breath.none ? 'no thrall' : 'scaleX moved ' + breath.dx.toFixed(4) +
        ' over ' + breath.n + ' frames, scaleY ' + breath.dy.toFixed(6) +
        ' (fixed at ' + breath.mid + ')');

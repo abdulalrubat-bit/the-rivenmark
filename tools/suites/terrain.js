@@ -278,6 +278,79 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   ck('and a forged one still stands in until it lands', art.forged);
   ck('tombs are actually scattered', art.tombs > 0, art.tombs+' in one cut');
 
+  /* --- HOW MUCH OF THE MAP THE DELVE ACTUALLY USES -----------------------
+   * Two kinds of dead space, both measured before they were changed and both
+   * asserted here so they cannot creep back:
+   *
+   *   the RIM -- rooms were kept two cells inside a leaf and the leaves start
+   *   one cell in, so every delve was cut inside a three-cell dead border and
+   *   the floor spanned cells 3 to 46 of fifty: 77% of the map by area, with a
+   *   hundred and twenty units of nothing on every side.
+   *
+   *   the SPAWN VOID -- no pack may stand within PACK_SAFE of the spawn, and
+   *   the spawn is the centre of the map, so that radius empties a disc out of
+   *   the middle of every delve. At 430 units it was a fifth of the floor, and
+   *   it is the fifth you start in and walk out through.
+   */
+  const space = await p.evaluate(() => {
+    const cuts = [];
+    for (let n = 0; n < 16; n++) {
+      stash = blankStash(); saveStash();
+      startRun('isaac', LEVELS[[0, 12, 26, 40][n % 4]].id, 'riven');
+      let minx = 1e9, maxx = -1, miny = 1e9, maxy = -1, open = 0, void_ = 0;
+      let rimOpen = 0;
+      for (let cy = 0; cy < GH; cy++) for (let cx = 0; cx < GW; cx++) {
+        if (cellAt(cx, cy) === SOLID) continue;
+        open++;
+        if (cx === 0 || cy === 0 || cx === GW - 1 || cy === GH - 1) rimOpen++;
+        if (cx < minx) minx = cx; if (cx > maxx) maxx = cx;
+        if (cy < miny) miny = cy; if (cy > maxy) maxy = cy;
+        const x = cx * CELL_W + CELL_W / 2, y = cy * CELL_W + CELL_W / 2;
+        if (Math.hypot(x - WORLD.w / 2, y - WORLD.h / 2) < PACK_SAFE) void_++;
+      }
+      cuts.push({ sides: [minx, miny, GW - 1 - maxx, GH - 1 - maxy],
+                  margin: Math.max(minx, miny, GW - 1 - maxx, GH - 1 - maxy),
+                  openPct: Math.round(100 * open / (GW * GH)),
+                  voidPct: Math.round(100 * void_ / open),
+                  rimOpen });
+    }
+    const med = k => cuts.map(c => c[k]).sort((a, b) => a - b)[cuts.length >> 1];
+    const allSides = cuts.flatMap(c => c.sides);
+    const mean = +(allSides.reduce((a, b) => a + b, 0) / allSides.length).toFixed(2);
+    return { mean, sides: allSides.length,
+             margin: med('margin'), worstMargin: Math.max(...cuts.map(c => c.margin)),
+             openPct: med('openPct'), voidPct: med('voidPct'),
+             rimOpen: cuts.reduce((a, c) => a + c.rimOpen, 0),
+             PACK_SAFE, cuts: cuts.length };
+  });
+  /* The MEAN of every side of every cut, which took two goes to get right.
+   *
+   * The maximum over four sides and eight cuts swung between two and five on
+   * consecutive runs; the median of that maximum still read three often enough
+   * to fail on nothing. Both were measuring the same thing: a leaf at the edge
+   * that came out too small to hold a room leaves that ONE side short, which
+   * is the generator working as written, and any statistic built on the worst
+   * side is a statistic about how often that happens.
+   *
+   * Averaging all four sides of sixteen cuts is not: measured over a hundred
+   * and sixty sides, the rim closed reads 2.93 and the rim open 1.52, and the
+   * mean of that many samples does not move. The bar sits between them.
+   */
+  ck('the delve is cut to the edge of the map, not inside a border',
+     space.mean <= 2.2,
+     space.mean + ' cells of dead border on average over ' + space.sides +
+     ' sides (2.93 before the rim was opened), worst single side ' +
+     space.worstMargin);
+  // The control. A rim of solid rock is what the wall is drawn on, so "cut to
+  // the edge" must stop one cell short of it and not one cell past.
+  ck('but the outermost course is still rock for the wall to stand on',
+     space.rimOpen === 0, space.rimOpen + ' open cells on the world edge');
+  ck('and more than half the map is floor', space.openPct >= 46,
+     space.openPct + '% open');
+  ck('the pack-free ground around the spawn is not a fifth of the delve',
+     space.voidPct <= 17,
+     space.voidPct + '% of the floor inside PACK_SAFE ' + space.PACK_SAFE);
+
   ck('no console errors', errs.length===0, errs.slice(0,3).join(' | '));
   console.log('\nPASS '+pass.length+'\n  '+pass.join('\n  '));
   console.log('\nFAIL '+fail.length+(fail.length?'\n  '+fail.join('\n  '):''));

@@ -11,7 +11,9 @@
  */
 
 /* global player, run, stash, state, LEVELS, LEVEL, LEVEL_BY_ID, HEROES,
-          startRun, endRun, stepThrough, blankStash, el, stashPower,
+          startRun, endRun, stepThrough, blankStash, el, stashPower, resumeRun,
+          REGION_BY_ID, REGION_RELIC, hardcore, setHardcore, honoured,
+          todaysBounty, bountyDone,
           SLOTS, SLOT_BY_ID, RARITY, itemPower, affixText, saveStash,
           VENDOR, vendorCost, canAfford, vendorBuy, HALL, hallTier,
           HALL_MAX, hallBuy, vaultCap */
@@ -21,9 +23,33 @@ const CSS = `
   background:rgba(8,7,6,.86);font:13px ui-monospace,Menlo,monospace;color:#cebe9e;
   -webkit-user-select:none;user-select:none;overflow:auto}
 #screens.up{display:grid}
-#screens .card{width:min(340px,92vw);background:#12100d;border:1px solid #4a3f30;
-  border-radius:10px;padding:16px;box-shadow:0 12px 40px rgba(0,0,0,.6);margin:16px 0}
-#screens h1{font:22px Georgia,"Times New Roman",serif;color:#eee0c0;margin:0 0 4px}
+/* CUT FROM THE SAME STONE AS THE DELVE.
+ *
+ * These were flat dark boxes with a hairline round them, which was fine while
+ * the HUD was flat dark discs -- and stopped being fine the moment the kit
+ * grew a bronze band and a slate face. Everything the player looks at is one
+ * object now: a band of bronze lit from the north-west, a dark line, and a
+ * slate face under it.
+ *
+ * Done with a transparent border and two background layers rather than a
+ * wrapper element, so the markup of four stations does not have to change:
+ * the face is clipped to the padding box and the band to the border box, so
+ * the border IS the band and the radius follows both.
+ */
+#screens .card{width:min(340px,92vw);border:3px solid transparent;border-radius:10px;
+  /* The face must be OPAQUE. Half-transparent, the band underneath shows
+     straight through it -- the band is painted over the whole border box, and
+     the face only clips WHERE it lands, not what is beneath -- so the top of
+     the card came out bright bronze instead of dark stone. */
+  background-image:linear-gradient(#241f18,#15120e 40%,#100e0b),
+    linear-gradient(#e2b96a,#a67c3a 34%,#6d4d22 70%,#3a2610);
+  background-origin:border-box;background-clip:padding-box,border-box;
+  padding:16px;box-shadow:0 12px 40px rgba(0,0,0,.6),inset 0 1px 0 rgba(150,172,200,.18);
+  margin:16px 0}
+/* The title takes the rule the gate-house plates have. */
+#screens h1{font:22px Georgia,"Times New Roman",serif;color:#eee0c0;margin:0 0 10px;
+  padding-bottom:8px;border-bottom:1px solid rgba(166,124,58,.45);
+  box-shadow:0 1px 0 rgba(0,0,0,.6)}
 #screens h1 em{font-style:normal;color:#d6b26e}
 #screens h1 span{color:#c0392b}
 #screens .sub{color:#a89878;font-style:italic;margin:0 0 12px;line-height:1.45}
@@ -31,34 +57,78 @@ const CSS = `
 #screens .stats div{background:#1a1712;border:1px solid #33291f;border-radius:5px;
   padding:6px 8px;display:flex;justify-content:space-between}
 #screens .stats b{color:#eee0c0}
-#screens .rows{display:grid;gap:6px;margin:0 0 14px;max-height:44vh;overflow:auto}
+/* A scrolling list cut off mid-row reads as a bug rather than as more below,
+   so the last few pixels fade out. Sticky rather than fixed: the fade belongs
+   to the bottom of the viewport of this list, wherever that has scrolled to. */
+#screens .rows{display:grid;gap:6px;margin:0 0 14px;max-height:44vh;overflow:auto;
+  position:relative;
+  -webkit-mask-image:linear-gradient(#000 calc(100% - 22px),transparent);
+  mask-image:linear-gradient(#000 calc(100% - 22px),transparent)}
 #screens .row{display:flex;justify-content:space-between;align-items:center;gap:8px;
   background:#1a1712;border:1px solid #33291f;border-radius:6px;padding:9px 10px;
   text-align:left;color:inherit;font:inherit;min-height:44px}
-#screens .row.on{border-color:#d6b26e;background:#231d15}
+#screens .row.on{border:2px solid transparent;
+  background-image:linear-gradient(rgba(44,36,22,.95),rgba(24,19,12,.98)),
+    linear-gradient(#e2b96a,#a67c3a 34%,#6d4d22 70%,#3a2610);
+  background-origin:border-box;background-clip:padding-box,border-box;
+  box-shadow:inset 0 1px 0 rgba(214,178,110,.22)}
 #screens .row small{color:#8c8168;display:block}
-#screens .go{width:100%;min-height:48px;border-radius:8px;background:#2a2015;
-  color:#f0e2c2;border:1px solid #d6b26e;font:15px Georgia,serif}
-#screens .go:active{background:#3a2c1c}
+/* The one button that does the thing, on the same plate as an ability. */
+#screens .go{width:100%;min-height:48px;border-radius:8px;
+  border:2px solid transparent;
+  background-image:linear-gradient(rgba(58,44,24,.92),rgba(28,20,11,.96)),
+    linear-gradient(#e2b96a,#a67c3a 34%,#6d4d22 70%,#3a2610);
+  background-origin:border-box;background-clip:padding-box,border-box;
+  color:#f0e2c2;font:15px Georgia,serif;
+  box-shadow:inset 0 1px 0 rgba(214,178,110,.3)}
+#screens .go:active{background-image:linear-gradient(rgba(78,60,34,.95),rgba(44,32,18,.98)),
+    linear-gradient(#e2b96a,#a67c3a 34%,#6d4d22 70%,#3a2610)}
+/* The second way out of a card. Same size and same target -- a 44px rule does
+   not stop applying because a button is the lesser of two -- but it does not
+   take the gold, so a glance still finds the one you probably want. */
+#screens .alt{width:100%;min-height:48px;border-radius:8px;background:#191510;
+  color:#a89878;border:1px solid #6d4d22;font:14px Georgia,serif;margin-top:8px;
+  box-shadow:inset 0 1px 0 rgba(150,172,200,.1)}
+#screens .alt:active{background:#241d15}
+#screens .seal{display:block;font-size:22px;color:#8c6830;margin:0 0 2px}
 #screens .purse{display:flex;justify-content:space-between;margin:0 0 10px;color:#a89878}
 #screens .tabs{display:flex;gap:6px;margin:0 0 12px}
 #screens .tabs button{flex:1;min-height:40px;border-radius:6px;background:#1a1712;
   color:#a89878;border:1px solid #33291f;font:inherit}
-#screens .tabs button.on{color:#f0e2c2;border-color:#d6b26e;background:#231d15}
-#screens .item{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+/* The station you are in wears the band; the others are plain, so the rail
+   reads as one object with a piece of it lit rather than as four boxes. */
+#screens .tabs button.on{color:#f0e2c2;border:2px solid transparent;
+  background-image:linear-gradient(rgba(48,38,22,.95),rgba(26,20,12,.98)),
+    linear-gradient(#e2b96a,#a67c3a 34%,#6d4d22 70%,#3a2610);
+  background-origin:border-box;background-clip:padding-box,border-box}
+#screens .item{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+/* The name and its affixes are one column and must own the space they need,
+   or the piece's power and the word for what tapping does drift left and land
+   at the end of the affix line -- "+13% damage take off" read as one phrase. */
+#screens .item>span:first-child{flex:1;min-width:0}
 #screens .item .aff{color:#8c8168;font-size:11px;display:block;margin-top:2px;line-height:1.35}
-#screens .pw{color:#d6b26e;white-space:nowrap;text-align:right}
-#screens .act{display:block;color:#8c8168;font-size:11px;margin-top:2px}
+#screens .pw{color:#d6b26e;white-space:nowrap;text-align:right;flex:none}
+/* And the word is a tag, not more text. It is the only part of a row that
+   says what happens if you touch it, so it is the part that must not look
+   like the affixes it was sitting beside. */
+#screens .act{display:block;color:#a89878;font-size:10px;margin-top:4px;
+  letter-spacing:.5px;padding:2px 6px;border:1px solid #4a3f30;border-radius:3px;
+  background:rgba(20,17,14,.6)}
 #screens .empty{color:#6a6154;font-style:italic}
 `;
 
 export class Screens {
-  constructor(onDescend) {
+  /* onDescend(hero, levelId) starts a delve; onAbandon() throws the current
+   * one away and comes back up. Both belong to the scene rather than here:
+   * beginning or ending a delve means destroying and rebuilding every sprite
+   * in it, and a menu has no business knowing that. */
+  constructor(onDescend, onAbandon) {
     const style = document.createElement('style');
     style.textContent = CSS;
     document.head.appendChild(style);
 
     this.onDescend = onDescend;
+    this.onAbandon = onAbandon || (() => {});
     this.root = document.createElement('div');
     this.root.id = 'screens';
     document.body.appendChild(this.root);
@@ -68,18 +138,142 @@ export class Screens {
 
   show(name) {
     this.name = name;
-    if (!name || name === 'paused') { this.root.classList.remove('up'); return; }
+    if (!name) { this.root.classList.remove('up'); return; }
     this.root.classList.add('up');
-    if (name === 'over') this.renderOver();
+    if (name === 'paused') this.renderPaused();
+    else if (name === 'over') this.renderOver();
     else if (name === 'gear') this.renderForge();
     else if (name === 'vendor') this.renderVendor();
     else if (name === 'hall') this.renderHall();
     else this.renderGatehouse();
   }
 
+  /* Held. The delve is still standing behind this -- the scene keeps drawing
+   * it, the core simply stops being stepped -- so the card says so and offers
+   * the two things a stopped run can do. Abandoning is deliberately the lesser
+   * button and deliberately says what it costs: nothing is banked.
+   */
+  renderPaused() {
+    this.root.innerHTML =
+      '<div class="card">' +
+        '<span class="seal">\u2620\ufe0e</span>' +   // FE0E: the glyph, not the emoji
+        '<h1>Held</h1>' +
+        '<p class="sub">The delve waits. It does not wait kindly.</p>' +
+        '<button class="go" type="button">Press on</button>' +
+        '<button class="alt" type="button">Abandon the delve</button>' +
+      '</div>';
+    this.root.querySelector('.go').addEventListener('click', () => {
+      if (typeof resumeRun === 'function') resumeRun();
+      else this.show(null);
+    });
+    this.root.querySelector('.alt').addEventListener('click', () => this.onAbandon());
+  }
+
+  /* THE DAILY.
+   *
+   * One delve a day, named in advance, on ground that has been changed. Both
+   * the twist and the rung fall out of the date, so there is nothing to
+   * synchronise and nothing to store except whether you have taken it.
+   */
+  daily() {
+    if (typeof todaysBounty !== 'function') return '';
+    const b = todaysBounty();
+    const done = bountyDone();
+    const armed = !done && stash.bountyArmed;
+    return '<p class="sub">Today\u2019s bounty.</p>' +
+      '<button class="row' + (armed ? ' on' : '') + '" id="bountyRow" type="button"' +
+        (done ? ' disabled' : '') + '><span>' + b.name +
+        '<small>' + b.note + '<br>' + b.level +
+        '</small></span><small>' +
+        (done ? 'paid' : armed ? 'taken' : 'a Hallowed piece') +
+      '</small></button>';
+  }
+
+  /* ONE LIFE.
+   *
+   * Hardcore is a second stash, not a setting on the first, so switching
+   * destroys nothing -- the other kit is put down and picked up again later.
+   * The two-tap confirm is only on the way IN, because that is the direction
+   * where the next death is final; coming back out is free and asking about
+   * it would only teach the player to tap through the question.
+   */
+  oneLife() {
+    const on = typeof hardcore !== 'undefined' && hardcore;
+    const won = typeof honoured === 'function' && honoured();
+    const arm = this.hcArmed && !on;
+    return '<button class="row' + (on ? ' on' : '') + '" id="hcToggle" type="button">' +
+      '<span>' + (on ? 'Hardcore' : 'One life') +
+        '<small>' + (arm
+          ? 'Tap again. One death ends everything this Vanguard owns.'
+          : on ? 'One death ends it. Loot and Regalia come half again as often.'
+               : 'A separate stash, and a separate life. Tap to take it up.') +
+        '</small></span>' +
+      (won ? '<small>\u25c8 crimson</small>' : (on ? '<small>\u00d71.5</small>' : '')) +
+      '</button>';
+  }
+
+  /* WHICH GROUND, and what it keeps.
+   *
+   * A rung deep enough to reach the Rot-Weald can be cut from five regions,
+   * and the delve used to roll one -- which made "the rings are in the
+   * Rot-Weald" advice nobody could act on. Asking for the ground is what turns
+   * the Regalia's scattering into a reason to go somewhere.
+   *
+   * Only shown where there is a choice. On the first rungs the pool is one
+   * region and a picker with one option in it is furniture.
+   */
+  ground() {
+    const L = LEVEL_BY_ID[this.pick.level];
+    if (!L || !L.regions || L.regions.length < 2) {
+      // Still say what the one region keeps -- that is the whole point of
+      // naming them, and it is true whether or not there is anything to pick.
+      const only = L && L.regions && L.regions[0];
+      const keeps = only && this.relicWord(only);
+      return keeps ? '<p class="sub">Cut from ' +
+        (REGION_BY_ID[only] || {}).name + ', which keeps ' + keeps + '.</p>' : '';
+    }
+    const want = stash.region;
+    const cell = (id, label, note) =>
+      '<button class="row' + ((want || 'any') === id ? ' on' : '') +
+      '" data-region="' + id + '" type="button"><span>' + label +
+      (note ? '<small>' + note + '</small>' : '') + '</span></button>';
+    return '<p class="sub">The ground, and what the Regalia left in it.</p>' +
+      '<div class="rows" id="regionRows">' +
+        cell('any', 'Whatever the rung offers', 'a region rolled per delve') +
+        L.regions.map(id => cell(id, (REGION_BY_ID[id] || {}).name || id,
+                                  this.relicWord(id))).join('') +
+      '</div>';
+  }
+
+  /* "the blade and the amulet", from the slots this region keeps. Written out
+   * rather than listed, because a row of slot ids is a database and this is a
+   * sentence about a place. */
+  relicWord(regionId) {
+    const slots = (typeof REGION_RELIC !== 'undefined' && REGION_RELIC[regionId]) || null;
+    if (!slots || !slots.length) return '';
+    const seen = [], names = [];
+    for (const id of slots) {
+      const sl = SLOT_BY_ID[id];
+      if (!sl || seen.indexOf(sl.name) >= 0) continue;   // both rings are "Ring"
+      seen.push(sl.name);
+      names.push(sl.name.toLowerCase());
+    }
+    if (!names.length) return '';
+    const many = slots.length > names.length;            // ring1 + ring2
+    const said = names.length === 1 ? 'the ' + names[0] + (many ? 's' : '')
+               : 'the ' + names.slice(0, -1).join(', the ') + ' and the ' + names[names.length - 1];
+    return said;
+  }
+
   /* The outcome. Every word of it was written by endRun -- which knows what
    * was banked, what the corpse kept and whether an older one was lost -- and
-   * read back out of the store the host gives it. */
+   * read back out of the store the host gives it.
+   *
+   * Two ways off it. "To the gate-house" was the only one, which made going
+   * again a three-tap trip through a menu you had just been told the result
+   * of; and the gate-house was the only way back to a menu at all, because
+   * until now there was no leaving a delve except by dying or extracting.
+   */
   renderOver() {
     const title = (el.overTitle && el.overTitle.innerHTML) || 'The delve ends';
     const sub = (el.overSub && el.overSub.textContent) || '';
@@ -89,9 +283,20 @@ export class Screens {
         '<h1>' + title + '</h1>' +
         '<p class="sub">' + sub + '</p>' +
         '<div class="stats">' + stats + '</div>' +
-        '<button class="go" type="button">To the gate-house</button>' +
+        '<button class="go" type="button">Descend again</button>' +
+        '<button class="alt" type="button">To the gate-house</button>' +
       '</div>';
-    this.root.querySelector('.go').addEventListener('click', () => this.show('splash'));
+    // The same delve and the same hero the run that just ended used. run is
+    // still the finished run at this point -- endRun banks it, it does not
+    // clear it -- so it is the only place that answers "again" correctly.
+    const hero = (run && run.hero) || this.pick.hero;
+    const lvl = (run && run.level_id) || this.pick.level;
+    this.root.querySelector('.go').addEventListener('click', () => {
+      this.pick.hero = hero;
+      if (lvl) this.pick.level = lvl;
+      this.onDescend(hero, lvl);
+    });
+    this.root.querySelector('.alt').addEventListener('click', () => this.show('splash'));
   }
 
   /* Which delve, and who goes down. The ladder is long, so this shows the
@@ -143,6 +348,9 @@ export class Screens {
                        : l.power < power - 2 ? 'well within you' : 'an even match') +
             '</small></button>').join('') +
         '</div>' +
+        this.daily() +
+        this.ground() +
+        this.oneLife() +
         '<button class="go" type="button" id="descend">Descend</button>' +
       '</div>';
 
@@ -150,6 +358,35 @@ export class Screens {
       b.addEventListener('click', () => { this.pick.hero = b.dataset.hero; this.renderGatehouse(); }));
     this.root.querySelectorAll('[data-level]').forEach(b =>
       b.addEventListener('click', () => { this.pick.level = b.dataset.level; this.renderGatehouse(); }));
+    const bt = this.root.querySelector('#bountyRow');
+    if (bt) bt.addEventListener('click', () => {
+      const b = todaysBounty();
+      if (bountyDone()) return;
+      stash.bountyArmed = !stash.bountyArmed;
+      // Taking it also takes you to its rung: a daily you have to go and find
+      // on the ladder is a daily half the people who took it never ran.
+      if (stash.bountyArmed) this.pick.level = b.level_id;
+      saveStash();
+      this.renderGatehouse();
+    });
+    const hc = this.root.querySelector('#hcToggle');
+    if (hc) hc.addEventListener('click', () => {
+      // Nothing is destroyed by switching: the two stashes are separate keys
+      // and the other one is simply put down. The confirmation is for turning
+      // Hardcore ON, where the next death is final, and not for coming back.
+      if (!hardcore && !this.hcArmed) { this.hcArmed = true; this.renderGatehouse(); return; }
+      this.hcArmed = false;
+      setHardcore(!hardcore);
+      this.pick.hero = stash.hero || this.pick.hero;
+      this.renderGatehouse();
+    });
+    this.root.querySelectorAll('[data-region]').forEach(b =>
+      b.addEventListener('click', () => {
+        const id = b.dataset.region;
+        stash.region = id === 'any' ? null : id;
+        saveStash();
+        this.renderGatehouse();
+      }));
     this.wireTabs();
     this.root.querySelector('#descend').addEventListener('click', () => {
       this.root.classList.remove('up');

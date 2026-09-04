@@ -1698,7 +1698,13 @@ let MAX_ENEMIES     = 340;   // measured: population is ~0.4ms of update at any
 // The delve is populated at generation time and cleared by walking into it,
 // rather than having waves pushed at the player forever. Packs sit dormant
 // until something wakes them, so pressure comes from what you walk into.
-const PACK_SAFE     = 430;   // no pack closer than this to the spawn pocket
+// No pack closer than this to the spawn pocket. It was 430 -- more than a
+// phone screen's width -- and with the spawn at the centre of the map that
+// emptied a fifth of every delve's floor, the fifth you start in and walk out
+// through. It is the dead space you notice, because it is the first thing you
+// see. Three hundred and sixty still means you can see the nearest pack from
+// where you land and it cannot see you.
+const PACK_SAFE     = 360;
 const PACK_APART    = 250;   // minimum spacing between pack sites
 // Slag placed on the map, as a multiple of the level's own quota. A fixed
 // budget was the old shape and it made the deep ladder unwinnable: the quota
@@ -1718,7 +1724,13 @@ const ALERT_DELAY   = 0.18;  // ...one beat later, so a pack rouses in sequence
 // Applied to bodies AWAKE it gives the same wall of meat in front of you and
 // leaves the delve full behind it. Past the cap a pack still rouses when you
 // walk into it; what stops is the chain running on across the map.
-const HORDE_LIVE    = 54;
+// Opening the delve to the rim gave it a fifth more floor, and floor is the
+// horde's ally: the cap on bodies AWAKE did not move, but on open ground far
+// more of the same fifty-four actually reach you instead of piling up behind
+// rock. Measured on the reference player, the same delves went from three in
+// ten ending at the gate to under two. The cap comes down by what the floor
+// went up, so more room to fight in does not quietly mean more to fight.
+const HORDE_LIVE    = 46;
 const ELITE_CHANCE  = 0.16;  // share of packs led by a branded champion
 // Odds a pack site gets pitch beside it. Lives here with the other placement
 // knobs rather than down with the scenery it describes, because buildLevels
@@ -1791,10 +1803,27 @@ const PORTAL_R        = 62;
 // sweep mows a broader swathe rather than punching through one more body.
 const BASE_PLAYER = {
   r: 14, maxHp: 100, speed: 205,
-  damage: 22, fireDelay: 0.50, range: 186, arcSpeed: 1550,
-  sweep: 28, shots: 1, magnet: 118, regen: 0,
+  damage: 22, fireDelay: 0.56, range: 186, arcSpeed: 1550,
+  sweep: 28, shots: 1, fan: 0, magnet: 118, regen: 0,
   iframe: 0.45
 };
+
+/* WHAT THE SWING IS WORTH ON ITS OWN.
+ *
+ * The blade swings by itself -- it always has, and on a game played with one
+ * thumb it has to. What it should not do is win the fight by itself, and it
+ * was: measured over ninety-six whole delves, seven tenths of every point of
+ * damage came off the automatic swing and a sixth off the six buttons, and
+ * the bar's share FELL with depth, from 22% on the first rung to 10% on the
+ * forty-fourth. The deeper you went the more the game played itself.
+ *
+ * So the crescent carries a share of the ward rather than all of it, and it
+ * comes round slower. `damage` still means what it always meant -- it is what
+ * the kit multiplies, so a ring that bites deeper bites deeper everywhere --
+ * and this is the one place the automatic swing is written down as less than
+ * the whole of you.
+ */
+const AUTO_BITE = 0.62;
 
 // Enemy archetypes. `weight` is the spawn share, ramped by `from` (seconds).
 // role decides how a body fights, not how hard. Until now every kind pressed
@@ -1962,14 +1991,14 @@ const HEROES = {
            magic:'#ffc24d', trim:'rgba(196,142,44,.9)', cape:[86,32,26],
            blurb:'The vanguard’s anchor. Sun-Gold magic, a sun-emblazoned shield, ' +
                  'and no purchase for the Deceiver’s illusions.',
-           maxHp:125, speed:196, damage:22, fireDelay:0.56,
+           maxHp:125, speed:196, damage:22, fireDelay:0.62,
            range:178, sweep:33, arcSpeed:1480 },
   zayd:  { id:'zayd', name:'Zayd', title:'The Piercing Truth',
            order:'Frost-Scholars of Kael', school:'Azure',
            magic:'#5fd0ff', trim:'rgba(70,150,196,.9)', cape:[30,44,72],
            blurb:'A tactician of Kael. The Sapphire Glaive severs hive-mind tethers, ' +
                  'and inverted ley-lines hold no confusion for him.',
-           maxHp:92, speed:228, damage:17, fireDelay:0.42,
+           maxHp:92, speed:228, damage:17, fireDelay:0.48,
            range:206, sweep:21, arcSpeed:1720 }
 };
 
@@ -2425,8 +2454,111 @@ const SET_BONUSES = [
   { at:8, text:'a second crescent with every strike', add:{ shots:1 } }
 ];
 
+/* WHERE EACH PIECE LIES.
+ *
+ * The Regalia was sundered across the Shattered Realm, and each region kept
+ * what fell in it. Farming one rung over and over for eight random slots is
+ * the shortest path to a player seeing the same corridor two hundred times;
+ * knowing that the rings are in the Rot-Weald is a reason to go somewhere
+ * else.
+ *
+ * The brief this came from asked for a Helm and Pauldrons in the Slag-Moors.
+ * There are no such slots -- the eight are blade, off-hand, mail, girdle,
+ * boots, amulet and two rings -- and the one the other four regions leave
+ * spare is the off-hand. That is the right answer anyway: the Unbroken Ward
+ * is a Hearth-Warden's shield and the Weeping Keep of Tor-Varden is where the
+ * Hearth-Wardens come from. Every slot is claimed exactly once.
+ */
+/* --- DAILY BOUNTIES ------------------------------------------------------
+   One delve a day, named in advance, on ground that has been changed.
+
+   The brief called these "mutators", and the game already has a thing by that
+   name -- the Deceiver's epithets, which are rolled per RUNG and are what make
+   the ladder learnable. These are a different animal: they change the DELVE
+   rather than the avatar, they last a day rather than for ever, and they are
+   the same for everybody. Naming them bounties keeps the two apart, which
+   matters more than matching the brief's word.
+
+   Deterministic from the day, so no state has to be stored to decide what the
+   bounty is -- only whether you have taken it. The same twist, on the same
+   rung, for everyone, until midnight.
+
+   Each is a TRADE rather than a difficulty setting: something worse, something
+   better. A bounty that is only harder is a chore with a prize on it.
+   ---------------------------------------------------------------------- */
+const BOUNTIES = [
+  { id: 'quickening', name: 'The Quickening',
+    note: 'Everything in it moves a quarter faster, and carries a third more slag.',
+    twist: { speed: 1.25, slag: 1.33 } },
+  { id: 'hoard', name: 'The Hoard',
+    note: 'Twice the coffers, and half the coin off a body.',
+    twist: { chests: 2, coin: 0.5 } },
+  { id: 'brittle', name: 'The Brittle Host',
+    note: 'A quarter less life in them, a quarter more in their blows.',
+    twist: { hp: 0.75, dmg: 1.25 } },
+  { id: 'teeming', name: 'The Teeming',
+    note: 'Half again as many of them, and each one worth less.',
+    twist: { slag: 1.5, tech: 0.7 } }
+];
+const BOUNTY_BY_ID = {};
+for (const b of BOUNTIES) BOUNTY_BY_ID[b.id] = b;
+
+// Days since the epoch, in LOCAL time -- a bounty that turns over at UTC
+// midnight turns over mid-evening for half the world.
+function dayStamp(now) {
+  const d = new Date(now === undefined ? Date.now() : now);
+  // The calendar date where the player is, turned into a day number. Built
+  // from the local Y/M/D through Date.UTC rather than by dividing the
+  // timestamp, so it does not slide by an hour twice a year.
+  return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000);
+}
+
+/* Which bounty, and where. Both fall out of the day, so nothing has to be
+ * stored or synchronised -- and the rung is drawn from the shallow half of the
+ * ladder, because a daily nobody can reach is a daily nobody does. */
+function todaysBounty(now) {
+  const day = dayStamp(now);
+  // Two different mixes of the same number, or the bounty and the rung would
+  // march up the ladder in lockstep.
+  const b = BOUNTIES[hash32(day * 2 + 1) % BOUNTIES.length];
+  const span = Math.max(1, Math.floor(LEVELS.length * 0.55));
+  const L = LEVELS[hash32(day * 40503 + 17) % span];
+  return { day, id: b.id, name: b.name, note: b.note, twist: b.twist,
+           level_id: L.id, level: L.name };
+}
+const bountyDone = () => !!(stash.bounty && stash.bounty.day === dayStamp() &&
+                            stash.bounty.done);
+
+/* What the delve is worth changing. Read through one function so a twist that
+ * is not armed costs exactly one property lookup, and so every place that
+ * bends to a bounty bends the same way. */
+function twist(k) {
+  const t = run && run.bounty && run.bounty.twist;
+  return (t && t[k] !== undefined) ? t[k] : 1;
+}
+
+const REGION_RELIC = {
+  slag:    ['offhand'],            // The Weeping Keep of Tor-Varden
+  vaelk:   ['boots', 'girdle'],    // The Kael-Dorm Redoubt
+  kraggen: ['mail'],               // The Shatter-Gate of Ghor
+  weald:   ['ring1', 'ring2'],     // The Heart-Rot Clearing
+  firth:   ['blade', 'amulet']     // The Ash-Shoals
+};
+// Weighted, not locked. A region that ONLY ever yields its own pieces makes
+// the last slot of a set hostage to one delve a player may not be able to
+// beat, and the reliquary already exists as the pity valve for exactly that.
+// Seven times in ten it is what the ground keeps; the rest is anything.
+const RELIC_HERE = 0.7;
+
+function relicSlotFor(regionId) {
+  const here = REGION_RELIC[regionId];
+  if (here && here.length && Math.random() < RELIC_HERE)
+    return here[(Math.random() * here.length) | 0];
+  return SLOTS[(Math.random() * SLOTS.length) | 0].id;
+}
+
 function rollSetPiece(slotId) {
-  const slot = slotId || SLOTS[(Math.random() * SLOTS.length) | 0].id;
+  const slot = slotId || relicSlotFor(REGION && REGION.id);
   const def = SET_PIECES[slot];
   return { uid: ++itemSeq, slot, base: def.base, rarity: 'mythic', set: SET_ID,
            affixes: def.affixes.map(a => ({ id: a[0], v: a[1] })),
@@ -2497,6 +2629,49 @@ const AFFIX_BY_ID = {};
 for (const a of AFFIXES) AFFIX_BY_ID[a.id] = a;
 
 // Which affixes a slot can roll. Keeps a blade feeling like a blade.
+/* BRANDS: what a Riven piece does, as opposed to what it adds up to.
+ *
+ * Every affix above moves one number in one direction, so the best item in the
+ * game is the one with the biggest numbers and there is nothing to think
+ * about. A brand moves two, against each other, and one of them changes how
+ * the blade behaves rather than how hard it hits. It is a decision: the fan
+ * clears a room and cannot fight one thing, the reaving edge fights one thing
+ * across the hall and cannot clear a room.
+ *
+ * Mechanically they are affixes -- same {id, v} shape on the item, same
+ * AFFIX_BY_ID lookup, same fold in recomputeStats -- so nothing that reads,
+ * validates, saves, tempers or prices an item has to learn a second kind. The
+ * only new thing is that a brand carries an `add`/`mul` BUNDLE instead of a
+ * single stat, and `v` is a roll on how strong the bundle is.
+ *
+ * They roll only on Riven, only on the slot they belong to, and only ever one
+ * to a piece: two brands on one item is two mechanics arguing.
+ */
+const BRANDS = [
+  { id: 'fan', slot: 'blade', name: 'Sundering',
+    word: 'three crescents in a fan, and half again the swing time',
+    lo: 1, hi: 1, add: { shots: 2, fan: 1 }, mul: { fireDelay: 0.5 } },
+  { id: 'reave', slot: 'blade', name: 'Reaving',
+    word: 'crescents carry twice as far, and cut a third as wide',
+    lo: 1, hi: 1, mul: { range: 1.0, sweep: -0.66 } },
+  { id: 'headlong', slot: 'boots', name: 'Headlong',
+    word: 'a third again the stride, at a fifth of your life',
+    lo: 1, hi: 1, mul: { speed: 0.34, maxHp: -0.20 } },
+  { id: 'covet', slot: 'girdle', name: 'Covetous',
+    word: 'the delve comes to you — triple draw, at a seventh of your life',
+    lo: 1, hi: 1, mul: { magnet: 2.0, maxHp: -0.14 } }
+];
+// Brands go into AFFIX_BY_ID beside the ordinary affixes, so validItem,
+// affixText, the temper, the vault and the save file all treat one as an affix
+// and none of them has to know what it is. Registered HERE rather than up with
+// the affix table, which runs before this declaration and cannot see it.
+for (const b of BRANDS) { b.brand = true; AFFIX_BY_ID[b.id] = b; }
+const BRAND_BY_SLOT = {};
+for (const b of BRANDS) (BRAND_BY_SLOT[b.slot] = BRAND_BY_SLOT[b.slot] || []).push(b);
+// Odds a Riven piece in a branded slot is branded. Not every one: a Riven
+// blade that is always Sundering or Reaving is two items rather than a tier.
+const BRAND_ODDS = 0.55;
+
 const SLOT_AFFIXES = {
   blade:   ['damage','damageP','reach','sweep','cadence'],
   offhand: ['ward','life','damageP','sweep','regen'],
@@ -2553,6 +2728,14 @@ function rollItem(depth, slotId) {
     v = a.dp ? +v.toFixed(a.dp) : (Math.abs(a.lo) >= 1 ? Math.max(1, Math.round(v)) : v);
     affixes.push({ id, v });
   }
+  // The brand REPLACES a rolled affix rather than being added to them, so a
+  // branded Riven is not simply a Riven with a sixth line on it -- the trade
+  // costs a slot as well as a stat.
+  const brands = rarity.id === 'riven' && BRAND_BY_SLOT[slot];
+  if (brands && affixes.length && Math.random() < BRAND_ODDS) {
+    const br = brands[(Math.random() * brands.length) | 0];
+    affixes[0] = { id: br.id, v: br.lo + Math.random() * (br.hi - br.lo) };
+  }
   return { uid: ++itemSeq, slot, base, rarity: rarity.id, affixes,
            name: affixes.length ? AFFIX_BY_ID[affixes[0].id].name + ' ' + base : base };
 }
@@ -2560,6 +2743,9 @@ function rollItem(depth, slotId) {
 function affixText(af, hero) {
   const a = AFFIX_BY_ID[af.id];
   if (!a) return '';
+  // A brand's word is the whole sentence: there is no single number to
+  // substitute into it, because it moves two in opposite directions.
+  if (a.brand) return a.word;
   let v;
   // An additive affix whose roll is a fraction has to say so, or it prints the
   // float: the synergy ward is `isaacWard`, so keying the percentage off the
@@ -2616,6 +2802,14 @@ function recomputeStats() {
       // An affix forged for this Vanguard pays more in their hands.
       const k = (a.hero && a.hero === p.hero) ? SYNERGY_BONUS : 1;
       const v = af.v * k;
+      // A brand carries a bundle rather than a stat, and `v` scales it. Same
+      // two piles, so the order it was equipped in still cannot matter.
+      if (a.brand) {
+        for (const st in (a.add || {})) add[st] = (add[st] || 0) + a.add[st] * v;
+        for (const st in (a.mul || {}))
+          mul[st] = (mul[st] === undefined ? 1 : mul[st]) * (1 + a.mul[st] * v);
+        continue;
+      }
       if (a.mul) mul[a.stat] = (mul[a.stat] === undefined ? 1 : mul[a.stat]) * (1 + v);
       else add[a.stat] = (add[a.stat] || 0) + v;
     }
@@ -2850,15 +3044,33 @@ function carveHalls() {
   // twenty-eight by twenty-seven that swallowed a quarter of the map each, and
   // the result read as open ground with rocks in it rather than as rooms. A
   // large leaf now holds a normal room with a lot of rock around it.
+  /* MARGIN is rock kept between a room and the edge of its leaf, so that two
+   * rooms in neighbouring leaves are not cut into one. At the OUTSIDE of the
+   * map there is no neighbouring leaf -- there is the end of the world -- and
+   * the only thing needed there is a course of rock to draw a wall on. Two
+   * cells were being kept anyway, on top of the one the split already leaves,
+   * so every delve was cut inside a three-cell dead border: measured, the
+   * floor of a delve spanned cells 3 to 46 of fifty, which is 77% of the map
+   * by area and a hundred and twenty units of nothing on every side.
+   *
+   * No margin at all at the rim, MARGIN everywhere else: carveRect already
+   * refuses cells 0 and GW-1, so the course of rock the wall is drawn on is
+   * kept whatever this asks for. The floor of a delve spans 1 to 48 now.
+   */
+  const RIM = 0;
   const halls = [];
   for (const L of leaves) {
-    const maxW = Math.min(MAXR, L.w - MARGIN * 2);
-    const maxH = Math.min(MAXR, L.h - MARGIN * 2);
+    const mL = L.x <= 1 ? RIM : MARGIN;
+    const mT = L.y <= 1 ? RIM : MARGIN;
+    const mR = L.x + L.w >= GW - 1 ? RIM : MARGIN;
+    const mB = L.y + L.h >= GH - 1 ? RIM : MARGIN;
+    const maxW = Math.min(MAXR, L.w - mL - mR);
+    const maxH = Math.min(MAXR, L.h - mT - mB);
     if (maxW < MINR || maxH < MINR) continue;
     const w = MINR + ((Math.random() * (maxW - MINR + 1)) | 0);
     const h = MINR + ((Math.random() * (maxH - MINR + 1)) | 0);
-    const x = L.x + MARGIN + ((Math.random() * (L.w - MARGIN * 2 - w + 1)) | 0);
-    const y = L.y + MARGIN + ((Math.random() * (L.h - MARGIN * 2 - h + 1)) | 0);
+    const x = L.x + mL + ((Math.random() * (L.w - mL - mR - w + 1)) | 0);
+    const y = L.y + mT + ((Math.random() * (L.h - mT - mB - h + 1)) | 0);
     carveRect(x, y, x + w - 1, y + h - 1);
     halls.push({ x, y, w, h, cx: x + (w >> 1), cy: y + (h >> 1) });
   }
@@ -3642,13 +3854,19 @@ function typeWeights(t) {
 function placeEnemy(kind, x, y, depth) {
   if (enemies.length >= MAX_ENEMIES) return null;
   const d = ENEMY_TYPES[kind];
-  const scale = (1 + depth * PACK_DEPTH_HP) * DIFF.threat * (1 + (LEVEL.depth || 0) * 1.6);
+  const scale = (1 + depth * PACK_DEPTH_HP) * DIFF.threat *
+                (1 + (LEVEL.depth || 0) * 1.6) * twist('hp');
   // Same body newBody makes, then the things that only a placed one has: it is
   // asleep where the generator put it, it remembers that spot, and a heavy one
   // notices further off.
   const e = newBody(kind, x, y, 0);
   e.hp = e.maxHp = d.hp * scale;
-  e.dmg = d.dmg * DIFF.threat;
+  e.dmg = d.dmg * DIFF.threat * twist('dmg');
+  e.speed *= twist('speed');
+  // Slag is what the delve is FOR, so a bounty that changes how much of it
+  // there is has to change what a body carries as well as how many there are,
+  // or the quota moves without the fight moving with it.
+  e.tech = Math.max(1, Math.round(e.tech * twist('tech')));
   e.awake = false;
   e.home = { x, y };
   e.aggro = d.r >= 20 ? AGGRO_FAR : AGGRO_NEAR;
@@ -3763,7 +3981,7 @@ function placePacks(spawn) {
   const sites = [];
   const roster = LEVEL.horde;
 
-  const budget = Math.round((LEVEL.quota || 125) * SLAG_HEAD);
+  const budget = Math.round((LEVEL.quota || 125) * SLAG_HEAD * twist('slag'));
   // Reservoir of candidate sites, kept apart so packs read as separate groups.
   // A deep delve needs more of them to carry its larger budget, but they still
   // have to fit: the cap is a ceiling, and the loop stops early if the floor
@@ -4067,9 +4285,16 @@ function fire() {
   // Extra crescents stagger behind the first rather than fanning out: two
   // blades of light chasing the same line reads as a combination strike, where
   // a spread reads as a shotgun.
+  // Extra crescents normally stagger behind the first down the same line --
+  // two blades of light chasing one target reads as a combination strike where
+  // a spread reads as a shotgun. A FAN is the deliberate exception: the
+  // Sundering brand buys width with cadence, so its crescents go wide and
+  // together, which is the whole of what it is for.
+  const fan = (player.fan || 0) > 0;
+  const step = fan ? 0.34 : 0.15;
   for (let i = 0; i < player.shots; i++) {
-    const a = base + (i === 0 ? 0 : (i % 2 ? 1 : -1) * 0.15 * Math.ceil(i / 2));
-    releaseCrescent(a, i * 0.055);
+    const a = base + (i === 0 ? 0 : (i % 2 ? 1 : -1) * step * Math.ceil(i / 2));
+    releaseCrescent(a, fan ? 0 : i * 0.055);
   }
   player.swing    = SWING_TIME;
   player.recov    = 0;
@@ -4106,7 +4331,7 @@ function releaseCrescent(a, delay) {
     x: player.x + Math.cos(a) * (player.r + 8),
     y: player.y + Math.sin(a) * (player.r + 8),
     dx: Math.cos(a), dy: Math.sin(a), a: a,
-    speed: player.arcSpeed, dmg: player.damage,
+    speed: player.arcSpeed, dmg: player.damage * AUTO_BITE,
     half: half, bow: bow, band: 11,
     delay: delay || 0,
     life: player.range / player.arcSpeed,
@@ -4130,9 +4355,12 @@ function clearShot(x0, y0, x1, y1) {
 }
 
 function dropLoot(e) {
+  // One lump, so the ring is a single angle -- but through the same spill, or
+  // a coffer and a body would throw their slag differently for no reason a
+  // player could name.
+  const s = spill(e.x, e.y, 1, 0, 1);
   loot.push({
-    x: e.x, y: e.y,
-    vx: rand(-38, 38), vy: rand(-38, 38),
+    x: s.x, y: s.y, vx: s.vx * 0.45, vy: s.vy * 0.45,
     value: e.tech, r: 6, spin: Math.random() * TAU, life: 0, pulled: false
   });
   maybeDropItem(e);
@@ -4151,7 +4379,7 @@ function maybeDropItem(e) {
                e.elite               ? 0.85 :
                e.kind === 'breaker'  ? 0.22 :
                e.kind === 'mirage'   ? 0 : 0.055;
-  chance *= (1 + depth * 0.8) * DIFF.lootRate;
+  chance *= (1 + depth * 0.8) * lootMult();
   const n = e.kind === 'deceiver' ? 3 : e.elite ? 2 : 1;
 
   // Regalia pieces come off champions and the avatar only -- and an invader
@@ -4164,7 +4392,7 @@ function maybeDropItem(e) {
   const purse = e.kind === 'deceiver' ? 90 : e.elite ? 26 : e.kind === 'breaker' ? 9 : 2;
   if (purse) {
     run.coins += Math.round(purse * (0.7 + Math.random() * 0.7) *
-                            (1 + (LEVEL.depth || 0) * 1.4) * DIFF.lootRate);
+                            (1 + (LEVEL.depth || 0) * 1.4) * lootMult() * twist('coin'));
   }
 
   const push = it => drops.push({
@@ -4172,7 +4400,7 @@ function maybeDropItem(e) {
     vx: rand(-46, 46), vy: rand(-46, 46),
     item: it, r: 9, life: 0, pulled: false });
 
-  if (setOdds && Math.random() < setOdds * DIFF.setRate * setBoost()) {
+  if (setOdds && Math.random() < setOdds * relicMult() * setBoost()) {
     push(rollSetPiece());
     if (e.kind !== 'deceiver') return;      // one piece is the whole prize
   }
@@ -4371,7 +4599,10 @@ const CHEST_ROW = { coffer: 0, warded: 1 };
 const CHEST_OPEN = 0.45;        // seconds the lid takes to come up
 let chestImg = null;
 const CHEST_REACH = 30;
-const CHEST_SAFE  = 320;    // never this near the spawn pocket
+// Never this near the spawn pocket -- but near enough that the ground you
+// cross on the way out has something in it. A coffer in the approach is the
+// cheapest thing that turns walking into exploring.
+const CHEST_SAFE  = 250;
 const CHEST_APART = 300;    // nor this near each other
 
 // Every coffer in a delve, opened, comes to about a third of what the whole
@@ -4381,16 +4612,16 @@ const CHEST_APART = 300;    // nor this near each other
 // feel robbed, and the gear the warded ones carry is on top of it.
 const CHEST_KINDS = {
   coffer: { coin: [34, 74],  gear: 0.34, floor: 0,    name: 'A coffer',
-            colour: '#c9a24a' },
+            slag: [4, 7],  colour: '#c9a24a' },
   warded: { coin: [112, 205], gear: 1,   floor: 0.62, name: 'A warded coffer',
-            colour: '#8fb8ff' }
+            slag: [9, 14], colour: '#8fb8ff' }
 };
 
 function placeChests(spawn, portal) {
   chests = [];
   if (!openCells.length) return;
   const depth = LEVEL.depth || 0;
-  const want = 3 + Math.round(depth * 3);
+  const want = Math.round((3 + Math.round(depth * 3)) * twist('chests'));
   const warded = Math.random() < 0.45 + depth * 0.4 ? 1 : 0;
 
   // Penned-in ground first. narrowGrid is 0 at a crossroads and 4 at a dead
@@ -4427,13 +4658,34 @@ function placeChests(spawn, portal) {
   }
 }
 
+/* THE FOUNTAIN.
+ *
+ * A coffer used to hand you a number and drop one thing ten units away. What
+ * came out of it read as a transaction; what should come out of it is a
+ * spill. Everything leaves the chest on a RING -- an angle each, evenly spaced
+ * with a little jitter, at a speed that carries it a body's length -- so the
+ * eye sees a fountain rather than a heap, and so the walk back to pick it all
+ * up is a beat of its own.
+ *
+ * Evenly spaced rather than randomly angled: eight random angles cluster, and
+ * a cluster is the heap again. The jitter is what keeps it from reading as a
+ * clock face.
+ */
+const SPILL_SPEED = [150, 260];
+function spill(x, y, n, i, total) {
+  const a = (i / Math.max(1, total)) * TAU + rand(-0.22, 0.22);
+  const v = rand(SPILL_SPEED[0], SPILL_SPEED[1]);
+  return { x: x + Math.cos(a) * 6, y: y + Math.sin(a) * 6,
+           vx: Math.cos(a) * v, vy: Math.sin(a) * v };
+}
+
 function openChest(ch) {
   if (ch.open) return;
   ch.open = true;
   ch.t = 0;                      // the lid takes CHEST_OPEN to come up
   const K = CHEST_KINDS[ch.kind];
   const depth = LEVEL.depth || 0;
-  const coin = Math.round(rand(K.coin[0], K.coin[1]) * (1 + depth * 1.4) * DIFF.lootRate);
+  const coin = Math.round(rand(K.coin[0], K.coin[1]) * (1 + depth * 1.4) * lootMult());
   run.coins += coin;
   run.chests = (run.chests || 0) + 1;
 
@@ -4441,17 +4693,32 @@ function openChest(ch) {
   ring(ch.x, ch.y, K.colour, 8, 46, 0.4);
   floatDmg(ch.x, ch.y - 12, coin, 'coin');
 
+  // SLAG, in a cluster. Coin is banked the instant the lid comes up and is
+  // therefore not a reason to walk anywhere; slag has to be picked up off the
+  // floor, which is what makes a coffer somewhere you go rather than something
+  // you touch. It is the same pickup a body leaves, so nothing new has to
+  // learn to collect it.
+  const lumps = K.slag[0] + ((Math.random() * (K.slag[1] - K.slag[0] + 1)) | 0);
+  const worth = Math.max(1, Math.round((1 + depth * 2.2) * lootMult()));
+  const gear = Math.random() < K.gear * lootMult()
+    ? [rollItem(Math.max(depth, K.floor))] : [];
+  const total = lumps + gear.length;
+  let seat = 0;
+  for (let i = 0; i < lumps; i++) {
+    const s = spill(ch.x, ch.y, lumps, seat++, total);
+    loot.push({ x: s.x, y: s.y, vx: s.vx, vy: s.vy, value: worth,
+                r: 6, spin: Math.random() * TAU, life: 0, pulled: false });
+  }
   // Gear lands on the floor as an ordinary drop, so a full bag behaves the
   // same way here as it does everywhere else rather than silently eating it.
-  if (Math.random() < K.gear * DIFF.lootRate) {
-    const it = rollItem(Math.max(depth, K.floor));
-    drops.push({ x: ch.x + rand(-10, 10), y: ch.y + rand(-10, 10),
-                 vx: rand(-40, 40), vy: rand(-40, 40),
+  for (const it of gear) {
+    const s = spill(ch.x, ch.y, 1, seat++, total);
+    drops.push({ x: s.x, y: s.y, vx: s.vx, vy: s.vy,
                  item: it, r: 9, life: 0, pulled: false });
-    toast(K.name + ' — ' + it.name, rarityOf(it).colour);
-  } else {
-    toast(K.name + ' — ' + coin + ' coin', K.colour);
   }
+  toast(gear.length ? K.name + ' \u2014 ' + gear[0].name
+                    : K.name + ' \u2014 ' + coin + ' coin',
+        gear.length ? rarityOf(gear[0]).colour : K.colour);
 }
 
 function updateChests(dt) {
@@ -4513,6 +4780,131 @@ function drawChests(t) {
    -------------------------------------------------------------------- */
 const HAZARD_TICK = 0.4;   // how often standing in one costs you
 let hazards = [];
+
+/* --- TRAPS ----------------------------------------------------------------
+   Ground the ROOM keeps, as opposed to ground the Riftborn leaves. A hazard is
+   spent and gone; a trap is a permanent property of a place, and that is the
+   difference that makes it terrain you can use rather than weather you endure.
+
+   THE POINT OF THEM IS THAT THEY CUT BOTH WAYS. A trap only the player can
+   step in is a tax; a trap the horde can be put into is a weapon, and it is
+   the one weapon this game's controls can express without another button --
+   you already choose where you stand, and the Anchoring Strike already throws
+   what it hits. The bash and the spikes were built months apart and turn out
+   to be the same move.
+
+   Two, each cut to the room that already exists:
+
+     SPIKES in the pillared hall. Plates on a checkerboard, so half the floor
+     is always safe and the room is a question about footing rather than a
+     place you leave. They tell before they come, because a trap with no tell
+     is a dice roll.
+
+     A POOL in the cistern, which dressRooms deliberately leaves bare. Standing
+     water that was never only water.
+
+   Boss-left hazards stay player-only: the Deceiver poisoning his own horde
+   would read as the arena helping you, and his fight is not that fight.
+   ---------------------------------------------------------------------- */
+let traps = [];
+const SPIKE_CYCLE = 3.4;    // the whole beat
+const SPIKE_TELL  = 0.7;    // stone grinding, before anything is out
+const SPIKE_OUT   = 1.0;    // and how long they stand
+const SPIKE_BITE  = 0.34;   // share of what stands on them -- a HEAVY blow
+const SPIKE_TOLL  = 0.12;   // ...but a gentler share of the hero
+const POOL_DPS    = 0.11;   // share of max life a second, both sides
+const TRAP_TICK   = 0.35;
+
+// Which phase a spike field is in. One function so the drawing and the damage
+// cannot disagree about whether the spikes are out -- they did, in the first
+// version, by a frame.
+function spikePhase(t) {
+  const u = t % SPIKE_CYCLE;
+  if (u < SPIKE_CYCLE - SPIKE_OUT - SPIKE_TELL) return { phase: 'down', f: 0 };
+  if (u < SPIKE_CYCLE - SPIKE_OUT)
+    return { phase: 'tell', f: (u - (SPIKE_CYCLE - SPIKE_OUT - SPIKE_TELL)) / SPIKE_TELL };
+  return { phase: 'out', f: (u - (SPIKE_CYCLE - SPIKE_OUT)) / SPIKE_OUT };
+}
+// A plate, or the floor between them. Parity on the cell, so it is a
+// checkerboard however the room is shaped and costs one modulo to ask.
+const onPlate = (x, y) =>
+  ((Math.floor(x / CELL_W) + Math.floor(y / CELL_W)) & 1) === 0;
+
+/* Who the floor is allowed to touch. The horde, and only the horde.
+ *
+ * The avatar and his escort are excluded because his fight has one rule --
+ * break the Lieutenants to reach him -- and a spike field under them breaks it
+ * for you. Parking him on a trap is not a tactic, it is a way of not having
+ * the encounter. It also broke deceiver.js, which found his escort ground down
+ * by the room before the cleave it was measuring could land.
+ *
+ * And nothing asleep: damageEnemy wakes what it hits and the alert chains, so
+ * a field over a dormant pack roused it and then roused its neighbours.
+ */
+const trapBites = e => e.hp > 0 && e.awake &&
+                       e.kind !== 'deceiver' && e.kind !== 'lieutenant';
+
+function placeTraps() {
+  traps = [];
+  for (const rm of rooms) {
+    if (rm.kind === 'hall') {
+      traps.push({ kind: 'spike', x: rm.x, y: rm.y, r: rm.r,
+                   // Offset so two halls in one delve are not in lockstep.
+                   t: Math.random() * SPIKE_CYCLE, was: 'down', bit: [] });
+    } else if (rm.kind === 'cistern') {
+      traps.push({ kind: 'pool', x: rm.x, y: rm.y, r: Math.max(70, rm.r * 0.62),
+                   t: Math.random() * 6, tick: 0 });
+    }
+  }
+}
+
+function updateTraps(dt) {
+  for (let i = 0; i < traps.length; i++) {
+    const tr = traps[i];
+    tr.t += dt;
+    if (tr.kind === 'spike') {
+      const ph = spikePhase(tr.t).phase;
+      // Only on the EDGE into 'out', and only once per body per rising. A
+      // per-tick spike field would grind everything in the room to nothing
+      // while it stood, which is not a trap, it is a floor that kills.
+      if (ph === 'out' && tr.was !== 'out') {
+        tr.bit = [];
+        if (dist2(player.x, player.y, tr.x, tr.y) < tr.r * tr.r &&
+            onPlate(player.x, player.y)) {
+          const was = player.invuln; player.invuln = 0;
+          hurtPlayerBy(player.maxHp * SPIKE_TOLL, tr.x, tr.y);
+          player.invuln = Math.max(player.invuln, was);
+        }
+        enemyGrid.query(tr.x, tr.y, tr.r, _near);
+        for (let k = 0; k < _near.length; k++) {
+          const e = _near[k];
+          if (!trapBites(e) || !onPlate(e.x, e.y)) continue;
+          if (dist2(e.x, e.y, tr.x, tr.y) > tr.r * tr.r) continue;
+          // From below, so the recoil the weight pass rides has nowhere
+          // sideways to go and the body simply drops where it stood.
+          damageEnemy(e, e.maxHp * SPIKE_BITE, e.x, e.y);
+        }
+      }
+      tr.was = ph;
+    } else {
+      tr.tick -= dt;
+      if (tr.tick > 0) continue;
+      tr.tick = TRAP_TICK;
+      if (dist2(player.x, player.y, tr.x, tr.y) < tr.r * tr.r) {
+        const was = player.invuln; player.invuln = 0;
+        hurtPlayerBy(player.maxHp * POOL_DPS * TRAP_TICK, tr.x, tr.y);
+        player.invuln = Math.max(player.invuln, was);
+      }
+      enemyGrid.query(tr.x, tr.y, tr.r, _near);
+      for (let k = 0; k < _near.length; k++) {
+        const e = _near[k];
+        if (!trapBites(e)) continue;
+        if (dist2(e.x, e.y, tr.x, tr.y) > tr.r * tr.r) continue;
+        damageEnemy(e, e.maxHp * POOL_DPS * TRAP_TICK, e.x, e.y);
+      }
+    }
+  }
+}
 
 /* --- reactive scenery -----------------------------------------------------
    The player has a stick and an automatic blade, so the only tactical input
@@ -4928,9 +5320,14 @@ const VULN_MULT  = 5;      // and what the Guillotine does to a body under it
 
 const ABILITIES = {
   isaac: [
+    // THE BLOW. Not a poke on the way to the real abilities: it is where a
+    // Hearth-Warden's damage comes from now, and it is on a shorter beat than
+    // everything else on the bar so pressing it is a rhythm rather than a
+    // once-a-second decision you make between other decisions. Sixty-two units
+    // was inside a thrall's own swing; ninety-six is a step, not a hug.
     { id: 'anchor', name: 'Anchoring Strike', mark: '✦',
-      note: 'A shield bash, close enough to touch. Builds a Charge.',
-      cd: 0, gcd: 1, build: 1, reach: 62, dmg: 2.4 },
+      note: 'A shield bash that breaks a guard. Builds a Charge.',
+      cd: 0, gcd: 0.8, build: 1, reach: 96, dmg: 3.4 },
     { id: 'aegis', name: 'Aegis of Tor-Varden', mark: '◉',
       note: 'Spends three. A ring of Sun-Gold, and a moment behind the guard.',
       cd: 0, gcd: 1, cost: CHARGE_MAX, radius: 150, dmg: 3.2, mitigate: 2 },
@@ -4945,9 +5342,12 @@ const ABILITIES = {
       cd: 0, gcd: 1.25, cost: CHARGE_MAX, reach: 96, dmg: 7 }
   ],
   zayd: [
+    // Zayd's is the same decision in his own idiom: a line rather than a bash,
+    // and it stays a line -- three hundred and forty units of it, through
+    // everything standing in the way. Same shorter beat, same reason.
     { id: 'truth', name: 'Piercing Truth', mark: '↠',
       note: 'A line of Azure through everything standing in it. Builds Tension.',
-      cd: 0, gcd: 1, build: 14, reach: 340, dmg: 1.5 },
+      cd: 0, gcd: 0.8, build: 14, reach: 340, dmg: 2.2 },
     { id: 'nullzone', name: 'Null-Zone Eruption', mark: '◍',
       note: 'Spends two fifths. A pool that slows what stands in it and eats what it is casting.',
       cd: 0, gcd: 1, costPct: 0.40, radius: 96, life: 7 },
@@ -5019,10 +5419,21 @@ const ABILITY_DO = {
     player.angle = Math.atan2(t.y - player.y, t.x - player.x);
     if (Math.abs(Math.cos(player.angle)) > 0.25)
       player.face = Math.cos(player.angle) < 0 ? -1 : 1;
+    // It breaks a guard. An anchor braces on a rhythm and eats most of what
+    // lands while it does, and the answer used to be only "wait" -- which is
+    // an answer, but it is the one the player was already giving. A shield
+    // bash is the other answer, and it is the reason to walk INTO the thing
+    // rather than round it.
+    const guarded = !!t.braced;
+    if (guarded) {
+      t.braced = false;
+      toast('Guard broken', '#ffd870');
+      ring(t.x, t.y, '#ffe6a8', 5, 58, 0.3);
+    }
     damageEnemy(t, player.damage * a.dmg, player.x, player.y);
-    knock(t, player.angle, 200);
-    freeze(0.03);
-    shake(5);
+    knock(t, player.angle, guarded ? 420 : 300);
+    freeze(guarded ? 0.05 : 0.04);
+    shake(guarded ? 8 : 6);
     burst(t.x, t.y, '#ffd870', 10, 190);
     ring(t.x, t.y, '#ffd870', 6, 44, 0.26);
     gainCharge(a.build);
@@ -5599,6 +6010,35 @@ function hurtPlayerBy(dmg, fx, fy) {
   if (player.hp <= 0) { player.hp = 0; endRun(false); }
 }
 
+/* --- WEIGHT ----------------------------------------------------------------
+   Measured, and it is why the fight felt weightless. Every freeze() and
+   shake() in this file sat inside an ability handler; damageEnemy -- the one
+   path the ordinary swing travels down, and 55 of the hero's 60 dps in a
+   measured delve -- did a hit-flash, a damage number and two particles, and
+   nothing else. No recoil, no camera, no hit-stop. The blow you land all the
+   time was the only blow with nothing behind it.
+
+   Given back here rather than at the call sites, because the call sites are
+   the crescent, five abilities, a husk going off and a shattering calcify,
+   and all of them are blows landing on a body.
+
+   Scaled by the SHARE OF THE BODY the blow took, not by the number: twenty-two
+   off a thrall is most of it and off the avatar it is a scratch, and they must
+   not land alike. Mass divides the recoil on top, so the same crescent throws
+   a thrall and barely turns a gorger.
+
+   ON THE HIT-STOP. It is spent on the KILL and not on the hit. At the measured
+   rate -- two and a half landings a second against about four fifths of a kill
+   -- a freeze per landing is a stutter you feel as a bad frame rate, where a
+   freeze per kill is punctuation. Same reasoning as HITSTOP_MAX: the pause has
+   to punctuate the fight, not stall it.
+   ------------------------------------------------------------------------ */
+const HIT_KNOCK   = 190;    // recoil on a blow that takes the whole body
+const HIT_SHAKE   = 3.2;    // ...and the camera, above HEAVY_HIT only
+const HEAVY_HIT   = 0.34;   // the floater's own threshold for calling one heavy
+const KILL_FREEZE = 0.045;  // the beat a body breaking is worth
+const KILL_SHAKE  = 4;
+
 /* `fx, fy` is where the blow came FROM, and it is the only reason this takes
  * more than a body and a number: a recoil has to go somewhere, and guessing
  * "away from the player" would be wrong for a hazard underfoot, a totem, or a
@@ -5640,6 +6080,15 @@ function damageEnemy(e, dmg, fx, fy) {
     const dx = e.x - fx, dy = e.y - fy, m = Math.hypot(dx, dy);
     if (m > 0.001) { e.hitX = dx / m; e.hitY = dy / m; }
   }
+  // What share of this body the blow just took. Everything below is scaled by
+  // it, so the same swing reads as a killing blow on a thrall and as a
+  // scratch on the avatar.
+  const weight = clamp(dmg / Math.max(1, e.maxHp), 0, 1);
+  // The recoil. A braced anchor does not take one -- it cannot move or swing
+  // while the guard is up, and that is the whole of why backing off is the
+  // answer to it; pushing it around would say the opposite.
+  if (!e.braced && e.hitX !== undefined)
+    knock(e, Math.atan2(e.hitY, e.hitX), HIT_KNOCK * (0.3 + weight));
   // A heavy enough blow shatters a body that is closing. A scratch does not:
   // the point is that you have to commit to stopping it, not graze it once.
   if (e.calcify > 0 && dmg >= e.maxHp * CALCIFY_BREAK) breakCalcify(e, true);
@@ -5707,10 +6156,19 @@ function damageEnemy(e, dmg, fx, fy) {
       }
     }
     dropLoot(e);
-    burst(e.x, e.y, e.color, e.r > 18 ? 14 : 7, 190);
-    if (e.r > 18) shake(3);
+    // The beat. A big body is worth a longer one, and the ring gives the
+    // break an edge that expands rather than a puff that fades.
+    const big = e.r > 18;
+    freeze(KILL_FREEZE * (big ? 1.6 : 1));
+    shake(KILL_SHAKE * (big ? 2 : 1));
+    burst(e.x, e.y, e.color, big ? 18 : 10, 210);
+    ring(e.x, e.y, e.color, 3, e.r * 2.4, 0.22);
   } else {
-    burst(e.x, e.y, '#e6d8bc', 2, 90);
+    // A landing that did not kill still has to look like one. The spray grows
+    // with the share it took; the camera only answers a heavy one, or a fight
+    // against thralls -- which die in two -- would never let it settle.
+    burst(e.x, e.y, '#e6d8bc', 2 + ((weight * 6) | 0), 90 + weight * 150);
+    if (weight >= HEAVY_HIT) shake(HIT_SHAKE * weight);
   }
 }
 
@@ -6772,6 +7230,7 @@ function update(dt) {
   updateProps(dt);
   updateSlams(dt);
   updateHazards(dt);
+  updateTraps(dt);
   updateBeams(dt);
   updateNulls(dt);
   updateTotems(dt);
@@ -10438,7 +10897,7 @@ function drawDrops(t) {
 
 function drawArcs() {
   if (!arcs.length) return;
-  const colour = HEROES[run.hero].magic;
+  const colour = crescentHue(run.hero);
   ctx.lineCap = 'round';
   for (let i = 0; i < arcs.length; i++) {
     const b = arcs[i];
@@ -11499,6 +11958,26 @@ function draw(t) {
 
 /* ---------------------------------------------------------------------------
    10. UI, STATE MACHINE & BOOT
+
+   THIS SECTION IS FROZEN, AND ON PURPOSE.
+
+   The Phaser build is the game -- it is what the APK carries and what is
+   deployed -- and its HUD, menus and screens live in phaser/src/hud.js and
+   phaser/src/screens.js. Those have moved on: a pause screen with a way to
+   abandon a delve, a boss bar that does not write over itself, a kit cut from
+   the same stone as the rest of the frame, forged stations. None of it is
+   here, and none of it is coming here.
+
+   That is a decision rather than a backlog. Every UI change made twice is a
+   second implementation of the same judgement, in a renderer no player will
+   ever see, and the two would drift anyway. What this build is for is the
+   SIMULATION -- everything above section 9 is lifted out of this file whole by
+   phaser/tools/extract-core.js and proved identical by `npm run verify` -- and
+   for being one document that opens from file:// with no toolchain when a bug
+   needs reproducing.
+
+   So: change how the game BEHAVES here. Change how it LOOKS in phaser/src.
+   What follows is kept because thirty of the canvas suites drive it.
    ------------------------------------------------------------------------ */
 
 const $ = id => document.getElementById(id);
@@ -11580,6 +12059,94 @@ function saveBest(b) {
 const STASH_KEY = 'rivenmark.stash.v1';
 const VAULT_MAX = 60;
 
+/* --- HARDCORE ------------------------------------------------------------
+   One life. Everything the Vanguard owns goes with them.
+
+   THREE KEYS, and the reason for each. The Hardcore stash is a SECOND key
+   rather than a flag inside the first, because the death hook wipes it and a
+   wipe that has to reach into a shared record and remove exactly the right
+   half is a wipe that will one day take the wrong half. Two keys means the
+   ordinary game is safe by construction rather than by care.
+
+   The flag cannot live in the stash either -- it is what decides which stash
+   to load, so it has to be known before there is one. It is its own tiny
+   record, kept beside the honours.
+
+   And the HONOURS are a third key because they must survive the wipe. A
+   Regalia carried out of a Hardcore delve is the only thing in this game that
+   is permanent whatever happens next, which is the entire point of it: the
+   character dies, the trophy does not.
+   ---------------------------------------------------------------------- */
+const HC_STASH_KEY = 'rivenmark.hc.stash.v1';
+const HC_MODE_KEY  = 'rivenmark.hc.mode.v1';
+const HONOURS_KEY  = 'rivenmark.honours.v1';
+// What one life is worth. Applied to loot and to the Regalia both, on top of
+// whatever the difficulty already says.
+const HC_LOOT = 1.5;
+
+let hardcore = false;
+const stashKey = () => (hardcore ? HC_STASH_KEY : STASH_KEY);
+const lootMult = () => DIFF.lootRate * (hardcore ? HC_LOOT : 1);
+const relicMult = () => DIFF.setRate * (hardcore ? HC_LOOT : 1);
+
+function loadHonours() {
+  try { return JSON.parse(localStorage.getItem(HONOURS_KEY)) || {}; }
+  catch (e) { return {}; }
+}
+function saveHonours(h) {
+  try { localStorage.setItem(HONOURS_KEY, JSON.stringify(h)); } catch (e) { /* ignore */ }
+}
+// The blood-red sweep. Earned once, kept for ever, and worn in either mode --
+// a trophy nobody can see outside the room it was won in is not a trophy.
+const honoured = () => !!loadHonours().crimson;
+// The trophy, worn. A Vanguard who carried the whole Regalia out of one life
+// swings in crimson from then on, in either mode and for ever -- which is what
+// makes it a trophy rather than a line in a menu. Asked here by both builds so
+// they cannot disagree about what colour the blade is.
+const CRIMSON = '#e0563f';
+const crescentHue = heroId =>
+  (honoured() ? CRIMSON : (HEROES[heroId] || HEROES.isaac).magic);
+
+/* Putting one kit down and picking the other up. Nothing is destroyed: the two
+ * stashes are separate keys, so switching is only a matter of which one is
+ * live. Split the same way the wipe is -- the RULE here, the one page-bound
+ * line beside it -- because the core cannot reach localStorage and this must
+ * behave identically in both builds. */
+function setHardcore(on) {
+  if (hardcore === !!on) return;
+  hardcore = !!on;
+  rememberHardcore(hardcore);
+  stash = loadStash();
+  itemSeq = stash.seq || 0;
+}
+function rememberHardcore(on) {
+  try { localStorage.setItem(HC_MODE_KEY, on ? '1' : ''); } catch (e) { /* ignore */ }
+}
+function loadHardcoreMode() {
+  try { return !!localStorage.getItem(HC_MODE_KEY); } catch (e) { return false; }
+}
+
+/* The death hook. Everything goes: the gear, the vault, the coin, the ranks.
+ * Not "reset to base gear" by hand -- blankStash IS base gear, and writing the
+ * wipe as anything other than "start again from nothing" leaves a field
+ * somebody adds later quietly surviving death.
+ *
+ * The honours are not touched, and the corpse is not written: there is nobody
+ * left to come back for it. */
+function wipeHardcore() {
+  dropHardcoreStash();          // the host owns the key; this owns the rule
+  stash = blankStash();
+  itemSeq = 0;
+  saveStash();
+}
+// The one page-bound line of it, kept apart so the RULE above can live in the
+// core and be proved by the same suites in both builds. The core extractor
+// refused a version where it did not: a wipe half in the engine and half in
+// the host is a wipe that will one day only half happen.
+function dropHardcoreStash() {
+  try { localStorage.removeItem(HC_STASH_KEY); } catch (e) { /* ignore */ }
+}
+
 /* --- the gate-house -------------------------------------------------------
    Coin was worth exactly three things: a commissioned piece, a temper, and a
    reliquary. All three are consumables, so a good run bought a slightly better
@@ -11657,12 +12224,19 @@ function blankStash() {
   for (const sl of SLOTS) g[sl.id] = null;
   return { gear: g, vault: [], hero: 'isaac', seq: 0, xp: 0, level: 1,
            coins: 0, pity: 0, loadouts: [], corpse: null,
+           // Which ground you asked to be cut into. null is "whatever the
+           // rung rolls", which is what it always did.
+           region: null,
+           // The daily. `bounty` records the day it was claimed on, so it can
+           // be taken once; `bountyArmed` is only whether it is picked up
+           // right now, and is deliberately not persisted as an achievement.
+           bounty: null, bountyArmed: false,
            hall: { vault: 0, forge: 0, reliquary: 0, wardstone: 0 } };
 }
 
 function loadStash() {
   let st;
-  try { st = JSON.parse(localStorage.getItem(STASH_KEY)); } catch (e) { st = null; }
+  try { st = JSON.parse(localStorage.getItem(stashKey())); } catch (e) { st = null; }
   if (!st || typeof st !== 'object') return blankStash();
   const out = blankStash();
   // Anything on disk is last session's data and may predate a change to the
@@ -11679,6 +12253,12 @@ function loadStash() {
   out.level = levelForXp(out.xp);            // derived, never trusted from disk
   out.coins = Math.max(0, +st.coins || 0);
   out.pity = clamp(+st.pity || 0, 0, 20);
+  if (REGION_BY_ID[st.region]) out.region = st.region;
+  // Only today's claim is worth keeping. Yesterday's is not a record of
+  // anything, and a stale one that outlived its day would lock out the daily.
+  if (st.bounty && typeof st.bounty === 'object' && +st.bounty.day === dayStamp())
+    out.bounty = { day: +st.bounty.day, done: !!st.bounty.done };
+  out.bountyArmed = !!st.bountyArmed;
   // Tiers are the only thing on disk that cannot be re-earned, so they are
   // filtered as carefully as the gear: an id that no longer exists is dropped
   // rather than carried, and a tier above the ceiling is clamped to it.
@@ -11729,7 +12309,7 @@ function validItem(it, slotId) {
 function saveStash() {
   try {
     stash.seq = itemSeq;
-    localStorage.setItem(STASH_KEY, JSON.stringify(stash));
+    localStorage.setItem(stashKey(), JSON.stringify(stash));
   } catch (e) { /* private mode: the delve still plays, it just will not keep */ }
 }
 
@@ -12762,9 +13342,18 @@ function resetRun(heroId, levelId, diffId) {
   const hero = heroId || (run && run.hero) || 'isaac';
   DIFF = DIFF_BY_ID[diffId || (run && run.diff_id) || DIFF.id] || DIFF_BY_ID.riven;
   LEVEL = LEVEL_BY_ID[levelId || (run && run.level_id) || LEVELS[0].id] || LEVELS[0];
-  // The level decides which regions it can be cut from; the delve rolls one.
+  // The level decides which regions it can be cut from, and the delve rolls
+  // one -- unless you asked for a particular one at the gate-house.
+  //
+  // That choice had to exist before naming a region's Regalia meant anything.
+  // A rung deep enough to reach the Rot-Weald can be cut from five regions,
+  // so "the rings are in the Rot-Weald" was advice you could not act on: you
+  // took the rung you could beat and the game rolled the ground. Asking for
+  // it is the whole of what makes the map worth reading.
   const pool = LEVEL.regions;
-  REGION = REGION_BY_ID[pool[(Math.random() * pool.length) | 0]] || REGIONS[0];
+  const want = stash && stash.region;
+  REGION = REGION_BY_ID[(want && pool.indexOf(want) >= 0 ? want
+                        : pool[(Math.random() * pool.length) | 0])] || REGIONS[0];
   PAL.stoneTop = REGION.stone[0];
   PAL.stoneMid = REGION.stone[1];
   PAL.stoneLow = REGION.stone[2];
@@ -12790,7 +13379,14 @@ function resetRun(heroId, levelId, diffId) {
   ruptures = [];
   enemyGrid = new SpatialHash(ENEMY_CELL);
 
+  // The bounty, if one was taken AND this is the rung it named. Checked here
+  // rather than trusted from the menu: an armed flag left over from yesterday,
+  // or from a different rung, must not quietly twist a delve it was not for.
+  const bty = todaysBounty();
+  const onBounty = !!(stash.bountyArmed && !bountyDone() && LEVEL.id === bty.level_id);
+
   run = { time: 0, tech: 0, kills: 0,
+          bounty: onBounty ? bty : null,
           // Where the one who is not on the ground keeps his wounds. Cleared
           // per run: swapping is not a heal, but a new delve is a new delve.
           pools: {},
@@ -12818,8 +13414,21 @@ function resetRun(heroId, levelId, diffId) {
   cam.shake = 0;
 
   recomputeStats();
+  // ...and go down whole.
+  //
+  // makePlayer fills to the HERO'S OWN maxHp -- Isaac's 125, Zayd's 92 --
+  // because at that point that is all a hero is. recomputeStats then adds the
+  // levels, the Ward-Stone and eight pieces of gear on top, and ends with
+  // `p.hp = Math.min(p.hp, p.maxHp)`, which is there so a +life ring cannot be
+  // swapped in as a free heal. Between them, every point of life ever earned
+  // was life the hero did not have when he stepped in: forty-four rungs down
+  // Isaac descended at 125 of 438, and Zayd at 92 of 405. The clamp is right
+  // where it lives; the start of a delve is simply not a stat recomputation,
+  // it is a hero arriving.
+  player.hp = player.maxHp;
   placePacks(spawn);
   placeChests(spawn, portal);
+  placeTraps();
   flowFrom = -1;
   rebuildFlow();
   hudCache.hp = hudCache.tech = hudCache.time = hudCache.lvl = -1;
@@ -12864,14 +13473,83 @@ function endRun(won) {
           items, coins: run.coins }
       : null;
   }
+  // THE TROPHY, before the wipe: eight pieces of the Regalia carried out of a
+  // Hardcore delve. Checked against what is WORN plus what is in the bag,
+  // because a set is only finished when the last piece is out of the ground,
+  // and it is banked here rather than in bankRun so that it is recorded from
+  // the same place the wipe is -- the two must never be able to disagree.
+  if (hardcore && won) {
+    const carriedSet = player.bag.filter(it => it.set === SET_ID).length;
+    if (setWorn(player) + carriedSet >= SLOTS.length) {
+      const h = loadHonours();
+      if (!h.crimson) {
+        h.crimson = 1;
+        h.crimsonAt = Date.now();
+        saveHonours(h);
+        run.banner = 4.0;
+        run.bannerText = 'The Regalia is whole';
+        run.bannerNote = 'Carried out of one life. The edge answers in crimson now.';
+      }
+    }
+  }
+  // THE BOUNTY PAYS ON THE WAY OUT, and only on the way out -- it is the
+  // ley-gate that is the objective, the same as any other delve. Once a day:
+  // the claim is stamped with the day it was taken so tomorrow's is free.
+  // Recorded on the run, not only said in the outcome copy. The fact that the
+  // bounty was paid -- or held back because the vault was full -- belongs to
+  // the run; the sentence about it belongs to whichever build is drawing the
+  // card, and there are two of those.
+  run.bountyPaid = 0; run.bountyHeld = 0;
+  let bounty = 0, bountyHeld = 0;
+  if (won && run.bounty && !bountyDone()) {
+    // The vault has to have room for it FIRST. Stamping the claim and then
+    // finding nowhere to put the piece spends the day's bounty on nothing,
+    // and the player has no way to know that is what happened.
+    if (stash.vault.length >= vaultCap()) { bountyHeld = run.bountyHeld = 1; }
+    else {
+    stash.bounty = { day: run.bounty.day, done: true };
+    stash.bountyArmed = false;
+    const it = rollItem(0.9);
+    it.rarity = 'hallowed';                    // the promise is the tier
+    while (it.affixes.length < 4) {
+      const pool = SLOT_AFFIXES[it.slot].filter(
+        id => !it.affixes.some(a => a.id === id));
+      if (!pool.length) break;
+      const id = pool[(Math.random() * pool.length) | 0];
+      const a = AFFIX_BY_ID[id];
+      let v = (a.lo + Math.random() * (a.hi - a.lo)) * 1.2;
+      v = a.dp ? +v.toFixed(a.dp) : (Math.abs(a.lo) >= 1 ? Math.max(1, Math.round(v)) : v);
+      it.affixes.push({ id, v });
+    }
+    it.name = AFFIX_BY_ID[it.affixes[0].id].name + ' ' + it.base;
+    stash.vault.push(it);
+    bounty = run.bountyPaid = 1;
+    }
+  }
   bankRun(won);
+  // And one life means one. Everything the Vanguard owned goes with them --
+  // after the banking, so the last delve is scored before it is taken away,
+  // and after the trophy, which is the one thing death cannot reach.
+  if (hardcore && !won) wipeHardcore();
 
-  el.overTitle.innerHTML = won ? '<em>Escaped</em>' : '<span>Slain</span>';
+  el.overTitle.innerHTML = won ? '<em>Escaped</em>'
+                              : hardcore ? '<span>Ended</span>' : '<span>Slain</span>';
+  // A Hardcore death is not the ordinary one and must not read like it. The
+  // corpse branch below is right by accident -- the wipe cleared the corpse,
+  // so it falls through to the short line -- but "the hive-mind claimed
+  // another" is what it says every other time you die, and this time nothing
+  // is owed to you and there is nothing to descend for.
   el.overSub.textContent = won
-    ? (carried ? 'The ley-gate held. You carried ' + carried +
+    ? ((carried ? 'The ley-gate held. You carried ' + carried +
                  (carried === 1 ? ' find' : ' finds') + ' out with the slag.'
-               : 'The ley-gate held. You carried the slag out.')
-    : (stash.corpse
+               : 'The ley-gate held. You carried the slag out.') +
+       (bounty ? ' The bounty is paid: a Hallowed piece waits in the vault.'
+        : bountyHeld ? ' The bounty is still owed \u2014 the vault is full, and ' +
+                       'it will not be paid into the ground.' : ''))
+    : hardcore
+      ? 'One life, and it is spent. Everything the Vanguard carried, wore and ' +
+        'banked is gone with them. Begin again.'
+      : (stash.corpse
         ? 'The hive-mind claimed another of the Clear-Sighted. ' +
           (carried ? carried + (carried === 1 ? ' find' : ' finds') + ' and ' : '') +
           run.coins + ' coin lie in ' + LEVEL.name + '. Descend again and take them back.' +
@@ -13008,8 +13686,15 @@ function vendorBuy(v, arg) {
     const it = arg && stash.gear[arg];
     if (!it || it.set === SET_ID) return false;      // the Regalia is fixed
     const pool = SLOT_AFFIXES[it.slot].slice();
-    const n = it.affixes.length;
-    it.affixes = [];
+    // THE BRAND SURVIVES THE FIRE. A temper rerolls from SLOT_AFFIXES, which
+    // brands are deliberately not in -- so without this it quietly replaced
+    // the one thing that made a Riven piece worth owning with an ordinary
+    // affix, and charged for it. The brand is what the piece IS; the temper is
+    // everything else about it, which is also the reason not to refuse the
+    // sale outright the way the Regalia does.
+    const kept = it.affixes.filter(a => AFFIX_BY_ID[a.id] && AFFIX_BY_ID[a.id].brand);
+    const n = it.affixes.length - kept.length;
+    it.affixes = kept;
     for (let i = 0; i < n && pool.length; i++) {
       const id = pool.splice((Math.random() * pool.length) | 0, 1)[0];
       const a = AFFIX_BY_ID[id];

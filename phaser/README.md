@@ -3,10 +3,20 @@
 The Rivenmark, moving from hand-written canvas 2D to Phaser — developed
 on-device under Termux.
 
-**This is a proving ground, not the game yet.** What runs today is one scene
-that loads the real art, animates every kind, and reports its own frame cost.
-It exists to settle two questions before nine thousand lines get moved, and
-both are now settled — see *Where it stands*.
+**This is the game.** It is what the APK carries, what is deployed to the web,
+and the only build whose look is maintained — see *Two builds, one game* in the
+root README.
+
+It began as a proving ground for two questions about whether the port was
+possible at all, and both are long settled; that scene is still here and still
+reachable at `?scene=proving`, because it remains the quickest way to ask what
+the renderer costs. Everything else is the delve.
+
+The canvas build at `../index.html` has not been retired and is not going to
+be: it is the simulation's source of truth, lifted out of that file whole by
+`tools/extract-core.js` and proved identical by `npm run verify`. What it no
+longer is, is the thing a player sees. Simulation changes go there; anything
+touching the HUD, the menus or the screens goes in `src/`.
 
 ## Why move at all
 
@@ -40,7 +50,7 @@ not have to unlearn it.
 
 ## Where it stands
 
-Done, and verified by `phasersmoke.js`:
+Done, and verified by the suites in `tools/`:
 
 - **`art/` drives Phaser directly.** 226 frames packed into one 2048×1501
   atlas, all eleven bestiary kinds plus both heroes animating on their
@@ -62,30 +72,35 @@ already late.
 
 The governor never fired, which is the point of it: the atmosphere is
 affordable on this hardware, and 4.76ms of work against a 16.7ms budget leaves
-room to grow. The one rough edge left is a single 166ms stall entering a
-delve; `bake` in the dump is there to say whether that is the one-off statics
-pass, which creates ~2100 game objects and uploads the atlas in one frame.
+room to grow. The 166ms stall entering a delve that this used to name as the
+one rough edge is gone — `bake` in the dump was added to find it, and on the
+same device it now reads **5ms** for the whole one-off statics pass.
 
-**It is playable.** The delve draws — walls, scenery, the horde and the hero,
-off the core's own state, at 60fps with a ~19ms one-off bake. The stick moves
-the hero, the kit casts, the HUD reads the run.
+**It is the shipping build.** The delve draws — walls, scenery, the horde and
+the hero, off the core's own state. The stick moves the hero, the kit casts,
+the HUD reads the run, a delve can be held and abandoned, and the stations
+behind it are the same object the HUD is.
 
 | | |
 |---|---|
-| `npm run smoke:delve` | 14 checks — the world draws and is dressed, the gait is distance-driven |
+| `npm run smoke:delve` | 19 checks — the world draws and is dressed, the gait is distance-driven |
 | `npm run smoke:world` | 18 checks — the waygate, the coffers, the slag, the beacons |
-| `npm run smoke:overlay` | 22 checks — the map, the arrow out, the boss bar, the crystal |
+| `npm run smoke:overlay` | 28 checks — the map, the arrow out, the boss bar, the crystal |
 | `npm run smoke:air` | 19 checks — light, haze, ash, the dark, and the governor |
 | `npm run smoke:prof` | 10 checks — the layer profiler finds a planted cost |
 | `npm run smoke:pwa` | 14 checks — installable, offline, and served from a subpath |
-| `npm run smoke:art` | 9 checks — authored art overrides forged art at any resolution |
-| `npm run smoke:play` | 16 checks — the stick, the kit, and the HUD's layout |
+| `npm run smoke:art` | 35 checks — authored art overrides forged art at any resolution |
+| `npm run smoke:play` | 17 checks — the stick, the kit, and the HUD's layout |
 | `npm run smoke:fx` | 16 checks — the fight reads, the crescent and the tells in pixels |
-| `npm run smoke:loop` | 15 checks — dying, the outcome, the gate-house, descending again |
+| `npm run smoke:loop` | 27 checks — dying, the outcome, the gate-house, descending again |
 | `npm run smoke:forge` | 13 checks — equipping, and that worn gear reaches the hero |
 | `npm run smoke:spend` | 13 checks — the vendor and the hall, and that coin buys what it says |
 | `npm run smoke` | 13 checks — the proving scene and the diagnostics dump |
 | `npm run verify` | the canvas suites against the extracted core |
+
+`smoke:loop` also covers the two things a delve can end with that the canvas
+build has had all along and this one only recently grew: holding a delve, and
+walking out of one without banking anything.
 
 One thing never sheds, and the numbers are the second: `floatDmg` and
 `floatWord` used to bail on `lowFx` too, which was invisible for as long as
