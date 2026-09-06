@@ -19,7 +19,7 @@ import Phaser from 'phaser';
           totems, ruptures, player, cam, FLOAT_STYLE, FLOAT_LIFE, BOLT_R,
           TAU, HEROES, run, portal, drops, PORTAL_R, PAL, LEVEL, rarityOf,
           CORPSE_HUE, enemies, beams, AGONY_WIND, AGONY_ARC, AGONY_REACH,
-          SIPHON_TIME */
+          SIPHON_TIME, MELEE_BITE, MELEE_LASH */
 
 const RIM = '#060403';   // the dark edge every ordinary number carries
 
@@ -70,6 +70,7 @@ export class Effects {
     this.gate(gt, t);
     this.ground(b, t);
     this.tells(b, t);
+    this.swings(b);
     this.beacons(b, li, t);
     this.crescents(b, t);
     this.beamwork(li);
@@ -106,7 +107,10 @@ export class Effects {
         g.strokeCircle(tr.x, tr.y, tr.r * w);
         continue;
       }
-      const ph = spikePhase(tr.t);
+      // The beat comes off the trap: it is compressed by the delve's depth,
+      // and a renderer reading the constant would draw one rhythm over the
+      // damage of another.
+      const ph = spikePhase(tr.t, tr.cycle);
       // Down and quiet: the plates still show, or the room gives no warning
       // at all until the first time it kills you.
       const out = ph.phase === 'out', tell = ph.phase === 'tell';
@@ -182,6 +186,69 @@ export class Effects {
       g.strokeCircle(s.x, s.y, s.r);
       g.fillStyle(s.husk ? 0xc8d63a : 0xe0402c, 0.10 + 0.18 * f);
       g.fillCircle(s.x, s.y, s.r * f);         // the fill IS the timer
+    }
+  }
+
+  /* THE HORDE'S OWN TELL.
+   *
+   * An ordinary body used to hurt you by standing next to you, on a private
+   * timer, with nothing drawn at all -- measured, nine tenths of everything
+   * that hit the hero in the first delve of the game. It commits now: it
+   * roots, an arc lights on the side it is swinging from, and the blow lands
+   * only if you are still inside it when the wind-up runs out.
+   *
+   * The arc is drawn at its FULL reach from the first frame and filled as the
+   * beat closes, which is the rule the slam already follows: a telegraph that
+   * grows with the timer says when but not where, and where is the half that
+   * decides whether you can answer it.
+   *
+   * Under the bodies, on the floor, like every other telegraph in the build --
+   * over them it becomes a second crowd to read on top of the first.
+   */
+  swings(g) {
+    const SPAN = 0.85;
+    for (const e of enemies) {
+      if (e.hp <= 0) continue;
+      const winding = (e.tell || 0) > 0;
+      const lash = (e.lash || 0) > 0, miss = (e.whiffed || 0) > 0;
+      if (!winding && !lash && !miss) continue;
+      const bite = e.r + player.r + MELEE_BITE;
+      const a = e.angle || 0;
+      const arc = (rr, from, to, col, al, w) => {
+        g.lineStyle(w, col, al);
+        g.beginPath();
+        for (let k = 0; k <= 14; k++) {
+          const an = from + (k / 14) * (to - from);
+          // Squashed on the short axis like every other floor mark here: a
+          // true circle on a top-down floor reads as a sphere in the air.
+          const x = e.x + Math.cos(an) * rr, y = e.y + Math.sin(an) * rr * 0.8;
+          k ? g.lineTo(x, y) : g.moveTo(x, y);
+        }
+        g.strokePath();
+      };
+      if (winding) {
+        const f = Math.max(0, Math.min(1, 1 - e.tell / Math.max(0.01, e.tellMax)));
+        // The ground it will take, known from the first frame.
+        g.fillStyle(0xe27848, 0.05 + f * 0.13);
+        g.beginPath();
+        g.moveTo(e.x, e.y);
+        for (let k = 0; k <= 14; k++) {
+          const an = a - SPAN + (k / 14) * SPAN * 2;
+          g.lineTo(e.x + Math.cos(an) * bite, e.y + Math.sin(an) * bite * 0.8);
+        }
+        g.closePath(); g.fillPath();
+        // ...and the edge sweeping round as the beat closes.
+        arc(bite * (0.55 + f * 0.45), a - SPAN * f, a + SPAN * f,
+            0xffc48c, 0.25 + f * 0.6, 1.5 + f * 2.5);
+      } else {
+        // A landed blow flashes white; one you stepped out of goes out grey,
+        // because a dodge that looks like nothing happened is not a dodge.
+        const g0 = miss ? Math.min(1, e.whiffed / 0.5)
+                        : Math.min(1, e.lash / MELEE_LASH);
+        arc(bite * (miss ? 1.02 : 1), a - SPAN, a + SPAN,
+            miss ? 0x96928a : 0xffecce,
+            (miss ? 0.4 : 0.9) * g0, (miss ? 2 : 4) * g0 + 0.5);
+      }
     }
   }
 

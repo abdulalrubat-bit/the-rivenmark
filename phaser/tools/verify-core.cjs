@@ -21,7 +21,7 @@ const { spawn } = require('child_process');
 const SUITES = (process.env.SUITES ||
   'horde roles packs terrain ramp lieuts bosses invader newkinds eco deceiver crescent ' +
   'extract stash gear vendor loadout prog hall layout combat2 combat3 zayd kit hub bag gait ' +
-  'weight regalia hardcore bounty traps'
+  'weight regalia hardcore bounty traps crucible swing'
 ).split(/\s+/).filter(Boolean);
 
 /* NOT in the list: winnable. It is the only stochastic suite in the tree --
@@ -46,7 +46,12 @@ const SUITES = (process.env.SUITES ||
  */
 const PRESENTATION = [
   /\bSPR\b/, /\bctx\b/, /\bdraw\s*\(/, /\bdrawHall\b/, /\bBOSS_BAR_H\b/,
-  /\bSTANDING\b/, /\bview\./, /\.click\(/, /\$eval\(/,
+  // STANDING is terrain.js's prop table, and it is only ever SUBSCRIPTED --
+  // written bare it matched the word in a comment instead, and excluded a
+  // whole simulation suite for a sentence of prose. This file already says
+  // that a pattern which excludes a passing suite is worse than no pattern at
+  // all; this is that, caught in the act.
+  /\bSTANDING\s*\[/, /\bview\./, /\.click\(/, /\$eval\(/,
   /document\./, /getComputedStyle/, /screenshot\(/, /\bHUD_H\b/,
   // The canvas build's DOM element map, named by its members rather than as a
   // bare `el.` -- eco.js calls a local body `el` and a broad pattern skipped a

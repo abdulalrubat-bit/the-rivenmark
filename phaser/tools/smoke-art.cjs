@@ -520,10 +520,20 @@ const LONG = { kind: 'gorger', n: 10 };
          D.revived === true && D.revivedClock,
          'shown ' + D.revived + ', clock cleared ' + D.revivedClock);
 
-      /* Flinching. A struck body should be shoved AWAY from what hit it,
-       * out fast and back slower, and it should never move the body itself --
+      /* Flinching. A struck body should be shoved AWAY from what hit it, out
+       * fast and back slower, and the FLINCH itself must never move the body --
        * a renderer that quietly moved things would put a hitbox somewhere the
-       * player cannot see. */
+       * player cannot see.
+       *
+       * The recoil is a different thing and is not the renderer's: the weight
+       * pass gives every unbraced hit a real knock through damageEnemy, so a
+       * struck body genuinely does end up somewhere else. This fixture used to
+       * assert the opposite -- that damageEnemy left the body where it stood --
+       * which was true when it was written and has been false since the weight
+       * pass shipped, so it failed on every build for reasons that had nothing
+       * to do with art. Both halves are checked now, separately, because they
+       * are separate claims: the offset is a drawing, the knock is the world.
+       */
       const D2 = await p.evaluate(() => {
         const e = { x: 100, y: 100, r: 20, hitFlash: 0.12, hitX: 1, hitY: 0 };
         const walk = [1, 0.66, 0.4, 0.1, 0].map(f => {
@@ -554,10 +564,23 @@ const LONG = { kind: 'gorger', n: 10 };
         let landed = null;
         if (live) {
           delete live.hitX; delete live.hitY;
+          // Stood on open ground first: the knock below is a real move through
+          // moveEntity, and a body already against rock cannot take one, which
+          // would fail the recoil check on the map rather than on the code.
+          for (let k = 0; k < 60; k++) {
+            const nx = 300 + Math.random() * (WORLD.w - 600);
+            const ny = 300 + Math.random() * (WORLD.h - 600);
+            if (pointInWalls(nx, ny, live.r + 40)) continue;
+            live.x = nx; live.y = ny; break;
+          }
           const was = { x: live.x, y: live.y, hp: live.hp };
-          damageEnemy(live, 1, live.x - 50, live.y);   // struck from its left
+          // A full-weight blow, so the recoil is unambiguous: knock scales on
+          // the SHARE of the body a hit took, and one point off a live thrall
+          // is a nudge of a couple of units that rounding can swallow.
+          damageEnemy(live, live.maxHp * 0.9, live.x - 50, live.y);
           landed = { hx: live.hitX, hy: live.hitY, flash: live.hitFlash,
-                     stayed: live.x === was.x && live.y === was.y };
+                     shoved: +(live.x - was.x).toFixed(2),
+                     sideways: +Math.abs(live.y - was.y).toFixed(2) };
           live.hp = was.hp;
         }
         return { walk, backX: bo ? bo.x : null, landed,
@@ -574,10 +597,17 @@ const LONG = { kind: 'gorger', n: 10 };
              ' against ' + D2.walk[1] + ' going right');
       ck('and a blow that lands records which way it came from',
          !!D2.landed && D2.landed.hx === 1 && D2.landed.hy === 0 &&
-         D2.landed.flash > 0 && D2.landed.stayed,
+         D2.landed.flash > 0,
          !D2.landed ? 'no body to hit'
            : 'struck from the left -> ' + D2.landed.hx + ',' + D2.landed.hy +
-             ', flash ' + D2.landed.flash + ', body unmoved ' + D2.landed.stayed);
+             ', flash ' + D2.landed.flash);
+      // The world half. Struck from its left, it goes right -- and only right,
+      // because a recoil that wanders is a body being pushed by something else.
+      ck('and the weight pass shoves it away from the blow',
+         !!D2.landed && D2.landed.shoved > 1 && D2.landed.sideways < 1,
+         !D2.landed ? 'no body to hit'
+           : 'moved ' + D2.landed.shoved + ' units right, ' +
+             D2.landed.sideways + ' sideways');
 
       ck('while a blow with no source flashes but does not shove',
          D2.none === null, 'offset: ' + JSON.stringify(D2.none));

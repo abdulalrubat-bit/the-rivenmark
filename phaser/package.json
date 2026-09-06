@@ -26,7 +26,8 @@
     "deploy": "node tools/deploy.js",
     "smoke:pwa": "node tools/smoke-pwa.cjs",
     "smoke:prof": "node tools/smoke-prof.cjs",
-    "smoke:art": "node tools/smoke-art.cjs"
+    "smoke:art": "node tools/smoke-art.cjs",
+    "smoke:mass": "node tools/smoke-mass.cjs"
   },
   "dependencies": {
     "phaser": "^4.2.1"

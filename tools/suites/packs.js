@@ -157,6 +157,66 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push(n+(note?'  ['+n
   ck('distant bodies stay dormant', wake.distantAsleep===wake.distantTotal,
      wake.distantAsleep+'/'+wake.distantTotal);
 
+  /* --- and the alarm carries further the deeper the delve is --------------
+   * ALERT_GROWTH is one of the three terms that make a deep delve hostile
+   * without touching what a body hits for: at the bottom of the ladder a
+   * roused pack reaches 229 units instead of 155, which is most of the way to
+   * the next pack site, so waking one room means fighting two.
+   *
+   * Measured rather than asserted from the constant, because the constant
+   * being right proves nothing about what the chain does with it. The hero is
+   * dropped on the nearest pack and the delve is left to run; what is counted
+   * is how many bodies are awake AT ONCE at the peak. Off the lever that is
+   * 12 at rung 44; on it, it is 46, which is HORDE_LIVE -- the chain now
+   * reaches the cap that exists to stop it reaching the whole map.
+   *
+   * WHAT THIS DOES NOT DO, recorded here because it is the more useful half:
+   * quadrupling the horde at rung 44 moved the reference player's extraction
+   * rate from 12/16 to 13/16, which is nothing. See winnable.js.
+   */
+  const chain = await p.evaluate(async () => {
+    const peakAwake = idx => {
+      const peaks = [];
+      for (let n = 0; n < 6; n++) {
+        startRun('isaac', LEVELS[idx].id, 'riven');
+        const near = enemies.filter(e => e.hp > 0).sort((a, b) =>
+          Math.hypot(a.x-player.x, a.y-player.y) - Math.hypot(b.x-player.x, b.y-player.y))[0];
+        if (!near) continue;
+        // The hero is a bystander here, not a fighter: unkillable so the
+        // sample is not cut short, and the count is of bodies AWAKE, so
+        // anything it happens to kill leaves the tally rather than inflating
+        // it.
+        player.x = near.x; player.y = near.y;
+        player.hp = player.maxHp = 1e7;
+        let peak = 0;
+        for (let i = 0; i < 60 * 20; i++) {
+          update(1/60);
+          const n = enemies.filter(e => e.awake && e.hp > 0).length;
+          if (n > peak) peak = n;
+        }
+        peaks.push(peak);
+      }
+      return peaks.sort((a,b)=>a-b)[peaks.length >> 1];
+    };
+    return { top: peakAwake(0), deep: peakAwake(LEVEL_COUNT - 1),
+             rTop: Math.round(ALERT_R), rDeep: Math.round(ALERT_R * (1 + ALERT_GROWTH)),
+             cap: HORDE_LIVE };
+  });
+  ck('the alarm carries further at the bottom of the ladder than at the top',
+     chain.rDeep > chain.rTop * 1.3,
+     chain.rTop + ' units at rung 0 against ' + chain.rDeep + ' at the last rung');
+  // The one that matters: the radius is a number, this is what the delve does
+  // with it. A deep delve must bring MEANINGFULLY more of itself at once.
+  ck('and a deep delve brings far more of itself at once',
+     chain.deep > chain.top * 2,
+     chain.top + ' bodies awake at the peak at rung 0 against ' + chain.deep +
+     ' at the last rung, cap ' + chain.cap);
+  // The control. If the chain ever runs past HORDE_LIVE the cap has broken,
+  // and a delve that wakes end to end is not a harder delve -- it is one
+  // fight with the whole map in it and nothing dormant left to walk into.
+  ck('and never past the cap that stops it taking the whole map',
+     chain.deep <= chain.cap, chain.deep + ' awake against a cap of ' + chain.cap);
+
   // --- struck from range, and rock blocks notice ---------------------------
   const more = await p.evaluate(()=>{
     resetRun('isaac'); const o={};

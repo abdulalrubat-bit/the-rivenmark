@@ -22,28 +22,47 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   p.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
   await p.goto(PAGE('index.html')); await sleep(700);
 
+  /* A rung to run the epithet tests on. The mutators are the DECEIVER's -- they
+   * set his blink, his mirages, his guard -- and every third rung past the ramp
+   * answers with the Crucible-Mass instead, which has none of those things.
+   * This used to be a hardcoded 26, and 26 is one of them: forcing a mutator
+   * list onto that rung produced a Crucible-Mass wearing epithets it cannot
+   * express, and every check below failed on a boss that was never the one
+   * being tested. Found, not guessed at, so a change to which rungs go to which
+   * avatar cannot silently point this at the wrong one again. */
+  const RUNG = await p.evaluate(() =>
+    LEVELS.findIndex((L, i) => i > RAMP.length + 4 && L.boss === 'deceiver'));
+  if (RUNG < 0) { console.log('\nFAIL 1\n  x no Deceiver rung past the ramp'); await b.close(); process.exit(1); }
+
   // ---- the roll -----------------------------------------------------------
   const roll = await p.evaluate(()=>{
     // The onboarding ramp deliberately leaves its rungs plain -- an epithet is
     // a rule to read and there is nothing to read it against yet -- so the
-    // roll is only asserted from the first rung past it.
-    const per = LEVELS.slice(RAMP.length).map(L=>L.mutators);
+    // roll is only asserted from the first rung past it. And only on the
+    // Deceiver's own rungs: the epithets are his, and a Crucible-Mass rung
+    // rolling one would be a rule the fight has no way to show you.
+    const past = LEVELS.slice(RAMP.length);
+    const per = past.filter(L => L.boss === 'deceiver').map(L=>L.mutators);
+    const massRungs = past.filter(L => L.boss === 'crucible');
     const counts = per.map(m=>m.length);
     const dupes = per.filter(m=>new Set(m).size!==m.length).length;
     const combos = new Set(per.map(m=>m.slice().sort().join('+')));
     // every mutator should actually be reachable
     const used = new Set(); per.forEach(m=>m.forEach(id=>used.add(id)));
     // and the roll must be a property of the rung, not the run
-    const again = LEVELS.slice(RAMP.length)
-                        .map((L,i)=>rollMutators(i+RAMP.length, L.depth).join('+'));
-    const stable = again.every((v,i)=>v===per[i].join('+'));
+    const stable = past.every((L, i) =>
+      L.boss !== 'deceiver' ||
+      rollMutators(i + RAMP.length, L.depth).join('+') === L.mutators.join('+'));
     return { n: LEVELS.length, min: Math.min(...counts), max: Math.max(...counts),
              dupes, combos: combos.size, used: used.size, all: MUTATORS.length,
              stable, shallow: counts[0], deep: counts[counts.length-1],
              // The third ramp rung does roll one -- by then there is something
              // to read an epithet against. Only the ones marked plain must be.
              ramp: RAMP.every((r,i)=>r.mutate || LEVELS[i].mutators.length===0),
-             titles: [RAMP.length, 12, 26, 51].map(i=>bossTitle(LEVELS[i])) };
+             mass: massRungs.length,
+             massPlain: massRungs.every(L => (L.mutators||[]).length === 0),
+             titles: LEVELS.map((L,i)=>i).filter(i=>LEVELS[i].boss==='deceiver')
+                           .slice(-4).map(i=>bossTitle(LEVELS[i])) };
   });
   ck('every rung past the ramp rolls a boss', roll.min>=1,
      roll.min+' to '+roll.max+' mutators');
@@ -58,17 +77,24 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
      roll.combos+' distinct bosses across '+roll.n+' rungs');
   ck('and each is named for what it does',
      roll.titles.every(t=>/Deceiver/.test(t)), roll.titles.join(' | '));
+  // The other avatar takes none of them, and the control that the split is
+  // real: if every rung were his, "his rungs all roll one" would be trivially
+  // true of a ladder with one boss on it.
+  ck('the Crucible-Mass rungs roll none of them, because they are his',
+     roll.mass > 0 && roll.massPlain === true,
+     roll.mass ? roll.mass + ' rungs, all plain'
+       : 'NO CRUCIBLE RUNGS — the split this suite now assumes does not exist');
 
   // ---- each mutator does something you can see ---------------------------
-  const call = async (mut) => p.evaluate((mut)=>{
+  const call = async (mut) => p.evaluate(([mut, rung])=>{
     stash=blankStash(); saveStash();
-    startRun('isaac', LEVELS[26].id, 'riven');
+    startRun('isaac', LEVELS[rung].id, 'riven');
     LEVEL.mutators = mut;                       // force the roll for the test
     run.tech = LEVEL.quota;
     slams.length=0; hazards.length=0;
     updatePortal(1/60);
     return run.boss;
-  }, mut);
+  }, [mut, RUNG]);
 
   await call([]);
   const plain = await p.evaluate(()=>({

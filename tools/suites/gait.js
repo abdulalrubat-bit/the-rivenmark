@@ -32,16 +32,27 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
         if(!SPR['h_'+hid+'r'+i]) miss.push('h_'+hid+'r'+i);
       }
     }
+    // Kinds with no run cycle, and why each one has none: the Deceiver and his
+    // mirages blink rather than walk, and anything anchored cannot walk at
+    // all. Every one of them still needs its REST pose, which is the frame
+    // they are actually drawn in, so that check stays above the skip.
+    const still = [];
     for (const k in ENEMY_TYPES){
       if(!SPR[k]) miss.push(k);
-      if(k==='deceiver'||k==='mirage') continue;
+      if(k==='deceiver'||k==='mirage'||ENEMY_TYPES[k].anchored){ still.push(k); continue; }
       for(let i=0;i<GAIT_N;i++) if(!SPR[k+'r'+i]) miss.push(k+'r'+i);
     }
+    // And the other half of it: a kind excused a run cycle must not have one
+    // forged anyway, or the excuse is costing the atlas without saving it.
+    const wasted = still.filter(k => SPR[k+'r0']);
     let bytes=0;
     for(const k in SPR){const c=SPR[k]; if(c&&c.width) bytes+=c.width*c.height*4;}
-    return {miss, MB:+(bytes/1048576).toFixed(2), n:GAIT_N};
+    return {miss, wasted, still, MB:+(bytes/1048576).toFixed(2), n:GAIT_N};
   });
   ck('every gait pose is forged', atlas.miss.length===0, atlas.miss.slice(0,4).join(','));
+  ck('and nothing that cannot walk carries one', atlas.wasted.length===0,
+     atlas.wasted.length ? atlas.wasted.join(',') + ' have run cycles they can never draw'
+       : 'no run cycle for ' + atlas.still.join(', '));
   ck('the whole atlas stays under 12MB', atlas.MB<12, atlas.MB+'MB');
 
   // Poses must be distinct. Six samples of a sine repeat in pairs, which is
