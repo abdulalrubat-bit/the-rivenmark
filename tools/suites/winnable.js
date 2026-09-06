@@ -275,6 +275,18 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
         tag('updateTraps', 'a trap');
         tag('updateBleed', 'a wound');
         tag('updateRuptures', 'a rupture');
+        tag('updateBolts', 'a bolt');
+        /* The melee entry, kept separate from every other caller of
+         * hurtPlayerBy: it is the one the whole combat redesign is about, and
+         * it needs the BODY as well as the name, so the classifier below can
+         * ask whether that body wound up first. */
+        const meleeOf = window.hurtPlayer;
+        window.hurtPlayer = function (e) {
+          const prevS = window.__hsrc, prevW = window.__winder;
+          window.__hsrc = 'a body in reach'; window.__winder = e;
+          try { return meleeOf.apply(this, arguments); }
+          finally { window.__hsrc = prevS; window.__winder = prevW; }
+        };
         const hurtOf = window.hurtPlayerBy;
         window.hurtPlayerBy = function (dmg, fx, fy) {
           const before = player.hp;
@@ -291,12 +303,80 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
               }
             }
             window.__took[who] = (window.__took[who] || 0) + took;
+            /* A body in reach is `touch` only while it has no wind-up. Read
+             * off the body itself rather than assumed, so the day the horde
+             * gets one this number moves on its own and nobody has to
+             * remember to come back here and edit it. */
+            let how = ANSWER[who];
+            if (!how) {
+              how = 'touch';
+              if (window.__hsrc === 'a body in reach' && window.__winder &&
+                  window.__winder.tell > 0) how = 'read';
+            }
+            window.__answer[how] += took;
           }
           return r;
         };
       }
       const took = {};
       window.__took = took;
+
+      /* --- COULD I HAVE DONE ANYTHING ABOUT THAT? ---------------------------
+       *
+       * The note that started this was that combat "feels hollow, boring and
+       * confusing", and all three come back to one fact that no number in this
+       * suite could see: an ordinary body damages the hero by STANDING NEXT TO
+       * THEM, on a private timer, with no wind-up, no pose and no tell. There
+       * is no blow to read, so there is nothing to answer.
+       *
+       * "Does combat feel better" is unfalsifiable. This is the falsifiable
+       * version of it: of every point of damage that reaches the Vanguard, how
+       * much arrived as an EVENT they had a chance to answer?
+       *
+       *   read      something wound up first and could be seen coming -- a
+       *             slam's ring, a bolt in flight, a fuse, a spike field
+       *             telling. A moment existed.
+       *   standing  ground that is hurting you because you are on it. No
+       *             moment, but leaving is an answer.
+       *   touch     a body in contact, on its own clock, with no warning of
+       *             any kind. Nothing to see and nothing to do.
+       *
+       * `touch` is the number this redesign exists to move. The mapping lives
+       * here rather than in the game because it is a judgement about what a
+       * player can perceive, not a fact about the code -- and it is written
+       * out in full so it can be argued with.
+       *
+       * THE BASELINE, before any of it was changed:
+       *
+       *     rung      read   standing   nothing to see
+       *       0        10%       0%          90%
+       *       3        45%      29%          26%
+       *       9        43%      45%          12%
+       *      17        42%      46%          12%
+       *      30        39%      48%          13%
+       *      44        43%      43%          15%
+       *
+       * Two findings, and the first one is the more damning. THE FIRST DELVE
+       * ANYONE PLAYS IS NINE TENTHS UNTELEGRAPHED CONTACT. Rung 0's horde is
+       * thralls and eclipses, both of which hurt you by being next to you, so
+       * the delve that teaches the game teaches that combat is a proximity
+       * tax. That is where the impression forms.
+       *
+       * And deeper in, pure touch falls to an eighth -- but `standing` rises
+       * to nearly half, so the share of damage arriving with NO MOMENT AT ALL
+       * (touch + standing) is 55 to 61 per cent at every rung past the third.
+       * A wind-up on the horde fixes the first of those and none of the
+       * second: burning ground is not hollow because it is unreadable, it is
+       * hollow because it is weather.
+       */
+      const ANSWER = {
+        'a slam': 'read', 'a burst': 'read', 'a trap': 'read',
+        'a bolt': 'read', 'a rupture': 'read',
+        'burning ground': 'standing', 'a wound': 'standing',
+        'the delve': 'standing'
+      };
+      const answer = { read: 0, standing: 0, touch: 0 };
+      window.__answer = answer;
 
       const DT = 1 / 30, CAP = 30 * 60 * 12;         // twelve sim-minutes
       let steps = 0, repath = 0, target = null, mode = '';
@@ -397,6 +477,7 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
                power: power0, want: L.power, hp0, dmg0,
                auto: Math.round(bill.auto), kit: Math.round(bill.kit),
                delveDmg: Math.round(bill.delve),
+               answer: { read: answer.read, standing: answer.standing, touch: answer.touch },
                took: took, tookAll: Math.round(
                  Object.keys(took).reduce((a, k) => a + took[k], 0)) };
     };
@@ -414,6 +495,11 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
     const sum = k => rs.reduce((a, r) => a + r[k], 0);
     const auto = sum('auto'), kit = sum('kit'), dlv = sum('delveDmg');
     const all = Math.max(1, auto + kit + dlv);
+    // Of everything that reached the hero, how much could they have answered?
+    const ans = { read: 0, standing: 0, touch: 0 };
+    for (const r of rs) for (const k in ans) ans[k] += r.answer[k];
+    const ansAll = Math.max(1, ans.read + ans.standing + ans.touch);
+    const pct = k => Math.round(100 * ans[k] / ansAll);
     // What was hitting it, pooled across the rung's delves and named by share.
     const hurt = {};
     for (const r of rs) for (const k in r.took) hurt[k] = (hurt[k] || 0) + r.took[k];
@@ -422,6 +508,7 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
       .map(k => k + ' ' + Math.round(100 * hurt[k] / hurtAll) + '%');
     curve.push({ idx, won, quota, stuck, n: TRIES,
                  worst: worst.join(', '),
+                 read: pct('read'), standing: pct('standing'), touch: pct('touch'),
                  // Blows taken per minute alive, as a share of the hero's own
                  // life: the one number that says whether a rung's horde can
                  // actually threaten the hero who belongs on it.
@@ -442,7 +529,9 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
     '\n              damage: ' + c.autoPct + '% the swing, ' + c.kitPct +
     '% the bar, ' + c.delvePct + '% the delve itself' +
     '\n              took: ' + c.pressure + ' lives/min off ' + c.life +
-    ' hp — ' + c.worst;
+    ' hp — ' + c.worst +
+    '\n              could answer: ' + c.read + '% read, ' + c.standing +
+    '% standing in it, ' + c.touch + '% nothing to see';
   const tot = curve.reduce((a, c) => a + c.won, 0), att = curve.length * TRIES;
   console.log('\n   THE REFERENCE PLAYER, ' + TRIES + ' delves a rung.');
   console.log('   An instrument, not a tripwire: the bot does not kite and does');
