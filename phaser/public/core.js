@@ -12,7 +12,7 @@
  * the game lives inside a function named draw, forge or paint, and those are
  * dropped here.
  *
- * 575 statements kept; 15 drawing functions and 52 page-bound statements dropped.
+ * 581 statements kept; 15 drawing functions and 52 page-bound statements dropped.
  * Re-run `npm run core` after changing ../index.html.
  */
 /* =============================================================================
@@ -470,6 +470,47 @@ const ANCHOR_GUARD = 330;  // and how far off that post it will step to meet you
 const BRACE_UP     = 2.2;  // seconds shielded
 const BRACE_DOWN   = 1.7;  // and seconds open, which is your window
 const BRACE_SOAK   = 0.26; // damage that gets through the guard
+
+/* --- THE BLOW ------------------------------------------------------------
+ * An ordinary body used to hurt you by STANDING NEXT TO YOU. One line:
+ * `e.atk -= dt; if (e.atk <= 0) { e.atk = e.cd; hurtPlayer(e); }`. A private
+ * timer, no wind-up, no pose, no tell, and the only thing drawn was blood on
+ * the hero afterwards. Measured, that path was nine tenths of everything that
+ * hit you in the first delve anyone plays.
+ *
+ * That is the whole of why the fight read as hollow. You cannot feel a blow
+ * you never saw start, you cannot answer one that has no moment, and a screen
+ * with forty-six bodies on it is unreadable when none of them is doing
+ * anything you can point at. Weight was given to the hero's blows a while
+ * back and it did not help, because the hero's blows were never the problem:
+ * the horde's were not blows at all.
+ *
+ * So a body's attack is an EVENT now, in three parts:
+ *
+ *   COMMIT   it stops. A body winding up does not walk, which is what makes
+ *            stepping away an answer rather than a footrace -- and it is the
+ *            same rule the braced anchor already runs on, so the horde has
+ *            one vocabulary for "this one is busy" rather than two.
+ *   TELL     an arc of light on the side it is swinging from, growing as the
+ *            wind-up runs out. Where as well as when.
+ *   STRIKE   and it lands only if you are still inside its reach. Step out
+ *            during the wind and it hits the air.
+ *
+ * The wind is taken from the kind's own attack rhythm, so the fast things are
+ * hard to read and the heavy ones are generous: an eclipse winds for 0.28s
+ * and a gorger for 0.6. The hero covers 205 units a second, so even the
+ * shortest tell is fifty-odd units of escape against a reach of forty -- a
+ * step, deliberately, and not a sprint.
+ */
+const MELEE_WIND  = 0.40;  // the beat, before the kind's own rhythm scales it
+const MELEE_MIN   = 0.26;  // ...and the bounds, so nothing is unreadable
+const MELEE_MAX   = 0.62;
+const MELEE_BITE  = 14;    // how far past contact the blow itself reaches
+const MELEE_LASH  = 0.14;  // the follow-through, which is what is drawn
+// How long this body takes to bring a blow round. Off `cd`, its own rhythm,
+// so a kind that attacks often telegraphs briefly and a slow heavy one is
+// legible from across the room.
+const meleeWind = e => clamp((e.cd || 1) * 0.42, MELEE_MIN, MELEE_MAX);
 
 // One place for the look. Everything on the canvas pulls from here.
 const PAL = {
@@ -2702,6 +2743,7 @@ function newBody(kind, x, y, t) {
     cast: rand(0, 1.2), casting: 0,            // cantor: between throws, and mid-throw
     lurk: rand(0, STALK_BACK), run: 0, struck: false,  // flayer: waiting, running, spent
     chant: rand(0, 2), chanting: 0, spell: 0,  // shaman: between, mid-cast, and which
+    tell: 0, tellMax: 0, lash: 0, whiffed: 0,  // winding, following through, missing
     calcify: 0, calcified: false,             // the retreat, and whether it has used it
     consume: 0, fed: false,                   // and whether it has eaten
   };
@@ -4955,7 +4997,12 @@ function updateEnemies(dt) {
       // makes a crowd that slides past itself; pushing the neighbour too makes
       // it a crowd that has to be got through. The heavier one moves less,
       // which is what mass is for -- an anchor at its post barely stirs.
-      if (o.awake && !(o.calcify > 0) && !o.braced) {
+      // ...but not into a body that has committed to a swing. A winding body
+      // is rooted, and the whole promise of the wind-up is that where it
+      // stands when it starts is where the blow comes from -- a crowd that
+      // shoves it two feet mid-swing makes the tell a lie about where the
+      // danger is, and makes stepping out of it a coin toss.
+      if (o.awake && !(o.calcify > 0) && !o.braced && !((o.tell || 0) > 0)) {
         const back = ((want - od) / want) * (e.mass / Math.max(0.5, o.mass)) * 0.5;
         moveEntity(o, -(ox / od) * back * o.speed * dt, -(oy / od) * back * o.speed * dt);
       }
@@ -5038,6 +5085,12 @@ function updateEnemies(dt) {
         stalk = 1;
         if (!e.struck && d < e.r + player.r + 8) {
           e.struck = true;
+          // Its run IS the wind-up: nearly a second of a body crossing the
+          // room straight at you, which is a longer and plainer tell than any
+          // swing in the game. The follow-through is set so it reads as the
+          // blow it is rather than as contact damage -- to the player, and to
+          // the fixture that counts how much of the fight can be answered.
+          e.lash = MELEE_LASH;
           hurtPlayer(e);
           openWound(BLEED_DPS, linger(BLEED_TIME), lingered);
           burst(player.x, player.y, PAL.blood, 12, 200);
@@ -5116,6 +5169,31 @@ function updateEnemies(dt) {
     // --- seek / melee -----------------------------------------------------
     let sx = 0, sy = 0;
     const touch = e.r + player.r + 3;
+
+    /* Mid-swing. It has committed, so it does not move and it does not steer:
+     * the blow is going where the body already is, and the hero has the whole
+     * of the wind-up to not be there. Handled here rather than down in the
+     * melee branch because a committed body must follow through even after
+     * you have left its reach -- that is the entire point of it, and a swing
+     * that quietly cancelled when you stepped back would be the old proximity
+     * tax wearing an animation.
+     */
+    if ((e.tell || 0) > 0) {
+      e.tell -= dt;
+      if (e.tell <= 0) {
+        e.tell = 0;
+        e.atk = e.cd;
+        e.lash = MELEE_LASH;
+        const bite = e.r + player.r + MELEE_BITE;
+        if (dist2(player.x, player.y, e.x, e.y) < bite * bite) hurtPlayer(e);
+        else e.whiffed = 0.5;              // drawn, so a miss reads as a miss
+      }
+      advanceGait(e, e.x, e.y, dt);        // standing: the gait knows it
+      continue;
+    }
+    if ((e.lash || 0) > 0) e.lash -= dt;
+    if ((e.whiffed || 0) > 0) e.whiffed -= dt;
+
     // Braced, it is a wall: it does not advance and it does not swing.
     if (e.braced) {
       const bx0 = e.x, by0 = e.y;
@@ -5203,8 +5281,13 @@ function updateEnemies(dt) {
         }
       }
     } else {
+      // In reach. The clock no longer lands a blow -- it starts one, and the
+      // branch above finishes it.
       e.atk -= dt;
-      if (e.atk <= 0) { e.atk = e.cd; hurtPlayer(e); }
+      if (e.atk <= 0) {
+        e.tell = meleeWind(e);
+        e.tellMax = e.tell;
+      }
     }
 
     const mx0 = e.x, my0 = e.y;
@@ -5598,14 +5681,33 @@ function updateCrucible(e, dt) {
     shake(5);
   }
 
-  // --- and it still swings at anything that comes into reach -------------
-  // It cannot chase, so contact is a choice the player made. It has to cost
-  // something or standing in its face while the ring is out would be the
-  // safest square on the floor.
-  e.atk -= dt;
-  if (d < e.r + player.r + 10 && e.atk <= 0) {
-    e.atk = e.cd;
-    hurtPlayerBy(e.dmg, e.x, e.y);
+  /* --- and it still swings at anything that comes into reach -------------
+   * It cannot chase, so contact is a choice the player made. It has to cost
+   * something, or standing in its face while the ring is out would be the
+   * safest square on the floor.
+   *
+   * Through the same wind-up as the horde, and not its own path: a boss's
+   * blows should be the most readable in the game, not the one place that
+   * still hurts you without warning.
+   */
+  if ((e.tell || 0) > 0) {
+    e.tell -= dt;
+    if (e.tell <= 0) {
+      e.tell = 0;
+      e.atk = e.cd;
+      e.lash = MELEE_LASH;
+      const bite = e.r + player.r + MELEE_BITE;
+      if (dist2(player.x, player.y, e.x, e.y) < bite * bite) hurtPlayer(e);
+      else e.whiffed = 0.5;
+    }
+  } else {
+    if ((e.lash || 0) > 0) e.lash -= dt;
+    if ((e.whiffed || 0) > 0) e.whiffed -= dt;
+    e.atk -= dt;
+    if (d < e.r + player.r + MELEE_BITE && e.atk <= 0) {
+      e.tell = meleeWind(e);
+      e.tellMax = e.tell;
+    }
   }
 }
 

@@ -310,8 +310,15 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
             let how = ANSWER[who];
             if (!how) {
               how = 'touch';
-              if (window.__hsrc === 'a body in reach' && window.__winder &&
-                  window.__winder.tell > 0) how = 'read';
+              /* `lash` and not `tell`: the wind-up has already run to zero by
+               * the moment the blow resolves -- that IS the moment -- and the
+               * follow-through is what is standing at the instant the damage
+               * lands. Reading `tell` here scored every telegraphed blow as
+               * unanswerable and reported no change at all from a change that
+               * had plainly worked. */
+              const w = window.__winder;
+              if (window.__hsrc === 'a body in reach' && w &&
+                  ((w.tell || 0) > 0 || (w.lash || 0) > 0)) how = 'read';
             }
             window.__answer[how] += took;
           }
@@ -716,6 +723,32 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
   ck('the ladder as a whole is neither a wall nor a walk',
      tot > att * 0.08 && tot < att * 0.85,
      tot + ' of ' + att + ' delves ended at the gate');
+  /* COULD THE PLAYER DO ANYTHING ABOUT IT?
+   *
+   * The horde's blows are events now: a body in reach commits, roots, shows an
+   * arc on the side it is swinging from, and lands only if you are still there
+   * when the wind-up runs out. What this holds is that nothing quietly goes
+   * back to hurting you without warning -- a new kind added with its own melee
+   * path, a boss given its own private swing, an old one refactored past the
+   * tell. Every one of those is how the 90% got there in the first place.
+   */
+  const worstTouch = Math.max(...curve.map(c => c.touch));
+  ck('almost nothing hits the Vanguard without warning any more',
+     worstTouch <= 18,
+     curve.map(c => 'r' + c.idx + ' ' + c.touch + '%').join('  ') + ' (was 90/26/12/12/13/15)');
+  // The rung that teaches the game is the one that must be clean: it was 90%
+  // untelegraphed contact, which is what the first hour of this game felt
+  // like, and it is the whole reason any of this was done.
+  ck('and the delve that teaches the game teaches a fight, not a tax',
+     curve[0].touch <= 5,
+     'rung ' + curve[0].idx + ': ' + curve[0].touch + '% nothing to see, was 90%');
+  // The control. "Nothing hits you without warning" is trivially true of a
+  // build where nothing hits you, so a real share must still be arriving as
+  // blows that were read.
+  ck('and the control: blows are still landing, they are just legible now',
+     curve.every(c => c.read >= 25),
+     curve.map(c => 'r' + c.idx + ' ' + c.read + '% read').join('  '));
+
   /* THE BAR'S SHARE. The note that started this was "the attack button feels
    * meaningless", and this is the number behind it: what fraction of a delve's
    * damage the six buttons actually carry against the swing that happens on
