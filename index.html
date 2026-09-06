@@ -5638,6 +5638,25 @@ const JAR_USES = 3;        // Crimson-Infused Jars carried into a delve
 const VULN_TIME  = 10;     // how long Metaphysical Vulnerability lasts
 const VULN_MULT  = 5;      // and what the Guillotine does to a body under it
 
+/* WHAT A BUTTON SAYS ABOUT ITSELF.
+ *
+ * A kit button was a mark and nothing else -- one abstract glyph on a disc,
+ * with the ability's name in a `title` attribute, which is a hover tooltip and
+ * so is invisible to the only input this game has. The note that came back was
+ * exactly right: "I'm unsure what does what."
+ *
+ * `tag` is the word the button wears. `role` is what KIND of thing it is, and
+ * it earns its place because the kit divides cleanly into four and a player
+ * can learn four colours in a delve where they cannot learn nine glyphs:
+ *
+ *   strike  it hurts something
+ *   ward    it keeps you standing
+ *   mend    it gives life back
+ *   snare   it takes something away from them
+ *
+ * Data and not UI, so both builds read the same answer and neither invents its
+ * own mapping from ability to colour.
+ */
 const ABILITIES = {
   isaac: [
     // THE BLOW. Not a poke on the way to the real abilities: it is where a
@@ -5645,19 +5664,19 @@ const ABILITIES = {
     // everything else on the bar so pressing it is a rhythm rather than a
     // once-a-second decision you make between other decisions. Sixty-two units
     // was inside a thrall's own swing; ninety-six is a step, not a hug.
-    { id: 'anchor', name: 'Anchoring Strike', mark: '✦',
+    { id: 'anchor', tag: 'ANCHOR', role: 'strike', name: 'Anchoring Strike', mark: '✦',
       note: 'A shield bash that breaks a guard. Builds a Charge.',
       cd: 0, gcd: 0.8, build: 1, reach: 96, dmg: 3.4 },
-    { id: 'aegis', name: 'Aegis of Tor-Varden', mark: '◉',
+    { id: 'aegis', tag: 'AEGIS', role: 'ward', name: 'Aegis of Tor-Varden', mark: '◉',
       note: 'Spends three. A ring of Sun-Gold, and a moment behind the guard.',
       cd: 0, gcd: 1, cost: CHARGE_MAX, radius: 150, dmg: 3.2, mitigate: 2 },
-    { id: 'mass', name: 'Unyielding Mass', mark: '▣',
+    { id: 'mass', tag: 'MASS', role: 'ward', name: 'Unyielding Mass', mark: '▣',
       note: 'Rooted, unmovable, and half the harm for four seconds.',
       cd: 12, gcd: 1, root: 4 },
-    { id: 'purge', name: 'Grounding Purge', mark: '✚',
+    { id: 'purge', tag: 'PURGE', role: 'mend', name: 'Grounding Purge', mark: '✚',
       note: 'Channelled. Breaks the moment you are struck or move.',
       cd: 14, gcd: 1, channel: 3, healPct: 0.15 },
-    { id: 'guillotine', name: 'Star-Forged Guillotine', mark: '⚔',
+    { id: 'guillotine', tag: 'GUILLOTINE', role: 'strike', name: 'Star-Forged Guillotine', mark: '⚔',
       note: 'Spends three. Comes down on one body, and on the Vulnerable it ends things.',
       cd: 0, gcd: 1.25, cost: CHARGE_MAX, reach: 96, dmg: 7 }
   ],
@@ -5665,16 +5684,16 @@ const ABILITIES = {
     // Zayd's is the same decision in his own idiom: a line rather than a bash,
     // and it stays a line -- three hundred and forty units of it, through
     // everything standing in the way. Same shorter beat, same reason.
-    { id: 'truth', name: 'Piercing Truth', mark: '↠',
+    { id: 'truth', tag: 'TRUTH', role: 'strike', name: 'Piercing Truth', mark: '↠',
       note: 'A line of Azure through everything standing in it. Builds Tension.',
       cd: 0, gcd: 0.8, build: 14, reach: 340, dmg: 2.2 },
-    { id: 'nullzone', name: 'Null-Zone Eruption', mark: '◍',
+    { id: 'nullzone', tag: 'NULL-ZONE', role: 'snare', name: 'Null-Zone Eruption', mark: '◍',
       note: 'Spends two fifths. A pool that slows what stands in it and eats what it is casting.',
       cd: 0, gcd: 1, costPct: 0.40, radius: 96, life: 7 },
-    { id: 'decrypt', name: 'Focal Decryption', mark: '⌁',
+    { id: 'decrypt', tag: 'DECRYPT', role: 'snare', name: 'Focal Decryption', mark: '⌁',
       note: 'Off the beat. Snaps a cast, silences for three, and gives the Tension back.',
       cd: 8, gcd: 0, reach: 300, silence: 3 },
-    { id: 'jars', name: 'Crimson-Infused Jars', mark: '⚱',
+    { id: 'jars', tag: 'JARS', role: 'mend', name: 'Crimson-Infused Jars', mark: '⚱',
       note: 'Three to a delve. Instant, and a great deal of life at once.',
       cd: 30, gcd: 1, uses: 3, healPct: 0.45 }
   ]

@@ -15,6 +15,16 @@ import { bossShown, bossBarDrop, minimapBox } from './overlay.js';
 /* global player, run, enemies, view, LEVEL, REGION, HUD_H, ABILITIES,
           ABILITY_BY_ID, CHARGE_MAX, TENSION_MAX, COMBO_LEN, CONDUIT_EDGE */
 
+/* Four roles, four colours, and the mapping lives beside the buttons because
+ * it is a rendering decision -- the role itself is data on the ability, so the
+ * canvas build reads the same word and is free to draw it differently. */
+const ROLE_HUE = {
+  strike: '#d9a441',   // sun-gold: it hurts something
+  ward:   '#8fb9d6',   // arcane:   it keeps you standing
+  mend:   '#7fb08f',   // green:    it gives life back
+  snare:  '#cbb6ff'    // brand:    it takes something from them
+};
+
 const g = window;   // ONLY for the functions -- see the note in delve.js: a
                     // top-level const in a classic script never lands on
                     // window, so constants are read bare and calls are not.
@@ -153,7 +163,43 @@ const CSS = `
      transparent 0)}
 #hud button .cd{position:absolute;bottom:5px;font:600 9px/1 ui-monospace,monospace;
      color:#ffd870;text-shadow:0 1px 2px #000}
-#hud button .mark{position:relative;z-index:1}
+#hud button .mark{position:relative;z-index:1;line-height:1;margin-top:-3px}
+/* THE WORD, WHICH IS THE WHOLE POINT.
+ *
+ * A button used to be one abstract glyph, with the ability's name in a title
+ * attribute -- a hover tooltip, on a game played with a thumb, which is to say
+ * nowhere. Nine glyphs is nine things to memorise before you can play; nine
+ * words is none.
+ *
+ * Small on purpose. It is read while you are learning the kit and ignored
+ * afterwards, when the glyph and the colour carry it -- so it must not compete
+ * with either during a fight.
+ */
+#hud button .tag{position:absolute;bottom:7px;left:0;right:0;z-index:1;
+     font:600 7.5px/1 'IBM Plex Mono',ui-monospace,monospace;letter-spacing:.06em;
+     color:var(--role,#d9a441);text-shadow:0 1px 2px #000;pointer-events:none;
+     text-align:center;padding:0 3px;overflow:hidden;text-overflow:ellipsis;
+     white-space:nowrap}
+/* THE ROLE, AS A COLOUR. Four of them, and four is learnable in one delve
+   where nine glyphs are not: gold hurts something, blue keeps you standing,
+   green gives life back, violet takes something from them. The mark carries it
+   too, so the pair is legible to anyone who cannot separate the hues. */
+#hud button .mark{color:var(--role,#e8dcc0)}
+/* WHAT IT COSTS, on the button rather than only in the shared meter. A button
+   greyed for want of Charge and a button greyed for a cooldown were the same
+   grey, and they are not the same problem: one is "wait" and the other is
+   "go and hit something first". */
+#hud button .cost{position:absolute;top:6px;left:0;right:0;z-index:1;
+     display:flex;gap:2px;justify-content:center;pointer-events:none}
+#hud button .cost i{width:4px;height:4px;border-radius:50%;
+     background:rgba(255,216,112,.25);box-shadow:0 0 0 1px rgba(0,0,0,.55)}
+#hud button .cost i.on{background:#ffd870}
+#hud button .cost b{font:600 7.5px/1 'IBM Plex Mono',monospace;color:#ffd870;
+     text-shadow:0 1px 2px #000}
+/* Short of the price, rather than merely cooling: the ring goes amber and the
+   word says so, because waiting will not fix it. */
+#hud button.broke{opacity:.85;background:linear-gradient(#6d5a2c,#4a3c1e 40%,#332a14)}
+#hud button.broke .tag{color:#c9a24a}
 /* Cooling and CANNOT are different states and used to look the same. Cooling
    keeps its colour and shows the wedge; blocked -- no charges, nothing in
    reach -- goes flat and grey, because no amount of waiting fixes it. */
@@ -407,8 +453,11 @@ export class Hud {
       b.type = 'button';
       b.dataset.id = a.id;
       b.title = a.name + ' — ' + a.note;
-      b.innerHTML = '<span class="sweep"></span><span class="mark">' + a.mark +
-                    '</span><span class="cd"></span>';
+      b.style.setProperty('--role', ROLE_HUE[a.role] || '#d9a441');
+      b.innerHTML = '<span class="sweep"></span><span class="cost"></span>' +
+                    '<span class="mark">' + a.mark + '</span>' +
+                    '<span class="tag">' + (a.tag || a.name) + '</span>' +
+                    '<span class="cd"></span>';
       // pointerdown, not click: a click waits for the pointer to come back up,
       // which on a touch screen is a beat you can feel in a fight.
       b.addEventListener('pointerdown', e => { e.preventDefault(); g.castAbility(a.id); });
@@ -460,7 +509,16 @@ export class Hud {
       const a = ABILITY_BY_ID[b.dataset.id];
       const why = g.abilityBlock(a);
       const cd = (p.cds && p.cds[a.id]) || 0;
-      const s = why + '|' + Math.ceil(cd);
+      /* What it costs, and how much of that you have. Part of the signature
+       * so the pips repaint when the purse changes and not otherwise. */
+      let held = 0, want = 0, note = '';
+      if (a.cost) { want = a.cost; held = Math.min(want, p.charges | 0); }
+      else if (a.costPct) {
+        want = -1;
+        note = Math.round(a.costPct * 100) + '%';
+        held = (p.tension || 0) >= TENSION_MAX * a.costPct ? 1 : 0;
+      } else if (a.uses) { want = -1; note = '\u00d7' + (p.jars | 0); held = (p.jars | 0) > 0 ? 1 : 0; }
+      const s = why + '|' + Math.ceil(cd) + '|' + held + '|' + note;
       sig += s + ';';
       if (b.__s !== s) {
         b.__s = s;
@@ -469,7 +527,16 @@ export class Hud {
         // Cooling is not the same as blocked: one resolves by waiting and the
         // other does not, and they used to look identical.
         b.classList.toggle('cooling', why === 'gcd' || cd > 0);
+        // ...and short of the price is a third thing again. Waiting fixes a
+        // cooldown; only going and hitting something fixes this one, so it
+        // says so rather than wearing the same grey.
+        b.classList.toggle('broke', why === 'cost');
         b.querySelector('.cd').textContent = cd >= 1 ? Math.ceil(cd) : '';
+        const cost = b.querySelector('.cost');
+        cost.innerHTML = want > 0
+          ? Array.from({ length: want }, (_, i) =>
+              '<i class="' + (i < held ? 'on' : '') + '"></i>').join('')
+          : (note ? '<b>' + note + '</b>' : '');
       }
       /* The wedge, every frame -- it is one custom property and the browser
        * paints the gradient, so it costs nothing to keep smooth, and a
