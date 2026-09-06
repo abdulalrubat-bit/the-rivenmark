@@ -9,3 +9,13 @@ local.properties
 # the other twelve files committable, and a committed atlas.png would go stale
 # the moment the art changed with nothing to say so.
 app/src/main/assets/
+
+# Signing keys never live in the tree. The release signingConfig reads its
+# keystore path and passwords from Gradle properties instead -- off the command
+# line, or ~/.gradle/gradle.properties. A key committed beside the source is a
+# key anyone with the repository can publish an update with, and that cannot be
+# taken back afterwards. These patterns are a second line of defence for the
+# day somebody drops one here anyway.
+*.jks
+*.keystore
+keystore.properties
