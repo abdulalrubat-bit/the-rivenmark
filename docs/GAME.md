@@ -745,9 +745,37 @@ for the player to know that is what happened.
 
 ## 14. Controls and UI
 
-**One thumb.** A floating stick anywhere on the left, the kit bottom-right,
-WASD and arrows on a desktop. A touch on a button is consumed by that button
-and never reaches the stick.
+**One thumb.** A floating stick anywhere on the left, the Conduit and the kit
+bottom-right, WASD and arrows on a desktop. A touch on a button is consumed by
+that button and never reaches the stick.
+
+### The Conduit — where the attack lives
+
+The blade used to swing itself: an auto-target, a timer, and no input at all.
+That is the whole of why the attack felt meaningless — the blow was not weak,
+nobody threw it. The Conduit is one control with three states, told apart by
+how it is touched, and it is the biggest thing on the screen because it is
+what the game is about.
+
+| | | |
+|---|---|---|
+| **Tap** | under 0.2s, never dragged | The old accessible swing — nearest body, no aiming — but at **full damage** against the 0.62 the idle blade is worth. Tap again inside the window and it **chains**: the third of three comes round a fifth wider. |
+| **Drag** | past the deadzone | The drag vector takes the aim off the auto-target entirely. The blade fires down that line on its own beat for as long as you hold it — back-pedalling while cutting into a doorway is a thing you can express now. |
+| **Hold at the rim** | 0.45s and out at the edge | The firing stops and the blade gathers, at **half stride** while it does. Let go and it comes round once: ×3.4 damage, ×2.1 wide, ×1.6 reach. |
+
+**The blade still swings on its own when the Conduit is idle**, at the reduced
+bite it has always been worth — one thumb, or no thumb, still plays. What
+driving it buys is *aim*, the *chain*, the *cleave*, and 62% more per swing.
+
+The chain's window is the blade's own beat (`fireDelay × 1.6`, so 0.99s for
+Isaac) and **not** `GCD_TIME`. The ability beat is 1.2s against a swing rate of
+0.62, and a window that wide makes the chain automatic — which is not a rhythm,
+it is a formality. Tied to the blade instead, the Quickening boon and a Quick
+affix speed the chain up too, which is what anyone would expect them to do.
+
+The state machine lives in the **core**, not in either host: both builds drive
+it through `conduitPress` / `conduitAim` / `conduitRelease`, and the suites
+drive it with no pointer at all.
 
 - **Top strip** — one band: life with quarter ticks and a low-life pulse, and
   the slag count against the quota.

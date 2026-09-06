@@ -13,7 +13,7 @@
 import { bossShown, bossBarDrop, minimapBox } from './overlay.js';
 
 /* global player, run, enemies, view, LEVEL, REGION, HUD_H, ABILITIES,
-          ABILITY_BY_ID, CHARGE_MAX, TENSION_MAX */
+          ABILITY_BY_ID, CHARGE_MAX, TENSION_MAX, COMBO_LEN, CONDUIT_EDGE */
 
 const g = window;   // ONLY for the functions -- see the note in delve.js: a
                     // top-level const in a classic script never lands on
@@ -66,8 +66,62 @@ const CSS = `
    placed so nothing lands on anything else -- measured in the play test, not
    eyeballed, because the first version put the swap through the middle of the
    kit and the diagnostics button on top of both. */
-#hud .kit{position:absolute;right:10px;bottom:16px;display:grid;gap:8px;
+#hud .kit{position:absolute;right:10px;bottom:124px;display:grid;gap:8px;
      grid-template-columns:repeat(3,56px);pointer-events:auto}
+
+/* THE CONDUIT: where the attack lives.
+ *
+ * The blade used to swing itself -- an auto-target and a timer, and no input
+ * at all -- which is the whole of why the attack felt meaningless. This is
+ * the thumb's place now, and it is the biggest thing on the screen because it
+ * is what the game is about.
+ *
+ * One control, three states, told apart by how it is touched. Tap it and the
+ * blade comes round at the nearest body, harder than it ever swings on its
+ * own, and chains if you keep the rhythm. Drag it and the aim is yours. Drag
+ * it to the rim and hold, and it gathers.
+ *
+ * touch-action:none and pointer capture, both deliberate: a drag that
+ * starts here has to keep reporting after it leaves the button, and without
+ * the first the browser claims the gesture as a scroll a third of the way
+ * through a cleave.
+ */
+#hud .conduit{position:absolute;right:12px;bottom:14px;width:96px;height:96px;
+     border-radius:50%;pointer-events:auto;touch-action:none;
+     background:linear-gradient(#e2b96a,#a67c3a 34%,#6d4d22 70%,#3a2610);
+     box-shadow:0 3px 10px rgba(0,0,0,.6);display:grid;place-items:center;
+     -webkit-user-select:none;user-select:none}
+#hud .conduit:before{content:'';position:absolute;inset:4px;border-radius:50%;
+     background:linear-gradient(rgba(44,54,70,.85),rgba(10,14,22,.96)),#161310;
+     box-shadow:inset 0 1px 0 rgba(150,172,200,.22),0 0 0 1px rgba(0,0,0,.85)}
+/* The rim, which is where a gather begins: it lights as the drag approaches
+   it, so "hold it at the edge" is a thing the control tells you rather than a
+   thing you have to be told. */
+#hud .conduit .ring{position:absolute;inset:7px;border-radius:50%;
+     border:2px solid rgba(232,192,96,var(--rim,.16));pointer-events:none}
+/* The gather, as the cooldown wedge run backwards -- filling instead of
+   draining, because this is a thing being built rather than spent. */
+#hud .conduit .chg{position:absolute;inset:8px;border-radius:50%;pointer-events:none;
+     background:conic-gradient(from -90deg,rgba(255,214,140,.55)
+     calc(var(--chg,0) * 360deg),transparent 0)}
+/* Where the thumb actually is. It is the only part that moves, so it is the
+   part that says the aim is yours now. */
+#hud .conduit .knob{position:absolute;width:26px;height:26px;border-radius:50%;
+     background:radial-gradient(circle at 38% 32%,#ffe9bc,#c79a44 60%,#6d4d22);
+     box-shadow:0 1px 3px rgba(0,0,0,.7);pointer-events:none;
+     transform:translate(var(--kx,0px),var(--ky,0px));
+     opacity:var(--knob,0);transition:opacity .08s linear}
+#hud .conduit .glyph{position:relative;z-index:1;font:22px/1 ui-monospace,monospace;
+     color:#ffd870;text-shadow:0 1px 3px #000;opacity:var(--mark,1);
+     pointer-events:none}
+/* The chain, as pips round the bottom of the rim. Three of them, and the
+   third is the one that comes round wider. */
+#hud .conduit .chain{position:absolute;bottom:9px;display:flex;gap:4px;
+     pointer-events:none}
+#hud .conduit .chain i{width:5px;height:5px;border-radius:50%;
+     background:rgba(255,216,112,.2);box-shadow:0 0 0 1px rgba(0,0,0,.6)}
+#hud .conduit .chain i.on{background:#ffd870}
+#hud .conduit.gathering{box-shadow:0 0 16px rgba(255,214,140,.5),0 3px 10px rgba(0,0,0,.6)}
 /* CUT FROM THE SAME STONE.
  *
  * The kit was flat black discs with a hairline ring, and they are the largest
@@ -205,6 +259,9 @@ export class Hud {
       '<div class="swap"><button type="button" title="swap">⇄</button></div>' +
       '<div class="hold"><button type="button" title="hold" aria-label="hold">❙❙</button></div>' +
       '<div class="kit"></div>' +
+      '<div class="conduit"><span class="ring"></span><span class="chg"></span>' +
+        '<span class="knob"></span><span class="glyph">\u2726</span>' +
+        '<span class="chain"></span></div>' +
       '<div class="boss" hidden>' +
         '<div class="line"><div class="name"></div>' +
           '<div class="held" hidden><s>HELD</s></div>' +
@@ -222,6 +279,12 @@ export class Hud {
     this.slag = root.querySelector('.slag');
     this.res = root.querySelector('.res');
     this.kit = root.querySelector('.kit');
+    this.conduit = root.querySelector('.conduit');
+    this.conRing = root.querySelector('.conduit .ring');
+    this.conKnob = root.querySelector('.conduit .knob');
+    this.conChain = root.querySelector('.conduit .chain');
+    for (let i = 0; i < COMBO_LEN; i++) this.conChain.appendChild(document.createElement('i'));
+    this.wireConduit();
     this.banner = root.querySelector('.banner');
     this.boss = root.querySelector('.boss');
     this.bossName = root.querySelector('.boss .name');
@@ -239,6 +302,101 @@ export class Hud {
 
     this.hero = null;      // which kit is currently built
     this.sig = '';         // last rendered button state, to skip DOM churn
+  }
+
+  /* THE CONDUIT'S POINTER.
+   *
+   * All three states come off one press, told apart by distance and time, so
+   * the whole of it is: where did the thumb go, and how long did it stay?
+   *
+   *   never past the deadzone, released quickly   -> a tap
+   *   past the deadzone                           -> aiming, and firing
+   *   out at the rim and held                     -> gathering
+   *
+   * The core owns the machine and this owns the pointer. Nothing here decides
+   * what a tap is worth or how long a gather takes -- it reports an angle and
+   * a distance, and reads back what the core made of it.
+   *
+   * setPointerCapture is not optional: a cleave is a drag that ends well
+   * outside a 96px circle, and without capture the browser stops reporting
+   * the moment the thumb leaves the button and the blade never comes round.
+   */
+  wireConduit() {
+    const el = this.conduit;
+    const R = 40;                       // the rim, in px from the middle
+    const DEAD = 12;                    // ...and how far is "not a tap"
+    let id = null, ox = 0, oy = 0;
+
+    const vec = e => {
+      const b = el.getBoundingClientRect();
+      return { x: e.clientX - (b.left + b.width / 2),
+               y: e.clientY - (b.top + b.height / 2) };
+    };
+    const show = (dx, dy, mag) => {
+      const st = el.style;
+      st.setProperty('--kx', dx.toFixed(1) + 'px');
+      st.setProperty('--ky', dy.toFixed(1) + 'px');
+      st.setProperty('--knob', mag > 0 ? '1' : '0');
+      st.setProperty('--mark', mag > 0 ? '0.25' : '1');
+      // The rim brightens as the drag reaches it, so "hold it at the edge" is
+      // something the control says rather than something you are told.
+      st.setProperty('--rim', (0.16 + 0.7 * Math.min(1, mag / CONDUIT_EDGE)).toFixed(2));
+    };
+
+    el.addEventListener('pointerdown', e => {
+      if (id !== null) return;
+      e.preventDefault(); e.stopPropagation();
+      id = e.pointerId;
+      const v = vec(e); ox = v.x; oy = v.y;
+      try { el.setPointerCapture(id); } catch (err) { /* ignore */ }
+      g.conduitPress();
+    });
+
+    el.addEventListener('pointermove', e => {
+      if (e.pointerId !== id) return;
+      e.preventDefault(); e.stopPropagation();
+      const v = vec(e);
+      const dx = v.x - ox, dy = v.y - oy;
+      const d = Math.hypot(dx, dy);
+      if (d < DEAD) { show(0, 0, 0); return; }
+      const mag = Math.min(1, d / R);
+      g.conduitAim(Math.atan2(dy, dx), mag);
+      const k = Math.min(d, R);
+      show(dx / d * k, dy / d * k, mag);
+    });
+
+    const up = e => {
+      if (e.pointerId !== id) return;
+      e.preventDefault();
+      try { el.releasePointerCapture(id); } catch (err) { /* ignore */ }
+      id = null;
+      show(0, 0, 0);
+      g.conduitRelease();
+    };
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+    el.addEventListener('lostpointercapture', up);
+    el.addEventListener('contextmenu', e => e.preventDefault());
+  }
+
+  /* What the control shows back: how much is gathered, and how far along the
+   * chain a tap has got. Both written only when they CHANGE -- this runs every
+   * frame and a style write that sets the same string still dirties layout. */
+  syncConduit() {
+    const p = player;
+    if (!p) return;
+    const chg = (p.cleave || 0);
+    if (this.lastChg !== chg) {
+      this.lastChg = chg;
+      this.conduit.style.setProperty('--chg', chg.toFixed(3));
+      this.conduit.classList.toggle('gathering', chg > 0);
+    }
+    const n = (p.comboT || 0) > 0 ? (p.combo || 0) : 0;
+    if (this.lastChain !== n) {
+      this.lastChain = n;
+      const pips = this.conChain.children;
+      for (let i = 0; i < pips.length; i++) pips[i].classList.toggle('on', i < n);
+    }
   }
 
   buildKit(hero) {
@@ -265,6 +423,7 @@ export class Hud {
     if (!p) return;
     if (this.hero !== p.hero) this.buildKit(p.hero);
 
+    this.syncConduit();
     const f = Math.max(0, p.hp) / p.maxHp;
     this.lifeFill.style.width = (f * 100).toFixed(1) + '%';
     this.lifeText.textContent = Math.ceil(Math.max(0, p.hp)) + ' / ' + Math.round(p.maxHp);

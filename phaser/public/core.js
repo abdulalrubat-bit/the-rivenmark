@@ -12,7 +12,7 @@
  * the game lives inside a function named draw, forge or paint, and those are
  * dropped here.
  *
- * 581 statements kept; 15 drawing functions and 52 page-bound statements dropped.
+ * 602 statements kept; 15 drawing functions and 52 page-bound statements dropped.
  * Re-run `npm run core` after changing ../index.html.
  */
 /* =============================================================================
@@ -2411,6 +2411,8 @@ function makePlayer(x, y, heroId) {
   p.gait = 0; p.pace = 0;
   p.strike = 0; p.recov = 0;
   p.bleed = 0; p.bleedDps = 0; p.bleedTick = 0; p.bleedSized = false;
+  p.conDown = false; p.conAim = false; p.conT = 0; p.conA = 0; p.conMag = 0;
+  p.cleave = 0; p.combo = 0; p.comboT = 0; p.comboPop = 0;
   p.upg = {};
   p.level = stash.level || 1;
   p.gear = {};
@@ -2850,10 +2852,12 @@ function spawnAmbush(cx, cy, n) {
   return born;
 }
 
-function fire() {
-  // Auto-target: nearest enemy inside weapon range. The spatial hash means
-  // this is a handful of cells, not a full pass over the swarm.
-  const R = player.range;
+/* Who the blade would pick if nobody aimed it. Split out of fire() because
+ * the Conduit needs the same answer for a tap in an empty room -- one rule
+ * about what counts as a target, not two that will one day disagree about
+ * mirages or about what rock stops.
+ */
+function nearestFoe(R) {
   enemyGrid.query(player.x, player.y, R, _near);
   // Nearest-target alone cannot fight a boss: while he is escorted, every
   // crescent lands in the escort and he never takes a scratch. The Vanguard put
@@ -2877,10 +2881,27 @@ function fire() {
     if (isAvatar(e)) { if (d < avatarD) { avatarD = d; avatar = e; } }
     if (d < bestD) { bestD = d; best = e; }
   }
-  best = avatar || best;
-  if (!best) return false;
+  return avatar || best;
+}
 
-  const base = Math.atan2(best.y - player.y, best.x - player.x);
+// The automatic blade: find something, swing at it, at what a swing nobody
+// asked for is worth.
+function fire() {
+  const best = nearestFoe(player.range);
+  if (!best) return false;
+  return swingAt(Math.atan2(best.y - player.y, best.x - player.x), EMPTY_SWING);
+}
+
+// A blank shape, so the hot path allocates nothing per swing.
+const EMPTY_SWING = {};
+
+/* Bring the blade round on a bearing. Everything that swings goes through
+ * here -- the automatic blade, a tap, the continuous fire down an aimed line,
+ * and the charged cleave -- so there is one place that knows what a swing IS
+ * and four callers that know what kind of swing they want.
+ */
+function swingAt(base, o) {
+  const k = o || EMPTY_SWING;
   // Extra crescents stagger behind the first rather than fanning out: two
   // blades of light chasing the same line reads as a combination strike, where
   // a spread reads as a shotgun.
@@ -2893,9 +2914,9 @@ function fire() {
   const step = fan ? 0.34 : 0.15;
   for (let i = 0; i < player.shots; i++) {
     const a = base + (i === 0 ? 0 : (i % 2 ? 1 : -1) * step * Math.ceil(i / 2));
-    releaseCrescent(a, fan ? 0 : i * 0.055);
+    releaseCrescent(a, fan ? 0 : i * 0.055, k);
   }
-  player.swing    = SWING_TIME;
+  player.swing    = SWING_TIME * (k.heavy ? 1.7 : 1);
   player.recov    = 0;
   player.swingA   = base;
   // Next form in the cycle. Slash, then rise, then chop, then round again --
@@ -2923,18 +2944,23 @@ function fire() {
 // The stat stays a stat rather than becoming `range / 0.12` so the boons keep
 // meaning what they say: Long Reach still buys reach at a little flight time,
 // and Swift Edge still buys the flight time back.
-function releaseCrescent(a, delay) {
-  const half = player.sweep;
+function releaseCrescent(a, delay, o) {
+  const k = o || EMPTY_SWING;
+  const half = player.sweep * (k.sweep || 1);
   const bow  = Math.max(half * 1.15, 52);
   arcs.push({
     x: player.x + Math.cos(a) * (player.r + 8),
     y: player.y + Math.sin(a) * (player.r + 8),
     dx: Math.cos(a), dy: Math.sin(a), a: a,
-    speed: player.arcSpeed, dmg: player.damage * AUTO_BITE,
+    speed: player.arcSpeed,
+    // AUTO_BITE is what the blade is worth when it swings ITSELF. A blow you
+    // asked for is worth the whole of it -- that difference is most of why
+    // pressing the button is worth doing.
+    dmg: player.damage * (k.bite === undefined ? AUTO_BITE : k.bite),
     half: half, bow: bow, band: 11,
     delay: delay || 0,
-    life: player.range / player.arcSpeed,
-    maxLife: player.range / player.arcSpeed,
+    life: player.range * (k.reach || 1) / player.arcSpeed,
+    maxLife: player.range * (k.reach || 1) / player.arcSpeed,
     hit: [], dead: false
   });
 }
@@ -4680,8 +4706,15 @@ function updatePlayer(dt) {
     // Rooted, and channelling, both mean the boots stay where they are. The
     // stick still reads -- it is what lapses the channel -- but it moves
     // nothing, which is the trade Unyielding Mass is asking you to make.
-    if (!(player.rooted > 0) && !player.channel)
-      moveEntity(player, mv.x * player.speed * dt, mv.y * player.speed * dt);
+    // Gathering a cleave halves the stride. Not a root -- you can still walk
+    // out of a slam that lands while you are winding one -- but you are slow,
+    // and that is what the blow is bought with: a second of being easy to
+    // reach, spent up front, before you know whether it will land.
+    if (!(player.rooted > 0) && !player.channel) {
+      const stride = (player.cleave || 0) > 0 ? CLEAVE_STRIDE : 1;
+      moveEntity(player, mv.x * player.speed * stride * dt,
+                         mv.y * player.speed * stride * dt);
+    }
   }
   // The gait is driven by ground actually covered, not by a clock, so the
   // feet cannot skate: walk into a wall and the stride stops with him.
@@ -4699,10 +4732,164 @@ function updatePlayer(dt) {
   }
   if (player.regen > 0) player.hp = Math.min(player.maxHp, player.hp + player.regen * dt);
 
+  updateConduit(dt);
+}
+
+/* --- THE CONDUIT ----------------------------------------------------------
+   The blade swung itself. That was the whole of the attack: an auto-target, a
+   timer, and no input at all -- which is why the note kept coming back that
+   the attack button felt meaningless and the fight felt hollow. It was not
+   that the blow was weak. It was that nobody threw it.
+
+   One control, three states, told apart by how you touch it. It is a state
+   machine and not three buttons on purpose: a thumb has one place to be.
+
+     TAP      under CONDUIT_TAP and never dragged. The old accessible swing --
+              nearest target, no aiming -- but at FULL bite rather than the
+              0.62 the automatic blade is worth, and it chains: tap again
+              inside the window and the third strike of the chain comes round
+              a fifth wider. Rhythm, for a thumb that wants one.
+     DRAG     past the deadzone. The drag vector takes the aim off the
+              auto-target entirely and the blade fires down that line on its
+              own beat for as long as you hold it. Back-pedalling while
+              cutting into a doorway is a thing you can express now.
+     HOLD     dragged to the edge and held. The firing stops, the blade
+              gathers, and the stride halves while it does -- you are rooted
+              in place by choice. Let go and it comes round once, heavy.
+
+   THE WINDOW IS OFF `fireDelay`, NOT `GCD_TIME`. The brief said the beat, and
+   the beat is 1.2s while the blade's own rhythm is 0.62 -- a window that wide
+   makes the chain automatic, which is not a rhythm, it is a formality. Tied
+   to the blade instead it also means the Quickening boon and a Quick affix
+   speed the chain up, which is what anyone would expect them to do.
+
+   The state machine lives here, in the core, rather than in either host: the
+   canvas build and the Phaser build both drive it through the same three
+   calls, and the suites drive it without a pointer at all.
+   ---------------------------------------------------------------------- */
+const CONDUIT_TAP    = 0.20;  // a press shorter than this, undragged, is a tap
+const CONDUIT_HOLD   = 0.45;  // held at the edge this long and it starts gathering
+const CONDUIT_FULL   = 1.15;  // ...and this long to be full
+const CONDUIT_EDGE   = 0.82;  // how far out "at the edge" is
+const COMBO_LEN      = 3;     // strikes to a chain
+const COMBO_WINDOW   = 1.6;   // ...as a multiple of the blade's own beat
+const COMBO_SWEEP    = 1.2;   // and what the last one is worth in width
+const CLEAVE_MIN     = 0.25;  // a gather shorter than this is not a cleave
+const CLEAVE_BITE    = 3.4;   // what a full one is worth against a tap
+const CLEAVE_SWEEP   = 2.1;
+const CLEAVE_REACH   = 1.6;
+const CLEAVE_STRIDE  = 0.45;  // what it costs to stand there gathering
+
+// The three calls a host makes. Nothing here knows about pixels or pointers.
+function conduitPress() {
+  player.conDown = true;
+  player.conT = 0;
+  player.conAim = false;
+  player.conMag = 0;
+}
+
+// `mag` is 0 at the origin and 1 at the ring's edge. Past the deadzone the
+// host reports it; inside, it does not call this at all.
+function conduitAim(angle, mag) {
+  if (!player.conDown) return;
+  player.conAim = true;
+  player.conA = angle;
+  player.conMag = clamp(mag, 0, 1);
+}
+
+function conduitRelease() {
+  if (!player.conDown) return;
+  player.conDown = false;
+  if ((player.cleave || 0) >= CLEAVE_MIN) {
+    // A gathered blow, worth what it gathered.
+    const f = player.cleave;
+    swingAt(player.conA, { bite: 1 + (CLEAVE_BITE - 1) * f,
+                           sweep: 1 + (CLEAVE_SWEEP - 1) * f,
+                           reach: 1 + (CLEAVE_REACH - 1) * f,
+                           heavy: true });
+    player.fireTimer = player.fireDelay;
+    freeze(0.05 * f);
+    shake(5 + 9 * f);
+    ring(player.x, player.y, HEROES[player.hero].magic, 12, 60 + 90 * f, 0.3);
+    player.combo = 0; player.comboT = 0;
+  } else if (!player.conAim && player.conT <= CONDUIT_TAP) {
+    tapSwing();
+  }
+  player.cleave = 0;
+  player.conAim = false;
+  player.conT = 0;
+}
+
+/* A swing you asked for. Rate-capped by the same beat the automatic blade
+ * runs on -- so tapping cannot out-throughput anything -- but it is YOUR beat:
+ * you decide the moment, and hitting the moment again inside the window
+ * carries the chain on.
+ */
+function tapSwing() {
+  if (player.fireTimer > 0) return false;
+  const last = player.combo || 0;
+  const n = (player.comboT || 0) > 0 ? Math.min(COMBO_LEN, last + 1) : 1;
+  const finisher = n >= COMBO_LEN;
+  const hit = swingAt(aimAngle(), {
+    bite: 1,
+    sweep: finisher ? COMBO_SWEEP : 1
+  });
+  if (!hit) return false;
+  player.combo = finisher ? 0 : n;
+  player.comboT = finisher ? 0 : player.fireDelay * COMBO_WINDOW;
+  player.comboPop = finisher ? 1 : 0.6;      // what the HUD flashes
+  if (finisher) {
+    shake(3);
+    ring(player.x, player.y, HEROES[player.hero].magic, 10, 54, 0.22);
+  }
+  player.fireTimer = player.fireDelay;
+  return true;
+}
+
+/* Where an undirected swing goes: at whatever the auto-target would have
+ * picked, and failing that at whatever the stick is pointing at, and failing
+ * that straight ahead. A tap in an empty room should still swing -- a button
+ * that silently does nothing is the complaint this whole system exists to
+ * answer.
+ */
+function aimAngle() {
+  const t = nearestFoe(player.range);
+  if (t) return Math.atan2(t.y - player.y, t.x - player.x);
+  if (stick.mag > 0.05) return Math.atan2(stick.dy, stick.dx);
+  return player.angle || 0;
+}
+
+/* The clock the blade runs on, and the only place it runs. Called from
+ * updatePlayer in place of the bare fireTimer countdown that used to live
+ * there, so the automatic blade and the driven one cannot both fire.
+ */
+function updateConduit(dt) {
+  if ((player.comboT || 0) > 0) {
+    player.comboT -= dt;
+    if (player.comboT <= 0) { player.combo = 0; player.comboT = 0; }
+  }
+  if ((player.comboPop || 0) > 0) player.comboPop = Math.max(0, player.comboPop - dt * 2.5);
+
+  if (player.conDown) {
+    player.conT += dt;
+    // At the edge, and held: gathering. Nothing else happens while it does.
+    if (player.conAim && player.conMag >= CONDUIT_EDGE && player.conT >= CONDUIT_HOLD) {
+      player.cleave = clamp((player.conT - CONDUIT_HOLD) /
+                            (CONDUIT_FULL - CONDUIT_HOLD), 0, 1);
+      return;
+    }
+    player.cleave = 0;
+  }
+
   player.fireTimer -= dt;
-  if (player.fireTimer <= 0) {
-    // No target in range: hold the timer at zero so the next one that walks in
-    // is engaged immediately rather than after a stale cooldown.
+  if (player.fireTimer > 0) return;
+  if (player.conDown && player.conAim) {
+    // Driven: down the line you are pointing, at the whole of the blade.
+    swingAt(player.conA, { bite: 1 });
+    player.fireTimer = player.fireDelay;
+  } else {
+    // Idle. The blade still keeps you alive on its own, at the reduced bite
+    // it has always been worth -- one thumb, or no thumb, still plays.
     player.fireTimer = fire() ? player.fireDelay : 0;
   }
 }

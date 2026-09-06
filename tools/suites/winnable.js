@@ -502,6 +502,16 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
     const sum = k => rs.reduce((a, r) => a + r[k], 0);
     const auto = sum('auto'), kit = sum('kit'), dlv = sum('delveDmg');
     const all = Math.max(1, auto + kit + dlv);
+    /* HOW LONG DOES A VANGUARD LIVE?
+     *
+     * The report was "I die in less than a minute", and this suite had been
+     * saying so all along without anyone reading it that way: `pressure` is
+     * lives lost per minute alive, so 1.5 IS forty seconds, and it was
+     * reported as a curve SHAPE -- flat, good -- while the absolute level went
+     * unexamined. A number nobody can misread belongs beside it.
+     */
+    const died = rs.filter(r => r.out === 'slain').map(r => r.mins * 60);
+    died.sort((a, b) => a - b);
     // Of everything that reached the hero, how much could they have answered?
     const ans = { read: 0, standing: 0, touch: 0 };
     for (const r of rs) for (const k in ans) ans[k] += r.answer[k];
@@ -516,6 +526,9 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
     curve.push({ idx, won, quota, stuck, n: TRIES,
                  worst: worst.join(', '),
                  read: pct('read'), standing: pct('standing'), touch: pct('touch'),
+                 deaths: died.length,
+                 diedAt: died.length ? Math.round(died[died.length >> 1]) : null,
+                 diedSoon: died.filter(t => t < 60).length,
                  // Blows taken per minute alive, as a share of the hero's own
                  // life: the one number that says whether a rung's horde can
                  // actually threaten the hero who belongs on it.
@@ -538,7 +551,10 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
     '\n              took: ' + c.pressure + ' lives/min off ' + c.life +
     ' hp — ' + c.worst +
     '\n              could answer: ' + c.read + '% read, ' + c.standing +
-    '% standing in it, ' + c.touch + '% nothing to see';
+    '% standing in it, ' + c.touch + '% nothing to see' +
+    '\n              died: ' + c.deaths + '/' + c.n +
+    (c.deaths ? ', median at ' + c.diedAt + 's, ' + c.diedSoon +
+                ' inside the first minute' : '');
   const tot = curve.reduce((a, c) => a + c.won, 0), att = curve.length * TRIES;
   console.log('\n   THE REFERENCE PLAYER, ' + TRIES + ' delves a rung.');
   console.log('   An instrument, not a tripwire: the bot does not kite and does');
