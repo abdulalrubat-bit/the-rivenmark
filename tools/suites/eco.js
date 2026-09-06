@@ -68,9 +68,20 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
     for(let i=0;i<60;i++) updateTotems(1/60);
     o.totemMends=hurt.hp>was;
     o.totemNotForYou=player.hp<=pHp;
+    /* Cut with the BLADE, which is how a totem is actually brought down.
+     *
+     * This used to call hurtTotemsNear, a helper with no caller anywhere in
+     * the game -- so the suite proved a totem could be destroyed through a
+     * path no player can reach, while the path they do reach (a crescent
+     * sweeping through it in updateArcs) was never tested at all. The helper
+     * is gone; this drives the real one.
+     */
     const th0=totems[0].hp;
-    hurtTotemsNear(totems[0].x, totems[0].y, 20, 40);
-    o.totemTakesDamage=totems[0].hp<th0;
+    player.x=totems[0].x-40; player.y=totems[0].y;
+    releaseCrescent(0);
+    for(let i=0;i<40 && totems.length && totems[0].hp>=th0;i++) updateArcs(1/60);
+    o.totemTakesDamage=totems.length>0 && totems[0].hp<th0;
+    o.totemCutBy=totems.length>0 ? Math.round(th0-totems[0].hp) : 0;
     totems[0].hp=0; updateTotems(1/60);
     o.totemFalls=totems.length===0;
     // and a shaman is what plants one
@@ -124,7 +135,10 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   ck('a totem stands where it is planted', R.totemPlanted);
   ck('it mends the horde', R.totemMends);
   ck('and not you', R.totemNotForYou, 'standing in it is not a gift');
-  ck('it can be broken', R.totemTakesDamage && R.totemFalls);
+  ck('it can be cut down with the blade, which is the only way anyone can',
+     R.totemTakesDamage && R.totemFalls,
+     R.totemTakesDamage ? 'one crescent took ' + R.totemCutBy + ' off it'
+       : 'THE BLADE DID NOT REACH IT — a totem nothing can cut is a totem you wait out');
   ck('and a shaman is what plants one', R.shamanPlants);
 
   ck('an elite over a fresh corpse stops to feed', R.consumeBegan);

@@ -1771,6 +1771,18 @@ const alertR = () => ALERT_R * (1 + (LEVEL.depth || 0) * ALERT_GROWTH);
 // arithmetic.
 const AFFLICT_GROWTH = 1.0;
 const linger = t => t * (1 + (LEVEL.depth || 0) * AFFLICT_GROWTH);
+/* Anything whose LIFETIME went through linger() has already been made worse by
+ * depth once, and must not be made worse by delveBite a second time.
+ *
+ * Measured, because the compound was invisible until it was: with both terms
+ * running, a patch of burning ground at the bottom of the ladder lasted twice
+ * as long AND hit twice as hard, which is four times the damage, and "burning
+ * ground" went from a line item to 45% of everything that killed the reference
+ * player at rung 44 -- the single biggest killer in the game. Doubling the
+ * clock was the design; quadrupling the total was an accident of two fixes
+ * meeting.
+ */
+const lingered = true;
 // How many bodies may be awake at once. The brief asked for a cap of 40-60 on
 // the horde; applied to bodies *placed* it breaks extraction outright, because
 // a delve holds 1.42x its own slag quota and the quota runs to 270 at ~1 slag
@@ -2401,8 +2413,40 @@ function buildLevels() {
       invade: ramp ? ramp.invade : 1,
       guard: ramp ? ramp.guard : -1,       // -1 means "however deep it is"
       lesson: ramp ? ramp.lesson : null,
-      // Expected power, and the terms that follow from it.
-      power: Math.round(4 + d * 96),
+      /* Expected power: what the card advertises, and what refreshDelveLine
+       * recommends by -- it picks the deepest rung your power qualifies for,
+       * so this number decides where players are SENT.
+       *
+       * It was `4 + d * 96`, linear, and linear was wrong. Measured by gearing
+       * the reference player to multiples of each rung's own advice and asking
+       * where it starts getting out:
+       *
+       *     rung   card said   actually took   out by
+       *      3        10            30          3.0x
+       *      9        21            42          2.0x
+       *     17        36          57-72        ~1.8x
+       *     30        60            90          1.5x
+       *     44        87          87-110       ~1.1x
+       *
+       * The advice was not merely low, it was low in a SHAPE: worst at the
+       * shallow end and about right at the deep one. And that is the whole of
+       * the cliff the ladder has always had at rungs 3 to 17 -- not a fight
+       * that is too hard, a rung the game actively told you that you were
+       * ready for. It sent a power-10 hero into a delve that wanted 30.
+       *
+       * The reason is content, and it is visible in RAMP right above: the
+       * first eight rungs each add a whole archetype, plus pitch, champions,
+       * invasions and epithets, while a linear curve gave the hero an eighth
+       * of its total growth over the same stretch. Demands rise fastest at the
+       * start, so the curve has to as well -- d^0.6 is what fits every
+       * measured point above, and it still starts at 4, so a Vanguard who has
+       * never descended still qualifies for the proving ground.
+       *
+       * The bot is a pessimistic yardstick -- it does not kite and does not
+       * use the terrain -- so these are an upper bound on what a person needs.
+       * What is not in doubt is the shape.
+       */
+      power: Math.round(4 + 116 * Math.pow(d, 0.6)),
       depth: d,
       quota: Math.round(125 + d * 145),
       channel: 4.0
@@ -3974,7 +4018,7 @@ function makePlayer(x, y, heroId) {
   p.swing = 0; p.swingA = 0;
   p.gait = 0; p.pace = 0;
   p.strike = 0; p.recov = 0;
-  p.bleed = 0; p.bleedDps = 0; p.bleedTick = 0;
+  p.bleed = 0; p.bleedDps = 0; p.bleedTick = 0; p.bleedSized = false;
   p.upg = {};
   p.level = stash.level || 1;
   p.gear = {};
@@ -4585,9 +4629,10 @@ function maybeDropItem(e) {
    already off-screen; the reach of what the Vanguard carries simply closes,
    which is enough to make a room you had read stop being read.
    -------------------------------------------------------------------- */
-function openWound(dps, life) {
+function openWound(dps, life, sized) {
   player.bleed = Math.max(player.bleed || 0, life);
   player.bleedDps = dps;
+  player.bleedSized = !!sized;
   player.bleedTick = Math.min(player.bleedTick || BLEED_TICK, BLEED_TICK);
 }
 
@@ -4601,7 +4646,7 @@ function updateBleed(dt) {
     // a bleed the player can outrun by taking another blow is not a bleed.
     const was = player.invuln;
     player.invuln = 0;
-    hurtPlayerBy(player.bleedDps * BLEED_TICK, player.x, player.y);
+    hurtPlayerBy(player.bleedDps * BLEED_TICK, player.x, player.y, player.bleedSized);
     player.invuln = was;
     floatDmg(player.x, player.y - player.r * 1.4, player.bleedDps * BLEED_TICK, 'bleed');
     if (player.hp > 0) burst(player.x, player.y, PAL.blood, 4, 90);
@@ -5059,7 +5104,7 @@ function updateTraps(dt) {
         if (dist2(player.x, player.y, tr.x, tr.y) < tr.r * tr.r &&
             onPlate(player.x, player.y)) {
           const was = player.invuln; player.invuln = 0;
-          hurtPlayerBy(player.maxHp * SPIKE_TOLL, tr.x, tr.y);
+          hurtPlayerBy(player.maxHp * SPIKE_TOLL, tr.x, tr.y, true);
           player.invuln = Math.max(player.invuln, was);
         }
         enemyGrid.query(tr.x, tr.y, tr.r, _near);
@@ -5079,7 +5124,7 @@ function updateTraps(dt) {
       tr.tick = TRAP_TICK;
       if (dist2(player.x, player.y, tr.x, tr.y) < tr.r * tr.r) {
         const was = player.invuln; player.invuln = 0;
-        hurtPlayerBy(player.maxHp * POOL_DPS * TRAP_TICK, tr.x, tr.y);
+        hurtPlayerBy(player.maxHp * POOL_DPS * TRAP_TICK, tr.x, tr.y, true);
         player.invuln = Math.max(player.invuln, was);
       }
       enemyGrid.query(tr.x, tr.y, tr.r, _near);
@@ -5136,13 +5181,33 @@ function blastAt(x, y, r, dmg, hue, pierce) {
     if (d > r + e.r) continue;
     damageEnemy(e, dmg * (1 - Math.min(0.6, d / (r * 2))), x, y);
   }
-  if (dist2(player.x, player.y, x, y) < r * r) {
+  /* The hero gets the same falloff the horde gets, and until now did not.
+   *
+   * A body took between 0.4 and 1.0 of the blast by how far out it stood; the
+   * hero took a flat 0.4 anywhere inside the radius, so the very edge of a
+   * barrel cost exactly what the middle of it did. That is backwards for the
+   * one piece of scenery whose whole design is "a thing you aim at by standing
+   * somewhere" -- there was no somewhere. Setting one off and stepping back
+   * was worth nothing, so the correct play and the careless one were priced
+   * the same.
+   *
+   * Measured: bursts were 52% of everything that killed the reference player
+   * at rung 3 and 26% at rung 9 -- the largest single cause of the cliff at
+   * the end of the teaching ramp, ahead of the entire horde put together.
+   *
+   * A direct hit is unchanged. The floor of 0.35 is so that a blast is never
+   * free to walk through, only cheap to be at the edge of.
+   */
+  const pr2 = dist2(player.x, player.y, x, y);
+  if (pr2 < r * r) {
+    const near = 0.35 + 0.65 * (1 - clamp(Math.sqrt(pr2) / r, 0, 1));
+    const toll = dmg * 0.4 * near;
     if (pierce === false) {
-      hurtPlayerBy(dmg * 0.4, x, y);
+      hurtPlayerBy(toll, x, y);
     } else {
       const was = player.invuln;
       player.invuln = 0;
-      hurtPlayerBy(dmg * 0.4, x, y);
+      hurtPlayerBy(toll, x, y);
       player.invuln = Math.max(player.invuln, was);
     }
   }
@@ -5186,9 +5251,9 @@ function hurtPropsNear(x, y, r, dmg) {
   }
 }
 
-function addHazard(x, y, r, dps, life, hue) {
+function addHazard(x, y, r, dps, life, hue, sized) {
   if (hazards.length > 40) hazards.shift();
-  hazards.push({ x, y, r, dps, life, max: life, tick: 0,
+  hazards.push({ x, y, r, dps, life, max: life, tick: 0, sized: !!sized,
                  hue: hue || '#b07cff', wob: Math.random() * TAU });
 }
 
@@ -5206,7 +5271,7 @@ function updateHazards(dt) {
       // also touching you.
       const was = player.invuln;
       player.invuln = 0;
-      hurtPlayerBy(h.dps * HAZARD_TICK, h.x, h.y);
+      hurtPlayerBy(h.dps * HAZARD_TICK, h.x, h.y, h.sized);
       player.invuln = Math.max(player.invuln, was);
     }
   }
@@ -5268,7 +5333,7 @@ function updateSlams(dt) {
         // came down on stays broken and burning, so the corridor it chose is
         // a corridor you now have to go round.
         if (s.fracture) {
-          addHazard(s.x, s.y, s.r * 0.72, FRACTURE_DPS, linger(FRACTURE_LIFE), '#e0402c');
+          addHazard(s.x, s.y, s.r * 0.72, FRACTURE_DPS, linger(FRACTURE_LIFE), '#e0402c', lingered);
           for (let k = 0; k < 6; k++) {
             props.push({ x: s.x + rand(-s.r * 0.7, s.r * 0.7),
                          y: s.y + rand(-s.r * 0.5, s.r * 0.5),
@@ -6180,12 +6245,54 @@ function hurtPlayer(e) { hurtPlayerBy(e.dmg, e.x, e.y); }
 
 // Damage from something that is not a body -- a slam, a hazard -- comes
 // through here. fx/fy is only where the spray comes from.
-function hurtPlayerBy(dmg, fx, fy) {
+/* HOW HARD A DELVE HITS, by how deep it is.
+ *
+ * placeEnemy multiplied a body's HEALTH by (1 + depth * 1.6) and its damage by
+ * nothing at all, and neither did any hazard the delve leaves on the floor. So
+ * the deeper you went the safer you were. Measured on the reference player, as
+ * life lost per minute alive against the hero who belongs on that rung:
+ *
+ *     rung   0     3     9    17    30    44
+ *     lives  1.58  1.91  2.36  1.89  0.99  0.54
+ *     life    161   159   195   271   419   553
+ *
+ * The deepest rung was four times safer than the ninth. The hero's life triples
+ * across the ladder and what the delve throws does not move.
+ *
+ * WHY THIS IS SAFE FOR `ward`, which is the reason it was not done sooner. The
+ * worry was that scaling incoming damage would make ward worth less every rung
+ * you carried it. It does not, and the line below is why: ward is applied as
+ * (1 - ward), a SHARE of the blow, not a subtraction from it. Twelve per cent
+ * of a bigger number is still twelve per cent. The comment that used to sit
+ * here called it "flat damage reduction" and that reading is what stalled the
+ * fix; the code has always been proportional.
+ *
+ * The term MIRRORS the health term deliberately -- same 1.6, same shape -- so
+ * the rule is one a reader can hold: a body's health and its bite scale
+ * together. One of them scaling alone is how this happened.
+ *
+ * Applied here, at the single door every point of damage comes through, rather
+ * than at the fourteen call sites. "The delve itself" -- hazards, bursts,
+ * broken ground, a slam thrown by something already dead -- is 45 to 64 per
+ * cent of what actually kills the reference player at every rung past the
+ * first, so a term on enemy damage alone would have moved less than half of it.
+ */
+const DELVE_BITE = 1.6;
+const delveBite = () => 1 + (LEVEL.depth || 0) * DELVE_BITE;
+
+/* `sized` marks a blow depth has already been applied to, for either of two
+ * reasons: the traps take a percentage of MAX LIFE, so they track the hero
+ * without help; and anything lingered has had its CLOCK stretched instead, so
+ * scaling the tick as well would multiply the two. Both must be excused here
+ * or they are counted twice.
+ */
+function hurtPlayerBy(dmg, fx, fy, sized) {
   if (player.invuln > 0) return;
-  // Ward is flat damage reduction off gear, capped well short of immunity.
+  // Ward is a SHARE off every blow, not a subtraction: see delveBite above.
   // Mitigation is the kit's own, on top of it and for a few seconds only.
   const mit = (player.mitigate || 0) > 0 ? 0.5 : 0;
-  const taken = dmg * (1 - (player.ward || 0)) * (1 - mit);
+  const taken = dmg * (sized ? 1 : delveBite()) *
+                (1 - (player.ward || 0)) * (1 - mit);
   breakChannel('hurt');
   player.hp -= taken;
   player.invuln = player.iframe;
@@ -6799,7 +6906,7 @@ function updateEnemies(dt) {
         if (!e.struck && d < e.r + player.r + 8) {
           e.struck = true;
           hurtPlayer(e);
-          openWound(BLEED_DPS, linger(BLEED_TIME));
+          openWound(BLEED_DPS, linger(BLEED_TIME), lingered);
           burst(player.x, player.y, PAL.blood, 12, 200);
         }
         if (e.run <= 0) { e.lurk = STALK_BACK * rand(0.8, 1.35); e.struck = false; }
@@ -6837,7 +6944,7 @@ function updateEnemies(dt) {
             e.chant = e.cd * rand(1.6, 2.2);
           } else if (clear) {
             if (e.spell === 0) {
-              addHazard(player.x, player.y, EMBER_R, EMBER_DPS, linger(EMBER_LIFE), '#ff7a2c');
+              addHazard(player.x, player.y, EMBER_R, EMBER_DPS, linger(EMBER_LIFE), '#ff7a2c', lingered);
               ring(player.x, player.y, '#ff7a2c', EMBER_R * 0.3, EMBER_R, 0.4);
             } else if (e.spell === 1) {
               castGloom();
@@ -7371,7 +7478,25 @@ function updateCrucible(e, dt) {
 
 function spawnDeceiver() {
   const d = ENEMY_TYPES.deceiver;
-  const scale = 1 + run.time / 220;
+  /* The avatar scales with the ladder, and until now did not.
+   *
+   * His health was five hundred and forty at the proving ground and five
+   * hundred and forty at the fifty-second rung, moved only by how long the run
+   * had taken. So he was the same fight against a hero with 149 life and
+   * against one with 662 -- the horde's own defect, in the one body the delve
+   * cannot be finished without.
+   *
+   * Measured, it was the whole of what was wrong with rung 0: the reference
+   * player met that rung's quota nineteen times in twenty-four and got out of
+   * it NONE, because gathering was never the problem and he was. Half at the
+   * mouth, and the same (1 + depth * 1.6) the horde carries after that, so
+   * there is one health rule in the game rather than three.
+   *
+   * His damage needs no term here: delveBite already scales every point the
+   * player takes by depth, and his blows come through the same door.
+   */
+  const dep = LEVEL.depth || 0;
+  const scale = (1 + run.time / 220) * (0.5 + dep * 1.6);
   const e = newBody('deceiver', portal.x, portal.y - 4, 0);
   e.hp = e.maxHp = d.hp * scale;
   e.dmg = d.dmg; e.speed = d.speed; e.atk = 1.4; e.wob = 0;
@@ -7401,7 +7526,8 @@ function spawnDeceiver() {
   // three-hundred-hit-point guards halved the extraction rate on the first
   // delve, where the horde is thirty-four-hit-point thralls and the hero has
   // power four: the fight has to be learnable before it is hard.
-  const dep = LEVEL.depth || 0;
+  // `dep` is the one declared at the top of this function, where his health
+  // is scaled by it -- the escort ramps on the same term for the same reason.
   const guard = (LEVEL.guard >= 0 ? LEVEL.guard : 1 + Math.round(dep * 2)) +
                 e.extraGuard;
   for (let i = 0; i < guard; i++) {
@@ -12941,20 +13067,16 @@ function updateTotems(dt) {
   }
 }
 
-// The blade and everything else hits a totem the way it hits a body. Called
-// from the places that already look for something to damage.
-function hurtTotemsNear(x, y, r, dmg) {
-  let hit = false;
-  for (let i = 0; i < totems.length; i++) {
-    const t = totems[i];
-    if (dist2(x, y, t.x, t.y) > (r + 14) * (r + 14)) continue;
-    t.hp -= dmg;
-    floatDmg(t.x, t.y - 18, dmg, 'hit');
-    burst(t.x, t.y, '#9dbb5a', 4, 120);
-    hit = true;
-  }
-  return hit;
-}
+/* There was a hurtTotemsNear here, and it had no callers.
+ *
+ * It said "the blade and everything else hits a totem the way it hits a body.
+ * Called from the places that already look for something to damage" -- and no
+ * such place ever called it. The blade does cut totems, inline in updateArcs,
+ * which is the code that ships; this was a second, unreachable answer to the
+ * same question sitting next to it looking like the API. The only thing that
+ * ever called it was eco.js, which meant the ecosystem suite was proving a
+ * totem could be cut down a path no player has.
+ */
 
 function drawTotems(t) {
   for (let i = 0; i < totems.length; i++) {
@@ -13116,7 +13238,7 @@ function wipeRoom(why) {
   run.bannerText = 'False Dawn';
   run.bannerNote = why || 'The light came up, and it was not the sun.';
   player.invuln = 0;
-  hurtPlayerBy(player.maxHp * 4, player.x, player.y - 200);
+  hurtPlayerBy(player.maxHp * 4, player.x, player.y - 200, true);
 }
 
 // --- Synchronized Agony ----------------------------------------------------

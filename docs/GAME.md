@@ -541,11 +541,12 @@ than conjuring back a piece that was sold, tempered away or left in a delve.
 
 | | |
 |---|---|
-| Expected power | `4 + d × 96` |
+| Expected power | `4 + 116 × d^0.6` |
 | Slag quota | `125 + d × 145` |
 | Regions in the pool | `1 + floor(d × 5)` |
 | Enemy **health** | `× (1 + d × 1.6)` |
-| Enemy **damage** | flat — see the note below |
+| Everything the delve hits you with | `× (1 + d × 1.6)` — see below |
+| The avatar's health | `× (0.5 + d × 1.6)` |
 | Which avatar waits | the Deceiver, except every third rung past the ramp |
 
 ### The teaching ramp
@@ -573,33 +574,72 @@ epithet appears while it is still teaching.
 | **Riven** | 1.42 | 1.00 | 1.0 | The Rivenmark as it is. Roughly one delve in three ends at the gate. |
 | **Sundered** | 1.95 | 1.35 | 1.8 | Champions in every hall. The Regalia surfaces here. |
 
-> ### ⚠ A known defect: the curve is a valley
->
-> The reference player's measured extraction rate, sixteen delves a rung:
->
-> ```
-> rung  0   7/16 out      rung 17   0/16
-> rung  3   0/16          rung 30   9/16
-> rung  9   0/16          rung 44  13/16
-> ```
->
-> It clears the teaching rungs, falls off a cliff the moment the ramp ends and
-> the whole bestiary arrives at once, then gets steadily **easier** all the way
-> down. The reason is in the table above: a body's **health** is multiplied by
-> depth and its **damage is not**, while the hero's health and damage both
-> climb. So the deeper you go the safer you are, and the hardest delve in the
-> game is its ninth.
->
-> This is recorded rather than fixed — it is a design decision, not a bug to
-> patch quietly. `tools/suites/winnable.js` names those three rungs and is
-> shaped to fail if the spike spreads *or* if someone fixes it without saying
-> so. The overall rate, 21–31% across runs, is the one Riven advertises.
+### The curve, and how it was straightened
+
+The ladder used to be a valley, and it is worth writing down what that was
+because the cause turned out to be one mistake made four times.
+
+The reference player's extraction rate and **pressure** — life lost per minute
+alive, against the hero who belongs on that rung:
+
+| | rung 0 | 3 | 9 | 17 | 30 | 44 | overall |
+|---|---|---|---|---|---|---|---|
+| **was** | 4/16 | 0/16 | 0/16 | 0/16 | 8/16 | 12/16 | 25% |
+| **is** | 17/24 | 3/24 | 1/24 | 3/24 | 11/24 | 15/24 | **35%** |
+| pressure was | 1.58 | 1.91 | 2.36 | 1.89 | 0.99 | **0.54** | |
+| pressure is | 1.33 | 1.67 | 1.67 | 1.11 | 0.92 | **0.94** | |
+
+It cleared the teaching rungs, hit a wall the moment the ramp ended, then got
+steadily **easier** all the way down — the deepest delve in the game was the
+safest one in it.
+
+**Four things were wrong, and all four were the same thing:** something the
+delve throws did not scale with the ladder while the hero did.
+
+1. **The horde's damage was flat** across all 52 rungs while its health was
+   multiplied by depth. Fixed by `delveBite`, applied at the single door every
+   point of damage comes through — because *"the delve itself"* (hazards,
+   bursts, broken ground) was 45–64% of what actually killed the reference
+   player, so a term on enemy damage alone would have moved less than half of
+   it.
+2. **The avatar did not scale at all** — 540 life at the proving ground and 540
+   at the fifty-second rung. Rung 0 met its quota 19 times in 24 and got out
+   *none*: gathering was never its problem, he was.
+3. **A blast had no falloff for the hero.** A body took 0.4–1.0 of it by
+   distance; the hero took a flat 0.4 anywhere inside the radius, so the edge
+   of a pitch barrel cost what the middle did and stepping back was worth
+   nothing. Bursts were **52%** of everything that killed the bot at rung 3.
+4. **The rung's own advice was wrong**, and this is what made rungs 3–17 look
+   like a wall. `power` is what the gate-house recommends by, and it was linear
+   when the content is not:
+
+   | rung | card said | actually took | wrong by |
+   |---|---|---|---|
+   | 3 | 10 | 30 | **3.0×** |
+   | 9 | 21 | 42 | 2.0× |
+   | 17 | 36 | 57–72 | ~1.8× |
+   | 30 | 60 | 90 | 1.5× |
+   | 44 | 87 | 87–110 | ~1.1× |
+
+   The game was sending people into delves it had told them they were ready
+   for. `d^0.6` fits every measured point and still starts at 4, so a Vanguard
+   who has never descended still qualifies for the proving ground.
+
+> **On `ward`.** Scaling incoming damage was avoided for a long time on the
+> belief that it would make ward worth less every rung. It does not: ward is
+> applied as `(1 - ward)`, a **share** of the blow, and 12% of a bigger number
+> is still 12%. The comment above that line called it "flat damage reduction",
+> and that reading is what stalled the fix for so long.
+
+`tools/suites/winnable.js` now guards this on **pressure** rather than win
+rate — a continuous measure over thousands of blows rather than a binary over
+two dozen delves — and fails if the deep end goes soft again.
 
 ### What a deep delve buys with its depth
 
-Three environmental terms scale with `d`, on the reasoning that raising the
-horde's flat damage would make **ward** — a flat share off every blow — worth
-less every rung you carried it:
+Beyond the damage term above, three *environmental* terms scale with `d` — they
+tax **position**, which is the input the controls actually have, rather than
+the health bar, which the gear already answers:
 
 | | at rung 0 | at rung 51 |
 |---|---|---|
@@ -613,37 +653,28 @@ rest. `tools/suites/traps.js` fails if that stops being true, and holds the
 rest above the time it takes to cross a plate — a hall you cannot cross is a
 wall, not a harder hall.
 
-> ### ⚠ They work, and they do not fix the valley
+The alert chain is the one that measures dramatically: at rung 44 a roused pack
+brings **46 bodies at once against 12** without it — four times the horde, and
+the whole of `HORDE_LIVE`. Ablated and guarded in `tools/suites/packs.js`.
+
+> **These three were built first, on their own, and moved the extraction rate
+> by nothing** — 24/96 to 26/96, when rung 0, which has no depth and therefore
+> no lever on it at all, swung 4/16 to 7/16 by itself.
 >
-> The alert chain measures dramatically: at rung 44 a roused pack now brings
-> **46 bodies at once against 12** before it — four times the horde, and the
-> whole of `HORDE_LIVE`. Ablated and guarded in `tools/suites/packs.js`.
->
-> The reference player's rate moved by nothing.
->
-> ```
-> rung   0    3    9   17   30   44   overall
-> before 4/16 0/16 0/16 0/16 8/16 12/16  24/96
-> after  7/16 0/16 0/16 0/16 6/16 13/16  26/96
-> ```
->
-> Rung 0 has no depth and so no lever on it at all, and it moved 4 → 7. That
-> is the noise floor, and every other delta is inside it.
->
-> **The finding is worth more than the change.** Quadrupling the horde at the
-> deepest rung does not make the deepest rung harder. What is broken is not
-> how *many* chances the delve gets to hurt you, it is how *big* each one is.
-> A flat blow, a flat 7 DPS wound, 46 bodies instead of 12 — all of it is
-> arithmetic against a health pool that ran 152 to 528 across the same ladder.
-> **Any lever that adds occurrences is dead on arrival here.**
->
-> The game already has the term that would bite, and uses it in exactly one
-> place: the traps take `SPIKE_TOLL` and `POOL_DPS` as a **share of max life**,
-> so they are the only environmental damage in the build that does not decay
-> with depth. Note also that proportional damage costs `ward` nothing — ward
-> takes its share off the blow either way — so the reason flat scaling was
-> ruled out does not apply to it. That is the shape of the repair, and it is a
-> design decision, so it is written down rather than made quietly.
+> That was the finding that led to the fix above: quadrupling the horde at the
+> deepest rung does not make the deepest rung harder. What was broken was not
+> how *many* chances the delve got to hurt you, it was how *big* each one was.
+> **Any lever that adds occurrences is dead on arrival against a flat number.**
+> They are kept because they are good for the *character* of a deep delve —
+> a pack that comes as two packs, a wound that outlives the fight — but the
+> arithmetic is `delveBite`'s job.
+
+> **A trap they set for each other.** `AFFLICT_GROWTH` doubles a hazard's
+> lifetime and `delveBite` doubles its damage, so together they quadrupled it,
+> and burning ground became the single largest killer in the game at 45% of
+> everything that reached the hero at rung 44. Anything lingered is now marked
+> `sized` and excused the damage term — it has been made worse by depth once
+> already.
 
 ---
 
@@ -823,9 +854,12 @@ either side of a change and the difference *is* the change.
   capped interstitials. Not game code: an SDK in the Android shell, a
   JS-to-native bridge, and a consent flow (UMP/GDPR, and Play's families policy
   if the app is ever family-designated). Needs the network chosen first.
-- **The difficulty valley** in §11. Three environmental levers were built and
-  measured against it and did not move it; §11 records what that ruled out and
-  what would actually work. The repair touches the damage model, so it is a
-  decision to make rather than a patch to apply.
+- **A gentle dip at rungs 3–17.** The valley in §11 is closed — no rung is a
+  wall and the pressure curve is roughly flat — but the middle of the ladder
+  still runs harder than either end. Worth knowing before chasing it: the two
+  biggest killers in the game are **bursts and burning ground** (55% of
+  everything that reaches the hero), and the reference player is by
+  construction bad at exactly those — it "does not use the terrain" — so its
+  rate at hazard-heavy rungs understates a person's.
 - **A third boss.** Two are built (§7). Every rung names one, and a rung whose
   boss is unknown simply opens its gate on quota.
