@@ -43,7 +43,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
   // ?nogov so the governor does not shed the mood mid-profile and change the
   // very thing being measured.
-  await p.goto('http://localhost:' + PORT + '/?nogov');
+  await p.goto('http://localhost:' + PORT + '/?nogov&nogate');
   let booted = false;
   for (let i = 0; i < 40 && !booted; i++) {
     await sleep(250);

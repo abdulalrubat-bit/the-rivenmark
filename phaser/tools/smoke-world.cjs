@@ -49,7 +49,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
    * The atmosphere has its own suite (smoke:air) where it is the subject
    * rather than the weather.
    */
-  await p.goto('http://localhost:' + PORT + '/?noatmos&nogov');
+  await p.goto('http://localhost:' + PORT + '/?noatmos&nogov&nogate');
   let booted = false;
   for (let i = 0; i < 40 && !booted; i++) {
     await sleep(250);
@@ -108,7 +108,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
    * looked at. Returns where each landed in SCREEN space. */
   const stage = await p.evaluate(async () => {
     const sc = window.__game.scene.getScene('delve');
-    state = 'over';                       // freeze the sim, keep rendering
+    state = 'pause';                       // freeze the sim, keep rendering
     enemies.length = 0;
     player.x = portal.x; player.y = portal.y - 46;
     portal.active = false; portal.channel = 0;
@@ -327,7 +327,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     // straddle his.
     enemies.length = 0;
     for (let i = 0; i < 20; i++) await new Promise(r => requestAnimationFrame(r));
-    state = 'over';
+    state = 'pause';
     // A standing prop must sort the same way; flat scenery never does.
     const up = sc.propImgs.filter(im => im.depth > 0).length;
     const flat = sc.propImgs.filter(im => im.depth < -1000).length;

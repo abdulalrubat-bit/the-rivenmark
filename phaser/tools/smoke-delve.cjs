@@ -33,7 +33,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   // which is exactly what an unterminated pool loop looked like -- so booting
   // is timed rather than assumed.
   const t0 = Date.now();
-  await p.goto('http://localhost:' + PORT + '/');
+  await p.goto('http://localhost:' + PORT + '/?nogate');
   let booted = false;
   for (let i = 0; i < 40 && !booted; i++) {
     await sleep(250);

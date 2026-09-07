@@ -42,11 +42,18 @@ export class Atmosphere {
     this.want = { fog: !/nofog/.test(q), motes: !/nomotes/.test(q),
                   vig: !/novig/.test(q), lights: !/nolights/.test(q) };
     this.bake();
-    this.bakeScreen(scene.scale.width, scene.scale.height);
+    /* SCREEN SPACE IS CSS PIXELS.
+     * scale.width is the game size, which is now the DEVICE resolution -- reading
+     * it here would size this against the framebuffer while the DOM HUD beside it
+     * is laid out in CSS pixels, and the two would disagree by the ratio. See the
+     * note in main.js.
+     */
+    this.bakeScreen(scene.scale.displaySize.width, scene.scale.displaySize.height);
 
     // Fog, between the floor and the walls, exactly where the canvas build
     // puts it. A TileSprite is this drawing: one texture, wrapped, offset.
-    this.fog = scene.add.tileSprite(0, 0, scene.scale.width, scene.scale.height, 'fogTile')
+    this.fog = scene.add.tileSprite(0, 0, scene.scale.displaySize.width,
+                                    scene.scale.displaySize.height, 'fogTile')
       .setOrigin(0, 0).setScrollFactor(0).setDepth(-2.5e5).setAlpha(0.9);
     // Drawn at twice its size, as the canvas build does: the tile is authored
     // at 256 and laid down over 512 world units, and at 1:1 the blobs read as
@@ -88,7 +95,7 @@ export class Atmosphere {
       .setOrigin(0, 0).setScrollFactor(0).setDepth(8.75e5).setVisible(false);
 
     const fit = () => {
-      const w = scene.scale.width, h = scene.scale.height;
+      const w = scene.scale.displaySize.width, h = scene.scale.displaySize.height;
       this.fog.setSize(w, h);
       this.flash.setDisplaySize(w, h);
       if (this.vig.width !== w || this.vig.height !== h) {
@@ -295,7 +302,7 @@ export class Atmosphere {
   motePass(t) {
     const g = this.moteGfx;
     g.clear().setVisible(true);
-    const w = this.s.scale.width, h = this.s.scale.height;
+    const w = this.s.scale.displaySize.width, h = this.s.scale.displaySize.height;
     for (const m of this.motes) {
       let x = m.x * w + m.vx * t - cam.x * (1 - m.z) * 0.25;
       let y = m.y * h + m.vy * t - cam.y * (1 - m.z) * 0.25;

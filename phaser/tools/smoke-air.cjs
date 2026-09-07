@@ -38,7 +38,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
 
   // ?nogov: see the note in delve.js. The governor is exercised on its own
   // below, and end-to-end on a second load at the bottom of this file.
-  await p.goto('http://localhost:' + PORT + '/?nogov');
+  await p.goto('http://localhost:' + PORT + '/?nogov&nogate');
   let booted = false;
   for (let i = 0; i < 40 && !booted; i++) {
     await sleep(250);
@@ -119,7 +119,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   const light = await p.evaluate(async () => {
     const sc = window.__game.scene.getScene('delve');
     const c = sc.cameras.main;
-    state = 'over';                              // freeze; the layer redraws
+    state = 'pause';                              // freeze; the layer redraws
     // lowFx ON for this one, which sheds the fog, the ash and the vignette and
     // keeps the light pass -- exactly the property being asserted below.
     //
@@ -348,7 +348,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
    * the state the port actually shipped -- frames being missed, every measure
    * saying so, and lowFx still false.
    */
-  await p.goto('http://localhost:' + PORT + '/');
+  await p.goto('http://localhost:' + PORT + '/?nogate');
   for (let i = 0; i < 40; i++) {
     await sleep(250);
     const up = await p.evaluate(() => {

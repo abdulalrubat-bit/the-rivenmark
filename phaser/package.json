@@ -27,7 +27,9 @@
     "smoke:pwa": "node tools/smoke-pwa.cjs",
     "smoke:prof": "node tools/smoke-prof.cjs",
     "smoke:art": "node tools/smoke-art.cjs",
-    "smoke:mass": "node tools/smoke-mass.cjs"
+    "smoke:mass": "node tools/smoke-mass.cjs",
+    "smoke:conduit": "node tools/smoke-conduit.cjs",
+    "smoke:boot": "node tools/smoke-boot.cjs"
   },
   "dependencies": {
     "phaser": "^4.2.1"

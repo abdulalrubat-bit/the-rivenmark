@@ -25,7 +25,7 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   const p=await (await b.newContext({viewport:{width:390,height:844}})).newPage();
   const errs=[]; p.on('pageerror',e=>errs.push(e.message));
   p.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
-  await p.goto('http://localhost:8215/'); await sleep(3500);
+  await p.goto('http://localhost:8215/?nogate'); await sleep(3500);
 
   const before = await p.evaluate(()=>({x:player.x,y:player.y,hp:player.hp}));
   // Drag from the middle-left of the play area, well clear of the HUD.

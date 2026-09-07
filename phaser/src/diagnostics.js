@@ -353,7 +353,15 @@ export function collect(game, log, extra) {
     gpu: gpu.renderer, gpuVendor: gpu.vendor,
     // Both, because they diverge and the difference is usually the problem:
     // the drawing buffer is what the GPU actually fills.
-    css: Math.round(scale.width) + 'x' + Math.round(scale.height),
+    // Both, and deliberately: the gap between them IS the fix. A dump that
+    // reported one number could not show a frame being stretched.
+    css: Math.round(scale.displaySize.width) + 'x' + Math.round(scale.displaySize.height),
+    // Three, not two, and each is a different claim: what the game thinks it
+    // is (gameSize), what the renderer was actually given (the canvas), and
+    // what the browser shows it at (displaySize). The first two agreeing is
+    // the fix working; the third differing from them by the ratio is the
+    // whole point of it.
+    game: Math.round(scale.width) + 'x' + Math.round(scale.height),
     buffer: (r.width || 0) + 'x' + (r.height || 0),
     dpr: window.devicePixelRatio,
     screen: screen.width + 'x' + screen.height,

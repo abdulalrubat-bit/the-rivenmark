@@ -29,7 +29,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   const errs = [];
   p.on('pageerror', e => errs.push(e.message));
   p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
-  await p.goto('http://localhost:' + PORT + '/');
+  await p.goto('http://localhost:' + PORT + '/?nogate');
   await sleep(3200);
 
   const first = await p.evaluate(() => ({ level: LEVEL.id, name: LEVEL.name,

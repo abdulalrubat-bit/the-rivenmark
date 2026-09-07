@@ -328,6 +328,69 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
       const took = {};
       window.__took = took;
 
+      /* --- HOW MUCH OF THE DELVE IS AWAKE ----------------------------------
+       *
+       * The baseline for Silence and the Blade, taken before any of it is
+       * built. The design's claim is that competent play sits at six to twelve
+       * bodies awake, against a cap of forty-six that should be a fail state
+       * rather than the normal case -- and the only honest way to know whether
+       * that is a change is to know what it is now.
+       *
+       * Two things, because they answer different questions:
+       *
+       *   the CURVE   how many are awake, sampled through the whole delve
+       *               rather than at its peak. A delve that spikes to forty
+       *               once is a different game from one that sits there.
+       *   the PRICE   how loud the room was at the moment each piece of slag
+       *               was banked. Clamour does not exist yet, so bodies awake
+       *               stands in for it -- and it is the number the design is
+       *               really about: what did you have to wake to take this?
+       *
+       * collectTech is the single door every piece of slag comes through and
+       * run.awake is already maintained every frame by updateEnemies, so both
+       * of these cost a push onto an array.
+       *
+       * THE BASELINE, and it corrected the design that asked for it:
+       *
+       *   rung   typical   p90   worst      slag taken: still/stirring/roused/awake
+       *     0       3       14     47            30% / 39% / 19% / 12%
+       *     3       6       13     27            23% / 42% / 27% /  7%
+       *     9       4       13     46            34% / 33% / 24% /  9%
+       *    17       6       16     42            14% / 37% / 29% / 20%
+       *    30       8       27     46            17% / 20% / 21% / 42%
+       *    44      13       30     46            10% / 18% / 26% / 46%
+       *
+       * THE DELVE IS ALREADY MOSTLY ASLEEP. Three to thirteen bodies awake at
+       * the median, against a cap of forty-six that is a spike and not a
+       * constant. The pitch for Silence and the Blade said the fight is
+       * unreadable because forty-six are awake, and at the median that is
+       * simply not true -- so the plan to "cut the horde" is a plan to change
+       * something that is already the case.
+       *
+       * What IS true is the gradient. Typical awake runs 3 at the mouth to 13
+       * at the deep end, and the share of the quota taken with sixteen or more
+       * bodies up runs 12% to 46%. The delve already gets louder the further
+       * in you go, on its own, by exactly the mechanism the design wanted to
+       * add -- the alert chain and ALERT_GROWTH.
+       *
+       * So the design's job is narrower and better than it was written: not to
+       * make the delve sleep, but to make the sleeping VISIBLE, put it under
+       * the player's hand, and give it consequences. The forty-six is what it
+       * looks like when that goes wrong, and today nothing tells you that you
+       * are heading there.
+       */
+      const awakeSeen = [];      // sampled through the delve
+      const slagAt = [];         // [awake, value] at each pickup
+      if (!window.__slagWrapped) {
+        window.__slagWrapped = 1;
+        const of = window.collectTech;
+        window.collectTech = function (v) {
+          if (window.__slagAt) window.__slagAt.push([run.awake | 0, v]);
+          return of.apply(this, arguments);
+        };
+      }
+      window.__slagAt = slagAt;
+
       /* --- COULD I HAVE DONE ANYTHING ABOUT THAT? ---------------------------
        *
        * The note that started this was that combat "feels hollow, boring and
@@ -467,6 +530,9 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
 
         if (mode === 'gate' && run.gateOpen && portal.inside) { stepThrough(); break; }
         update(DT); steps++;
+        // Every half-second of delve time. Sampled rather than peaked: a delve
+        // that touches forty once is not the delve that sits there.
+        if (steps % 15 === 0) awakeSeen.push(run.awake | 0);
 
         if (steps % 60 === 0) {
           const moved = Math.hypot(player.x - wasAt[0], player.y - wasAt[1]);
@@ -484,6 +550,7 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
                power: power0, want: L.power, hp0, dmg0,
                auto: Math.round(bill.auto), kit: Math.round(bill.kit),
                delveDmg: Math.round(bill.delve),
+               awakeSeen: awakeSeen, slagAt: slagAt,
                answer: { read: answer.read, standing: answer.standing, touch: answer.touch },
                took: took, tookAll: Math.round(
                  Object.keys(took).reduce((a, k) => a + took[k], 0)) };
@@ -502,6 +569,38 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
     const sum = k => rs.reduce((a, r) => a + r[k], 0);
     const auto = sum('auto'), kit = sum('kit'), dlv = sum('delveDmg');
     const all = Math.max(1, auto + kit + dlv);
+    /* HOW LONG DOES A VANGUARD LIVE?
+     *
+     * The report was "I die in less than a minute", and this suite had been
+     * saying so all along without anyone reading it that way: `pressure` is
+     * lives lost per minute alive, so 1.5 IS forty seconds, and it was
+     * reported as a curve SHAPE -- flat, good -- while the absolute level went
+     * unexamined. A number nobody can misread belongs beside it.
+     */
+    const died = rs.filter(r => r.out === 'slain').map(r => r.mins * 60);
+    died.sort((a, b) => a - b);
+    /* HOW MUCH OF THE DELVE WAS AWAKE, and what the slag cost in noise.
+     *
+     * The bands are the ones Silence and the Blade proposes, so that when it
+     * is built this line reads the same way before and after and the two can
+     * be put side by side:
+     *
+     *   still     0-2 awake    nothing beyond what you walked into
+     *   stirring  3-7          the pack you are in
+     *   roused    8-15         its neighbours have come
+     *   awake     16+          the region, and at 46 the cap itself
+     */
+    const curveAwake = [];
+    for (const r of rs) for (const v of r.awakeSeen) curveAwake.push(v);
+    curveAwake.sort((a, b) => a - b);
+    const at = f => curveAwake.length ? curveAwake[Math.min(curveAwake.length - 1,
+      Math.floor(curveAwake.length * f))] : 0;
+    const band = n => n <= 2 ? 'still' : n <= 7 ? 'stirring' : n <= 15 ? 'roused' : 'awake';
+    const paid = { still: 0, stirring: 0, roused: 0, awake: 0 };
+    let paidAll = 0;
+    for (const r of rs) for (const [n, v] of r.slagAt) { paid[band(n)] += v; paidAll += v; }
+    paidAll = Math.max(1, paidAll);
+    const share = k => Math.round(100 * paid[k] / paidAll);
     // Of everything that reached the hero, how much could they have answered?
     const ans = { read: 0, standing: 0, touch: 0 };
     for (const r of rs) for (const k in ans) ans[k] += r.answer[k];
@@ -516,6 +615,12 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
     curve.push({ idx, won, quota, stuck, n: TRIES,
                  worst: worst.join(', '),
                  read: pct('read'), standing: pct('standing'), touch: pct('touch'),
+                 awakeMid: at(0.5), awakeP90: at(0.9), awakeMax: curveAwake[curveAwake.length - 1] || 0,
+                 paidStill: share('still'), paidStirring: share('stirring'),
+                 paidRoused: share('roused'), paidAwake: share('awake'),
+                 deaths: died.length,
+                 diedAt: died.length ? Math.round(died[died.length >> 1]) : null,
+                 diedSoon: died.filter(t => t < 60).length,
                  // Blows taken per minute alive, as a share of the hero's own
                  // life: the one number that says whether a rung's horde can
                  // actually threaten the hero who belongs on it.
@@ -538,7 +643,14 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
     '\n              took: ' + c.pressure + ' lives/min off ' + c.life +
     ' hp — ' + c.worst +
     '\n              could answer: ' + c.read + '% read, ' + c.standing +
-    '% standing in it, ' + c.touch + '% nothing to see';
+    '% standing in it, ' + c.touch + '% nothing to see' +
+    '\n              died: ' + c.deaths + '/' + c.n +
+    (c.deaths ? ', median at ' + c.diedAt + 's, ' + c.diedSoon +
+                ' inside the first minute' : '') +
+    '\n              awake: ' + c.awakeMid + ' typical, ' + c.awakeP90 +
+    ' at the 90th, ' + c.awakeMax + ' at worst' +
+    '\n              slag taken: ' + c.paidStill + '% still, ' + c.paidStirring +
+    '% stirring, ' + c.paidRoused + '% roused, ' + c.paidAwake + '% awake';
   const tot = curve.reduce((a, c) => a + c.won, 0), att = curve.length * TRIES;
   console.log('\n   THE REFERENCE PLAYER, ' + TRIES + ' delves a rung.');
   console.log('   An instrument, not a tripwire: the bot does not kite and does');
