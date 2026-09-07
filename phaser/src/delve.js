@@ -145,10 +145,34 @@ export class Delve extends Phaser.Scene {
     // The core reads the viewport to place spawns; give it a real one and keep
     // it current. Without this the spawn ring collapses and the delve sends a
     // fraction of what it should.
-    const pushView = () => window.__setView(this.scale.width, this.scale.height,
-                                       window.devicePixelRatio || 1);
+    /* SCREEN SPACE IS CSS PIXELS.
+     * scale.width is the game size, which is now the DEVICE resolution -- reading
+     * it here would size this against the framebuffer while the DOM HUD beside it
+     * is laid out in CSS pixels, and the two would disagree by the ratio. See the
+     * note in main.js.
+     */
+    const pushView = () => window.__setView(
+      this.scale.displaySize.width, this.scale.displaySize.height,
+      window.devicePixelRatio || 1);
     pushView();
     this.scale.on('resize', pushView);
+
+    /* A world unit is a CSS pixel, whatever the framebuffer is.
+     *
+     * The game is sized in DEVICE pixels so the canvas is sharp (see main.js),
+     * which would otherwise mean the camera shows three times as much world on
+     * a DPR-3 phone at a third the size. The zoom puts it back: at dpr 3, one
+     * world unit is three device pixels, which is one CSS pixel -- so every
+     * coordinate in the core, and every screen-space object sized against
+     * displaySize, means exactly what it did before.
+     *
+     * Set HERE and not in main.js. The first version set it at the game's
+     * ready event, before any scene had a camera, so it silently stayed at 1
+     * and everything rendered a third of its size without throwing.
+     */
+    const fitCam = () => this.cameras.main.setZoom(window.__dpr ? window.__dpr() : 1);
+    fitCam();
+    this.scale.on('resize', fitCam);
 
     // ?norun leaves the world ungenerated, for isolating where a frame goes.
     this.stepping = !/norun/.test(location.search);
@@ -257,7 +281,7 @@ export class Delve extends Phaser.Scene {
     this.dbg = this.add.text(8, 0, '', {
       fontFamily: 'ui-monospace, monospace', fontSize: '12px', color: '#cebe9e'
     }).setOrigin(0, 1).setScrollFactor(0).setDepth(1e6).setVisible(false);
-    const placeDbg = () => this.dbg.setPosition(8, this.scale.height - 96);
+    const placeDbg = () => this.dbg.setPosition(8, this.scale.displaySize.height - 96);
     placeDbg();
     this.scale.on('resize', placeDbg);
 
