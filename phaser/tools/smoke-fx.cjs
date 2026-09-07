@@ -62,9 +62,14 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     }
     updateEnemies(0.001);
     player.fireTimer = 0;
-    // A few seconds of the hero swinging on his own clock.
+    /* A few seconds of the hero FIGHTING. It used to say "swinging on his own
+     * clock", and it was: the blade swung itself and this loop only had to
+     * step the sim. There is no own clock any more, so the fixture taps --
+     * every frame, which the beat rate-caps to the same rhythm the automatic
+     * blade used to run on, so the fight it produces is the same fight. */
     const seen = { arcs: 0, parts: 0, rings: 0, floats: 0, kinds: new Set() };
     for (let i = 0; i < 200; i++) {
+      conduitPress(); conduitRelease();
       update(1 / 60);
       seen.arcs = Math.max(seen.arcs, arcs.length);
       seen.parts = Math.max(seen.parts, particles.length);
@@ -130,8 +135,14 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
    */
   const arc = await p.evaluate(() => {
     arcs.length = 0; particles.length = 0; rings.length = 0; floaters.length = 0;
-    player.fireTimer = 1e9;                    // stop him swinging again
-    fire();
+    /* A tap. There is no fire() any more -- the automatic blade was cut -- so
+     * the blade has to be asked, and the old `fireTimer = 1e9` that used to
+     * sit here to "stop him swinging again" is gone with it: nothing swings
+     * without a press now, which is the whole point of the change. The beat
+     * is zeroed instead, because a tap is REFUSED while the beat is running
+     * and this fixture wants its one crescent immediately. */
+    player.fireTimer = 0;
+    conduitPress(); conduitRelease();
     const a = arcs[0];
     if (!a) return { none: true };
     a.speed = 0; a.life = 1e9; a.maxLife = 1e9;   // hang it there to be looked at

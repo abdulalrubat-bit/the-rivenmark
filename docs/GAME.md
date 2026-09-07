@@ -111,17 +111,27 @@ means picking him up at 30 life.
 
 ### The swing, and what it is worth
 
-The blade swings **by itself** — on a game played with one thumb it has to. But
-it does not win the fight by itself, and until recently it did: measured over
-ninety-six whole delves, **seven tenths** of every point of damage came off the
-automatic swing and **a sixth** off the six buttons, and the bar's share *fell*
-with depth, from 22% on the first rung to 10% on the forty-fourth. The deeper
-you went, the more the game played itself.
+**The blade does not swing itself.** It used to — a target and a timer, no
+input at all — and that was the whole of the attack before the Conduit
+existed. It was kept afterwards as a kindness, so that one thumb or no thumb
+still played. The kindness was the problem: with it in, standing still and
+pressing nothing killed things, and the Conduit was an optional way to kill
+them faster. Two attack systems at once, one of which nobody chose.
 
-So the crescent carries `AUTO_BITE` **0.62** of the ward rather than all of it,
-and the primary ability is the rest. After the change: **the bar carries about
-a third**, the swing about a half, and the delve itself (husks, shattering
-calcify, traps) the remainder.
+It was measured twice, and the second measurement is why it went. First, when
+the swing was written down to 0.62 of a real blow to stop it winning fights on
+its own: **seven tenths** of every point of damage came off it and a sixth off
+the six buttons, with the bar's share *falling* with depth. That helped, and
+it did not fix anything — the second measurement, over ninety-six delves
+across six rungs, found the crescent still carrying **39% to 60%** of all
+damage dealt by a reference player *who never once touched the control*.
+Between a third and two thirds of the game was being played by nobody.
+
+So there is no swing nobody asked for. Every crescent is worth the whole of
+`damage`, and comes round because you asked for it: a **tap** (which still
+finds its own target — the accessible one-thumb swing is intact, it simply has
+to be pressed), a **held drag** down a line you choose, or a **gather**. What
+you cannot do any more is decline to fight.
 
 ---
 
@@ -759,18 +769,21 @@ what the game is about.
 
 | | | |
 |---|---|---|
-| **Tap** | under 0.2s, never dragged | The old accessible swing — nearest body, no aiming — but at **full damage** against the 0.62 the idle blade is worth. Tap again inside the window and it **chains**: the third of three comes round a fifth wider. |
+| **Tap** | under 0.2s, never dragged | The accessible swing — nearest body, no aiming, one thumb. Tap again inside the window and it **chains**: the third of three comes round a fifth wider. |
 | **Drag** | past the deadzone | The drag vector takes the aim off the auto-target entirely. The blade fires down that line on its own beat for as long as you hold it — back-pedalling while cutting into a doorway is a thing you can express now. |
 | **Hold at the rim** | 0.45s and out at the edge | The firing stops and the blade gathers, at **half stride** while it does. Let go and it comes round once: ×3.4 damage, ×2.1 wide, ×1.6 reach. |
 
-**The blade still swings on its own when the Conduit is idle**, at the reduced
-bite it has always been worth — one thumb, or no thumb, still plays. What
-driving it buys is *aim*, the *chain*, the *cleave*, and 62% more per swing.
+**The blade does not swing when the Conduit is idle.** It used to, and that
+was the last thing making the attack optional; see *The swing, and what it is
+worth* above for the two measurements that took it out. A one-thumb player
+still has the whole game — the tap finds its own target and needs no aiming —
+but it is a press, not a default. What driving it buys beyond that is *aim*,
+the *chain* and the *cleave*.
 
 The chain's window is the blade's own beat (`fireDelay × 1.6`, so 0.99s for
 Isaac) and **not** `GCD_TIME`. The ability beat is 1.2s against a swing rate of
-0.62, and a window that wide makes the chain automatic — which is not a rhythm,
-it is a formality. Tied to the blade instead, the Quickening boon and a Quick
+0.62, and a window that wide would make the chain a formality rather than a
+rhythm. Tied to the blade instead, the Quickening boon and a Quick
 affix speed the chain up too, which is what anyone would expect them to do.
 
 The state machine lives in the **core**, not in either host: both builds drive

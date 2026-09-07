@@ -209,7 +209,7 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
     window.requestAnimationFrame=()=>0;
     enemies.length=0;
     // Stand somewhere with room, or clearShot rejects the dummy through rock
-    // and fire() correctly declines to swing at a wall.
+    // and the blade correctly declines to swing at a wall.
     let open=null;
     for(const c of openCells){ if(!pointInWalls(c.x,c.y,90)){open=c;break;} }
     player.x=open.x; player.y=open.y;
@@ -217,11 +217,25 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
     for(let k=0;k<9;k++){
       const e=newBody('thrall', player.x+50, player.y, 0);
       e.awake=true; e.hp=1e9; e.maxHp=1e9; enemies.push(e);
-      // fire() reads the spatial hash, and only updateEnemies rebuilds it.
+      // The blade's target search reads the spatial hash, and only
+      // updateEnemies rebuilds it.
       enemyGrid.clear(); enemyGrid.insert(e, e.x, e.y);
       player.fireTimer=0; arcs.length=0;
-      const ok=fire();
-      if(!ok) return {err:'fire() found no target'};
+      /* THE CHAIN, RESET. What is being measured here is whether the STRIKE
+       * FORM -- which pose the blade comes round in, cycled every swing --
+       * changes the blow. It must not. The chain is a different mechanism
+       * and it does change the blow: every third tap is a finisher and comes
+       * round a fifth wider, so leaving the chain running made three of these
+       * nine swings legitimately different and the check read that as the
+       * form leaking into the damage. */
+      player.combo=0; player.comboT=0;
+      /* A TAP, not fire(). There is no fire() any more -- the automatic blade
+       * was cut, and this suite was the last thing calling it, which is why
+       * it came back "the suite did not report" rather than as a failure.
+       * A tap goes through aimAngle to the same nearestFoe, so the strike it
+       * measures is the same strike. */
+      conduitPress(); conduitRelease();
+      if(!arcs.length) return {err:'a tap found no target'};
       seen.push(STRIKES[player.strike].id);
       dmgs.push(arcs.map(a=>[a.dmg,a.half,a.bow,a.band].join(':')).join('|'));
       enemies.length=0;

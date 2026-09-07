@@ -215,16 +215,22 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
     const hp1 = cut.hp;
     damageEnemy(cut, player.damage, player.x, player.y);   // as a crescent does
     const cutTook = hp1 - cut.hp, cutStill = !!cut.braced;
-    return { arc, ward: player.damage, AUTO_BITE,
+    return { arc, ward: player.damage,
              beat: anchor.gcd, otherBeat: aegis.gcd,
              bashTook: +bashTook.toFixed(1), bashedStill,
              cutTook: +cutTook.toFixed(1), cutStill,
              full: +(player.damage * anchor.dmg).toFixed(1),
              soaked: +(player.damage * BRACE_SOAK).toFixed(1) };
   });
-  ck('the automatic swing carries a share of the ward, not all of it',
-     own.arc < own.ward * 0.9 && own.arc > 0,
-     own.arc.toFixed(1)+' off a ward of '+own.ward+' ('+own.AUTO_BITE+'x)');
+  /* This used to say the swing carries a SHARE of the ward -- the automatic
+     blade was written down to 0.62 so that a game playing itself could not
+     also win. The automatic blade is gone, so every crescent is one somebody
+     asked for and is worth the whole of it. The check is inverted rather than
+     deleted: a default that quietly weakened a swing is exactly the kind of
+     thing that would come back unnoticed. */
+  ck('a swing carries the whole of the ward, because every swing was asked for',
+     Math.abs(own.arc - own.ward) < 0.01 && own.arc > 0,
+     own.arc.toFixed(1)+' off a ward of '+own.ward);
   ck('and the primary is on a shorter beat than the rest of the bar',
      own.beat < own.otherBeat,
      own.beat+' against '+own.otherBeat+' -- '+(own.beat*1.2).toFixed(2)+'s a press');

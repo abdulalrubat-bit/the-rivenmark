@@ -37,6 +37,29 @@ const ck=(n,ok,note)=>(ok?pass:fail).push(n+(note?'  ['+note+']':''));
 
   // Helper installed in-page: clear the field, plant enemies, swing once.
   await p.evaluate(() => {
+    /* A TAP, WHERE THIS SUITE USED TO CALL fire().
+     *
+     * The automatic blade is gone, so the only way a crescent leaves the
+     * hero is the Conduit. Returns whether one did, which is what fire()
+     * returned. The chain is reset first: every third tap in a chain comes
+     * round a fifth wider, and this suite is about geometry, so a wider
+     * finisher would read as the geometry changing.
+     */
+    window.tap = () => {
+      /* The beat, zeroed. fire() ignored fireTimer entirely -- it was called
+       * by the game's own clock, which had already decided the blade was
+       * ready -- whereas a tap is refused while the beat is running. This
+       * suite drives the sim by hand and is not testing the beat, so it
+       * hands the blade over ready, exactly as fire() found it. Without
+       * this, six checks read "the blade did not swing" when what had
+       * happened is that it declined to swing early. */
+      player.fireTimer = 0;
+      player.combo = 0; player.comboT = 0;
+      const before = arcs.length;
+      conduitPress(); conduitRelease();
+      return arcs.length > before;
+    };
+
     window.T = {
       clear() { enemies.length = 0; arcs.length = 0; compactEnemies && compactEnemies(); },
       // put a dummy at an offset from the player, out of the walls' way
@@ -72,7 +95,7 @@ const ck=(n,ok,note)=>(ok?pass:fail).push(n+(note?'  ['+note+']':''));
       swing(secs) {
         enemyGrid = new SpatialHash(ENEMY_CELL);
         for (const e of enemies) enemyGrid.insert(e, e.x, e.y);
-        const ok = fire();
+        const ok = tap();
         for (let i=0;i<Math.ceil((secs||1.0)*60);i++) {
           enemyGrid = new SpatialHash(ENEMY_CELL);
           for (const e of enemies) if (e.hp>0) enemyGrid.insert(e, e.x, e.y);
@@ -103,7 +126,7 @@ const ck=(n,ok,note)=>(ok?pass:fail).push(n+(note?'  ['+note+']':''));
     // 1. a swing releases a crescent
     T.clear(); T.plant(70, 0, HP);
     o.releases = (enemyGrid = new SpatialHash(ENEMY_CELL),
-                  enemies.forEach(e=>enemyGrid.insert(e,e.x,e.y)), fire()) && arcs.length === 1;
+                  enemies.forEach(e=>enemyGrid.insert(e,e.x,e.y)), tap()) && arcs.length === 1;
     o.arcHasSweep = arcs[0] && arcs[0].half > 0 && arcs[0].bow > 0;
 
     // 2. it damages what it sweeps
@@ -159,11 +182,11 @@ const ck=(n,ok,note)=>(ok?pass:fail).push(n+(note?'  ['+note+']':''));
 
     T.clear(); T.plant(80,0,HP);
     const n0 = (enemyGrid = new SpatialHash(ENEMY_CELL),
-                enemies.forEach(e=>enemyGrid.insert(e,e.x,e.y)), fire(), arcs.length);
+                enemies.forEach(e=>enemyGrid.insert(e,e.x,e.y)), tap(), arcs.length);
     U('split');                                        // Twin Crescent
     T.clear(); T.plant(80,0,HP);
     const n1 = (enemyGrid = new SpatialHash(ENEMY_CELL),
-                enemies.forEach(e=>enemyGrid.insert(e,e.x,e.y)), fire(), arcs.length);
+                enemies.forEach(e=>enemyGrid.insert(e,e.x,e.y)), tap(), arcs.length);
     o.shots = [n0, n1];
 
     const r0 = player.range; U('range'); o.reach = [r0, player.range];
@@ -198,7 +221,7 @@ const ck=(n,ok,note)=>(ok?pass:fail).push(n+(note?'  ['+note+']':''));
                   atk:9, hitFlash:0, wob:0, angle:0, face:1 };
       enemies.push(e);
       enemyGrid = new SpatialHash(ENEMY_CELL); enemyGrid.insert(e, e.x, e.y);
-      const fired = fire();
+      const fired = tap();
       const swung = player.swing > 0;
       const arcN = arcs.length;
       for(let i=0;i<60;i++){ enemyGrid=new SpatialHash(ENEMY_CELL);
@@ -218,7 +241,7 @@ const ck=(n,ok,note)=>(ok?pass:fail).push(n+(note?'  ['+note+']':''));
     // a body in the open, inside reach: the blade must swing
     T.clear(); const open = T.plant(90, 0, HP);
     enemyGrid = new SpatialHash(ENEMY_CELL); enemyGrid.insert(open, open.x, open.y);
-    o.firesInOpen = fire();
+    o.firesInOpen = tap();
 
     // A body on the far side of rock: the blade must hold, not swing at stone.
     // The fixture parks the player in a deliberately clear lane, so the pair
@@ -239,27 +262,52 @@ const ck=(n,ok,note)=>(ok?pass:fail).push(n+(note?'  ['+note+']':''));
       T.clear(); const e = T.plant(pair.b.x - player.x, pair.b.y - player.y, HP);
       enemyGrid = new SpatialHash(ENEMY_CELL); enemyGrid.insert(e, e.x, e.y);
       arcs.length = 0;
-      o.holdsBehindRock = fire() === false && arcs.length === 0;
+      /* WHAT CHANGED HERE, AND WHY THE CLAIM MOVED.
+       *
+       * This used to assert that the blade HELD -- that fire() looked at a
+       * body behind rock, found no clear shot, and declined to swing at all.
+       * That was the right thing for an automatic blade: it was spending
+       * itself on your behalf, so wasting a swing on stone was its mistake.
+       *
+       * A tap is not that. The design is explicit that a tap ALWAYS swings,
+       * because a button that silently does nothing is the complaint the
+       * whole Conduit exists to answer -- so a hero who taps at a wall gets
+       * a crescent, and should.
+       *
+       * What must still be true is that the blade does not TARGET through
+       * stone: the swing goes where the hero is facing rather than curving
+       * to a body it cannot reach, and that body takes nothing. That is the
+       * claim now, and it is the one that would matter if it broke.
+       */
+      const hp0 = e.hp;
+      o.swingsAtRock = tap();
+      for (let i = 0; i < 60; i++) updateArcs(1 / 60);
+      o.rockBodyUntouched = e.hp >= hp0;
       o.walledDist = pair.d;
       player.x = home.x; player.y = home.y;
-    } else o.holdsBehindRock = 'no walled pair anywhere on this map';
+    } else { o.swingsAtRock = 'no walled pair anywhere on this map';
+             o.rockBodyUntouched = 'no walled pair anywhere on this map'; }
 
     // a body pressed right up against the player is always hittable
     T.clear(); const near = T.plant(26, 0, HP);
     enemyGrid = new SpatialHash(ENEMY_CELL); enemyGrid.insert(near, near.x, near.y);
-    o.firesPointBlank = fire();
+    o.firesPointBlank = tap();
 
     // and the blocked one is not merely deprioritised -- it is not a target
     T.clear();
     const far = T.plant(90, 0, HP);
     enemyGrid = new SpatialHash(ENEMY_CELL); enemyGrid.insert(far, far.x, far.y);
-    o.stillFiresWhenOneIsClear = fire();
+    o.stillFiresWhenOneIsClear = tap();
     return o;
   });
   ck('swings at a body in the open', los.firesInOpen);
-  ck('holds rather than swinging at rock', los.holdsBehindRock === true,
-     typeof los.holdsBehindRock === 'string' ? los.holdsBehindRock
-       : 'blocked body at ' + los.walledDist + ' units, no crescent released');
+  ck('a tap swings even at rock, because you asked for it',
+     los.swingsAtRock === true,
+     typeof los.swingsAtRock === 'string' ? los.swingsAtRock
+       : 'blocked body at ' + los.walledDist + ' units');
+  ck('but the blade does not reach through it', los.rockBodyUntouched === true,
+     typeof los.rockBodyUntouched === 'string' ? los.rockBodyUntouched
+       : 'the body behind the rock took nothing over a full arc life');
   ck('point blank still swings', los.firesPointBlank);
   ck('a clear body is still found', los.stillFiresWhenOneIsClear);
 

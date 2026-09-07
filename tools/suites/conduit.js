@@ -64,11 +64,23 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     const wide = () => arcs.length ? +arcs[0].half.toFixed(2) : null;
     const reach = () => arcs.length ? +arcs[0].maxLife.toFixed(3) : null;
 
-    /* --- 1. A BLOW YOU ASKED FOR IS WORTH MORE THAN ONE YOU DID NOT ------ */
-    room(); foe(70); updateConduit(0.001);
-    o.autoDmg = dmg();
+    /* --- 1. THE BLADE DOES NOT SWING ITSELF ------------------------------
+     *
+     * This used to compare a tap against the idle blade and assert the tap
+     * was worth more. There is no idle blade now, so the claim is the
+     * stronger one: left alone with a body in reach and the beat ready, for
+     * four seconds, NOTHING comes out of it.
+     *
+     * The control is the same room and the same body, tapped -- because
+     * "no arcs appeared" would also be what a broken fixture looks like, and
+     * the pair together cannot both be explained by one.
+     */
+    room(); foe(70);
+    for (let i = 0; i < 60 * 4; i++) updateConduit(1 / 60);
+    o.unaskedArcs = arcs.length;
     room(); foe(70); conduitPress(); conduitRelease();
     o.tapDmg = dmg();
+    o.tapArcs = arcs.length;
 
     /* --- 2. THE CHAIN ---------------------------------------------------- */
     room(); foe(70);
@@ -96,9 +108,14 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     room(); foe(-70);
     conduitPress(); conduitAim(0, 0.5); updateConduit(0.001);
     o.aimed = arcs.length ? +arcs[0].a.toFixed(2) : null;
-    // The control: with nobody driving it, the same room swings the other way.
-    room(); foe(-70); updateConduit(0.001);
-    o.auto = arcs.length ? +Math.abs(arcs[0].a).toFixed(2) : null;
+    /* The control: the same room, TAPPED instead of dragged, swings the other
+     * way -- at the body, because aimAngle still finds one for an undirected
+     * blow. Without this the check above would pass on a blade that always
+     * swings right, whatever anyone points at. It used to be the idle blade;
+     * the idle blade is gone, and the tap makes the same point better, since
+     * it is a swing somebody asked for either way. */
+    room(); foe(-70); conduitPress(); conduitRelease();
+    o.autoAimed = arcs.length ? +Math.abs(arcs[0].a).toFixed(2) : null;
     // And it keeps firing while held, on the blade's own beat rather than
     // once per press.
     room(); foe(-70);
@@ -136,7 +153,13 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     for (let i = 0; i < Math.ceil(60 * 1.4); i++) updateConduit(1 / 60);
     o.gatheredInside = +(player.cleave || 0).toFixed(2);
 
-    /* --- 5. AND THE BLADE STILL SWINGS FOR A THUMB THAT DOES NOTHING ----- */
+    /* --- 5. AND A THUMB THAT DOES NOTHING KILLS NOTHING ------------------
+     *
+     * The inverse of what this used to say. Four seconds of the full update
+     * loop -- not just updateConduit, so anything else that might quietly
+     * swing gets its chance too -- against a body in reach, with no input.
+     * It must come out untouched.
+     */
     room(); const t5 = foe(70);
     const hp0 = t5.hp;
     for (let i = 0; i < 60 * 4; i++) update(1 / 60);
@@ -149,13 +172,17 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     return o;
   });
 
-  ck('the blade swings for a thumb that does nothing', R.idleKilled > 0,
-     Math.round(R.idleKilled) + ' off a body over four seconds');
-  ck('and a blow you asked for is worth more than one you did not',
-     R.tapDmg > R.autoDmg * 1.4,
-     R.autoDmg === null ? 'THE IDLE BLADE NEVER FIRED — nothing here proves anything'
-       : 'tap ' + R.tapDmg + ' against the idle blade’s ' + R.autoDmg +
-         ' (×' + (R.tapDmg / R.autoDmg).toFixed(2) + ')');
+  ck('the blade does not swing itself', R.unaskedArcs === 0,
+     R.unaskedArcs + ' crescent(s) in four seconds with a body in reach and ' +
+     'nobody touching it');
+  ck('and the control: the same room, tapped, does swing',
+     R.tapArcs > 0 && R.tapDmg > 0,
+     R.tapArcs ? 'tap put out ' + R.tapDmg + ' damage, so the silence above is ' +
+                 'the blade and not the fixture'
+               : 'NOTHING FIRED EITHER WAY — the check above proves nothing');
+  ck('and a thumb that does nothing kills nothing', R.idleKilled === 0,
+     Math.round(R.idleKilled) + ' off a body over four seconds of the whole ' +
+     'update loop');
   ck('and a tap in an empty room still swings', R.tapInTheDark === true);
 
   ck('taps chain, and the chain resets when it finishes',
@@ -173,10 +200,10 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   ck('a drag aims the blade away from what it would have picked',
      R.aimed !== null && Math.abs(R.aimed) < 0.02,
      R.aimed === null ? 'NOTHING FIRED' : 'aimed ' + R.aimed + ' rad');
-  ck('and the control: undriven, the same room swings the other way',
-     R.auto !== null && Math.abs(R.auto - Math.PI) < 0.02,
-     R.auto === null ? 'THE AUTO BLADE NEVER FIRED — the aim above proves nothing'
-       : 'auto went ' + R.auto + ' rad, at the body');
+  ck('and the control: tapped instead, the same room swings the other way',
+     R.autoAimed !== null && Math.abs(R.autoAimed - Math.PI) < 0.02,
+     R.autoAimed === null ? 'THE TAP NEVER FIRED — the aim above proves nothing'
+       : 'the tap went ' + R.autoAimed + ' rad, at the body');
   ck('and holding it fires down that line on the blade’s beat',
      R.heldShots >= R.expectShots - 1 && R.heldShots <= R.expectShots + 1,
      R.heldShots + ' crescents in three seconds against a beat of ' + R.expectShots);

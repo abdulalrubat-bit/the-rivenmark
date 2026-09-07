@@ -1874,22 +1874,19 @@ const BASE_PLAYER = {
   iframe: 0.45
 };
 
-/* WHAT THE SWING IS WORTH ON ITS OWN.
+/* THERE IS NO LONGER A SWING NOBODY ASKED FOR.
  *
- * The blade swings by itself -- it always has, and on a game played with one
- * thumb it has to. What it should not do is win the fight by itself, and it
- * was: measured over ninety-six whole delves, seven tenths of every point of
- * damage came off the automatic swing and a sixth off the six buttons, and
- * the bar's share FELL with depth, from 22% on the first rung to 10% on the
- * forty-fourth. The deeper you went the more the game played itself.
+ * An AUTO_BITE of 0.62 lived here: what the blade was worth when it swung by
+ * itself, written down as less than a real blow so that the automatic attack
+ * could not win the fight on its own. It was a way of managing a problem
+ * rather than fixing it, and the fix was to take the automatic attack out --
+ * see the long note where fire() used to be.
  *
- * So the crescent carries a share of the ward rather than all of it, and it
- * comes round slower. `damage` still means what it always meant -- it is what
- * the kit multiplies, so a ring that bites deeper bites deeper everywhere --
- * and this is the one place the automatic swing is written down as less than
- * the whole of you.
+ * So every swing in the game is now one somebody asked for, and is worth the
+ * whole of `damage`. That is why releaseCrescent's default bite is 1 and not
+ * a fraction: a caller that forgets to say what its blow is worth gets a real
+ * one, rather than a quietly weakened one nobody notices for a month.
  */
-const AUTO_BITE = 0.62;
 
 // Enemy archetypes. `weight` is the spawn share, ramped by `from` (seconds).
 // role decides how a body fights, not how hard. Until now every kind pressed
@@ -4533,21 +4530,52 @@ function nearestFoe(R) {
   return avatar || best;
 }
 
-// The automatic blade: find something, swing at it, at what a swing nobody
-// asked for is worth.
-function fire() {
-  const best = nearestFoe(player.range);
-  if (!best) return false;
-  return swingAt(Math.atan2(best.y - player.y, best.x - player.x), EMPTY_SWING);
-}
+/* THE AUTOMATIC BLADE IS GONE, AND THIS IS WHERE IT WAS.
+ *
+ * fire() found the nearest body and swung at it on a timer, at 0.62 of a real
+ * blow, whenever nobody was touching the control. It was the whole of the
+ * attack before the Conduit existed, and it was left in afterwards as a
+ * kindness: one thumb, or no thumb, still plays.
+ *
+ * That kindness was the problem. With it in, the game plays itself -- stand
+ * still, press nothing, and things die -- so the Conduit was an optional way
+ * to kill them somewhat faster rather than the way you fight. Two attack
+ * systems running at once, one of which nobody chose. That is the whole of
+ * "it feels stuck between the two games it was built on".
+ *
+ * MEASURED before it went, over ninety-six delves across six rungs: the
+ * crescent was 39% to 60% of every point of damage the reference player
+ * dealt, and that player never once touched the control. Between a third and
+ * two thirds of the game was being played by nobody.
+ *
+ * nearestFoe stays, and is still exported to the same callers. It is what
+ * aimAngle uses, so a TAP still finds its own target -- the accessible swing
+ * is not gone, it simply has to be asked for.
+ *
+ * A POSTSCRIPT WORTH KEEPING. Cutting it broke SEVEN test fixtures across
+ * both builds, and every one of them in the same way:
+ *
+ *   swing.js       measuring the recoil of blows it was not throwing
+ *   crucible.js    measuring what a Vanguard can do to a boss, while only
+ *                  pressing the bar -- so one totem started out-mending it
+ *   conduit.js     proving a tap is worth more than the idle blade
+ *   combat2.js     eight calls to fire(), through a stale debug.html
+ *   combat3.js     one call to fire(), which took the whole suite down
+ *   dbgtest.js     one call to fire(), likewise
+ *   smoke-fx.cjs   a fight scene with nobody fighting in it
+ *
+ * All seven had been written as though the blade were part of the room rather
+ * than part of the player. That is the same mistake the game itself was
+ * making, and it had spread into the things that were supposed to catch it.
+ */
 
 // A blank shape, so the hot path allocates nothing per swing.
 const EMPTY_SWING = {};
 
 /* Bring the blade round on a bearing. Everything that swings goes through
- * here -- the automatic blade, a tap, the continuous fire down an aimed line,
- * and the charged cleave -- so there is one place that knows what a swing IS
- * and four callers that know what kind of swing they want.
+ * here -- a tap, the continuous fire down an aimed line, and the charged
+ * cleave -- so there is one place that knows what a swing IS and three
+ * callers that know what kind of swing they want.
  */
 function swingAt(base, o) {
   const k = o || EMPTY_SWING;
@@ -4602,10 +4630,9 @@ function releaseCrescent(a, delay, o) {
     y: player.y + Math.sin(a) * (player.r + 8),
     dx: Math.cos(a), dy: Math.sin(a), a: a,
     speed: player.arcSpeed,
-    // AUTO_BITE is what the blade is worth when it swings ITSELF. A blow you
-    // asked for is worth the whole of it -- that difference is most of why
-    // pressing the button is worth doing.
-    dmg: player.damage * (k.bite === undefined ? AUTO_BITE : k.bite),
+    // Every blow is one somebody asked for now, so the default is the whole
+    // of the ward. See the note where AUTO_BITE used to be.
+    dmg: player.damage * (k.bite === undefined ? 1 : k.bite),
     half: half, bow: bow, band: 11,
     delay: delay || 0,
     life: player.range * (k.reach || 1) / player.arcSpeed,
@@ -5207,10 +5234,11 @@ function updateTraps(dt) {
 }
 
 /* --- reactive scenery -----------------------------------------------------
-   The player has a stick and an automatic blade, so the only tactical input
-   they have is *where* they fight. That is what this is for: a room with a
-   pitch barrel in it is a different room, and standing in the right part of
-   it is a decision the controls can actually express.
+   Written when the player had a stick and an automatic blade, and *where*
+   they fought was the only tactical input they had. They have a Conduit now
+   and rather more to say, but the point stands and stands better: a room with
+   a pitch barrel in it is a different room, and standing in the right part of
+   it is a decision the controls can express.
 
    A barrel takes a beat to go up after it is broken, so setting one off and
    then standing in it is your own fault rather than the auto-aim's. A pillar
@@ -6630,11 +6658,12 @@ function updatePlayer(dt) {
    One control, three states, told apart by how you touch it. It is a state
    machine and not three buttons on purpose: a thumb has one place to be.
 
-     TAP      under CONDUIT_TAP and never dragged. The old accessible swing --
-              nearest target, no aiming -- but at FULL bite rather than the
-              0.62 the automatic blade is worth, and it chains: tap again
+     TAP      under CONDUIT_TAP and never dragged. The accessible swing --
+              nearest target, no aiming, one thumb -- and it chains: tap again
               inside the window and the third strike of the chain comes round
-              a fifth wider. Rhythm, for a thumb that wants one.
+              a fifth wider. Rhythm, for a thumb that wants one. This is the
+              whole of the game for a player who wants to press one button;
+              what it is not any more is a button they can decline to press.
      DRAG     past the deadzone. The drag vector takes the aim off the
               auto-target entirely and the blade fires down that line on its
               own beat for as long as you hold it. Back-pedalling while
@@ -6706,10 +6735,10 @@ function conduitRelease() {
   player.conT = 0;
 }
 
-/* A swing you asked for. Rate-capped by the same beat the automatic blade
- * runs on -- so tapping cannot out-throughput anything -- but it is YOUR beat:
- * you decide the moment, and hitting the moment again inside the window
- * carries the chain on.
+/* A swing you asked for, which since the automatic blade went is the only
+ * kind there is. Rate-capped by the blade's own beat -- so tapping cannot
+ * out-throughput a held drag -- but it is YOUR beat: you decide the moment,
+ * and hitting the moment again inside the window carries the chain on.
  */
 function tapSwing() {
   if (player.fireTimer > 0) return false;
@@ -6747,7 +6776,9 @@ function aimAngle() {
 
 /* The clock the blade runs on, and the only place it runs. Called from
  * updatePlayer in place of the bare fireTimer countdown that used to live
- * there, so the automatic blade and the driven one cannot both fire.
+ * there. It used to exist to stop the automatic blade and the driven one
+ * firing on the same beat; the automatic blade is gone, so it is now simply
+ * where the beat lives.
  */
 function updateConduit(dt) {
   if ((player.comboT || 0) > 0) {
@@ -6769,14 +6800,13 @@ function updateConduit(dt) {
 
   player.fireTimer -= dt;
   if (player.fireTimer > 0) return;
+  // Ready, and waiting to be asked. There is no else here any more: the blade
+  // does not swing itself. See the note where fire() used to be.
+  player.fireTimer = 0;
   if (player.conDown && player.conAim) {
     // Driven: down the line you are pointing, at the whole of the blade.
     swingAt(player.conA, { bite: 1 });
     player.fireTimer = player.fireDelay;
-  } else {
-    // Idle. The blade still keeps you alive on its own, at the reduced bite
-    // it has always been worth -- one thumb, or no thumb, still plays.
-    player.fireTimer = fire() ? player.fireDelay : 0;
   }
 }
 

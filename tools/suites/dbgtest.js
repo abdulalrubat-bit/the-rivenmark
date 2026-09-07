@@ -156,7 +156,9 @@ const ck = (name, ok, note) => (ok ? pass : fail).push(name + (note ? '  [' + no
     spawnEnemy(run.time);
     const t2 = enemies[enemies.length-1];
     t2.x = player.x + 60; t2.y = player.y;
-    r.arcsFire = (fire(), arcs.length > 0);
+    // A tap: the automatic blade is gone, so a crescent only leaves the hero
+    // when the Conduit is pressed.
+    r.arcsFire = (conduitPress(), conduitRelease(), arcs.length > 0);
     btn('wipe horde').click(); r.wiped = enemies.filter(e=>e.kind!=='deceiver').length === 0;
     btn('to gate').click();   r.atGate = Math.hypot(player.x-portal.x, player.y-portal.y) < 1;
     btn('summon boss').click();
