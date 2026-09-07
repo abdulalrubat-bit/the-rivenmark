@@ -16,6 +16,7 @@ import { FrameLog, FxGovernor, LayerProfiler, collect, asText, mountButton }
 import { Hud } from './hud.js';
 import { Effects } from './effects.js';
 import { Screens } from './screens.js';
+import { Title } from './title.js';
 import { Overlay } from './overlay.js';
 import { Atmosphere } from './atmosphere.js';
 
@@ -129,6 +130,11 @@ export class Delve extends Phaser.Scene {
   constructor() { super('delve'); }
 
   preload() {
+    /* The title card is already on screen -- it was painted by the shell
+     * before this bundle existed. Take it over and point it at the loader, so
+     * the bar in it is the atlas arriving rather than an animation. */
+    this.title = new Title();
+    this.title.watch(this.load);
     this.load.atlas('art', 'atlas.png', 'atlas.json');
     // The manifest travels with the atlas and this scene needs it: the wall
     // course spans and the authored-art scale table both live in it. main.js
@@ -140,7 +146,10 @@ export class Delve extends Phaser.Scene {
   }
 
   create() {
-    document.getElementById('boot')?.remove();
+    // The title card is NOT removed here. It stays up over the one-off bake
+    // below -- which is the longest stall in the whole boot -- and is taken
+    // down at the end of create(), by which time there is a gate-house behind
+    // it to arrive at.
 
     // The core reads the viewport to place spawns; give it a real one and keep
     // it current. Without this the spawn ring collapses and the delve sends a
@@ -176,8 +185,13 @@ export class Delve extends Phaser.Scene {
 
     // ?norun leaves the world ungenerated, for isolating where a frame goes.
     this.stepping = !/norun/.test(location.search);
+    /* ?nogate drops straight into a delve, skipping the title and the
+     * gate-house. A debug entrance, and the smoke suites that are about how
+     * the delve DRAWS use it so that each of them tests one thing -- the
+     * startup path has a suite of its own, which drives the real buttons.
+     * Nothing ships pointing at it. */
+    this.gated = !/nogate/.test(location.search);
     if (this.stepping) {
-      state = 'play';
       // Which life the player was last in, BEFORE the stash is read -- it is
       // what decides which stash there is to read. A Hardcore player who
       // closed the app must not come back to their softcore kit and discover
@@ -185,9 +199,31 @@ export class Delve extends Phaser.Scene {
       hardcore = loadHardcoreMode();
       stash = loadStash();
       const t0 = performance.now();
-      startRun('isaac', LEVELS[3].id, 'riven');
-      run.banner = 0;
-      console.log('startRun ' + (performance.now() - t0).toFixed(0) + 'ms');
+      if (this.gated) {
+        /* THE GAME OPENS AT THE GATE-HOUSE.
+         *
+         * It used to open mid-delve, on rung 4, as somebody called Isaac,
+         * with none of that chosen -- a leftover from when this scene was a
+         * port harness and getting a delve on screen at all was the question.
+         * Every station the gate-house has (the Forge, the Vendor, the Hall,
+         * the daily, the ground, Hardcore, which hero, which rung) was
+         * already built and already reachable from it; the only thing wrong
+         * was that the player was never shown it.
+         *
+         * resetRun builds a world without beginning a run, so the menu has
+         * ground behind it rather than a black frame, and `state` is 'menu'
+         * so update() is not stepped. Descending goes through newRun, which
+         * is the same door the gate-house has always used.
+         */
+        state = 'menu';
+        resetRun('isaac', LEVELS[0].id, 'riven');
+      } else {
+        state = 'play';
+        startRun('isaac', LEVELS[3].id, 'riven');
+        run.banner = 0;
+      }
+      console.log((this.gated ? 'resetRun ' : 'startRun ') +
+                  (performance.now() - t0).toFixed(0) + 'ms');
     }
 
     /* The manifest is not optional. A missing one used to mean silently wrong
@@ -311,6 +347,25 @@ export class Delve extends Phaser.Scene {
             delve: LEVEL.id
           }));
       }, () => this.prof.start(), () => this.prof.label());
+    }
+
+    /* And the curtain comes down.
+     *
+     * Last in create(), on purpose: everything a player can touch now exists
+     * -- the world is baked, the HUD is mounted, the gate-house has something
+     * to render against -- so the card is hiding a finished screen rather
+     * than an unfinished one. Doing this any earlier shows the seams being
+     * assembled.
+     *
+     * The gate-house is raised only after the fade has finished, so the two
+     * do not cross-dissolve into each other. ?nogate skips the card outright:
+     * there is no menu to arrive at, and a debug entrance should be instant.
+     */
+    if (this.gated) {
+      this.title.note('the gate-house');
+      this.title.dismiss().then(() => this.screens.show('splash'));
+    } else {
+      document.getElementById('boot')?.remove();
     }
   }
 

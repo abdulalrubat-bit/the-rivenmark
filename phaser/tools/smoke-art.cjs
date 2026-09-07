@@ -223,7 +223,7 @@ const LONG = { kind: 'gorger', n: 10 };
     const errs = [];
     p.on('pageerror', e => errs.push(e.message));
     p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
-    await p.goto('http://localhost:' + PORT + '/?nogov');
+    await p.goto('http://localhost:' + PORT + '/?nogov&nogate');
     let booted = false;
     for (let i = 0; i < 40 && !booted; i++) {
       await sleep(250);

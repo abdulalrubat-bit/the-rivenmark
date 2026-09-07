@@ -14,10 +14,56 @@
   html,body{margin:0;height:100%;background:#0b0908;overflow:hidden;
             -webkit-tap-highlight-color:transparent}
   canvas{display:block;touch-action:none}
-  #boot{position:fixed;inset:0;display:grid;place-items:center;color:#cebe9e;
-        font:14px ui-monospace,monospace;pointer-events:none}
+  /* THE TITLE CARD.
+     Inline, in the shell, and deliberately: this is what covers the wait for
+     bundle.js and the atlas, so it must paint on the first frame with nothing
+     downloaded. Anything that moves it into the bundle puts the loading
+     screen behind the load. src/title.js adopts this node; it does not build
+     it. Cut from the same stone as the gate-house cards -- a bronze band lit
+     from the north-west over a dark slate face. */
+  #boot{position:fixed;inset:0;z-index:60;display:grid;place-items:center;
+        background:radial-gradient(120% 80% at 50% 34%,#171310,#0b0908 68%);
+        color:#cebe9e;font:13px ui-monospace,Menlo,monospace;
+        padding:max(24px,env(safe-area-inset-top)) 24px
+                max(24px,env(safe-area-inset-bottom));
+        -webkit-user-select:none;user-select:none;
+        opacity:1;transition:opacity 420ms ease}
+  #boot.out{opacity:0;pointer-events:none}
+  #boot .wrap{width:min(340px,86vw);text-align:center}
+  /* The riven mark itself: a bronze rule with the break in it that the game
+     is named for. Drawn, not an image -- it has to be here before any asset
+     is, and it is sharp at every ratio for free. */
+  #boot .rule{height:2px;margin:0 auto 20px;width:70%;
+        background:linear-gradient(90deg,transparent,#6d4d22 18%,#e2b96a 47%,
+                   transparent 49%,transparent 51%,#e2b96a 53%,#6d4d22 82%,transparent)}
+  #boot h1{margin:0;font:300 30px/1.15 Georgia,"Times New Roman",serif;
+        letter-spacing:6px;color:#eee0c0;text-shadow:0 2px 10px rgba(0,0,0,.8)}
+  #boot h1 em{font-style:normal;color:#d6b26e;display:block;letter-spacing:9px}
+  #boot .tag{margin:14px 0 26px;color:#8c8168;font-style:italic;
+        font-family:Georgia,serif;line-height:1.5}
+  /* Narrower than the rule above it, with a track you can see when it is
+     empty. Full width and trackless, a finished bar was a second gold rule
+     and read as decoration rather than as progress finishing. */
+  #boot .bar{width:52%;margin:0 auto;height:4px;border-radius:2px;
+        background:#181410;border:1px solid #2a221a;overflow:hidden;
+        box-shadow:inset 0 1px 2px rgba(0,0,0,.8)}
+  /* Starts at a sliver rather than at nothing: a bar of zero width is
+     indistinguishable from a bar that failed to appear. */
+  #boot .bar>i{display:block;height:100%;width:6%;
+        background:linear-gradient(90deg,#6d4d22,#e2b96a);
+        transition:width 220ms ease}
+  #boot .say{margin:12px 0 0;color:#6a6154;font-size:11px;letter-spacing:.5px}
 </style>
-<div id="boot">forging…</div>
+<div id="boot">
+  <div class="wrap">
+    <div class="rule"></div>
+    <h1>THE
+        <em>RIVENMARK</em></h1>
+    <p class="tag">Descend. Take what you can carry. Climb out.</p>
+    <div class="bar"><i></i></div>
+    <p class="say">waking the engine…</p>
+  </div>
+</div>
 <!-- The core is a plain script, exactly as it is in the canvas build, so it
      keeps the flat global scope everything in it expects. The bundle reads it
      off `window`. Order matters: stubs, then the real host, then the core.

@@ -49,7 +49,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
    * The atmosphere has its own suite (smoke:air) where it is the subject
    * rather than the weather.
    */
-  await p.goto('http://localhost:' + PORT + '/?noatmos&nogov');
+  await p.goto('http://localhost:' + PORT + '/?noatmos&nogov&nogate');
   let booted = false;
   for (let i = 0; i < 40 && !booted; i++) {
     await sleep(250);

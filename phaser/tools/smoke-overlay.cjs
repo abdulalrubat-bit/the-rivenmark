@@ -40,7 +40,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
    * against a frozen frame, and a drifting fog or a guttering torch under the
    * box is noise the measurement cannot tell from the thing being measured.
    * The atmosphere is the subject of smoke:air, not the weather here. */
-  await p.goto('http://localhost:' + PORT + '/?noatmos&nogov');
+  await p.goto('http://localhost:' + PORT + '/?noatmos&nogov&nogate');
   let booted = false;
   for (let i = 0; i < 40 && !booted; i++) {
     await sleep(250);

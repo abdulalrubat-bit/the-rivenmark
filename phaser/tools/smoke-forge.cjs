@@ -30,7 +30,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   const errs = [];
   p.on('pageerror', e => errs.push(e.message));
   p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
-  await p.goto('http://localhost:' + PORT + '/');
+  await p.goto('http://localhost:' + PORT + '/?nogate');
   await sleep(3200);
 
   // Put a few real drops in the vault, rolled by the core rather than faked,
