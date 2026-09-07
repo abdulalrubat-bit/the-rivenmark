@@ -72,7 +72,18 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   // "map-shaped rectangle" would catch.
   const m0 = await p.evaluate(() => {
     const sc = window.__game.scene.getScene('delve');
-    state = 'over';                       // freeze; the map still redraws
+    /* Held, not over. This wants the delve to stop moving so the map can be
+     * diffed against a still world -- and it used to say 'over', which is
+     * the word for a run that has ENDED, chosen only because at the time
+     * nothing read `state` except the step. Something does now: the HUD
+     * hides itself when there is no run under it, so 'over' took the boss
+     * bar, the toast and the banner away and ten checks below here went
+     * looking for text on elements that were no longer being drawn.
+     *
+     * 'pause' is what the suite actually means. update() is skipped exactly
+     * the same way, the scene keeps drawing every frame, and the run is
+     * still a run -- which is the truth, and is why the HUD stays. */
+    state = 'pause';                      // freeze; the map still redraws
     for (const e of enemies) e.awake = false;
     run.corpse = null; run.boss = null; run.invader = null; run.toast = null;
     // The host ships a placeholder minimapBox that returns a zero-sized box at

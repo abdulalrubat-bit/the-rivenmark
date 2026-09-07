@@ -237,7 +237,7 @@ const LONG = { kind: 'gorger', n: 10 };
       await sleep(1500);
       const R = await p.evaluate(async ([kind, key]) => {
         const sc = window.__game.scene.getScene('delve');
-        state = 'over';
+        state = 'pause';
         const live = enemies.filter(e => e.hp > 0);
         const one = live.find(e => e.kind === kind);
         const other = live.find(e => e.kind !== kind);

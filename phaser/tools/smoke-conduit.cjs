@@ -106,13 +106,21 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   const midChg = await p.evaluate(() => ({ chg: +(player.cleave || 0).toFixed(2),
     css: document.querySelector('#hud .conduit').style.getPropertyValue('--chg'),
     lit: document.querySelector('#hud .conduit').classList.contains('gathering') }));
-  await sleep(600);
+  /* Long enough that the gather is finished by wall time on ANY frame rate,
+   * not merely on a fast one. 600ms was cutting it fine against a 1.15s
+   * gather, and on software GL under load this read 0.58, 0.74 and 0.9 on
+   * three consecutive runs of the same unchanged code. A check whose answer
+   * depends on how busy the machine is teaches people to ignore it; the
+   * claim here is "a full hold gathers fully", so hold fully. */
+  await p.waitForFunction(() => (player.cleave || 0) >= 0.99, null, { timeout: 6000 })
+        .catch(() => {});
   const full = await p.evaluate(() => +(player.cleave || 0).toFixed(2));
   await clear();                                // the release, and nothing else
   await p.mouse.up();
   await sleep(150);
   const cleave = await seen();
-  ck('holding it at the rim gathers', full > 0.9, 'gathered ' + full);
+  ck('holding it at the rim gathers', full > 0.9,
+     'gathered ' + full + ' (held until full, or 6s)');
   ck('and the control shows it', midChg.lit === true && midChg.css !== '',
      'wedge at ' + (midChg.css || 'nothing') + ', rim lit ' + midChg.lit);
   ck('and letting go brings it round heavy',

@@ -226,7 +226,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   };
   const tell = await p.evaluate(async () => {
     const sc = window.__game.scene.getScene('delve');
-    state = 'over';                              // freeze; the layer redraws
+    state = 'pause';                              // freeze; the layer redraws
     enemies.length = 0; arcs.length = 0; particles.length = 0;
     rings.length = 0; floaters.length = 0; beams.length = 0;
     run.agonyT = 0; run.boss = null;

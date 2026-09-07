@@ -12,7 +12,7 @@
 
 import { bossShown, bossBarDrop, minimapBox } from './overlay.js';
 
-/* global player, run, enemies, view, LEVEL, REGION, HUD_H, ABILITIES,
+/* global player, run, state, enemies, view, LEVEL, REGION, HUD_H, ABILITIES,
           ABILITY_BY_ID, CHARGE_MAX, TENSION_MAX, COMBO_LEN, CONDUIT_EDGE */
 
 /* Four roles, four colours, and the mapping lives beside the buttons because
@@ -30,7 +30,32 @@ const g = window;   // ONLY for the functions -- see the note in delve.js: a
                     // window, so constants are read bare and calls are not.
 
 const CSS = `
-#hud{position:fixed;inset:0;pointer-events:none;font:12px ui-monospace,Menlo,monospace;
+/* THE PARTS OF THE SCREEN THE PHONE HAS ALREADY TAKEN.
+ *
+ * A notch, a punch-hole, a status bar, a home indicator, a gesture bar. The
+ * page asks for viewport-fit=cover so the delve fills the glass edge to edge,
+ * which is right for the world and wrong for everything laid over it: the
+ * life bar sat 8px from the top of a 390x844 frame, which on a phone with a
+ * notch is underneath it, and the Conduit sat 14px from the bottom, which is
+ * where the home indicator lives.
+ *
+ * Everything in the HUD is positioned absolutely against #hud, so the frame
+ * itself is what moves: inset, not padding. An absolutely positioned box
+ * resolves against its ancestor's padding box, and the padding box is INSIDE
+ * the border and therefore contains the padding -- padding here changed
+ * nothing at all, measurably, which is why it is worth writing down. Shrink
+ * the frame and every offset below still means what it says.
+ *
+ * Held in custom properties rather than written as env() at each use. One
+ * place to read, and a test can override the four to prove the plumbing
+ * carries: env() cannot be set from a test, and a rule nothing can exercise
+ * is a rule that stops being true without telling anyone.
+ */
+:root{--sa-t:env(safe-area-inset-top,0px);--sa-r:env(safe-area-inset-right,0px);
+      --sa-b:env(safe-area-inset-bottom,0px);--sa-l:env(safe-area-inset-left,0px)}
+#hud[hidden]{display:none!important}
+#hud{position:fixed;pointer-events:none;font:12px ui-monospace,Menlo,monospace;
+     inset:var(--sa-t) var(--sa-r) var(--sa-b) var(--sa-l);
      color:#cebe9e;-webkit-user-select:none;user-select:none}
 /* One band, not a red slab with text floating beside it. The frame, the inset
    and the stone colour are the boss bar's, so the two read as the same object
@@ -161,8 +186,14 @@ const CSS = `
 #hud button .sweep{position:absolute;inset:4px;border-radius:50%;pointer-events:none;
      background:conic-gradient(from -90deg,rgba(6,5,3,.66) calc(var(--cd,0) * 360deg),
      transparent 0)}
-#hud button .cd{position:absolute;bottom:5px;font:600 9px/1 ui-monospace,monospace;
-     color:#ffd870;text-shadow:0 1px 2px #000}
+/* The seconds and the word cannot both have the bottom of the disc: they
+ * overlapped, and a cooling button drew its remaining time through its own
+ * name. The word is what you read while you are learning the kit and the
+ * number is what you read in the middle of a fight, so when there is a
+ * number the word stands down for it. */
+#hud button .cd{position:absolute;bottom:6px;font:600 9px/1 ui-monospace,monospace;
+     color:#ffd870;text-shadow:0 1px 2px #000;z-index:2}
+#hud button.counting .tag{opacity:0}
 #hud button .mark{position:relative;z-index:1;line-height:1;margin-top:-3px}
 /* THE WORD, WHICH IS THE WHOLE POINT.
  *
@@ -175,10 +206,27 @@ const CSS = `
  * afterwards, when the glyph and the colour carry it -- so it must not compete
  * with either during a fight.
  */
-#hud button .tag{position:absolute;bottom:7px;left:0;right:0;z-index:1;
-     font:600 7.5px/1 'IBM Plex Mono',ui-monospace,monospace;letter-spacing:.06em;
+/* INSIDE THE CIRCLE, NOT INSIDE THE BOX.
+ *
+ * The tag ran the full 56px of the button and was cut off at both ends --
+ * GUILLOTINE came out as a headless word with no ellipsis to say so. The
+ * button is round and clips at the circle, and seven pixels up from the
+ * bottom of a 56px disc the chord is only about 44px wide, so twelve pixels
+ * of the tag were being drawn outside the shape and thrown away. The button's
+ * own overflow:hidden did the cutting, so the tag's ellipsis never fired: as
+ * far as the tag knew, it fitted.
+ *
+ * So it is inset to the chord. And rather than truncate the long ones -- the
+ * word IS the thing that says which ability this is, which is why it was put
+ * there -- a long tag is set smaller. Ten characters at 6.2px fit the 46px
+ * that is actually visible; the ellipsis stays as a backstop for anything
+ * longer still.
+ */
+#hud button .tag{position:absolute;bottom:11px;left:5px;right:5px;z-index:1;
+     font:600 var(--tagfs,7.5px)/1 'IBM Plex Mono',ui-monospace,monospace;
+     letter-spacing:.06em;
      color:var(--role,#d9a441);text-shadow:0 1px 2px #000;pointer-events:none;
-     text-align:center;padding:0 3px;overflow:hidden;text-overflow:ellipsis;
+     text-align:center;overflow:hidden;text-overflow:ellipsis;
      white-space:nowrap}
 /* THE ROLE, AS A COLOUR. Four of them, and four is learnable in one delve
    where nine glyphs are not: gold hurts something, blue keeps you standing,
@@ -198,21 +246,32 @@ const CSS = `
      text-shadow:0 1px 2px #000}
 /* Short of the price, rather than merely cooling: the ring goes amber and the
    word says so, because waiting will not fix it. */
-#hud button.broke{opacity:.85;background:linear-gradient(#6d5a2c,#4a3c1e 40%,#332a14)}
+/* NOT opacity. A translucent button shows the delve through its face -- two
+ * of the five had pillars standing in the middle of them -- and a button you
+ * can see the floor through does not read as unavailable, it reads as a hole
+ * in the HUD. Both of these states are said with colour, on a face that stays
+ * opaque. */
+#hud button.broke{background:linear-gradient(#6d5a2c,#4a3c1e 40%,#332a14)}
 #hud button.broke .tag{color:#c9a24a}
 /* Cooling and CANNOT are different states and used to look the same. Cooling
    keeps its colour and shows the wedge; blocked -- no charges, nothing in
    reach -- goes flat and grey, because no amount of waiting fixes it. */
 /* Blocked loses the bronze as well as the colour: no amount of waiting fixes
    it, so it should not look like a thing that is warming up. */
-#hud button:disabled{color:#9a8f7c;opacity:.62;
-     background:linear-gradient(#6a5f4c,#4a4034 40%,#332c22)}
+#hud button:disabled{color:#6f665a;
+     background:linear-gradient(#4a443a,#332e27 40%,#241f1a)}
+#hud button:disabled .tag,#hud button:disabled .mark{color:#6f665a}
+#hud button:disabled:before{background:linear-gradient(rgba(30,32,36,.9),
+     rgba(10,11,13,.97)),#121110}
 #hud button.cooling{opacity:1;color:#e8dcc0}
 #hud button.ready{box-shadow:0 0 12px rgba(214,178,110,.45),0 2px 6px rgba(0,0,0,.55)}
 #hud button.ready:before{box-shadow:inset 0 1px 0 rgba(214,178,110,.4),
      0 0 0 1px rgba(0,0,0,.85)}
 #hud button:active:before{background:linear-gradient(rgba(64,74,90,.9),rgba(26,32,44,.96)),#2a2419}
 #hud .swap{position:absolute;right:204px;bottom:16px;pointer-events:auto}
+/* The other hero is not an ability, so it does not take an ability's colour.
+   Bone, which is what the rest of the frame is written in. */
+#hud .swap button{--role:#cebe9e}
 #hud .res{position:absolute;right:10px;bottom:148px;display:flex;gap:5px;
      align-items:center;justify-content:flex-end}
 #hud .pip{width:11px;height:11px;border-radius:50%;border:1px solid #6a5a42;background:#161310}
@@ -302,7 +361,16 @@ export class Hud {
         '<div class="slag"></div>' +
       '</div>' +
       '<div class="res"></div>' +
-      '<div class="swap"><button type="button" title="swap">⇄</button></div>' +
+      /* Built like a kit button, for the same reason a kit button is: the
+       * whole point of the tag under an ability's mark is that a glyph is a
+       * thing to memorise and a word is not. This was one bare arrow, and
+       * worse than that -- U+21C4 is missing from some system font stacks
+       * and renders as NOTHING rather than as tofu, which is a 56px button
+       * with nothing on it and no way to tell that from a bug. The word
+       * carries it now whatever the font does. */
+      '<div class="swap"><button type="button" title="swap">' +
+        '<span class="mark">\u21c4</span><span class="tag">SWAP</span>' +
+        '<span class="cd"></span></button></div>' +
       '<div class="hold"><button type="button" title="hold" aria-label="hold">❙❙</button></div>' +
       '<div class="kit"></div>' +
       '<div class="conduit"><span class="ring"></span><span class="chg"></span>' +
@@ -454,9 +522,16 @@ export class Hud {
       b.dataset.id = a.id;
       b.title = a.name + ' — ' + a.note;
       b.style.setProperty('--role', ROLE_HUE[a.role] || '#d9a441');
+      /* Set from the word's own length rather than typed per ability, so a
+       * new one that happens to be long is legible the day it is added
+       * instead of the day somebody notices it is not. 46px of visible chord
+       * holds about eight characters at the standard size. */
+      const tag = a.tag || a.name;
+      b.style.setProperty('--tagfs', tag.length > 8 ? '6.2px'
+                                   : tag.length > 6 ? '7px' : '7.5px');
       b.innerHTML = '<span class="sweep"></span><span class="cost"></span>' +
                     '<span class="mark">' + a.mark + '</span>' +
-                    '<span class="tag">' + (a.tag || a.name) + '</span>' +
+                    '<span class="tag">' + tag + '</span>' +
                     '<span class="cd"></span>';
       // pointerdown, not click: a click waits for the pointer to come back up,
       // which on a touch screen is a beat you can feel in a fight.
@@ -470,6 +545,20 @@ export class Hud {
   sync() {
     const p = player;
     if (!p) return;
+    /* THE HUD BELONGS TO A DELVE, NOT TO THE GAME.
+     *
+     * At the gate-house there was a full life bar, a slag counter reading
+     * 0/125 and a pause button standing behind the menu -- a HUD for a run
+     * nobody had started, and the first thing a new player saw behind the
+     * card was a game that looked like it was already in progress.
+     *
+     * Held is not the menu: the delve IS still standing there, the scene is
+     * still drawing it and the card says as much, so the HUD stays. So the
+     * test is whether there is a run under this, not whether a screen is up.
+     */
+    const inDelve = state === 'play' || state === 'pause';
+    this.root.hidden = !inDelve;
+    if (!inDelve) return;
     if (this.hero !== p.hero) this.buildKit(p.hero);
 
     this.syncConduit();
@@ -531,7 +620,9 @@ export class Hud {
         // cooldown; only going and hitting something fixes this one, so it
         // says so rather than wearing the same grey.
         b.classList.toggle('broke', why === 'cost');
-        b.querySelector('.cd').textContent = cd >= 1 ? Math.ceil(cd) : '';
+        const secs = cd >= 1 ? String(Math.ceil(cd)) : '';
+        b.querySelector('.cd').textContent = secs;
+        b.classList.toggle('counting', secs !== '');
         const cost = b.querySelector('.cost');
         cost.innerHTML = want > 0
           ? Array.from({ length: want }, (_, i) =>
@@ -554,7 +645,11 @@ export class Hud {
     const swapWhy = g.swapBlocked();
     this.swapBtn.disabled = !!swapWhy && swapWhy !== 'gcd';
     this.swapBtn.classList.toggle('ready', !swapWhy);
-    this.swapBtn.textContent = (p.swapCd || 0) > 0 ? Math.ceil(p.swapCd) : '⇄';
+    // Same shape as the kit: the seconds take the bottom of the disc while
+    // they are there and the word stands down for them.
+    const swapSecs = (p.swapCd || 0) > 0 ? String(Math.ceil(p.swapCd)) : '';
+    this.swapBtn.querySelector('.cd').textContent = swapSecs;
+    this.swapBtn.classList.toggle('counting', swapSecs !== '');
 
     // The opening banner announces the level, then the region it was cut
     // from; anything the run raises later -- the gate, the boss -- replaces

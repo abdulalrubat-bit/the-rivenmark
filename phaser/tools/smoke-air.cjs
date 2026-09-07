@@ -119,7 +119,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   const light = await p.evaluate(async () => {
     const sc = window.__game.scene.getScene('delve');
     const c = sc.cameras.main;
-    state = 'over';                              // freeze; the layer redraws
+    state = 'pause';                              // freeze; the layer redraws
     // lowFx ON for this one, which sheds the fog, the ash and the vignette and
     // keeps the light pass -- exactly the property being asserted below.
     //

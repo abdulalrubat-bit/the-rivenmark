@@ -77,11 +77,17 @@ const cardState = () => {
   p.on('pageerror', e => errs.push(e.message));
   p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
 
-  /* A short leash on every click. The default is thirty seconds, and this
-   * suite's whole job is to notice when a control the player needs is not
-   * there -- so a missing one should be a named failure in a few seconds, not
-   * a stack trace half a minute later with none of the checks printed. */
-  const tap = sel => p.click(sel, { timeout: 4000 });
+  /* A shorter leash than the default thirty seconds, because this suite's
+   * whole job is to notice when a control the player needs is not there, and
+   * a missing one should be a named failure rather than a stack trace half a
+   * minute later with none of the checks printed.
+   *
+   * Ten, not four. Four was enough standalone and not enough in a batch run:
+   * sixteen browser suites in a row on software GL contend badly, and the
+   * suite failed on a button that was there and would have been clicked a
+   * second later. A test that fails because the machine is busy teaches
+   * people to ignore it. */
+  const tap = sel => p.click(sel, { timeout: 10000 });
 
   const report = () => {
     console.log('\nPASS ' + pass.length + '\n  ' + pass.join('\n  '));
@@ -147,7 +153,13 @@ const cardState = () => {
     heroes: [...document.querySelectorAll('#screens [data-hero]')].map(h => h.dataset.hero),
     rungs: [...document.querySelectorAll('#screens [data-level]')].map(r => r.dataset.level),
     descend: !!document.getElementById('descend'),
-    runTime: run ? +(run.time || 0).toFixed(1) : null
+    runTime: run ? +(run.time || 0).toFixed(1) : null,
+    /* NOT offsetParent: it is null for a position:fixed element whatever
+       * its visibility, so it called the HUD "down" in every state and the
+       * check passed without looking at anything. The rendered box is the
+       * honest measure. */
+      hudUp: (h => !!h && h.getBoundingClientRect().height > 0)
+             (document.getElementById('hud'))
   }));
   ck('the game opens at the gate-house and not in a delve',
      gate.state === 'menu' && gate.screensUp && /Gate-House/i.test(gate.h1 || ''),
@@ -157,9 +169,62 @@ const cardState = () => {
   ck('and every station is on the rail',
      ['Descend', 'Forge', 'Vendor', 'Hall'].every(t => gate.tabs.includes(t)),
      gate.tabs.join(' / '));
+  ck('the HUD is not standing behind the menu for a run nobody started',
+     gate.hudUp === false, 'HUD ' + (gate.hudUp ? 'VISIBLE at the gate-house' : 'down'));
   ck('and there is a hero and a rung to choose',
      gate.heroes.length >= 2 && gate.rungs.length >= 4,
      gate.heroes.length + ' heroes, ' + gate.rungs.length + ' rungs');
+
+  /* ---- 2b. and its one button is where a thumb can reach it -------------
+   * The card is 1300-odd pixels of rungs, bounty, ground and Hardcore on an
+   * 844px phone, and Descend used to sit 470px below the fold: the main
+   * menu's primary action could not be seen without scrolling past all of
+   * it. The check would be vacuous on a card that happens to fit, so the
+   * overflow is asserted alongside it.
+   */
+  const reach = await p.evaluate(() => {
+    const r = document.getElementById('screens');
+    const g = document.getElementById('descend').getBoundingClientRect();
+    return { over: r.scrollHeight - r.clientHeight,
+             top: Math.round(g.top), bottom: Math.round(g.bottom), h: innerHeight };
+  });
+  ck('Descend is on the screen without scrolling for it',
+     reach.over > 100 && reach.top >= 0 && reach.bottom <= reach.h + 1,
+     'button at ' + reach.top + '-' + reach.bottom + ' in ' + reach.h +
+     'px, with ' + reach.over + 'px of card below the fold');
+
+  /* The verdict beside each rung comes from the core's delveStanding, which
+   * has four bands and a colour for each -- not from a second copy in the
+   * menu with different numbers and no colour. Checked by the colour, since
+   * that is the part only the core has. */
+  const verdicts = await p.evaluate(() => [...document.querySelectorAll('#rungRows .verdict')]
+    .map(v => ({ text: v.textContent, colour: v.style.color })));
+  const PALETTE = ['rgb(127, 168, 105)', 'rgb(196, 183, 149)',
+                   'rgb(201, 134, 62)', 'rgb(192, 80, 63)'];
+  ck('each rung wears the core’s own verdict, colour and all',
+     verdicts.length >= 4 && verdicts.every(v => PALETTE.includes(v.colour)),
+     verdicts.length + ' rungs, ' +
+     [...new Set(verdicts.map(v => v.text))].join(' / '));
+
+  /* And the menu keeps off them too. #screens is a scroller with the card
+   * centred in normal flow, so there padding IS the right tool -- unlike the
+   * HUD, where the same idea does nothing (see the note in hud.js). Checked
+   * separately for exactly that reason: the two use different mechanisms and
+   * one of them can break while the other holds. */
+  const menuFlat = await p.evaluate(() =>
+    Math.round(document.getElementById('descend').getBoundingClientRect().bottom));
+  const menuInset = await p.evaluate(() => {
+    const st = document.createElement('style');
+    st.id = 'faux-safe-area';
+    st.textContent = ':root{--sa-t:44px;--sa-b:44px;--sa-l:44px;--sa-r:44px}';
+    document.head.appendChild(st);
+    return new Promise(done => requestAnimationFrame(() => requestAnimationFrame(() =>
+      done(Math.round(document.getElementById('descend').getBoundingClientRect().bottom)))));
+  });
+  ck('and so does the gate-house',
+     menuFlat - menuInset === 44,
+     'with a 44px inset: Descend ends at ' + menuFlat + ' -> ' + menuInset);
+  await p.evaluate(() => document.getElementById('faux-safe-area')?.remove());
 
   /* ---- 3. the stations open --------------------------------------------- */
   const station = async (tab, want) => {
@@ -184,6 +249,7 @@ const cardState = () => {
     return { state, level: LEVEL.id, screensUp: document.getElementById('screens').classList.contains('up'),
              bodies: sc.pool.length, walls: walls.length, hp: Math.round(player.hp),
              hud: !!document.querySelector('#hud .conduit'),
+             hudUp: (h => !!h && h.getBoundingClientRect().height > 0)(document.getElementById('hud')),
              kit: document.querySelectorAll('#hud .kit button').length };
   });
   ck('Descend takes you into the rung you chose, not the one it defaulted to',
@@ -194,17 +260,106 @@ const cardState = () => {
   ck('and there is a delve under it',
      delve.walls > 10 && delve.bodies > 20 && delve.hp > 0,
      delve.walls + ' walls, ' + delve.bodies + ' bodies, ' + delve.hp + ' hp');
-  ck('and the HUD came with it', delve.hud && delve.kit >= 3,
-     'conduit ' + (delve.hud ? 'up' : 'MISSING') + ', ' + delve.kit + ' kit buttons');
+  ck('and the HUD came with it', delve.hudUp && delve.hud && delve.kit >= 3,
+     'HUD ' + (delve.hudUp ? 'up' : 'STILL DOWN') + ', conduit ' +
+     (delve.hud ? 'up' : 'MISSING') + ', ' + delve.kit + ' kit buttons');
+
+  /* ---- 4b. and the kit is legible ---------------------------------------
+   * Two defects, both of which a screenshot showed and no test did.
+   *
+   * The word on a button ran the full width of a ROUND button and was cut
+   * off at both ends by its overflow -- and because the tag itself fitted its
+   * own box, the ellipsis never fired and nothing anywhere reported it. So
+   * the text run is measured against the CHORD of the disc at the height the
+   * text sits, which is the width that is actually visible.
+   *
+   * And a disabled button was drawn at 62% opacity, so the delve showed
+   * through its face: two of the five had pillars standing in the middle of
+   * them. A button you can see the floor through does not read as
+   * unavailable. The check needs a disabled button to be meaningful, so it
+   * says how many it found.
+   */
+  const kit = await p.evaluate(() => [...document.querySelectorAll('#hud .kit button')]
+    .map(bt => {
+      const t = bt.querySelector('.tag');
+      const br = bt.getBoundingClientRect(), tr = t.getBoundingClientRect();
+      // The glyph run, not the box it is centred in.
+      const rg = document.createRange(); rg.selectNodeContents(t);
+      const ink = rg.getBoundingClientRect().width;
+      const R = br.width / 2, cy = br.top + R;
+      const dy = Math.max(Math.abs(tr.top - cy), Math.abs(tr.bottom - cy));
+      const chord = 2 * Math.sqrt(Math.max(0, R * R - dy * dy));
+      return { tag: t.textContent, ink: Math.round(ink), chord: Math.round(chord),
+               disabled: bt.disabled, opacity: +getComputedStyle(bt).opacity };
+    }));
+  const tight = kit.filter(k => k.ink > k.chord);
+  ck('every ability’s name fits inside the disc it is written on',
+     kit.length >= 4 && tight.length === 0,
+     kit.length + ' buttons, widest ' +
+     kit.reduce((a, k) => k.ink / k.chord > a.ink / a.chord ? k : a, kit[0] || { ink: 0, chord: 1 }).tag +
+     ' at ' + (kit[0] ? Math.max(...kit.map(k => k.ink)) : 0) + 'px in a ' +
+     (kit[0] ? kit[0].chord : 0) + 'px chord' +
+     (tight.length ? ' — CUT: ' + tight.map(k => k.tag).join(', ') : ''));
+  const off = kit.filter(k => k.disabled);
+  ck('and an unavailable one is opaque, not a hole you can see the delve through',
+     off.length > 0 && off.every(k => k.opacity === 1),
+     off.length + ' of ' + kit.length + ' unavailable, opacity ' +
+     [...new Set(off.map(k => k.opacity))].join('/'));
+
+  /* ---- 4c. the parts of the glass the phone has already taken -----------
+   * The page asks for viewport-fit=cover so the delve reaches the edge, and
+   * the HUD then has to keep off the notch and the home indicator itself.
+   * env() cannot be set from a test, so the four insets are read through
+   * custom properties and this sets them: what is being proved is that the
+   * padding carries -- that every control moves inward by exactly the inset
+   * -- which is the half that silently stops working.
+   */
+  const INSET = 44;
+  const pin = () => ({
+    life: Math.round(document.querySelector('#hud .top').getBoundingClientRect().top),
+    conduit: Math.round(innerHeight -
+             document.querySelector('#hud .conduit').getBoundingClientRect().bottom),
+    hold: Math.round(document.querySelector('#hud .hold button').getBoundingClientRect().top)
+  });
+  const flat = await p.evaluate(pin);
+  const inset = await p.evaluate(n => {
+    const st = document.createElement('style');
+    st.id = 'faux-safe-area';
+    st.textContent = ':root{--sa-t:' + n + 'px;--sa-b:' + n + 'px;' +
+                     '--sa-l:' + n + 'px;--sa-r:' + n + 'px}';
+    document.head.appendChild(st);
+    return new Promise(done => requestAnimationFrame(() => requestAnimationFrame(() => {
+      const r = {
+        life: Math.round(document.querySelector('#hud .top').getBoundingClientRect().top),
+        conduit: Math.round(innerHeight -
+                 document.querySelector('#hud .conduit').getBoundingClientRect().bottom),
+        hold: Math.round(document.querySelector('#hud .hold button').getBoundingClientRect().top)
+      };
+      done(r);
+    })));
+  }, INSET);
+  ck('the HUD keeps off the notch and the home indicator',
+     inset.life - flat.life === INSET && inset.conduit - flat.conduit === INSET &&
+     inset.hold - flat.hold === INSET,
+     'with a ' + INSET + 'px inset: life ' + flat.life + '->' + inset.life +
+     ', conduit ' + flat.conduit + '->' + inset.conduit +
+     ', hold ' + flat.hold + '->' + inset.hold);
+  await p.evaluate(() => document.getElementById('faux-safe-area')?.remove());
 
   /* ---- 5. hold, press on, abandon --------------------------------------- */
   await tap('#hud .hold button');
   await sleep(300);
   const held = await p.evaluate(() => ({
     state, h1: document.querySelector('#screens h1')?.textContent,
+    hudUp: (h => !!h && h.getBoundingClientRect().height > 0)(document.getElementById('hud')),
     up: document.getElementById('screens').classList.contains('up') }));
   ck('the delve can be held', held.state === 'pause' && held.up && /Held/i.test(held.h1 || ''),
      'state ' + held.state + ', showing ' + JSON.stringify(held.h1));
+  // Held is not the menu -- the delve is still standing behind the card, so
+  // the HUD stays. The hide rule is about whether there is a run, not about
+  // whether a screen is up, and this is the case that tells the two apart.
+  ck('and holding it does not take the HUD away, because the delve is still there',
+     held.hudUp === true, 'HUD ' + (held.hudUp ? 'up' : 'GONE while merely held'));
 
   await tap('#screens .go');
   await sleep(300);
@@ -225,6 +380,46 @@ const cardState = () => {
      'state ' + home.state + ', showing ' + JSON.stringify(home.h1));
   ck('with ground under the menu rather than the corpse of the last delve',
      home.walls > 10, home.walls + ' walls');
+
+  /* ---- 5b. and dying gets you back too ----------------------------------
+   * The last transition on the list, and the one that was broken: "To the
+   * gate-house" on the death card raised the menu and nothing else, so it
+   * came up over the delve you had just died in, with the run still marked
+   * over and no fresh world underneath. It recovered as soon as you
+   * descended again, which is why it survived this long.
+   */
+  await tap('#descend');
+  await sleep(1400);
+  // Through the door damage comes through, not by writing hp to zero: the
+  // run ends inside hurtPlayerBy, and a hero whose number was simply set to
+  // nothing never reaches it. Carrying something, so there is a corpse and
+  // the outcome card has figures to show.
+  await p.evaluate(() => {
+    run.time = 42; run.kills = 7; run.tech = 11; run.coins = 25;
+    player.invuln = 0; player.ward = 0;
+    hurtPlayerBy(player.maxHp * 5, player.x, player.y);
+  });
+  await p.waitForFunction(() => state === 'over', null, { timeout: 8000 }).catch(() => {});
+  const dead = await p.evaluate(() => ({
+    state, up: document.getElementById('screens').classList.contains('up'),
+    h1: document.querySelector('#screens h1')?.textContent,
+    hudUp: (h => !!h && h.getBoundingClientRect().height > 0)(document.getElementById('hud')),
+    alt: document.querySelector('#screens .alt')?.textContent }));
+  ck('dying raises the outcome, and takes the HUD with it',
+     dead.state === 'over' && dead.up && dead.hudUp === false,
+     'state ' + dead.state + ', showing ' + JSON.stringify(dead.h1) +
+     ', HUD ' + (dead.hudUp ? 'STILL UP' : 'down'));
+  ck('and it offers the way back', /gate-house/i.test(dead.alt || ''),
+     JSON.stringify(dead.alt));
+  await tap('#screens .alt');
+  await sleep(900);
+  const after = await p.evaluate(() => ({
+    state, h1: document.querySelector('#screens h1')?.textContent,
+    walls: walls.length, runTime: +(run.time || 0).toFixed(1) }));
+  ck('and taking it stands you in the gate-house on fresh ground, not over the corpse',
+     after.state === 'menu' && /Gate-House/i.test(after.h1 || '') &&
+     after.walls > 10 && after.runTime === 0,
+     'state ' + after.state + ', ' + after.walls + ' walls, run.time ' + after.runTime);
 
   /* ---- 6. the frame the whole thing was drawn into ----------------------- */
   const px = await p.evaluate(() => {

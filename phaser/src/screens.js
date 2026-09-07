@@ -12,14 +12,19 @@
 
 /* global player, run, stash, state, LEVELS, LEVEL, LEVEL_BY_ID, HEROES,
           startRun, endRun, stepThrough, blankStash, el, stashPower, resumeRun,
-          REGION_BY_ID, REGION_RELIC, hardcore, setHardcore, honoured,
+          REGION_BY_ID, REGION_RELIC, hardcore, setHardcore, honoured, delveStanding,
           todaysBounty, bountyDone,
           SLOTS, SLOT_BY_ID, RARITY, itemPower, affixText, saveStash,
           VENDOR, vendorCost, canAfford, vendorBuy, HALL, hallTier,
           HALL_MAX, hallBuy, vaultCap */
 
 const CSS = `
+/* The safe areas, same as the HUD -- see the note at the top of hud.js. The
+   scrim wants the whole glass, so the padding is on the scroller and the
+   cards live inside it: a pinned Descend at bottom:0 was sitting in the home
+   indicator's strip. */
 #screens{position:fixed;inset:0;z-index:40;display:none;place-items:center;
+  padding:var(--sa-t) var(--sa-r) var(--sa-b) var(--sa-l);box-sizing:border-box;
   background:rgba(8,7,6,.86);font:13px ui-monospace,Menlo,monospace;color:#cebe9e;
   -webkit-user-select:none;user-select:none;overflow:auto}
 #screens.up{display:grid}
@@ -73,6 +78,27 @@ const CSS = `
   background-origin:border-box;background-clip:padding-box,border-box;
   box-shadow:inset 0 1px 0 rgba(214,178,110,.22)}
 #screens .row small{color:#8c8168;display:block}
+/* THE ONE BUTTON THAT DOES THE THING, ALWAYS WITHIN REACH.
+ *
+ * Measured on a 390x844 phone: the gate-house card is 1317px tall -- four
+ * stations, a purse, a power, two heroes, eight rungs, the daily, the ground
+ * and Hardcore -- and Descend sat at 1266, four hundred and seventy pixels
+ * below the fold. The main menu's primary action could not be seen, and the
+ * only way to find out the game had one was to scroll past everything else.
+ *
+ * Sticky rather than a shorter card. What is above it is genuinely worth
+ * reading -- which rung, which hero, what today's bounty pays -- so the answer
+ * is not to cut it; it is that the way out of the menu should not scroll
+ * away. The bar under it is opaque and runs the full width of the card's
+ * padding box, or rows slide out from behind the button and read as a
+ * rendering fault.
+ */
+#screens .go.pinned{position:sticky;bottom:0;z-index:2;
+  margin:4px -16px -16px;width:calc(100% + 32px);border-radius:0 0 7px 7px;
+  border-width:2px 0 0}
+#screens .go.pinned:before{content:'';position:absolute;left:0;right:0;
+  bottom:100%;height:18px;pointer-events:none;
+  background:linear-gradient(transparent,#100e0b)}
 /* The one button that does the thing, on the same plate as an ability. */
 #screens .go{width:100%;min-height:48px;border-radius:8px;
   border:2px solid transparent;
@@ -184,9 +210,13 @@ export class Screens {
       '<button class="row' + (armed ? ' on' : '') + '" id="bountyRow" type="button"' +
         (done ? ' disabled' : '') + '><span>' + b.name +
         '<small>' + b.note + '<br>' + b.level +
-        '</small></span><small>' +
+        /* The reward as a chip, not as more grey text. It sat beside a
+         * two-line description in the same colour at the same size, and the
+         * eye read straight across the two columns -- "and each / a Hallowed"
+         * on one line, "one worth less. / piece" on the next. */
+        '</small></span><span class="act">' +
         (done ? 'paid' : armed ? 'taken' : 'a Hallowed piece') +
-      '</small></button>';
+      '</span></button>';
   }
 
   /* ONE LIFE.
@@ -296,7 +326,20 @@ export class Screens {
       if (lvl) this.pick.level = lvl;
       this.onDescend(hero, lvl);
     });
-    this.root.querySelector('.alt').addEventListener('click', () => this.show('splash'));
+    /* THROUGH THE SAME DOOR AS ABANDONING, NOT STRAIGHT TO THE CARD.
+     *
+     * This used to call show('splash') and nothing else, so the gate-house
+     * came up over the delve you had just died in -- the corpse, the horde
+     * and all -- with `state` still 'over' and no world of its own. It
+     * recovered the moment you descended again, which is why nobody saw it,
+     * but the screen in between was the last delve with a menu on top.
+     *
+     * onAbandon is exactly the verb: put the delve down, take nothing
+     * further from it, and stand in the gate-house on fresh ground. That the
+     * run here has already been banked by endRun makes no difference to what
+     * has to happen to the world.
+     */
+    this.root.querySelector('.alt').addEventListener('click', () => this.onAbandon());
   }
 
   /* Which delve, and who goes down. The ladder is long, so this shows the
@@ -341,17 +384,29 @@ export class Screens {
         '</div>' +
         '<div class="rows" id="rungRows">' +
           rungs.map(l =>
+            /* THE CORE'S VERDICT, NOT A SECOND ONE.
+             *
+             * This used to carry its own copy -- a flat plus-or-minus two
+             * around the rung's power -- while the core has had
+             * delveStanding all along, with four bands and a colour for
+             * each. Two verdict functions on the same pair of numbers is
+             * one that will disagree, and they did: the core calls a rung
+             * an even match up to fourteen points under you, this called it
+             * "well within you" at three. The gate-house is where the
+             * player decides what to attempt, and it was giving different
+             * advice from every other place the same question is asked.
+             */
+            ((v) =>
             '<button class="row' + (this.pick.level === l.id ? ' on' : '') +
             '" data-level="' + l.id + '" type="button"><span>' + l.name +
             '<small>power ' + l.power + ' · ' + l.quota + ' slag</small></span>' +
-            '<small>' + (l.power > power + 2 ? 'above your weight'
-                       : l.power < power - 2 ? 'well within you' : 'an even match') +
-            '</small></button>').join('') +
+            '<small class="verdict" style="color:' + v.colour + '">' + v.text +
+            '</small></button>')(delveStanding(l, power))).join('') +
         '</div>' +
         this.daily() +
         this.ground() +
         this.oneLife() +
-        '<button class="go" type="button" id="descend">Descend</button>' +
+        '<button class="go pinned" type="button" id="descend">Descend</button>' +
       '</div>';
 
     this.root.querySelectorAll('[data-hero]').forEach(b =>
