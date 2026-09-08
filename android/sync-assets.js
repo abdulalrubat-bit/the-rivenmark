@@ -22,16 +22,17 @@ const dstDir = path.join(__dirname, 'app', 'src', 'main', 'assets');
 fs.rmSync(dstDir, { recursive: true, force: true });
 fs.mkdirSync(dstDir, { recursive: true });
 
-// The atlas is generated from ../art and gitignored, so a clean checkout does
-// not have one -- which is exactly how this failed in CI the first time, with
-// deploy.js quite correctly refusing to ship without it. Packed here rather
-// than left to a separate command somebody has to remember, and packed every
-// time rather than when missing: the art can change, and "the APK must never
-// carry a stale build" has to mean the art too.
+/* The atlas used to be packed here, because deploy.js only checked for one
+ * and refused to ship without it -- which is how this failed in CI the first
+ * time, on a clean checkout where the gitignored atlas did not exist.
+ *
+ * deploy.js packs it itself now, for the same reason it was done here: an
+ * atlas that merely EXISTS can still be older than ../art, and that ships
+ * last week's sprites past a check that only looks for a file. Doing it in
+ * the one place both routes to a device already go through means the web
+ * build gets the guarantee too, instead of only the APK.
+ */
 const phaser = path.join(root, 'phaser');
-cp.execFileSync(process.execPath, [path.join(phaser, 'tools', 'pack-atlas.js')],
-                { stdio: 'inherit', cwd: phaser });
-
 cp.execFileSync(process.execPath,
   [path.join(phaser, 'tools', 'deploy.js'), dstDir], { stdio: 'inherit', cwd: phaser });
 

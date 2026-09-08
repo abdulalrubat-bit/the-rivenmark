@@ -10,8 +10,14 @@ public/atlas.json
 public/manifest.json
 public/bundle.js
 public/bundle.js.map
-# the smoke test's screenshot: paths in here are relative to this folder,
-# so it is proving.png, not phaser/proving.png
+# The smoke tests' screenshots. Paths in here are relative to this folder, so
+# it is proving.png, not phaser/proving.png.
+#
+# Eight of these were tracked and seven were ignored, for no reason anyone
+# could have reconstructed -- so half of them churned a binary into every
+# commit that ran a suite, and the other half did not. Nothing references any
+# of them, and every one is written by the suite that names it, so they are
+# all generated output now and none of them are kept.
 proving.png
 playable.png
 fight.png
@@ -20,3 +26,11 @@ over.png
 gatehouse.png
 forge.png
 hall.png
+air.png
+arc.png
+delve.png
+gfx.png
+held.png
+overlay.png
+rt-red.png
+world.png

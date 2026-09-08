@@ -20,10 +20,19 @@
  * it is generated too, so it cannot go stale).
  *
  * Run: npm run core
+ *
+ * `--quiet` keeps the two summary lines and drops the inventories. build.js
+ * runs this on every build now, and 108 lines of listing in front of every
+ * smoke suite is 108 lines nobody reads -- which is how a real warning gets
+ * missed. Errors are never quiet: every failure path here exits 1 with its
+ * whole explanation, whatever this flag says.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+const quiet = process.argv.includes('--quiet');
+const list = (...a) => { if (!quiet) console.log(...a); };
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SRC  = path.join(here, '..', '..', 'index.html');
@@ -488,10 +497,10 @@ console.log('core.js  ' + kept.length + ' statements, ' +
 console.log('dropped: ' + byKind('draw').length + ' drawing, ' +
             byKind('host').length + ' page-bound');
 for (const d of byKind('host'))
-  console.log('   page-bound @' + d.at + '  ' + d.what);
+  list('   page-bound @' + d.at + '  ' + d.what);
 const loose = byKind('kept-loose');
-console.log('kept ' + loose.length + ' top-level initialisers:');
-for (const d of loose) console.log('   @' + String(d.at).padStart(6) + '  ' + d.what);
+list('kept ' + loose.length + ' top-level initialisers:');
+for (const d of loose) list('   @' + String(d.at).padStart(6) + '  ' + d.what);
 /* Generated no-op stubs for everything the core calls and does not declare.
  *
  * Written rather than hand-maintained, because hand-maintaining it does not
@@ -552,7 +561,7 @@ fs.writeFileSync(path.join(OUT, 'missing.json'),
   }
 }
 
-console.log('\nthe host must supply ' + missing.length + ':');
+list('\nthe host must supply ' + missing.length + ':');
 for (const [n, from] of missing.slice(0, 30))
-  console.log('  ' + n.padEnd(22) + [...from].slice(0, 2).join(', '));
-if (missing.length > 30) console.log('  … and ' + (missing.length - 30) + ' more');
+  list('  ' + n.padEnd(22) + [...from].slice(0, 2).join(', '));
+if (missing.length > 30) list('  … and ' + (missing.length - 30) + ' more');
