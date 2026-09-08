@@ -13,6 +13,7 @@
 /* global player, run, stash, state, LEVELS, LEVEL, LEVEL_BY_ID, HEROES,
           startRun, endRun, stepThrough, blankStash, el, stashPower, resumeRun,
           REGION_BY_ID, REGION_RELIC, hardcore, setHardcore, honoured, delveStanding,
+          recommendedLevel,
           todaysBounty, bountyDone,
           SLOTS, SLOT_BY_ID, RARITY, itemPower, affixText, saveStash,
           VENDOR, vendorCost, canAfford, vendorBuy, HALL, hallTier,
@@ -349,7 +350,15 @@ export class Screens {
     // called bare returns NaN -- which then compares false against every rung
     // and quietly labelled the whole ladder "an even match".
     const power = typeof stashPower === 'function' ? stashPower() : 1;
-    if (!this.pick.level) this.pick.level = LEVELS[0].id;
+    /* Open where the core says to, not on rung 0 for everybody. This used to
+     * be `LEVELS[0].id` flat, so a hero geared deep enough for rung 47 was
+     * shown the first eight rungs -- all of them "well within you" -- and had
+     * to scroll past thirty-nine to reach anything worth doing. The canvas
+     * gate-house had always picked a rung; the two builds simply disagreed. */
+    if (!this.pick.level) {
+      this.pick.level = typeof recommendedLevel === 'function'
+        ? recommendedLevel(power) : LEVELS[0].id;
+    }
     const here = LEVELS.findIndex(l => l.id === this.pick.level);
     const from = Math.max(0, here - 3), to = Math.min(LEVELS.length, from + 8);
     const rungs = LEVELS.slice(from, to);

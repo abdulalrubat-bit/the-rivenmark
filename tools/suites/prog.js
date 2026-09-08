@@ -24,7 +24,11 @@ async function enterHub(pg){
 }
 
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push(n+(note?'  ['+note+']':''));
+const pass=[],fail=[];
+/* 'x ' on a failure: run-suites.js surfaces exactly that prefix when it
+ * summarises a sweep, so without it a red suite reports its count and none
+ * of its reasons — which means re-running it alone to find out why. */
+const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''));
 (async()=>{
   const b=await chromium.launch();
   const p=await (await b.newContext({viewport:{width:430,height:900}})).newPage();
@@ -121,6 +125,84 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push(n+(note?'  ['+n
     pw: stashPower() }));
   ck('a strong hero opens deeper down the ladder', deep.sel!=='test',
      'power '+deep.pw+' opened on '+deep.sel);
+
+  /* ---- the front door speaks the hero's own units --------------------------
+   *
+   * The gate-house and the ladder each had a number called "power" and they
+   * were not the same quantity. powerLevel() starts a Vanguard at 1; the
+   * ladder's floor was 4, written down as "where a Vanguard who has never
+   * descended stands". And delveStanding compared them by SUBTRACTION, with
+   * bands of twelve and fourteen points, on a scale running 1 to 120 that is
+   * measured in ratios everywhere else in the file.
+   *
+   * The cost was the whole front door: on a fresh stash the gate-house showed
+   * one rung "above your weight" and fifty-one "far beyond you", including
+   * the rung it was simultaneously recommending. These checks are about that
+   * first screen, and the last of them is the one that would have caught it.
+   */
+  const front = await p.evaluate(() => {
+    const o = {};
+    const tally = pw => { const t = { trivial:0, even:0, hard:0, deadly:0 };
+      for (const L of LEVELS) t[delveStanding(L, pw).id]++; return t; };
+    stash = blankStash(); saveStash();
+    o.freshPower = stashPower();
+    o.rung0Power = LEVELS[0].power;
+    o.freshStanding = delveStanding(LEVELS[0], stashPower()).id;
+    o.freshTally = tally(stashPower());
+    o.freshRecommends = recommendedLevel(stashPower());
+    o.rung0Id = LEVELS[0].id;
+    o.rungCount = LEVELS.length;
+    /* THE BANDS MEAN THE SAME THING AT BOTH ENDS. Carrying a fixed FRACTION
+     * of a rung's asking power must read the same at rung 3 and rung 44 --
+     * that is the whole of what "different units" meant, and a difference-
+     * based band cannot do it however the numbers are chosen. */
+    o.sameShallow = [];
+    o.sameDeep = [];
+    for (const f of [1.5, 1.0, 0.8, 0.4]) {
+      o.sameShallow.push(delveStanding(LEVELS[3], Math.round(LEVELS[3].power * f)).id);
+      o.sameDeep.push(delveStanding(LEVELS[44], Math.round(LEVELS[44].power * f)).id);
+    }
+    // ...and the ladder still gets harder as you go down, at a fixed power.
+    o.monotone = true;
+    const at = 40, seen = [];
+    for (const L of LEVELS) seen.push(delveStanding(L, at).id);
+    const rank = { trivial:3, even:2, hard:1, deadly:0 };
+    for (let i = 1; i < seen.length; i++)
+      if (rank[seen[i]] > rank[seen[i-1]]) o.monotone = false;
+    o.atPower40 = seen[0] + ' -> ' + seen[seen.length-1];
+    return o;
+  });
+  ck('a Vanguard who has never descended reads the same units as the ladder',
+     front.freshPower === front.rung0Power,
+     'hero ' + front.freshPower + ', proving ground ' + front.rung0Power +
+     (front.freshPower === front.rung0Power ? ''
+       : ' — TWO SCALES, and the front door is written in the wrong one'));
+  ck('...so the proving ground is an even match, not a warning',
+     front.freshStanding === 'even', 'it reads "' + front.freshStanding + '"');
+  ck('and the gate-house sends them there',
+     front.freshRecommends === front.rung0Id, 'opens on ' + front.freshRecommends);
+  ck('the rung it recommends is not one it calls beyond you',
+     ['even','trivial'].indexOf(
+       front.freshStanding) >= 0 && front.freshRecommends === front.rung0Id,
+     'recommended ' + front.freshRecommends + ', labelled "' + front.freshStanding + '"');
+  ck('a new player is not shown a ladder of nothing but red',
+     front.freshTally.even + front.freshTally.trivial >= 1,
+     front.freshTally.trivial + ' well within, ' + front.freshTally.even +
+     ' even, ' + front.freshTally.hard + ' above, ' + front.freshTally.deadly +
+     ' beyond — of ' + front.rungCount);
+  ck('THE SAME FRACTION OF A RUNG READS THE SAME AT BOTH ENDS OF THE LADDER',
+     front.sameShallow.join() === front.sameDeep.join(),
+     'at 1.5x/1.0x/0.8x/0.4x — rung 3 ' + front.sameShallow.join('/') +
+     ', rung 44 ' + front.sameDeep.join('/') +
+     (front.sameShallow.join() === front.sameDeep.join() ? ''
+       : ' — THE BANDS ARE ABSOLUTE ON A SCALE THAT IS NOT'));
+  ck('and the control: the ladder still only ever gets harder',
+     front.monotone === true,
+     'at a fixed power 40, rung 0 to 51: ' + front.atPower40 +
+     (front.monotone ? '' : ' — A RUNG READS EASIER THAN THE ONE ABOVE IT'));
+
+  // put the stash back for anything below that expects a fresh one
+  await p.evaluate(() => { stash = blankStash(); saveStash(); });
 
   // ---- a deep delve actually plays ---------------------------------------
   const deepRun = await p.evaluate(()=>{

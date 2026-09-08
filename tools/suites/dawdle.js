@@ -26,7 +26,10 @@ const PAGE = f => process.env.RIVENMARK_PAGE ||
   ('file://' + require('path').join(__dirname, '..', '..', f));
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const pass = [], fail = [];
-const ck = (n, ok, note) => (ok ? pass : fail).push(n + (note ? '  [' + note + ']' : ''));
+/* 'x ' on a failure: run-suites.js surfaces exactly that prefix when it
+ * summarises a sweep, so without it a red suite reports its count and none
+ * of its reasons — which means re-running it alone to find out why. */
+const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note ? '  [' + note + ']' : ''));
 
 const RUNGS = [3, 17, 30];
 const TRIES = Math.max(6, +(process.env.DAWDLE_TRIES || 10));

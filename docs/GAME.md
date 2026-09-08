@@ -656,7 +656,7 @@ than conjuring back a piece that was sold, tempered away or left in a delve.
 
 | | |
 |---|---|
-| Expected power | `4 + 116 × d^0.6` |
+| Expected power | `1 + 119 × d^0.6` |
 | Slag quota | `125 + d × 145` |
 | Regions in the pool | `1 + floor(d × 5)` |
 | Enemy **health** | `× (1 + d × 1.6)` |
@@ -737,8 +737,46 @@ delve throws did not scale with the ladder while the hero did.
    | 44 | 87 | 87–110 | ~1.1× |
 
    The game was sending people into delves it had told them they were ready
-   for. `d^0.6` fits every measured point and still starts at 4, so a Vanguard
-   who has never descended still qualifies for the proving ground.
+   for. `d^0.6` fits every measured point.
+
+   **And the floor of that curve was in the wrong units.** It read 4, written
+   down as "where a Vanguard who has never descended stands" — which is the
+   right intent and the wrong number, because `powerLevel()` starts a fresh
+   hero at **1**: no gear, level 1, `(1 × 2.1 + 0) / 2`. The gate-house and
+   the ladder each had a quantity called *power* and they were never the same
+   quantity.
+
+   `delveStanding` then compared the two by **subtraction** — fourteen points
+   clear is trivial, twelve points short is deadly — on a scale that runs 1 to
+   120 and is measured in ratios at every other point in the file. Twelve
+   points at the mouth is the first ten rungs; twelve points at the deep end is
+   one rung. The same word meant two different things depending where you read
+   it, and at the shallow end it meant the harshest of them.
+
+   Measured on a fresh stash, the front door showed **one rung "above your
+   weight" and fifty-one "far beyond you"** — not one delve in the game a new
+   player was told they could take, *including the one the gate-house was
+   recommending to them in the same breath*.
+
+   The floor is 1, and the bands are ratios: **1.35×** well within you, **0.90×**
+   an even match, **0.65×** above your weight. The thresholds come off the
+   retune rather than from feel — that curve was fitted so carrying about the
+   card's own number is what it takes to walk out, so a ratio near 1 *is* an
+   even match, by construction, at every depth. A fresh hero now reads the
+   proving ground as an even match and everything below it as beyond them,
+   which is both true and the only thing the screen needs to say.
+
+   `recommendedLevel()` lives in the core beside `delveStanding` for the same
+   reason: there are two gate-houses and they had already drifted. The canvas
+   build picked a rung with `pw >= L.power`, which is not the test its own
+   cards print; the Phaser build did not pick one at all and opened on rung 0
+   for everybody, so a hero geared for rung 47 was shown the first eight.
+
+   What this does *not* answer is **pacing** — how many delves it takes to
+   qualify for rung N. A bare hero reaches rung 20 at level 60; gear is what
+   carries you deeper (a full Regalia set at level 60 reads 103 and opens rung
+   47). Whether that climb is the right length is a question for the reference
+   player, not for the label on the card.
 
 > **On `ward`.** Scaling incoming damage was avoided for a long time on the
 > belief that it would make ward worth less every rung. It does not: ward is

@@ -36,7 +36,11 @@ async function beginRun(p, hero, diff) {
   await new Promise(r => setTimeout(r, 500));
 }
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push(n+(note?'  ['+note+']':''));
+const pass=[],fail=[];
+/* 'x ' on a failure: run-suites.js surfaces exactly that prefix when it
+ * summarises a sweep, so without it a red suite reports its count and none
+ * of its reasons — which means re-running it alone to find out why. */
+const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''));
 const URL=PAGE('index.html');
 (async()=>{
   const b=await chromium.launch();

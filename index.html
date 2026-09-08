@@ -2599,8 +2599,21 @@ function buildLevels() {
        * The bot is a pessimistic yardstick -- it does not kite and does not
        * use the terrain -- so these are an upper bound on what a person needs.
        * What is not in doubt is the shape.
+       *
+       * THE FLOOR IS 1 AND IT USED TO BE 4, which was a number in the wrong
+       * units. The sentence above it -- that the curve starts where a Vanguard
+       * who has never descended stands, so the proving ground is always open
+       * -- is the right intent, and 4 was simply not where that Vanguard
+       * stands. powerLevel() puts a fresh hero at 1: no gear, level 1,
+       * (1 x 2.1 + 0) / 2. The two numbers were never on the same scale.
+       *
+       * The cost of that was the whole front door. Measured on a fresh stash,
+       * the gate-house showed ONE rung "above your weight" and the other
+       * FIFTY-ONE "far beyond you" in red -- not one delve in the game that a
+       * new player was told they could take, including the one the game was
+       * simultaneously recommending to them. See delveStanding.
        */
-      power: Math.round(4 + 116 * Math.pow(d, 0.6)),
+      power: Math.max(1, Math.round(1 + 119 * Math.pow(d, 0.6))),
       depth: d,
       quota: Math.round(125 + d * 145),
       channel: 4.0
@@ -2633,14 +2646,55 @@ for (const L of LEVELS) {
   LEVEL_BY_ID[L.id] = L;
 }
 
-// How a delve's expected power compares with what you are carrying. Advisory,
-// not a gate: the ladder guides, it does not lock the door.
+/* How a delve's expected power compares with what you are carrying. Advisory,
+ * not a gate: the ladder guides, it does not lock the door.
+ *
+ * A RATIO, AND IT USED TO BE A DIFFERENCE. That was the second half of the
+ * units bug, and the more interesting half, because the numbers on both sides
+ * were right and the comparison between them was not.
+ *
+ * The bands were absolute -- fourteen points clear is trivial, twelve points
+ * short is deadly -- on a scale that runs 1 to 120 and is measured in ratios
+ * at every other point in this file. Twelve points at the mouth is the whole
+ * of the first ten rungs; twelve points at the deep end is one rung. So the
+ * same word meant two entirely different things depending on where you read
+ * it, and at the shallow end it meant the harshest of them.
+ *
+ * The thresholds come off the retune above rather than from feel. That curve
+ * was fitted so that carrying about the card's own number is what it takes to
+ * walk out -- 1.2x the card measured at rung 3, 0.93x at rung 9, 1.02x at
+ * rung 30 -- so a ratio near 1 IS an even match, by construction, at every
+ * depth. The bands are then just how far either side of it you are.
+ *
+ * L.power is floored at 1 by buildLevels, so this cannot divide by zero; the
+ * max() is belt and braces for a hand-built level in a fixture.
+ */
 function delveStanding(L, pw) {
-  const d = pw - L.power;
-  if (d >= 14) return { id: 'trivial', text: 'well within you', colour: '#7fa869' };
-  if (d >= 0)  return { id: 'even',    text: 'an even match',   colour: '#c4b795' };
-  if (d >= -12) return { id: 'hard',   text: 'above your weight', colour: '#c9863e' };
+  const r = pw / Math.max(1, L.power);
+  if (r >= 1.35) return { id: 'trivial', text: 'well within you', colour: '#7fa869' };
+  if (r >= 0.90) return { id: 'even',    text: 'an even match',   colour: '#c4b795' };
+  if (r >= 0.65) return { id: 'hard',    text: 'above your weight', colour: '#c9863e' };
   return { id: 'deadly', text: 'far beyond you', colour: '#c0503f' };
+}
+
+/* Where the ladder should open: the deepest rung you are at least an even
+ * match for, and never nothing -- the proving ground is always an answer.
+ *
+ * Here rather than in either gate-house, because there are two of them and
+ * they had already drifted. The canvas build worked it out with `pw >=
+ * L.power`, which is not the test its own cards print; the Phaser build did
+ * not work it out at all and opened on rung 0 for everyone, so a hero deep
+ * enough for rung 47 was shown the first eight and left to scroll. The
+ * comment in screens.js says exactly why two copies of one verdict is one
+ * verdict too many. This is that lesson applied to the question next to it.
+ */
+function recommendedLevel(pw) {
+  let best = LEVELS[0].id;
+  for (const L of LEVELS) {
+    const st = delveStanding(L, pw).id;
+    if (st === 'even' || st === 'trivial') best = L.id;
+  }
+  return best;
 }
 const REGION_BY_ID = {};
 for (const R of REGIONS) REGION_BY_ID[R.id] = R;
@@ -15428,13 +15482,13 @@ window.addEventListener('orientationchange', () => setTimeout(resize, 120));
   }
   buildLadder();
 
-  // Open on the deepest delve you are an even match for.
-  function defaultLevel() {
-    const pw = stashPower();
-    let best = LEVELS[0].id;
-    for (const L of LEVELS) if (pw >= L.power) best = L.id;
-    return best;
-  }
+  /* Open on the deepest delve you are an even match for -- and it has to be
+   * the SAME test the card prints, or the gate-house recommends a rung and
+   * then calls it beyond you in the next breath. It did exactly that: a fresh
+   * hero was sent to the proving ground by this function and told "above your
+   * weight" by the card for it, because one asked `pw >= L.power` and the
+   * other measured a difference in points. */
+  const defaultLevel = () => recommendedLevel(stashPower());
 
   const diffWrap = $('diffPick');
   for (const D of DIFFICULTIES) {
