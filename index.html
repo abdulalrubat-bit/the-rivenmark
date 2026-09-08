@@ -1793,16 +1793,54 @@ const alertR = () => ALERT_R * (1 + (LEVEL.depth || 0) * ALERT_GROWTH);
  * walking costs you, the game is asking you to creep, and this is not that
  * game.
  *
- * The decay is set so a swing is paid off in about two and a half seconds and
- * a full meter in twelve: long enough that a fight you drag out keeps the
- * room reaching for you, short enough that finishing one and walking on finds
- * the next room where you left it.
+ * The decay is set so a swing is paid off in about a second, a gathered one
+ * in two and a half, and a full meter in twelve: long enough that a fight you
+ * drag out keeps the room reaching for you, short enough that finishing one
+ * and walking on finds the next room where you left it.
  * ---------------------------------------------------------------------- */
 const CLAMOUR_DECAY  = 0.085;  // per second, off a meter that runs 0..1
 const CLAMOUR_REACH  = 0.85;   // at full, a body notices you 85% further off
 const CLAMOUR_SWING  = 0.085;  // a crescent, asked for
 const CLAMOUR_HEAVY  = 0.22;   // ...and a gathered one, which is a real noise
 const CLAMOUR_CAST   = 0.13;   // anything off the bar
+
+/* AND THE FIGHT ITSELF, WHICH IS THE OTHER HALF OF THE GUARANTEE.
+ *
+ * Everything above is a thing you DID. That alone leaves a hole, and it is
+ * the hole a careful player falls straight into: back off, stop swinging,
+ * circle, let the meter drain, come back in. Under a meter that only hears
+ * your own blade, the quietest way through a room is to fight it as slowly
+ * as possible -- which is the creeping this game is not supposed to be,
+ * arrived at from the opposite direction.
+ *
+ * So a fight makes its own noise, every second it lasts. Not per blow landed
+ * and not per blow taken -- BEING HIT IS STILL NOT LOUD, for the reason it
+ * never was -- but per second that bodies are up and around you. The total
+ * noise of a fight is therefore its DURATION, and duration is the one thing
+ * about a fight the player fully controls. Kill four things in five seconds
+ * and you pay five seconds of it. Take twenty and you pay twenty.
+ *
+ * That is what turns the quiet play and the aggressive play into the same
+ * play, which is the whole point of the meter. Before this, they were
+ * opposites: the safest fight was the slowest one.
+ *
+ * IT SATURATES, and that matters more than the rate does. A brawl is a brawl
+ * whether it is four bodies or forty -- noise that scaled with the crowd
+ * would make the deep rungs unplayably loud through nothing the player did,
+ * and would hand the horde the meter that is supposed to be the hero's own.
+ * Four voices is full cry.
+ *
+ * THE RATE IS SET AGAINST THE DECAY, not chosen for feel: at full cry it is
+ * exactly CLAMOUR_DECAY, so a fight you are only surviving holds the meter
+ * where it is and a fight you are winning climbs it. You cannot wait out a
+ * room you are standing in the middle of. You can still walk away from it --
+ * that door is deliberately left open, because closing it makes the terrain
+ * an off switch, and because walking away costs the thing that actually
+ * costs: the slag you did not collect while you were doing it.
+ */
+const CLAMOUR_CRY    = 0.085;  // per second at full cry — one decay's worth
+const CLAMOUR_VOICES = 4;      // bodies near you that add up to full cry
+const CLAMOUR_NEAR   = 420;    // ...and how near "around you" is
 
 /* THE WAY BACK DOWN. How long a body keeps looking after it has lost you, and
  * how near its bed it has to get before it lies down again.
@@ -1817,10 +1855,15 @@ const SETTLE_NEAR   = 40;
 // The one door every noise comes through, so there is one place to read and
 // one place to change. Clamped at both ends: a meter that can run past 1 makes
 // the decay time unbounded, and the reach term meaningless above it.
-function clamour(n) {
+function clamour(n, sustained) {
   if (!run) return;
   run.clamour = clamp((run.clamour || 0) + n, 0, 1);
-  run.clamourPop = 1;            // for the HUD: something was just heard
+  /* The pop is the HUD's tell, and it means something was just HEARD: one
+   * event, one flash. The fight's noise arrives every frame, so letting it
+   * through here would hold the pop at 1 for the length of the fight and the
+   * tell would stop telling anything. Sustained noise moves the meter and
+   * says nothing. */
+  if (!sustained) run.clamourPop = 1;
 }
 
 // How far a body's notice reaches right now. Everything that asks "can it see
@@ -6689,10 +6732,20 @@ function updatePlayer(dt) {
   if (player.gcd > 0) player.gcd = Math.max(0, player.gcd - dt);
   updateAbilities(dt);
 
-  /* The Clamour falls. On a clock, and NOT on standing still -- see the block
-   * where the constants are. This is the line that keeps it from being a
-   * stealth game, so it is deliberately not conditional on anything. */
+  /* The Clamour falls, and the fight it is in pushes back. Both per-second
+   * terms live here so the net of them can be read in one place.
+   *
+   * The fall is on a clock, and NOT on standing still -- see the block where
+   * the constants are. That is the line that keeps this from being a stealth
+   * game, so it is deliberately not conditional on anything.
+   *
+   * The rise is the fight, saturating at CLAMOUR_VOICES. It is applied as a
+   * separate term rather than folded into the decay so that neither can be
+   * mistaken for the other later: the decay must never learn a condition, and
+   * this must never lose one. */
   if (run) {
+    const cry = Math.min(1, (run.inCry || 0) / CLAMOUR_VOICES);
+    if (cry > 0) clamour(CLAMOUR_CRY * cry * dt, true);
     if ((run.clamour || 0) > 0)
       run.clamour = Math.max(0, run.clamour - CLAMOUR_DECAY * dt);
     if ((run.clamourPop || 0) > 0)
@@ -6999,12 +7052,22 @@ function updateEnemies(dt) {
   // frame the counter starts at zero and every body in turn waves itself
   // through a ceiling that has not caught up yet. Measured against a crowd of
   // 140 inside their own notice, that let all 140 rise against a cap of 54.
-  let awake = 0;
+  //
+  // The bodies in cry are tallied in the same pass and for the same reason.
+  // Counting them as the pass runs would weigh each against the bodies before
+  // it in the array, and the Clamour would then depend on the order the
+  // generator happened to push them.
+  let awake = 0, inCry = 0;
   for (let i = 0; i < enemies.length; i++) {
     const e = enemies[i];
-    if (e.hp > 0 && e.awake) awake++;
+    if (e.hp > 0 && e.awake) {
+      awake++;
+      const cx = player.x - e.x, cy = player.y - e.y;
+      if (cx * cx + cy * cy < CLAMOUR_NEAR * CLAMOUR_NEAR) inCry++;
+    }
   }
   run.awake = awake;
+  run.inCry = inCry;
 
   for (let i = 0; i < enemies.length; i++) {
     const e = enemies[i];
@@ -14497,7 +14560,7 @@ function resetRun(heroId, levelId, diffId) {
           // carries them and never notices.
           dawn: 0, dawnPop: 0, dawnFired: false, breath: 0,
           // How much of the delve can hear you. See the CLAMOUR block.
-          clamour: 0, clamourPop: 0,
+          clamour: 0, clamourPop: 0, inCry: 0,
           agonyT: 0, agonyCd: AGONY_CD * 0.65 };
   run.invadeAt = rollInvasion();
   // If you died in this level and never came back for it, it is still here.

@@ -228,11 +228,14 @@ test a body already ran. Nothing else changes — no senses model, no cones.
 
 | | |
 |---|---|
-| `CLAMOUR_DECAY` **0.085**/s | a swing paid off in ~2.5s, a full meter in ~12 |
+| `CLAMOUR_DECAY` **0.085**/s | a swing paid off in ~1s, a gathered one in ~2.6, a full meter in ~12 |
 | `CLAMOUR_REACH` **0.85** | at full, `AGGRO_NEAR` 250 reaches **463** |
 | `CLAMOUR_SWING` **0.085** | a crescent, asked for |
 | `CLAMOUR_HEAVY` **0.22** | a gathered one, which is a real noise |
 | `CLAMOUR_CAST` **0.13** | anything off the bar |
+| `CLAMOUR_CRY` **0.085**/s | a fight at full cry — exactly one decay's worth |
+| `CLAMOUR_VOICES` **4** | bodies near you that add up to full cry |
+| `CLAMOUR_NEAR` **420** | ...and how near "near you" is |
 
 **What is loud is a short list, and short on purpose: things you chose.**
 Swinging, and spending. Being hit is not — you did not pick it. **Moving is
@@ -240,6 +243,41 @@ not loud at any speed**, and the meter **decays on a clock rather than on
 standing still**. Those two lines are the whole anti-stealth guarantee: a
 meter that only falls while you stand still *is* a stealth game, because it
 makes waiting the optimal move and turns every room into a pause.
+
+**And the fight makes its own noise, every second it lasts.** That list of
+chosen things left one exploit standing, and it is the obvious one: stop
+swinging, circle, let the meter drain, come back in. Under a meter that hears
+only your own blade, the quietest way through a room is to fight it as slowly
+as possible — creeping, arrived at from the opposite direction.
+
+So bodies up and around you feed the meter on a clock of their own. Not per
+blow landed, not per blow taken — being hit is still not loud, for the reason
+it never was — so the total noise of a fight is its **duration**, which is the
+one thing about a fight the player fully controls. Kill four things in five
+seconds and you pay five seconds of it; take twenty and you pay twenty. That
+is what makes the quiet play and the aggressive play the *same* play, which is
+the entire point of the meter. Before it, they were opposites.
+
+The rate is set against the decay rather than chosen for feel: at full cry it
+is exactly `CLAMOUR_DECAY`, so a fight you are only surviving **holds** the
+meter where it is and a fight you are winning climbs it. Measured, over five
+seconds from a meter at 0.6: an empty room loses **0.425**, one body up loses
+**0.319**, and four or more move it **0.001**. You cannot wait out a fight you
+are standing in the middle of. You can still walk away from one — that door is
+deliberately left open, because closing it makes the terrain an off switch,
+and because walking away already costs the thing that costs: the slag you did
+not collect while you were doing it.
+
+**It saturates, and that matters more than the rate.** A brawl is a brawl at
+four bodies or forty — noise that scaled with the crowd would make the deep
+rungs deafening through nothing the player did, and would hand the horde a
+meter that is supposed to be the hero's own. Forty measured **0.001**, the
+same as four.
+
+The guarantee is re-checked *under* the new term rather than assumed to
+survive it, because a per-second noise is exactly the kind of change that
+quietly makes stillness a move: the same fight, once stood through and once
+run through, moves the meter to **0.4986** either way.
 
 That is not asserted, it is measured. `dawdle.js` plays the same delves twice
 — once normally, once standing still whenever the meter is up — with a hero
