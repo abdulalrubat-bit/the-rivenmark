@@ -250,15 +250,59 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push(n+(note?'  ['+n
      more.rockBlocks.straight+' but path '+more.rockBlocks.path
      : 'no body was ever blocked by rock in '+more.checked+' chances');
 
-  // --- a cleared room stays cleared ----------------------------------------
+  /* --- a cleared room stays cleared ----------------------------------------
+   *
+   * THIS USED TO FAIL ABOUT TWO RUNS IN FIVE, and the reason turned out to be
+   * the check rather than the game.
+   *
+   * The count really did grow -- by one to three bodies over two minutes of
+   * standing still, in a game whose design statement is that nothing is
+   * pushed at the player. But teaching the failure to name what arrived
+   * answered it in one run: "1 deceiver, 2 mirage; an invader is up". That is
+   * THE UNINVITED, which is a designed event with its own roll (rollInvasion,
+   * odds rising with depth) and its own section in the design document. It is
+   * not a wave. It is the one thing in the game that is supposed to come and
+   * find you.
+   *
+   * So the claim is narrowed to what it always meant: no ORDINARY HORDE BODY
+   * arrives on a timer. An invasion is allowed, and is asserted to be the
+   * only thing that may arrive -- so a real wave regression, which would show
+   * up as thralls and gorgers appearing, still fails this.
+   *
+   * Two lessons kept because both cost time. First: a check that says "it
+   * grew by three" and cannot say three of WHAT is a check that costs an hour
+   * every time it goes red -- naming the kinds turned an afternoon's
+   * suspicion into a one-line answer. Second: a suite is a page with history,
+   * and this fixture runs after twenty others; the invasion was rolled by an
+   * earlier one, which is why a fresh page never reproduced it.
+   */
   const cleared = await p.evaluate(()=>{
     resetRun('isaac');
-    const n0=enemies.length;
+    const tally=()=>{const m={};for(const e of enemies)m[e.kind]=(m[e.kind]||0)+1;return m;};
+    const b4=tally(); const n0=enemies.length;
     for(let i=0;i<60*120;i++) update(1/60);
-    return { n0, n1:enemies.length, waves:!!LEVEL.waves };
+    const now=tally();
+    const grew=[];
+    for(const k of new Set([...Object.keys(b4),...Object.keys(now)])){
+      const d=(now[k]||0)-(b4[k]||0);
+      if(d>0) grew.push(d+' '+k);
+    }
+    // The uninvited and what he brings with him. Anything else appearing is
+    // the horde being pushed, which is the thing this forbids.
+    const UNINVITED = { deceiver:1, mirage:1, lieutenant:1 };
+    const pushed = grew.filter(g => !UNINVITED[g.split(' ').slice(1).join(' ')]);
+    return { n0, n1:enemies.length, waves:!!LEVEL.waves, grew, pushed,
+             boss:run.boss?run.boss.kind:null, invader:!!run.invader };
   });
-  ck('no waves are pushed at the player', cleared.n1<=cleared.n0 && !cleared.waves,
-     cleared.n0+' -> '+cleared.n1+' after 2 min standing still');
+  const say = cleared.n0+' -> '+cleared.n1+' after 2 min standing still' +
+     (cleared.grew.length ? '; arrived: '+cleared.grew.join(', ') : '') +
+     (cleared.invader ? '; an invader is up, which is allowed' : '');
+  ck('no horde body is pushed at the player',
+     cleared.pushed.length===0 && !cleared.waves, say);
+  // The control. Without it the check above passes on a delve that generated
+  // nothing to begin with, or on a fixture that never stepped the sim.
+  ck('and the control: the delve it stood in was populated',
+     cleared.n0 > 25, cleared.n0 + ' bodies placed');
 
   ck('no console errors', errs.length===0, errs.slice(0,2).join(' | '));
   console.log('\nPASS '+pass.length+'\n  '+pass.join('\n  '));
