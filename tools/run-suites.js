@@ -27,6 +27,27 @@ if (unknown.length) {
   process.exit(1);
 }
 
+/* THE DEBUG BUILD IS GENERATED, SO REGENERATE IT.
+ *
+ * combat2 and dbgtest load debug.html, which build-debug.js writes from
+ * index.html. Nothing was rebuilding it, so it drifted -- FIFTY-ONE commits
+ * behind, discovered when the automatic blade was deleted from index.html and
+ * those two suites carried on passing because their copy still had it. Two
+ * suites had been testing a build from weeks earlier and reporting green.
+ *
+ * A stale generated artefact that a test reads is worse than no test: it says
+ * the thing works when what works is a copy of the thing from before the
+ * change. So it is rebuilt here, every run, before anything reads it. It
+ * takes about a tenth of a second.
+ */
+try {
+  execFileSync(process.execPath, [path.join(here, 'build-debug.js')], { stdio: 'ignore' });
+} catch (e) {
+  console.error('could not rebuild debug.html — combat2 and dbgtest would be ' +
+                'testing a stale build, so stopping here');
+  process.exit(1);
+}
+
 let bad = 0, totalPass = 0, totalFail = 0;
 for (const s of run) {
   let out = '';

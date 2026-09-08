@@ -262,6 +262,21 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
           if (!a || !ABILITIES[player.hero].some(x => x.id === id)) continue;
           if (!abilityBlock(a)) { castAbility(id); break; }
         }
+        /* AND THE BLADE, which has to be asked for now.
+         *
+         * This loop used to be the kit and nothing else, and it still scored
+         * the crescent -- because the blade swung itself. When the automatic
+         * blade was cut this measured only the bar, the hero's damage against
+         * the boss fell by about half, and a single totem started out-mending
+         * the weakest of seven gear rolls. That would have read as the
+         * encounter being unbeatable when what had actually changed was that
+         * the fixture stopped attacking.
+         *
+         * Tapping every frame is not cheating: the tap is rate-capped by the
+         * blade's own beat, so this is simply a Vanguard swinging as often as
+         * a Vanguard can, which is what "what a hero can do to it" means.
+         */
+        conduitPress(); conduitRelease();
         update(1 / 60);
         player.x = bb.x + bb.r + player.r + 4; player.y = bb.y;
       }

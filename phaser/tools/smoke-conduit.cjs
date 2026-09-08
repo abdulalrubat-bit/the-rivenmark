@@ -82,9 +82,22 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   await p.mouse.move(box.x, box.y);
   await p.mouse.down();
   await p.mouse.move(box.x, box.y - 30, { steps: 4 });
-  // Long enough for more than one beat of the blade, and short of the gather
-  // threshold's reach -- held at half the ring, this never becomes a cleave.
-  await sleep(beat * 1000 * 2.4);
+  /* HELD UNTIL IT HAS SWUNG TWICE, not for a fixed slice of wall clock.
+   *
+   * This used to sleep for 2.4 beats of real time and assert two swings came
+   * out. It measured one, and the mechanism was fine: on the software GL this
+   * container renders with, the simulation advances at about a third of real
+   * time -- fireTimer was measured falling 0.6 to 0 over 1681ms of wall clock
+   * against a 620ms beat -- so 1.5 seconds of sleeping is barely one beat of
+   * game time. It only ever passed because the automatic blade was firing
+   * during the same window and its swings were being counted too, which means
+   * the check was partly measuring a swing nobody asked for.
+   *
+   * So it waits on the thing it is actually asserting. The cap is wall clock
+   * and generous; the claim is the count.
+   */
+  await p.waitForFunction(() => (window.__seen || []).length >= 2, null, { timeout: 8000 })
+        .catch(() => {});
   await p.mouse.up();
   await sleep(120);
   const drag = await seen();
@@ -92,7 +105,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   const up = drag.filter(s => Math.abs(s.a + Math.PI / 2) < 0.25);
   ck('a drag aims the blade where the thumb went',
      up.length > 0, drag.length ? drag.map(s => s.a).join(', ') + ' rad' : 'nothing fired');
-  ck('and keeps swinging while it is held', drag.length >= 2,
+  ck('and keeps swinging while it is held, on the blade’s own beat', drag.length >= 2,
      drag.length + ' swings over ' + (beat * 2.4).toFixed(1) + 's, at a beat of ' + beat);
 
   // --- a gather ------------------------------------------------------------

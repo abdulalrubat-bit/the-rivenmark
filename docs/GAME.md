@@ -111,17 +111,27 @@ means picking him up at 30 life.
 
 ### The swing, and what it is worth
 
-The blade swings **by itself** — on a game played with one thumb it has to. But
-it does not win the fight by itself, and until recently it did: measured over
-ninety-six whole delves, **seven tenths** of every point of damage came off the
-automatic swing and **a sixth** off the six buttons, and the bar's share *fell*
-with depth, from 22% on the first rung to 10% on the forty-fourth. The deeper
-you went, the more the game played itself.
+**The blade does not swing itself.** It used to — a target and a timer, no
+input at all — and that was the whole of the attack before the Conduit
+existed. It was kept afterwards as a kindness, so that one thumb or no thumb
+still played. The kindness was the problem: with it in, standing still and
+pressing nothing killed things, and the Conduit was an optional way to kill
+them faster. Two attack systems at once, one of which nobody chose.
 
-So the crescent carries `AUTO_BITE` **0.62** of the ward rather than all of it,
-and the primary ability is the rest. After the change: **the bar carries about
-a third**, the swing about a half, and the delve itself (husks, shattering
-calcify, traps) the remainder.
+It was measured twice, and the second measurement is why it went. First, when
+the swing was written down to 0.62 of a real blow to stop it winning fights on
+its own: **seven tenths** of every point of damage came off it and a sixth off
+the six buttons, with the bar's share *falling* with depth. That helped, and
+it did not fix anything — the second measurement, over ninety-six delves
+across six rungs, found the crescent still carrying **39% to 60%** of all
+damage dealt by a reference player *who never once touched the control*.
+Between a third and two thirds of the game was being played by nobody.
+
+So there is no swing nobody asked for. Every crescent is worth the whole of
+`damage`, and comes round because you asked for it: a **tap** (which still
+finds its own target — the accessible one-thumb swing is intact, it simply has
+to be pressed), a **held drag** down a line you choose, or a **gather**. What
+you cannot do any more is decline to fight.
 
 ---
 
@@ -198,6 +208,73 @@ something wakes them, so pressure comes from what you walk into.
 The cap is on bodies **awake**, not bodies placed. Applied to placement it
 breaks extraction outright: a delve holds 1.42× its own quota at roughly one
 slag a thrall, and the map would no longer contain enough to open its own gate.
+
+### Clamour — how much of the delve can hear you
+
+The design this came from was written against a delve that does not exist. It
+said the fight is unreadable because forty-six bodies are up at once; the
+instrument measured **three to thirteen at the median**, against a cap of
+forty-six that is a spike and not a constant. The delve is *already* mostly
+asleep, and "cut the horde" was a plan to change something already true.
+
+What is true is the gradient — 3 awake at the mouth, 13 at the deep end, and
+the share of a quota taken with sixteen or more up running 12% to 46%. So
+Clamour does not make the delve sleep. It makes the sleeping **visible**, puts
+it under your hand, and gives it consequences.
+
+One number, 0 to 1. Loud things raise it; it falls with time. What it buys is
+**reach**: a loud hero is noticed from further off, through the same aggro
+test a body already ran. Nothing else changes — no senses model, no cones.
+
+| | |
+|---|---|
+| `CLAMOUR_DECAY` **0.085**/s | a swing paid off in ~2.5s, a full meter in ~12 |
+| `CLAMOUR_REACH` **0.85** | at full, `AGGRO_NEAR` 250 reaches **463** |
+| `CLAMOUR_SWING` **0.085** | a crescent, asked for |
+| `CLAMOUR_HEAVY` **0.22** | a gathered one, which is a real noise |
+| `CLAMOUR_CAST` **0.13** | anything off the bar |
+
+**What is loud is a short list, and short on purpose: things you chose.**
+Swinging, and spending. Being hit is not — you did not pick it. **Moving is
+not loud at any speed**, and the meter **decays on a clock rather than on
+standing still**. Those two lines are the whole anti-stealth guarantee: a
+meter that only falls while you stand still *is* a stealth game, because it
+makes waiting the optimal move and turns every room into a pause.
+
+That is not asserted, it is measured. `dawdle.js` plays the same delves twice
+— once normally, once standing still whenever the meter is up — with a hero
+who cannot die, so survival is out of the comparison and only efficiency is
+left. Waiting gathers about **half** the slag in the same time (49%, 52%, 55%
+over three runs). It is *reported* per rung and *asserted* pooled, because ten
+delves cannot resolve one rung: the per-rung figure came back at 172%, 92% and
+84% on three runs of the identical build.
+
+### The settle
+
+Without a way back down, Clamour is a ratchet — every noise wakes something,
+nothing ever sleeps again, and the meter is only a slower road to the same
+fully-woken delve.
+
+So a body that has lost you walks back to where it was standing and goes
+dormant. "Lost you" is the *same* test that woke it, so the two cannot
+disagree, and a loud hero is correspondingly harder to shake.
+
+`SETTLE_WAIT` **6s** — long enough that stepping behind a wall does not switch
+the fight off, short enough that a room you left is quiet again by the time you
+have crossed the next one. `SETTLE_NEAR` **40** units of its bed.
+
+**Losing you has to change where it walks, or it is not losing you.** An awake
+body used to steer at your live position whatever it could sense, so one that
+had lost you closed fifteen hundred units at a run, came back inside its own
+notice and reset its own timer — it never lost anyone, because chasing is how
+it found them again. A body that cannot hear you now goes to the last place it
+could, and looks there.
+
+Only bodies with a **bed** settle, and only `placeEnemy` gives one. The packs
+the generator laid out are guarding a place and can be given the slip; the
+horde that drips in during a run is hunting you and still is. Anchored things
+and the avatars never settle — a boss you can walk away from and come back to
+fresh is not a boss.
 
 ### The bestiary
 
@@ -759,18 +836,21 @@ what the game is about.
 
 | | | |
 |---|---|---|
-| **Tap** | under 0.2s, never dragged | The old accessible swing — nearest body, no aiming — but at **full damage** against the 0.62 the idle blade is worth. Tap again inside the window and it **chains**: the third of three comes round a fifth wider. |
+| **Tap** | under 0.2s, never dragged | The accessible swing — nearest body, no aiming, one thumb. Tap again inside the window and it **chains**: the third of three comes round a fifth wider. |
 | **Drag** | past the deadzone | The drag vector takes the aim off the auto-target entirely. The blade fires down that line on its own beat for as long as you hold it — back-pedalling while cutting into a doorway is a thing you can express now. |
 | **Hold at the rim** | 0.45s and out at the edge | The firing stops and the blade gathers, at **half stride** while it does. Let go and it comes round once: ×3.4 damage, ×2.1 wide, ×1.6 reach. |
 
-**The blade still swings on its own when the Conduit is idle**, at the reduced
-bite it has always been worth — one thumb, or no thumb, still plays. What
-driving it buys is *aim*, the *chain*, the *cleave*, and 62% more per swing.
+**The blade does not swing when the Conduit is idle.** It used to, and that
+was the last thing making the attack optional; see *The swing, and what it is
+worth* above for the two measurements that took it out. A one-thumb player
+still has the whole game — the tap finds its own target and needs no aiming —
+but it is a press, not a default. What driving it buys beyond that is *aim*,
+the *chain* and the *cleave*.
 
 The chain's window is the blade's own beat (`fireDelay × 1.6`, so 0.99s for
 Isaac) and **not** `GCD_TIME`. The ability beat is 1.2s against a swing rate of
-0.62, and a window that wide makes the chain automatic — which is not a rhythm,
-it is a formality. Tied to the blade instead, the Quickening boon and a Quick
+0.62, and a window that wide would make the chain a formality rather than a
+rhythm. Tied to the blade instead, the Quickening boon and a Quick
 affix speed the chain up too, which is what anyone would expect them to do.
 
 The state machine lives in the **core**, not in either host: both builds drive

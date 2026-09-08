@@ -98,12 +98,21 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
       o.windDrift = +drift.toFixed(2);
       o.windFramesSeen = frames;
     }
-    // ...and the other half: a blow DOES still move it mid-swing.
+    /* ...and the other half: a blow DOES still move it mid-swing.
+     *
+     * The blade has to be ASKED now. This loop used to rely on the automatic
+     * swing to land the blows it is measuring the recoil of, and when the
+     * automatic swing was deleted it measured zero and reported that a
+     * winding body cannot be shoved -- which would have been a real and
+     * alarming finding if it had been true. It is the fixture that changed,
+     * so the fixture taps, which is what a player would be doing anyway.
+     */
     {
       const e = alone('thrall');
       let shoved = 0;
       for (let i = 0; i < 60 * 12; i++) {
         const x = e.x, y = e.y, was = (e.tell || 0) > 0;
+        conduitPress(); conduitRelease();       // a tap, every frame it is ready
         update(1 / 60);
         if (was && (e.tell || 0) > 0) shoved = Math.max(shoved, Math.hypot(e.x - x, e.y - y));
       }

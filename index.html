@@ -1755,6 +1755,79 @@ const ALERT_DELAY   = 0.18;  // ...one beat later, so a pack rouses in sequence
 const ALERT_GROWTH  = 0.55;
 const alertR = () => ALERT_R * (1 + (LEVEL.depth || 0) * ALERT_GROWTH);
 
+/* --- CLAMOUR -------------------------------------------------------------
+ *
+ * WHAT THE INSTRUMENT SAID FIRST, because the design was written against a
+ * delve that does not exist. The pitch for Silence and the Blade said the
+ * fight is unreadable because forty-six bodies are awake at once. winnable.js
+ * measured it: three to thirteen awake at the median, against a cap of
+ * forty-six that is a spike and not a constant. The delve is ALREADY mostly
+ * asleep, so "cut the horde" was a plan to change something already true.
+ *
+ * What IS true is the gradient -- 3 awake at the mouth, 13 at the deep end,
+ * and the share of a quota taken with sixteen or more up running 12% to 46%.
+ * The delve gets louder the further in you go, on its own, by the alert chain
+ * and ALERT_GROWTH above.
+ *
+ * So this does not make the delve sleep. It makes the sleeping VISIBLE, puts
+ * it under the player's hand, and gives it consequences.
+ *
+ * HOW IT WORKS. One number, 0 to 1. Loud things raise it; it falls with time.
+ * What it buys is REACH: a loud hero is noticed from further off, through the
+ * same aggro test a body already runs. Nothing else changes -- no new state
+ * machine, no senses model, no cones. A quiet hero is noticed at 250 units
+ * exactly as before; a hero at full Clamour is noticed at 250 * (1 + REACH).
+ *
+ * WHY IT DECAYS ON A CLOCK AND NOT ON STILLNESS. This is the whole of the
+ * anti-stealth guarantee and it is one line, so it is worth saying plainly:
+ * Clamour falls at the same rate whether you are standing still or running,
+ * because a meter that only falls while you stand still IS a stealth game --
+ * it makes waiting the optimal move and turns every room into a pause. Here
+ * waiting buys you nothing that walking does not, and walking is the thing
+ * that gets you to the gate. Nothing in the game rewards holding still.
+ *
+ * WHAT IS LOUD is a short list, and it is short on purpose: things you CHOSE
+ * to do. Swinging, and spending from the bar. Being hit is not loud -- you
+ * did not pick it, and a hero punished for the horde's decisions has no
+ * decision of their own to make. MOVING IS NOT LOUD, at any speed. The moment
+ * walking costs you, the game is asking you to creep, and this is not that
+ * game.
+ *
+ * The decay is set so a swing is paid off in about two and a half seconds and
+ * a full meter in twelve: long enough that a fight you drag out keeps the
+ * room reaching for you, short enough that finishing one and walking on finds
+ * the next room where you left it.
+ * ---------------------------------------------------------------------- */
+const CLAMOUR_DECAY  = 0.085;  // per second, off a meter that runs 0..1
+const CLAMOUR_REACH  = 0.85;   // at full, a body notices you 85% further off
+const CLAMOUR_SWING  = 0.085;  // a crescent, asked for
+const CLAMOUR_HEAVY  = 0.22;   // ...and a gathered one, which is a real noise
+const CLAMOUR_CAST   = 0.13;   // anything off the bar
+
+/* THE WAY BACK DOWN. How long a body keeps looking after it has lost you, and
+ * how near its bed it has to get before it lies down again.
+ *
+ * Six seconds is long enough that stepping behind a wall for a moment does
+ * not switch the fight off -- which would make the terrain an off button --
+ * and short enough that a room you left is quiet again by the time you have
+ * crossed the next one. */
+const SETTLE_WAIT   = 6.0;
+const SETTLE_NEAR   = 40;
+
+// The one door every noise comes through, so there is one place to read and
+// one place to change. Clamped at both ends: a meter that can run past 1 makes
+// the decay time unbounded, and the reach term meaningless above it.
+function clamour(n) {
+  if (!run) return;
+  run.clamour = clamp((run.clamour || 0) + n, 0, 1);
+  run.clamourPop = 1;            // for the HUD: something was just heard
+}
+
+// How far a body's notice reaches right now. Everything that asks "can it see
+// me" goes through this rather than reading e.aggro, so the meter cannot be
+// bypassed by a caller that forgot about it.
+const noticeR = e => e.aggro * (1 + (run ? (run.clamour || 0) : 0) * CLAMOUR_REACH);
+
 // How much longer an affliction outlasts the blow that opened it, at the
 // bottom of the ladder: 1.0 doubles it. DURATION and not rate -- a bleed that
 // hits harder is a blow you did not see and cannot answer, while a bleed that
@@ -1874,22 +1947,19 @@ const BASE_PLAYER = {
   iframe: 0.45
 };
 
-/* WHAT THE SWING IS WORTH ON ITS OWN.
+/* THERE IS NO LONGER A SWING NOBODY ASKED FOR.
  *
- * The blade swings by itself -- it always has, and on a game played with one
- * thumb it has to. What it should not do is win the fight by itself, and it
- * was: measured over ninety-six whole delves, seven tenths of every point of
- * damage came off the automatic swing and a sixth off the six buttons, and
- * the bar's share FELL with depth, from 22% on the first rung to 10% on the
- * forty-fourth. The deeper you went the more the game played itself.
+ * An AUTO_BITE of 0.62 lived here: what the blade was worth when it swung by
+ * itself, written down as less than a real blow so that the automatic attack
+ * could not win the fight on its own. It was a way of managing a problem
+ * rather than fixing it, and the fix was to take the automatic attack out --
+ * see the long note where fire() used to be.
  *
- * So the crescent carries a share of the ward rather than all of it, and it
- * comes round slower. `damage` still means what it always meant -- it is what
- * the kit multiplies, so a ring that bites deeper bites deeper everywhere --
- * and this is the one place the automatic swing is written down as less than
- * the whole of you.
+ * So every swing in the game is now one somebody asked for, and is worth the
+ * whole of `damage`. That is why releaseCrescent's default bite is 1 and not
+ * a fraction: a caller that forgets to say what its blow is worth gets a real
+ * one, rather than a quietly weakened one nobody notices for a month.
  */
-const AUTO_BITE = 0.62;
 
 // Enemy archetypes. `weight` is the spawn share, ramped by `from` (seconds).
 // role decides how a body fights, not how hard. Until now every kind pressed
@@ -4533,21 +4603,52 @@ function nearestFoe(R) {
   return avatar || best;
 }
 
-// The automatic blade: find something, swing at it, at what a swing nobody
-// asked for is worth.
-function fire() {
-  const best = nearestFoe(player.range);
-  if (!best) return false;
-  return swingAt(Math.atan2(best.y - player.y, best.x - player.x), EMPTY_SWING);
-}
+/* THE AUTOMATIC BLADE IS GONE, AND THIS IS WHERE IT WAS.
+ *
+ * fire() found the nearest body and swung at it on a timer, at 0.62 of a real
+ * blow, whenever nobody was touching the control. It was the whole of the
+ * attack before the Conduit existed, and it was left in afterwards as a
+ * kindness: one thumb, or no thumb, still plays.
+ *
+ * That kindness was the problem. With it in, the game plays itself -- stand
+ * still, press nothing, and things die -- so the Conduit was an optional way
+ * to kill them somewhat faster rather than the way you fight. Two attack
+ * systems running at once, one of which nobody chose. That is the whole of
+ * "it feels stuck between the two games it was built on".
+ *
+ * MEASURED before it went, over ninety-six delves across six rungs: the
+ * crescent was 39% to 60% of every point of damage the reference player
+ * dealt, and that player never once touched the control. Between a third and
+ * two thirds of the game was being played by nobody.
+ *
+ * nearestFoe stays, and is still exported to the same callers. It is what
+ * aimAngle uses, so a TAP still finds its own target -- the accessible swing
+ * is not gone, it simply has to be asked for.
+ *
+ * A POSTSCRIPT WORTH KEEPING. Cutting it broke SEVEN test fixtures across
+ * both builds, and every one of them in the same way:
+ *
+ *   swing.js       measuring the recoil of blows it was not throwing
+ *   crucible.js    measuring what a Vanguard can do to a boss, while only
+ *                  pressing the bar -- so one totem started out-mending it
+ *   conduit.js     proving a tap is worth more than the idle blade
+ *   combat2.js     eight calls to fire(), through a stale debug.html
+ *   combat3.js     one call to fire(), which took the whole suite down
+ *   dbgtest.js     one call to fire(), likewise
+ *   smoke-fx.cjs   a fight scene with nobody fighting in it
+ *
+ * All seven had been written as though the blade were part of the room rather
+ * than part of the player. That is the same mistake the game itself was
+ * making, and it had spread into the things that were supposed to catch it.
+ */
 
 // A blank shape, so the hot path allocates nothing per swing.
 const EMPTY_SWING = {};
 
 /* Bring the blade round on a bearing. Everything that swings goes through
- * here -- the automatic blade, a tap, the continuous fire down an aimed line,
- * and the charged cleave -- so there is one place that knows what a swing IS
- * and four callers that know what kind of swing they want.
+ * here -- a tap, the continuous fire down an aimed line, and the charged
+ * cleave -- so there is one place that knows what a swing IS and three
+ * callers that know what kind of swing they want.
  */
 function swingAt(base, o) {
   const k = o || EMPTY_SWING;
@@ -4602,10 +4703,9 @@ function releaseCrescent(a, delay, o) {
     y: player.y + Math.sin(a) * (player.r + 8),
     dx: Math.cos(a), dy: Math.sin(a), a: a,
     speed: player.arcSpeed,
-    // AUTO_BITE is what the blade is worth when it swings ITSELF. A blow you
-    // asked for is worth the whole of it -- that difference is most of why
-    // pressing the button is worth doing.
-    dmg: player.damage * (k.bite === undefined ? AUTO_BITE : k.bite),
+    // Every blow is one somebody asked for now, so the default is the whole
+    // of the ward. See the note where AUTO_BITE used to be.
+    dmg: player.damage * (k.bite === undefined ? 1 : k.bite),
     half: half, bow: bow, band: 11,
     delay: delay || 0,
     life: player.range * (k.reach || 1) / player.arcSpeed,
@@ -5207,10 +5307,11 @@ function updateTraps(dt) {
 }
 
 /* --- reactive scenery -----------------------------------------------------
-   The player has a stick and an automatic blade, so the only tactical input
-   they have is *where* they fight. That is what this is for: a room with a
-   pitch barrel in it is a different room, and standing in the right part of
-   it is a decision the controls can actually express.
+   Written when the player had a stick and an automatic blade, and *where*
+   they fought was the only tactical input they had. They have a Conduit now
+   and rather more to say, but the point stands and stands better: a room with
+   a pitch barrel in it is a different room, and standing in the right part of
+   it is a decision the controls can express.
 
    A barrel takes a beat to go up after it is broken, so setting one off and
    then standing in it is your own fault rather than the auto-aim's. A pillar
@@ -5724,6 +5825,11 @@ function castAbility(id) {
                    player.chargePop = 1; }
   if (a.cd) { player.cds = player.cds || {}; player.cds[a.id] = a.cd; }
   if (a.gcd) startGCD(a.gcd);
+  // Spending from the bar is loud, whatever it does. A ward and a bolt cost
+  // the same attention: what carries here is that you ACTED, not what the
+  // action was, and grading nine abilities by how noisy each one sounds is a
+  // table nobody could hold in their head while playing.
+  clamour(CLAMOUR_CAST);
   ABILITY_DO[a.id](a);
   return true;
 }
@@ -6583,6 +6689,16 @@ function updatePlayer(dt) {
   if (player.gcd > 0) player.gcd = Math.max(0, player.gcd - dt);
   updateAbilities(dt);
 
+  /* The Clamour falls. On a clock, and NOT on standing still -- see the block
+   * where the constants are. This is the line that keeps it from being a
+   * stealth game, so it is deliberately not conditional on anything. */
+  if (run) {
+    if ((run.clamour || 0) > 0)
+      run.clamour = Math.max(0, run.clamour - CLAMOUR_DECAY * dt);
+    if ((run.clamourPop || 0) > 0)
+      run.clamourPop = Math.max(0, run.clamourPop - dt * 2.2);
+  }
+
   const mv = moveVector();
   const px0 = player.x, py0 = player.y;
   if (mv.x !== 0 || mv.y !== 0) {
@@ -6630,11 +6746,12 @@ function updatePlayer(dt) {
    One control, three states, told apart by how you touch it. It is a state
    machine and not three buttons on purpose: a thumb has one place to be.
 
-     TAP      under CONDUIT_TAP and never dragged. The old accessible swing --
-              nearest target, no aiming -- but at FULL bite rather than the
-              0.62 the automatic blade is worth, and it chains: tap again
+     TAP      under CONDUIT_TAP and never dragged. The accessible swing --
+              nearest target, no aiming, one thumb -- and it chains: tap again
               inside the window and the third strike of the chain comes round
-              a fifth wider. Rhythm, for a thumb that wants one.
+              a fifth wider. Rhythm, for a thumb that wants one. This is the
+              whole of the game for a player who wants to press one button;
+              what it is not any more is a button they can decline to press.
      DRAG     past the deadzone. The drag vector takes the aim off the
               auto-target entirely and the blade fires down that line on its
               own beat for as long as you hold it. Back-pedalling while
@@ -6693,6 +6810,8 @@ function conduitRelease() {
                            sweep: 1 + (CLEAVE_SWEEP - 1) * f,
                            reach: 1 + (CLEAVE_REACH - 1) * f,
                            heavy: true });
+    // A gathered blow is the loudest thing a hero does, and pays for it.
+    clamour(CLAMOUR_SWING + (CLAMOUR_HEAVY - CLAMOUR_SWING) * f);
     player.fireTimer = player.fireDelay;
     freeze(0.05 * f);
     shake(5 + 9 * f);
@@ -6706,10 +6825,10 @@ function conduitRelease() {
   player.conT = 0;
 }
 
-/* A swing you asked for. Rate-capped by the same beat the automatic blade
- * runs on -- so tapping cannot out-throughput anything -- but it is YOUR beat:
- * you decide the moment, and hitting the moment again inside the window
- * carries the chain on.
+/* A swing you asked for, which since the automatic blade went is the only
+ * kind there is. Rate-capped by the blade's own beat -- so tapping cannot
+ * out-throughput a held drag -- but it is YOUR beat: you decide the moment,
+ * and hitting the moment again inside the window carries the chain on.
  */
 function tapSwing() {
   if (player.fireTimer > 0) return false;
@@ -6720,6 +6839,7 @@ function tapSwing() {
     bite: 1,
     sweep: finisher ? COMBO_SWEEP : 1
   });
+  clamour(CLAMOUR_SWING);
   if (!hit) return false;
   player.combo = finisher ? 0 : n;
   player.comboT = finisher ? 0 : player.fireDelay * COMBO_WINDOW;
@@ -6747,7 +6867,9 @@ function aimAngle() {
 
 /* The clock the blade runs on, and the only place it runs. Called from
  * updatePlayer in place of the bare fireTimer countdown that used to live
- * there, so the automatic blade and the driven one cannot both fire.
+ * there. It used to exist to stop the automatic blade and the driven one
+ * firing on the same beat; the automatic blade is gone, so it is now simply
+ * where the beat lives.
  */
 function updateConduit(dt) {
   if ((player.comboT || 0) > 0) {
@@ -6769,14 +6891,14 @@ function updateConduit(dt) {
 
   player.fireTimer -= dt;
   if (player.fireTimer > 0) return;
+  // Ready, and waiting to be asked. There is no else here any more: the blade
+  // does not swing itself. See the note where fire() used to be.
+  player.fireTimer = 0;
   if (player.conDown && player.conAim) {
     // Driven: down the line you are pointing, at the whole of the blade.
     swingAt(player.conA, { bite: 1 });
+    clamour(CLAMOUR_SWING);
     player.fireTimer = player.fireDelay;
-  } else {
-    // Idle. The blade still keeps you alive on its own, at the reduced bite
-    // it has always been worth -- one thumb, or no thumb, still plays.
-    player.fireTimer = fire() ? player.fireDelay : 0;
   }
 }
 
@@ -7004,7 +7126,7 @@ function updateEnemies(dt) {
       if (e.alert > 0) {
         e.alert -= dt;
         if (e.alert <= 0 && awake < HORDE_LIVE) wakeEnemy(e);
-      } else if (noticeDist(e, d) < e.aggro && awake < HORDE_LIVE) {
+      } else if (noticeDist(e, d) < noticeR(e) && awake < HORDE_LIVE) {
         // The ceiling binds here too. A body over the cap stays down until
         // something ahead of it falls -- but being struck always wakes it
         // (see damageEnemy), so nothing on the map can become unkillable and
@@ -7019,6 +7141,56 @@ function updateEnemies(dt) {
       // frame, or a whole crowd rises through a cap that only ever sees the
       // frame before.
       awake++; run.awake = awake;
+    }
+
+    /* --- THE SETTLE ------------------------------------------------------
+     *
+     * A body that has lost you walks back to where it was standing and goes
+     * dormant again. Without this the Clamour is a ratchet: every noise wakes
+     * something and nothing ever goes back down, so the meter would only be a
+     * slower way of arriving at the same fully-woken delve. The loop needs a
+     * way back to quiet or it is not a loop.
+     *
+     * "Lost you" is the SAME test that woke it -- noticeDist against noticeR
+     * -- so the two cannot disagree. Anything that can currently notice you
+     * has not lost you, however far away it is, which is what makes a loud
+     * hero hard to shake and a quiet one easy to leave behind.
+     *
+     * WHAT DOES NOT SETTLE, and why the rule is a property rather than a
+     * list: only a body with a `home` does, and only placeEnemy gives one.
+     * The packs the generator laid out have somewhere to be; the horde that
+     * drips in during a run does not, and a reinforcement wandering off to a
+     * corner it was never placed in would be a body the delve had lost track
+     * of. Anchored things and the avatars are excluded outright -- a boss
+     * that got bored would be a fight you could walk away from and come back
+     * to fresh.
+     *
+     * Being struck always cancels it: damageEnemy wakes what it hits, and
+     * that is the one line that stops a body settling while you are cutting
+     * it from behind.
+     */
+    if (e.home && !e.anchored && !isAvatar(e) && !e.invader && !e.tender) {
+      if (noticeDist(e, d) < noticeR(e)) {
+        e.lost = 0; e.settling = false;
+        // Where it last had you. See the note below on why it matters.
+        e.seenX = player.x; e.seenY = player.y;
+      } else {
+        e.lost = (e.lost || 0) + dt;
+        if (e.lost > SETTLE_WAIT) e.settling = true;
+      }
+      if (e.settling) {
+        const hx = e.home.x - e.x, hy = e.home.y - e.y;
+        if (Math.hypot(hx, hy) < SETTLE_NEAR) {
+          // Home, and still nothing to hear. Down it goes, and the alert it
+          // carries goes with it -- a body that settles holding a pending
+          // alarm would rouse its neighbours from its own bed.
+          e.awake = false; e.alert = 0; e.settling = false; e.lost = 0;
+          e.tell = 0; e.tellMax = 0;
+          awake--; run.awake = awake;
+          e.drowse += dt * 1.6;
+          continue;
+        }
+      }
     }
 
     e.angle = Math.atan2(dy, dx);
@@ -7293,6 +7465,38 @@ function updateEnemies(dt) {
       sx = 0; sy = 0;
     } else if (stalk === 0 && e.role === 'stalk') {
       sx = 0; sy = 0;                           // holding, out in the dark
+    } else if (e.settling) {
+      // Walking back to where it was standing. Same shape as the leash below
+      // -- head for a fixed point and stop when you reach it -- but the point
+      // is the bed rather than a post, and arriving there puts it to sleep
+      // (see THE SETTLE above) rather than leaving it standing guard.
+      const hx = e.home.x - e.x, hy = e.home.y - e.y;
+      const hm = Math.hypot(hx, hy) || 1;
+      sx = hx / hm; sy = hy / hm;
+    } else if ((e.lost || 0) > 0 && !e.settling && e.seenX !== undefined) {
+      /* IT GOES WHERE IT LAST HAD YOU, not where you are.
+       *
+       * Without this the settle cannot happen at all, and the trace says so
+       * plainly: a body that had lost the hero still steered at the hero's
+       * LIVE position, closed fifteen hundred units at a run, came back
+       * inside its notice and reset its own timer. It never lost anyone,
+       * because chasing is how it found them again. Twenty seconds of that
+       * was measured before the reason was clear.
+       *
+       * So losing you has to change where it walks, or it is not losing you.
+       * It heads for the last place it could actually hear you and looks
+       * there, which is also the behaviour anyone would expect to see: a
+       * guard that heard something goes to the something.
+       *
+       * ONLY FOR BODIES WITH A BED. The packs the generator laid out are
+       * guarding a place and can be given the slip. The horde that drips in
+       * during a run is hunting you and still does -- it has no home, so it
+       * never reaches this branch, and the pressure a long delve builds does
+       * not quietly go away.
+       */
+      const lx = e.seenX - e.x, ly = e.seenY - e.y;
+      const lm = Math.hypot(lx, ly);
+      if (lm > 18) { sx = lx / lm; sy = ly / lm; }
     } else if (leash) {
       // Back to its post, and stand there once it arrives.
       const px = e.postX - e.x, py = e.postY - e.y;
@@ -14292,6 +14496,8 @@ function resetRun(heroId, levelId, diffId) {
           // dawnAdd() is a no-op until he is standing, so an ordinary delve
           // carries them and never notices.
           dawn: 0, dawnPop: 0, dawnFired: false, breath: 0,
+          // How much of the delve can hear you. See the CLAMOUR block.
+          clamour: 0, clamourPop: 0,
           agonyT: 0, agonyCd: AGONY_CD * 0.65 };
   run.invadeAt = rollInvasion();
   // If you died in this level and never came back for it, it is still here.

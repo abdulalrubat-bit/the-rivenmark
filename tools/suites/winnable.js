@@ -47,6 +47,33 @@ const RUNGS = [0, 3, 9, 17, 30, 44];
 // anything.
 const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
 
+/* HOW MUCH OF A PER-RUNG NUMBER IS NOISE. Measured, because the numbers below
+ * were about to be used to retune the ladder and nobody had ever asked.
+ *
+ * Three runs of the IDENTICAL build and the identical bot, 16 delves a rung:
+ *
+ *     run    r0    r3    r9   r17   r30   r44   overall
+ *      a   11/16  0/16  2/16 10/16  7/16 10/16   40/96
+ *      b    7/16  0/16  1/16  9/16  5/16 13/16   35/96
+ *      c   14/16  1/16  2/16  5/16  8/16 10/16   40/96
+ *
+ * A SEVEN-POINT SPREAD ON ONE RUNG WITH NOTHING CHANGED. Rung 0 came back 7,
+ * 11 and 14 out of 16; rung 17 came back 5, 9 and 10. So a per-rung move of
+ * five in sixteen means nothing at this sample size, and any retune that
+ * reads one is chasing a coin.
+ *
+ * The pooled figure is far steadier -- 35, 40, 40 of 96 -- which is why every
+ * guard below is pooled and why the per-rung table is printed as a report and
+ * not asserted on. That was already the case for a different reason ("POOLED,
+ * because per-rung it flaked and the flake was honest"); this is the number
+ * behind it.
+ *
+ * WHAT THIS MEANS FOR THE RETUNE. Halving the spread needs four times the
+ * delves. Set WINNABLE_TRIES=64 when the question is "did this change move
+ * rung 9", and leave it at 16 when the question is "is the ladder still
+ * climbable at all", which is what this suite is asked on every commit.
+ */
+
 (async () => {
   const b = await chromium.launch();
   const p = await (await b.newContext({ viewport: { width: 390, height: 844 } })).newPage();
@@ -173,6 +200,159 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
       stick.active = true; stick.dx = v.x; stick.dy = v.y; stick.mag = 1;
     };
 
+    /* --- THE THUMB ---------------------------------------------------------
+     *
+     * The blade used to swing itself, so this bot never touched the attack
+     * control and still dealt between 39% and 60% of its damage with the
+     * crescent. Now that the automatic blade is gone, a bot that does not
+     * press anything deals none -- so every number this suite reports would
+     * be measuring a player who refuses to fight.
+     *
+     * WHAT IT IS NOT. It is not a good player, and it must not become one.
+     * This suite is a fixed yardstick: its whole value is that the same
+     * policy is run either side of a change, so the difference is the change.
+     * A thumb that improves is a ruler that stretches.
+     *
+     * SO THE POLICY IS THE DULLEST DEFENSIBLE ONE, and it is written out here
+     * rather than tuned, so that anyone changing it has to argue with this
+     * paragraph first:
+     *
+     *   TAP     whenever the blade is ready and the thing it wants dead is
+     *           the thing auto-aim would pick anyway. This is the common
+     *           case, and it is the only one that carries the chain -- the
+     *           third strike comes round wider, and a bot that never taps
+     *           would never measure that.
+     *   DRAG    when what it wants dead is NOT what auto-aim would pick: a
+     *           tender totem behind the pack, a Lieutenant past three husks.
+     *           Held, so the blade keeps coming round on its own beat down
+     *           the line it is pointed.
+     *   GATHER  only when nothing awake is inside GATHER_SAFE. The gather
+     *           roots you by design -- CLEAVE_STRIDE halves the stride -- so
+     *           taking it while something is closing is not bravery, it is
+     *           the mistake the mechanic is built to punish. A bot that
+     *           gathered under pressure would report the ladder as harder
+     *           than it is, for a reason that is its own fault.
+     *
+     * AND IT HAS A REACTION TIME. THUMB_LAG frames between decisions, because
+     * a thumb that re-decides every 33ms is not a hand, and a yardstick that
+     * plays better than any person cannot say whether a person can climb the
+     * ladder.
+     */
+    const GATHER_SAFE = 240;   // nothing awake this close, or it is not safe
+    const THUMB_LAG   = 4;     // frames between decisions: about 130ms
+    const AIM_SLOP    = 0.25;  // radians: closer than this and a tap will do
+
+    let thumb = '', thumbFor = 0;
+    /* What the thumb actually did, counted. Without this the suite can say
+     * the bot deals damage with the blade and cannot say HOW -- and a policy
+     * that had silently collapsed to tapping would look identical in every
+     * number the report prints. */
+    const thumbUse = { press: 0, tap: 0, drag: 0, gather: 0 };
+    window.__thumbUse = thumbUse;
+    const release = () => { if (player.conDown) conduitRelease(); thumb = ''; };
+
+    const inReach = e => e && e !== portal && e.hp > 0 &&
+      Math.hypot(e.x - player.x, e.y - player.y) <= player.range;
+
+    /* Something that has to die SPECIFICALLY, rather than whatever is nearest:
+     * the totem mending the Crucible-Mass, the Lieutenant holding the
+     * Deceiver, the avatar itself. These are the only cases where the blade's
+     * bearing is a decision, and therefore the only ones worth a drag. */
+    const named = e => !!e && (e === run.boss || e.tender ||
+                               e.kind === 'lieutenant' || isAvatar(e));
+
+    /* One decision, made every THUMB_LAG frames and held in between. `wanted`
+     * is what the bot came for; `nd` is how far off the nearest awake body
+     * is. Returns true while it is standing still to gather, which the caller
+     * has to honour -- walking while gathering is a contradiction the control
+     * does not stop you making.
+     */
+    const useThumb = (wanted, nd) => {
+      if (thumbFor-- > 0) return thumb === 'gather';
+      thumbFor = THUMB_LAG;
+
+      /* WHAT IT SWINGS AT.
+       *
+       * The dullest thing that works: whatever is nearest, which is what a
+       * tap already does on its own through aimAngle. Two earlier versions
+       * were cleverer and both were worse.
+       *
+       * The first only swung at the hunt target -- the slag-carrying body it
+       * had chosen to walk to -- and let go of the control whenever that was
+       * out of reach, which is most of the time. Rung 0 fell from 16/16 to
+       * 7/16 on that alone.
+       *
+       * The second preferred the hunt target whenever it was in reach, and
+       * dragged the blade at it past whatever was closer and actually hitting
+       * the hero. Rung 0 came back 12/16. Nobody plays like that.
+       *
+       * So the aim is only a decision when something has to die specifically
+       * -- a totem, a Lieutenant, the avatar -- and everything else is a tap
+       * at whatever the blade would have picked anyway.
+       */
+      const aimAt = (named(wanted) && inReach(wanted)) ? wanted : null;
+      const anything = nearestFoe(player.range);
+      if (!aimAt && !anything) { release(); return false; }
+
+      const mark = aimAt || anything;
+      const a = Math.atan2(mark.y - player.y, mark.x - player.x);
+
+      // Gathering, and still gathering: hold until it is full, then let go.
+      // Anything closing inside GATHER_SAFE ends it -- standing rooted while
+      // something walks up to you is the mistake the mechanic exists to
+      // punish, and a bot that made it would report the ladder as harder than
+      // it is for a reason that is its own fault.
+      if (thumb === 'gather') {
+        if ((player.cleave || 0) >= 0.99 || nd < GATHER_SAFE) { release(); return false; }
+        conduitAim(a, 1);
+        return true;
+      }
+
+      // Worth gathering? Only against something that will still be there when
+      // it lands, and only with the room to stand still for it.
+      if (named(mark) && inReach(mark) && nd >= GATHER_SAFE && (player.cleave || 0) === 0) {
+        release();
+        conduitPress(); conduitAim(a, 1);
+        thumb = 'gather'; thumbUse.gather++;
+        return true;
+      }
+
+      // A named target that an undirected swing would miss: point the blade.
+      // aimAngle is what a tap actually uses, so this asks the real question
+      // rather than guessing at nearestFoe's tie-breaks.
+      if (aimAt) {
+        const off = Math.abs(((aimAngle() - a + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+        if (off > AIM_SLOP) {
+          if (thumb !== 'drag') { release(); conduitPress(); thumb = 'drag'; thumbUse.drag++; }
+          conduitAim(a, 0.6);
+          return false;
+        }
+      }
+
+      // Otherwise a tap: press and let go inside the same frame, which is what
+      // a tap is. It carries the chain; a held drag does not.
+      /* Presses and LANDED swings, separately. The thumb decides every four
+       * frames, which is about seven presses a second against a beat of one
+       * and a half -- so most of them are refused because the blade is still
+       * coming back, exactly as a person mashing slightly ahead of the rhythm
+       * would be. Counting presses alone reported forty thousand taps on the
+       * first rung and made the bot look superhuman.
+       *
+       * READ THE BEAT BEFORE THE PRESS, not after. tapSwing sets fireTimer
+       * when a swing lands, but when it REFUSES -- because the beat is still
+       * running -- it returns without touching it, and fireTimer is still
+       * whatever the last swing set. So "fireTimer > 0 afterwards" is true
+       * either way, and the first version of this counter reported every
+       * single press as a landed tap.
+       */
+      const ready = (player.fireTimer || 0) <= 0;
+      release();
+      conduitPress(); conduitRelease();
+      thumbUse.press++;
+      if (ready && (player.fireTimer || 0) > 0) thumbUse.tap++;
+      return false;
+    };
+
     window.__delve = function (idx, hero, wantPower) {
       const L = LEVELS[idx];
       // The power to gear to, when asking "what would it actually take here?"
@@ -217,11 +397,12 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
        * credited the kit with husk bursts and calcify shatters, and a bot that
        * pressed nothing still scored two thousand "kit" damage.
        *
-       * updateArcs is the crescent, which is the auto-attack. castAbility is
-       * the bar. Everything else -- a husk going off, a body shattering out of
-       * its calcify, a hazard -- is the delve itself.
+       * updateArcs is the crescent, which since the automatic blade was cut is
+       * always a swing the thumb asked for. castAbility is the bar. Everything
+       * else -- a husk going off, a body shattering out of its calcify, a
+       * hazard -- is the delve itself.
        */
-      const bill = { auto: 0, kit: 0, delve: 0 };
+      const bill = { blade: 0, kit: 0, delve: 0 };
       if (!window.__billed) {
         window.__billed = 1;
         const tag = (name, src) => {
@@ -231,7 +412,7 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
             try { return of.apply(this, arguments); } finally { window.__src = prev; }
           };
         };
-        tag('updateArcs', 'auto');
+        tag('updateArcs', 'blade');   // the crescent -- now only ever one you asked for
         tag('castAbility', 'kit');
         const dmgOf = window.damageEnemy;
         window.damageEnemy = function (e, dmg, fx, fy) {
@@ -505,16 +686,27 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
         if (frac < 0.45 && near && nd < 260) {
           // Disengage along open floor. Straight away from the body walks into
           // rock, and a hero pinned against rock is not disengaging.
+          // The hand comes off the blade first: running away and cutting at
+          // the same time is not a thing the control lets you do, and a bot
+          // still holding a gather would be walking at half speed.
+          release();
           fieldTo(WORLD.w / 2, WORLD.h / 2);
           const away = stepDir();
           if (away) drive(away);
           else { const a = Math.atan2(player.y - near.y, player.x - near.x);
                  drive({ x: Math.cos(a), y: Math.sin(a) }); }
           repath = 0;
-        } else if (target) {
-          const d = Math.hypot(target.x - player.x, target.y - player.y);
-          drive(d < (mode === 'gate' ? 12 : 46) ? null : stepDir());
-        } else drive(null);
+        } else {
+          /* The thumb is told what the bot came for and how close the
+           * nearest awake body is; it decides the rest. See the note in
+           * useThumb for why it is as dull as it is. */
+          const rooted = useThumb(target, nd);
+          if (rooted) drive(null);
+          else if (target) {
+            const d = Math.hypot(target.x - player.x, target.y - player.y);
+            drive(d < (mode === 'gate' ? 12 : 46) ? null : stepDir());
+          } else drive(null);
+        }
 
         // Drink, mend, then hit. Casting whatever is first on the bar means
         // casting the melee poke forever and never reaching the heal.
@@ -528,7 +720,7 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
           if (!abilityBlock(a)) { castAbility(id); break; }
         }
 
-        if (mode === 'gate' && run.gateOpen && portal.inside) { stepThrough(); break; }
+        if (mode === 'gate' && run.gateOpen && portal.inside) { release(); stepThrough(); break; }
         update(DT); steps++;
         // Every half-second of delve time. Sampled rather than peaked: a delve
         // that touches forty once is not the delve that sits there.
@@ -548,7 +740,9 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
                mins: +(steps * DT / 60).toFixed(1), tech: run.tech, quota: LEVEL.quota,
                bossDown: !!run.bossDown, kills: run.kills,
                power: power0, want: L.power, hp0, dmg0,
-               auto: Math.round(bill.auto), kit: Math.round(bill.kit),
+               blade: Math.round(bill.blade), kit: Math.round(bill.kit),
+               thumb: { press: thumbUse.press, tap: thumbUse.tap,
+                        drag: thumbUse.drag, gather: thumbUse.gather },
                delveDmg: Math.round(bill.delve),
                awakeSeen: awakeSeen, slagAt: slagAt,
                answer: { read: answer.read, standing: answer.standing, touch: answer.touch },
@@ -567,8 +761,8 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
     const stuck = rs.filter(r => r.out === 'ran out of time').length;
     const med = a => a.slice().sort((x, y) => x - y)[a.length >> 1];
     const sum = k => rs.reduce((a, r) => a + r[k], 0);
-    const auto = sum('auto'), kit = sum('kit'), dlv = sum('delveDmg');
-    const all = Math.max(1, auto + kit + dlv);
+    const blade = sum('blade'), kit = sum('kit'), dlv = sum('delveDmg');
+    const all = Math.max(1, blade + kit + dlv);
     /* HOW LONG DOES A VANGUARD LIVE?
      *
      * The report was "I die in less than a minute", and this suite had been
@@ -628,7 +822,12 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
                    Math.max(0.1, rs.reduce((a, r) => a + r.mins, 0)) /
                    Math.max(1, rs[0].hp0)).toFixed(2),
                  life: rs[0].hp0,
-                 autoPct: Math.round(100 * auto / all),
+                 bladePct: Math.round(100 * blade / all),
+                 thumb: rs.reduce((a, r) => ({ press: a.press + r.thumb.press,
+                                               tap: a.tap + r.thumb.tap,
+                                               drag: a.drag + r.thumb.drag,
+                                               gather: a.gather + r.thumb.gather }),
+                                  { press: 0, tap: 0, drag: 0, gather: 0 }),
                  kitPct: Math.round(100 * kit / all),
                  delvePct: Math.round(100 * dlv / all),
                  slag: med(rs.map(r => r.tech)), need: rs[0].quota,
@@ -638,8 +837,11 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
   const say = c => 'rung ' + String(c.idx).padStart(2) + ' (power ' + c.power + ')  ' +
     c.won + '/' + c.n + ' out, quota met ' + c.quota + '/' + c.n +
     ', median ' + c.slag + '/' + c.need + ' slag in ' + c.mins + ' min' +
-    '\n              damage: ' + c.autoPct + '% the swing, ' + c.kitPct +
+    '\n              damage: ' + c.bladePct + '% the swing, ' + c.kitPct +
     '% the bar, ' + c.delvePct + '% the delve itself' +
+    '\n              thumb: ' + c.thumb.tap + ' taps landed of ' +
+    c.thumb.press + ' pressed, ' + c.thumb.drag + ' drags, ' +
+    c.thumb.gather + ' gathers' +
     '\n              took: ' + c.pressure + ' lives/min off ' + c.life +
     ' hp — ' + c.worst +
     '\n              could answer: ' + c.read + '% read, ' + c.standing +
@@ -863,21 +1065,81 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
 
   /* THE BAR'S SHARE. The note that started this was "the attack button feels
    * meaningless", and this is the number behind it: what fraction of a delve's
-   * damage the six buttons actually carry against the swing that happens on
-   * its own. Reported per rung above; guarded here on the whole sample, since
-   * a bar worth pressing is a property of the design and not of one rung.
+   * damage the six buttons actually carry against the blade. Reported per rung
+   * above; guarded here on the whole sample, since a bar worth pressing is a
+   * property of the design and not of one rung.
    *
-   * The bar is NOT asked to beat the swing -- an auto-attack that does nothing
-   * is a different game -- only to be a real share of the fight. */
+   * The blade is no longer "the swing that happens on its own" -- there is no
+   * such thing any more -- so this is now a comparison between two things the
+   * player does, which is the comparison it should always have been. */
   const barShare = Math.round(curve.reduce((a, c) => a + c.kitPct, 0) / curve.length);
-  const swingShare = Math.round(curve.reduce((a, c) => a + c.autoPct, 0) / curve.length);
+  const swingShare = Math.round(curve.reduce((a, c) => a + c.bladePct, 0) / curve.length);
   // A third is the design target, and it was a sixth before the swing was cut
   // to a share of the ward. Twenty-five is the floor: below it the bar has
   // drifted back to being something you press between the parts that matter.
   ck('the bar is worth pressing', barShare >= 25,
      barShare + '% of the damage against the swing’s ' + swingShare + '%');
-  ck('and no rung hangs the run', curve.every(c => c.stuck === 0),
-     curve.filter(c => c.stuck).map(c => 'rung ' + c.idx + ' ' + c.stuck).join(' ') || 'none timed out');
+  /* THE YARDSTICK IS ACTUALLY HOLDING THE CONTROL.
+   *
+   * Everything above measures what the reference player achieved; this
+   * measures that it played. The blade used to swing itself, so this bot
+   * dealt 39-60% of its damage with a crescent while touching nothing -- and
+   * every number in this suite was describing a player who does not exist.
+   *
+   * Now the blade has to be asked, so a policy that quietly stopped asking
+   * would show up as a harder ladder and nothing anywhere would say why. Two
+   * separate claims, because they fail for different reasons: the tap is the
+   * common case and its absence means the thumb is broken, while the drag and
+   * the gather are the cases that only arise against a named target, and
+   * their absence means the bot never met one -- or that a branch died.
+   */
+  const thumbAll = curve.reduce((a, c) => ({ press: a.press + c.thumb.press,
+                                             tap: a.tap + c.thumb.tap,
+                                             drag: a.drag + c.thumb.drag,
+                                             gather: a.gather + c.thumb.gather }),
+                                { press: 0, tap: 0, drag: 0, gather: 0 });
+  ck('the reference player is holding the control, not watching the blade',
+     thumbAll.tap > 500,
+     thumbAll.tap + ' taps landed of ' + thumbAll.press + ' pressed, over ' +
+     (curve.length * TRIES) + ' delves');
+  ck('and it uses the aim and the gather, not only the tap',
+     thumbAll.drag > 0 && thumbAll.gather > 0,
+     thumbAll.drag + ' drags and ' + thumbAll.gather + ' gathers — ' +
+     (thumbAll.drag && thumbAll.gather ? 'all three states exercised'
+       : 'A BRANCH OF THE THUMB NEVER RAN, so nothing here measures it'));
+
+  /* A RUN THAT NEVER ENDS, WHICH IS NOT THE SAME AS A RUN THAT LOSES.
+   *
+   * `stuck` counts delves still in 'play' after twelve simulated minutes.
+   * The check exists for a yardstick that CANNOT finish an encounter -- it
+   * was written when the bot walked up to the Crucible-Mass and hit it
+   * forever while the totems mended it, and fifteen of fifty-two rungs came
+   * back timed out. That failure mode produces a rung full of timeouts, not
+   * one.
+   *
+   * It was zero across the board until the automatic blade was cut. It is
+   * now occasionally one, at rung 44, and that is a real consequence rather
+   * than noise in the usual sense: the bot deals about half the damage it
+   * used to in the opening of a run, so the Crucible errand -- which is a
+   * race against a boss that mends -- now finishes nearer the cap. Measured
+   * over four consecutive runs of 96 delves: 1, 0, 0, 0.
+   *
+   * So the bar is the shape of the failure it guards rather than a flat
+   * zero: a hang is systematic and shows up as several on one rung. One
+   * delve losing a race is reported, every time, whether or not it fails --
+   * a number that only appears when it breaks is a number nobody watches
+   * drift.
+   */
+  const stuckAll = curve.reduce((a, c) => a + c.stuck, 0);
+  const stuckSay = curve.filter(c => c.stuck)
+                        .map(c => 'rung ' + c.idx + ' ' + c.stuck + '/' + TRIES).join(' ');
+  const hangs = !(curve.every(c => c.stuck <= 1) && stuckAll <= 2);
+  ck('and no rung hangs the run', !hangs,
+     !stuckSay ? 'none timed out'
+       : stuckSay + ' ran the clock out — ' +
+         (hangs ? 'THAT IS A HANG, not a race: a yardstick this size cannot '
+                + 'be losing on the wire that often'
+                : 'a race lost, not a hang, at this rate'));
 
   ck('no console errors', errs.length === 0, errs.slice(0, 3).join(' | '));
   console.log('\nPASS ' + pass.length + '\n  ' + pass.join('\n  '));
