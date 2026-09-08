@@ -209,6 +209,73 @@ The cap is on bodies **awake**, not bodies placed. Applied to placement it
 breaks extraction outright: a delve holds 1.42× its own quota at roughly one
 slag a thrall, and the map would no longer contain enough to open its own gate.
 
+### Clamour — how much of the delve can hear you
+
+The design this came from was written against a delve that does not exist. It
+said the fight is unreadable because forty-six bodies are up at once; the
+instrument measured **three to thirteen at the median**, against a cap of
+forty-six that is a spike and not a constant. The delve is *already* mostly
+asleep, and "cut the horde" was a plan to change something already true.
+
+What is true is the gradient — 3 awake at the mouth, 13 at the deep end, and
+the share of a quota taken with sixteen or more up running 12% to 46%. So
+Clamour does not make the delve sleep. It makes the sleeping **visible**, puts
+it under your hand, and gives it consequences.
+
+One number, 0 to 1. Loud things raise it; it falls with time. What it buys is
+**reach**: a loud hero is noticed from further off, through the same aggro
+test a body already ran. Nothing else changes — no senses model, no cones.
+
+| | |
+|---|---|
+| `CLAMOUR_DECAY` **0.085**/s | a swing paid off in ~2.5s, a full meter in ~12 |
+| `CLAMOUR_REACH` **0.85** | at full, `AGGRO_NEAR` 250 reaches **463** |
+| `CLAMOUR_SWING` **0.085** | a crescent, asked for |
+| `CLAMOUR_HEAVY` **0.22** | a gathered one, which is a real noise |
+| `CLAMOUR_CAST` **0.13** | anything off the bar |
+
+**What is loud is a short list, and short on purpose: things you chose.**
+Swinging, and spending. Being hit is not — you did not pick it. **Moving is
+not loud at any speed**, and the meter **decays on a clock rather than on
+standing still**. Those two lines are the whole anti-stealth guarantee: a
+meter that only falls while you stand still *is* a stealth game, because it
+makes waiting the optimal move and turns every room into a pause.
+
+That is not asserted, it is measured. `dawdle.js` plays the same delves twice
+— once normally, once standing still whenever the meter is up — with a hero
+who cannot die, so survival is out of the comparison and only efficiency is
+left. Waiting gathers about **half** the slag in the same time (49%, 52%, 55%
+over three runs). It is *reported* per rung and *asserted* pooled, because ten
+delves cannot resolve one rung: the per-rung figure came back at 172%, 92% and
+84% on three runs of the identical build.
+
+### The settle
+
+Without a way back down, Clamour is a ratchet — every noise wakes something,
+nothing ever sleeps again, and the meter is only a slower road to the same
+fully-woken delve.
+
+So a body that has lost you walks back to where it was standing and goes
+dormant. "Lost you" is the *same* test that woke it, so the two cannot
+disagree, and a loud hero is correspondingly harder to shake.
+
+`SETTLE_WAIT` **6s** — long enough that stepping behind a wall does not switch
+the fight off, short enough that a room you left is quiet again by the time you
+have crossed the next one. `SETTLE_NEAR` **40** units of its bed.
+
+**Losing you has to change where it walks, or it is not losing you.** An awake
+body used to steer at your live position whatever it could sense, so one that
+had lost you closed fifteen hundred units at a run, came back inside its own
+notice and reset its own timer — it never lost anyone, because chasing is how
+it found them again. A body that cannot hear you now goes to the last place it
+could, and looks there.
+
+Only bodies with a **bed** settle, and only `placeEnemy` gives one. The packs
+the generator laid out are guarding a place and can be given the slip; the
+horde that drips in during a run is hunting you and still is. Anchored things
+and the avatars never settle — a boss you can walk away from and come back to
+fresh is not a boss.
+
 ### The bestiary
 
 `role` decides *how* a body fights, not how hard.

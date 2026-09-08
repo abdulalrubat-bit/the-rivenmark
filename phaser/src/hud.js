@@ -60,8 +60,10 @@ const CSS = `
 /* One band, not a red slab with text floating beside it. The frame, the inset
    and the stone colour are the boss bar's, so the two read as the same object
    in two sizes rather than as two different games' HUDs. */
-#hud .top{position:absolute;left:8px;right:8px;top:8px;display:flex;gap:6px;align-items:stretch;
+#hud .top{position:absolute;left:8px;right:8px;top:8px;display:flex;
+     flex-direction:column;gap:3px;
      background:rgba(16,13,10,.72);border:1px solid #4a3f30;border-radius:4px;padding:3px}
+#hud .top .band{display:flex;gap:6px;align-items:stretch}
 #hud .life{flex:1;height:16px;background:#0d0b09;border:1px solid #3a3226;border-radius:2px;
      overflow:hidden;position:relative}
 #hud .life i{display:block;height:100%;background:linear-gradient(#d1503c,#7c2018);
@@ -272,6 +274,18 @@ const CSS = `
 /* The other hero is not an ability, so it does not take an ability's colour.
    Bone, which is what the rest of the frame is written in. */
 #hud .swap button{--role:#cebe9e}
+/* Deliberately quiet: at rest it is a dark groove that reads as part of the
+   band's inner edge, and it only becomes a thing you notice when there is
+   something to notice -- which is the behaviour the meter itself has. */
+#hud .din{height:3px;background:#0d0b09;border-radius:2px;overflow:hidden;
+     box-shadow:inset 0 1px 1px rgba(0,0,0,.8)}
+#hud .din i{display:block;height:100%;width:0;border-radius:2px;
+     background:linear-gradient(90deg,#6d4d22,#d6b26e 55%,#ffd870);
+     transition:width .12s linear}
+/* Loud. Not red -- red in this HUD means life, and a player who has learned
+   that the red bar is their health should not have to learn a second red. */
+#hud .din.loud i{background:linear-gradient(90deg,#a67c3a,#ffbe8c 55%,#ffd18c)}
+#hud .din.loud{box-shadow:inset 0 1px 0 rgba(0,0,0,.6),0 0 8px rgba(255,190,140,.4)}
 #hud .res{position:absolute;right:10px;bottom:148px;display:flex;gap:5px;
      align-items:center;justify-content:flex-end}
 #hud .pip{width:11px;height:11px;border-radius:50%;border:1px solid #6a5a42;background:#161310}
@@ -356,9 +370,24 @@ export class Hud {
     const root = document.createElement('div');
     root.id = 'hud';
     root.innerHTML =
+      /* THE CLAMOUR SITS INSIDE THE BAND, under the life bar.
+       *
+       * It is not a resource. Charge and Tension are things you spend, and
+       * they live by the thumb that spends them; this is a thing the DELVE
+       * knows about you, so it belongs with the other line that says what the
+       * delve is doing to you. Reading it is a glance, not a decision.
+       *
+       * Inside, and not floating under: the first version hung it three
+       * pixels below the band's bottom edge, where it read as a stray line
+       * lying on the floor of the delve rather than as part of the frame.
+       * The band is a column now -- life and slag on one row, the din on the
+       * next -- so it is one object with two things in it. */
       '<div class="top">' +
-        '<div class="life"><i></i><b></b></div>' +
-        '<div class="slag"></div>' +
+        '<div class="band">' +
+          '<div class="life"><i></i><b></b></div>' +
+          '<div class="slag"></div>' +
+        '</div>' +
+        '<div class="din"><i></i></div>' +
       '</div>' +
       '<div class="res"></div>' +
       /* Built like a kit button, for the same reason a kit button is: the
@@ -407,6 +436,9 @@ export class Hud {
     this.bossFill = root.querySelector('.boss .bar i');
     this.bossHeld = root.querySelector('.boss .held');
     this.toast = root.querySelector('.toast');
+    this.din = root.querySelector('.din');
+    this.dinFill = root.querySelector('.din i');
+    this.dinSig = -1;
     this.swapBtn = root.querySelector('.swap button');
     this.swapBtn.addEventListener('click', () => g.swapHero());
     // click, not pointerdown: unlike an ability, being a beat late to pause is
@@ -562,6 +594,16 @@ export class Hud {
     if (this.hero !== p.hero) this.buildKit(p.hero);
 
     this.syncConduit();
+    /* Rounded before it is compared, so this writes to the DOM about twenty
+     * times over a full meter rather than on every frame of a decay. The life
+     * bar next to it does the same for the same reason. */
+    const din = Math.round((run.clamour || 0) * 100);
+    if (this.dinSig !== din) {
+      this.dinSig = din;
+      this.dinFill.style.width = din + '%';
+      this.din.classList.toggle('loud', din >= 55);
+    }
+
     const f = Math.max(0, p.hp) / p.maxHp;
     this.lifeFill.style.width = (f * 100).toFixed(1) + '%';
     this.lifeText.textContent = Math.ceil(Math.max(0, p.hp)) + ' / ' + Math.round(p.maxHp);
