@@ -121,7 +121,8 @@ them faster. Two attack systems at once, one of which nobody chose.
 It was measured twice, and the second measurement is why it went. First, when
 the swing was written down to 0.62 of a real blow to stop it winning fights on
 its own: **seven tenths** of every point of damage came off it and a sixth off
-the six buttons, with the bar's share *falling* with depth. That helped, and
+the buttons — six of them at the time; see §4 for why there are three now —
+with the bar's share *falling* with depth. That helped, and
 it did not fix anything — the second measurement, over ninety-six delves
 across six rungs, found the crescent still carrying **39% to 60%** of all
 damage dealt by a reference player *who never once touched the control*.
@@ -137,30 +138,87 @@ you cannot do any more is decline to fight.
 
 ## 4. The kit
 
-Six buttons, bottom-right, on a shared beat. `GCD_TIME` is **1.2s** and each
-ability multiplies it — the **primary is on 0.8**, everything else on 1.0, so
-pressing it is a rhythm rather than a decision you fit between other decisions.
-The beat locks the ability bar and *nothing else*: moving, swinging and
-drinking are never taken away.
+**Three buttons a hero, and it was five and four.** The width was the problem
+— not because nine abilities is hard to balance, but because nine abilities
+answered the wrong question. Every one of them was a way to deal damage or
+refuse it, so all of the depth sat in *which button*, and the delve around you
+was scenery you fought in front of.
+
+Each cut was a **second copy of a decision the player was already making**:
+
+- **Anchoring Strike** and **Piercing Truth** were the blade with extra steps.
+  When the automatic blade went, the Conduit became the attack, and a bar
+  button that also means "hit the thing in front of you" is the same decision
+  asked twice.
+- **Unyielding Mass** rooted you and halved harm for four seconds. It is the
+  stand-still button, and this game has spent the whole Silence arc saying
+  standing still is not a move — the Clamour decays on a clock so waiting buys
+  nothing, and since §6 made a long fight a loud one, standing in one actively
+  costs. An ability whose whole text is *"wait, safely"* was arguing with the
+  rest of the design and losing.
+
+**What replaced the width is the Clamour.** Every press of this bar is
+`CLAMOUR_CAST` — the loudest single thing a hero does, louder than a swing and
+louder than a gathered one. At five buttons that was a tax you paid without
+noticing. At three it is the question: the bar is not what you *do*, it is what
+you spend the room's attention on.
+
+### The blade pays for the bar
+
+Those two cuts took away the only source of Charge and Tension, and the
+replacement is the better design anyway: **a swing that lands builds it** — 1
+Charge for Isaac, 14 Tension for Zayd. Once per press, however many crescents
+that press threw (Twin Crescent and the Sundering brand put up to five arcs in
+the air, and paying each would turn a boon that buys *width* into one that
+opens every fight with a free Guillotine). A swing at empty floor builds
+nothing.
+
+So the attack you have to ask for pays for the attack you choose the moment of,
+and the two halves of a fight are welded rather than parallel.
+
+**The guard-break moved with it.** Anchoring Strike was the only answer to a
+braced body, so cutting it would have left bracing countered by patience —
+which is the answer the player was already giving. A blow **gathered to 55% or
+better** goes through a raised guard now. It costs a second of being easy to
+reach and makes the loudest noise on the meter: the price of walking *into*
+something rather than round it.
+
+`GCD_TIME` is **1.2s** and each ability multiplies it. The blade is the
+primary and beats faster than anything on the bar (0.62s against the bar's
+quickest 1.0), so pressing it is a rhythm rather than a decision you fit
+between other decisions. The beat locks the ability bar and *nothing else*:
+moving, swinging and drinking are never taken away.
 
 ### Isaac — Sun-Gold, and Charges (max 3)
 
 | | | |
 |---|---|---|
-| ✦ | **Anchoring Strike** | 3.4× the ward at reach 96. **Breaks a braced guard**, and throws what it hits. Builds a Charge. |
 | ◉ | **Aegis of Tor-Varden** | Spends three. 3.2× in a 150 ring, and a moment at half harm behind the guard. |
-| ▣ | **Unyielding Mass** | 12s. Rooted, unmovable, half harm, for four seconds. |
-| ✚ | **Grounding Purge** | 14s. Channelled three seconds for 15% of your life. Breaks the moment you are struck or move. |
 | ⚔ | **Star-Forged Guillotine** | Spends three. 7× on one body — and **×5 again** on the Metaphysically Vulnerable. |
+| ✚ | **Grounding Purge** | 14s. Channelled three seconds for 15% of your life. Breaks the moment you are struck or move. |
 
 ### Zayd — Azure, and Ley-Tension (max 100)
 
 | | | |
 |---|---|---|
-| ↠ | **Piercing Truth** | 2.2× in a **line** 340 long, through everything standing in it. Builds 14 Tension per body. |
 | ◍ | **Null-Zone Eruption** | Spends two fifths. A pool that slows what stands in it and **eats what it is casting**. |
 | ⌁ | **Focal Decryption** | 8s, **off the beat**. Snaps a cast at 300, silences for three, and gives the Tension back. |
 | ⚱ | **Crimson-Infused Jars** | Three to a delve. Instant, 45% of your life. |
+
+> **What it cost, measured.** The reference player's extraction rate fell from
+> **33/96 to 25/96**, and the fall is concentrated at the shallow end: rung 0
+> went 9/16 → **3/16**, rung 3 went 1/16 → 2/16, while rung 30 *rose* 5/16 →
+> 9/16 and rung 44 fell 14/16 → 9/16. Isaac lost a free strike on a 0.8s beat
+> and a survival cooldown, and the bot feels that hardest where it has no gear
+> to make up the difference.
+>
+> That is reported, not hidden, and it is not tuned away here. The bot is a
+> pessimistic yardstick — it does not kite and does not use the terrain — and
+> at 16 tries a rung the spread on an unchanged build is ±7, so rung 0 at 3/16
+> is a real signal but not a precise one. **Retuning against it is §11's job,
+> at `WINNABLE_TRIES=64`.** The mechanic is what landed here; the numbers are
+> the next question, and the bar being worth pressing survived the cut intact
+> (29% of all damage against the swing's 56%).
 
 ---
 
@@ -399,7 +457,7 @@ the breaker's bracing, the gorger's slam, the shaman's totems — and drawn as a
 gorger at 45 units instead of 26, which is three times the footprint, tinted
 hotter. No new art, no new systems.
 
-- **The Anchor.** It never moves. The Anchoring Strike breaks its guard and
+- **The Anchor.** It never moves. A gathered blow breaks its guard and
   lands its damage but cannot relocate it, and this is stated in `knock()`
   rather than left to fall out of a large mass — "it cannot be moved" is a
   rule of the encounter, not a consequence of a number someone may retune.
@@ -533,8 +591,8 @@ Three things the floor may **not** touch, each for its own reason:
 - **The avatar and his escort.** His fight has one rule — break the Lieutenants
   to reach him — and a trap under them breaks it for you.
 
-> **On "forcing them in".** Measured: a plate is a 40-unit cell, and the
-> Anchoring Strike moves a thrall **15 units**, a guard-break 21, an ordinary
+> **On "forcing them in".** Measured: a plate is a 40-unit cell, and a
+> gathered blow moves a thrall **15 units**, a guard-break 21, an ordinary
 > crescent 9, a breaker 5. So the play is not *shoving*, it is **leading** —
 > you choose where to stand, the horde comes to you, and the floor is what it
 > crosses to get there. That is positioning, which is the one tactical input

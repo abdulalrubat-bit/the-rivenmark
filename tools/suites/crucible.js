@@ -272,7 +272,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
       const max = bb.maxHp;
       bb.hp = bb.maxHp = 1e9;
       player.hp = player.maxHp = 1e7;
-      const order = ['guillotine','aegis','truth','nullzone','mass','decrypt','anchor'];
+      const order = ['guillotine','aegis','nullzone','decrypt'];
       const h0 = bb.hp;
       for (let i = 0; i < 60 * 15; i++) {
         for (const id of order) {

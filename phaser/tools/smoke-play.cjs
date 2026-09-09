@@ -63,8 +63,14 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
     const e = newBody('thrall', spot.x, spot.y, 0);
     e.awake = true; enemies.push(e); updateEnemies(0.001);
     // and prove the fixture before trusting what it measures
-    const inReach = !!nearestBody(ABILITY_BY_ID.anchor.reach);
-    const btn = document.querySelector('#hud .kit button[data-id="anchor"]');
+    const inReach = !!nearestBody(ABILITY_BY_ID.guillotine.reach);
+    /* Guillotine, and CHARGED first. This used to press Anchoring Strike,
+     * which cost nothing and so could always be pressed. The bar is three now
+     * and every one of Isaac's either spends three Charges or is a channel, so
+     * a fixture that presses one on an empty purse is measuring a button
+     * correctly refusing rather than a button working. */
+    player.charges = CHARGE_MAX; player.gcd = 0; player.cds = {};
+    const btn = document.querySelector('#hud .kit button[data-id="guillotine"]');
     if (!btn) return { noBtn: true };
     btn.dispatchEvent(new PointerEvent('pointerdown', {bubbles:true}));
     await new Promise(r=>setTimeout(r,60));
@@ -73,13 +79,19 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
              // It used to be "> 1", which stopped being true the moment the
              // primary was put on a shorter beat than the rest of the bar --
              // and the fixture then reported a passing build as broken.
-             wants: +(GCD_TIME * ABILITY_BY_ID.anchor.gcd).toFixed(2),
+             wants: +(GCD_TIME * ABILITY_BY_ID.guillotine.gcd).toFixed(2),
              hurt: e.hp < e.maxHp, inReach };
   });
   ck('the fixture put a body in reach', !kit.noBtn && !kit.noSpot && kit.inReach,
      kit.noSpot ? 'NO CLEAR GROUND — the press would prove nothing' : '');
-  ck('an ability button casts', !kit.noBtn && kit.charges===1,
-     kit.noBtn ? 'no button in the DOM' : 'built '+kit.charges+' charge, gcd '+kit.gcd);
+  /* SPENT, not built. This pressed Anchoring Strike and looked for a Charge
+   * to appear; the button it presses now is a spender, so the same press has
+   * to leave the purse EMPTY. Reading it the old way would have called a
+   * working bar broken -- and, worse, a bar that silently stopped charging
+   * anything would have passed. */
+  ck('an ability button casts', !kit.noBtn && kit.charges===0,
+     kit.noBtn ? 'no button in the DOM'
+               : 'spent all three, '+kit.charges+' left, gcd '+kit.gcd);
   ck('and the blow lands', !kit.noBtn && kit.hurt);
   ck('and it starts the beat the ability asks for',
      !kit.noBtn && kit.gcd > kit.wants - 0.12 && kit.gcd <= kit.wants,
@@ -134,8 +146,9 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
      wedge.hot.every(v => v > 0.2) && wedge.later.every((v, i) => v < wedge.hot[i]),
      'just cast ' + wedge.hot.join(' ') + '  ->  0.7s later ' + wedge.later.join(' '));
 
+  // Three since the bar was cut; see the note over ABILITIES in index.html.
   ck('with a button for every ability and a swap',
-     hud.buttons===5 && hud.swap && hud.pips===3,
+     hud.buttons===3 && hud.swap && hud.pips===3,
      hud.buttons+' buttons, '+hud.pips+' charge pips');
   // Layout, measured. The canvas build taught this the hard way more than
   // once: a control that is off the screen, under another control, or too

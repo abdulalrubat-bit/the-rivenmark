@@ -711,8 +711,8 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
         // Drink, mend, then hit. Casting whatever is first on the bar means
         // casting the melee poke forever and never reaching the heal.
         const order = frac < 0.35 ? ['jars', 'purge', 'aegis']
-                    : frac < 0.55 ? ['jars', 'purge', 'aegis', 'guillotine', 'truth', 'anchor']
-                    : ['guillotine', 'aegis', 'truth', 'nullzone', 'mass', 'decrypt', 'anchor'];
+                    : frac < 0.55 ? ['jars', 'purge', 'aegis', 'guillotine']
+                    : ['guillotine', 'aegis', 'nullzone', 'decrypt'];
         for (const id of order) {
           const a = ABILITY_BY_ID[id];
           if (!a || !ABILITIES[player.hero].some(x => x.id === id)) continue;

@@ -35,11 +35,21 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
     const mob=(k,dx,dy)=>{const e=newBody(k,player.x+dx,player.y+(dy||0),0);e.awake=true;
       e.hp=e.maxHp=900;enemies.push(e);updateEnemies(0.001);return e;};
 
-    fresh(); player.angle=0;
-    const a=mob('thrall',80), c=mob('thrall',170), off=mob('thrall',60,120);
-    const ah=a.hp,ch=c.hp,oh=off.hp;
-    o.truth={cast:castAbility('truth'), near:ah-a.hp, far:ch-c.hp, off:oh-off.hp,
-             tension:player.tension, beams:beams.length};
+    /* Piercing Truth is gone -- see the note over ABILITIES. It was Zayd's
+     * builder and a second attack button, and the blade is both now. What is
+     * measured here is that the seam actually reaches him: a Hearth-Warden
+     * and a Ley-Ward build different pools off the same press, and it would
+     * be easy to wire one and not the other. */
+    fresh(); player.angle=0; player.fireTimer=0; player.tension=0;
+    const zb=mob('thrall',60);
+    player.conA=0; player.conAim=true; tapSwing();
+    for(let i=0;i<24;i++) update(1/60);
+    o.blade={tension:player.tension, hurt:900-zb.hp};
+    fresh(); player.fireTimer=0; player.tension=0;
+    player.conA=0; player.conAim=true; tapSwing();
+    for(let i=0;i<24;i++) update(1/60);
+    o.bladeEmpty={tension:player.tension};
+    o.BLADE_TENSION = BLADE_TENSION;
 
     fresh(); player.tension=TENSION_MAX;
     const sh=mob('shaman',40); sh.chanting=1.0;
@@ -100,12 +110,19 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
     return o;
   });
 
-  ck('the beam strikes everything standing in the line',
-     R.truth.cast && R.truth.near>0 && R.truth.far>0,
-     'near '+R.truth.near.toFixed(0)+', far '+R.truth.far.toFixed(0));
-  ck('and nothing standing beside it', R.truth.off===0,
-     'a line that hits what is not in it is a circle');
-  ck('it builds Tension per body struck', R.truth.tension>0, R.truth.tension.toFixed(0));
+  ck('his blade builds Ley-Tension, not Sun-Gold',
+     R.blade.tension > 0 && R.blade.hurt > 0,
+     R.blade.tension.toFixed(0)+' Tension off one landed swing, '+
+     R.blade.hurt.toFixed(0)+' damage');
+  /* The control has to allow for TENSION_REGEN. Zayd's pool refills on its own
+   * at 4 a second, so twenty-four frames of empty floor is 1.6 Tension that
+   * the blade had nothing to do with -- the first version of this asked for
+   * exactly zero and reported the regen as a pay-out. What the blade is worth
+   * is the DIFFERENCE between the two, which is the thing being claimed. */
+  ck('and the control: a swing that lands on nothing builds none',
+     R.blade.tension - R.bladeEmpty.tension > R.BLADE_TENSION * 0.9,
+     (R.blade.tension - R.bladeEmpty.tension).toFixed(1)+' more for landing it, '+
+     'against '+R.bladeEmpty.tension.toFixed(1)+' of passive regen either way');
   ck('the pool costs exactly two fifths',
      Math.abs(R.nullCost - 40) < 0.01, R.nullCost.toFixed(1)+' of 100');
   ck('and will not drop on less', R.nullTooPoor);
@@ -135,7 +152,8 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   ck('each of them keeps his own wounds', R.isaacKept && R.zaydKept,
      'swapping is not a heal');
   ck('the interface changes hands with them', R.skin);
-  ck('and so does the kit', R.kitSize.isaac===5 && R.kitSize.zayd===4,
+  // Three each since the bar was cut; see the note over ABILITIES.
+  ck('and so does the kit', R.kitSize.isaac===3 && R.kitSize.zayd===3,
      JSON.stringify(R.kitSize));
   ck('a forged-for affix pays out for whoever is holding it',
      R.synergy.isaac > R.synergy.zayd,

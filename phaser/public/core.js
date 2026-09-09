@@ -12,7 +12,7 @@
  * the game lives inside a function named draw, forge or paint, and those are
  * dropped here.
  *
- * 615 statements kept; 15 drawing functions and 52 page-bound statements dropped.
+ * 619 statements kept; 15 drawing functions and 52 page-bound statements dropped.
  * Re-run `npm run core` after changing ../index.html.
  */
 /* =============================================================================
@@ -2627,7 +2627,11 @@ function makePlayer(x, y, heroId) {
   p.tension = 0;                    // Zayd's Ley-Tension
   p.jars = JAR_USES;
   p.cds = {}; p.channel = null;
-  p.mitigate = 0; p.rooted = 0; p.swapCd = 0;
+  p.mitigate = 0; p.swapCd = 0;
+  // The swing serial and the last one that paid, reset together. Apart,
+  // a stale builtSwing above a restarted swingNo eats one free swing's
+  // worth of resource at the top of a run.
+  p.swingNo = 0; p.builtSwing = -1;
   return p;
 }
 
@@ -3145,6 +3149,9 @@ function swingAt(base, o) {
   // together, which is the whole of what it is for.
   const fan = (player.fan || 0) > 0;
   const step = fan ? 0.34 : 0.15;
+  // One serial for every crescent this press threw, so the pay-out below can
+  // be per SWING rather than per blade. See the BLADE_CHARGE note.
+  player.swingNo = (player.swingNo || 0) + 1;
   for (let i = 0; i < player.shots; i++) {
     const a = base + (i === 0 ? 0 : (i % 2 ? 1 : -1) * step * Math.ceil(i / 2));
     releaseCrescent(a, fan ? 0 : i * 0.055, k);
@@ -3191,6 +3198,8 @@ function releaseCrescent(a, delay, o) {
     dmg: player.damage * (k.bite === undefined ? 1 : k.bite),
     half: half, bow: bow, band: 11,
     delay: delay || 0,
+    swingNo: player.swingNo || 0,
+    breaks: !!k.breaks,
     life: player.range * (k.reach || 1) / player.arcSpeed,
     maxLife: player.range * (k.reach || 1) / player.arcSpeed,
     hit: [], dead: false
@@ -4097,40 +4106,60 @@ const VULN_MULT  = 5;      // and what the Guillotine does to a body under it
  * Data and not UI, so both builds read the same answer and neither invents its
  * own mapping from ability to colour.
  */
+/* --- THE BAR, CUT TO THREE ------------------------------------------------
+ *
+ * It was five for Isaac and four for Zayd, and the width was the problem. Not
+ * because nine abilities is hard to balance -- because nine abilities answered
+ * the wrong question. Every one of them was a way to deal damage or refuse it,
+ * so the whole of the depth sat in "which button", and the delve around you
+ * was scenery you fought in front of.
+ *
+ * Three each, and the cuts are not arbitrary -- each removed thing was a
+ * SECOND COPY of a decision the player was already making:
+ *
+ *   ANCHOR and TRUTH were the blade with extra steps. When the automatic
+ *   blade went (see where fire() used to be) the Conduit became the attack,
+ *   and a bar button that also means "hit the thing in front of you" is the
+ *   same decision asked twice. They were also the only source of Charge and
+ *   Tension, which is the other half of this change: the blade builds now.
+ *
+ *   UNYIELDING MASS rooted you and halved harm for four seconds. It is the
+ *   stand-still button, and this game has spent the whole Silence arc saying
+ *   that standing still is not a move -- the Clamour decays on a clock so
+ *   waiting buys nothing, and since a long fight became a loud one, standing
+ *   in one actively costs. An ability whose whole text is "wait, safely" was
+ *   arguing with the rest of the design and losing.
+ *
+ * WHAT REPLACED THE WIDTH IS THE CLAMOUR. Every press of this bar is
+ * CLAMOUR_CAST, the loudest single thing a hero does -- louder than a swing,
+ * louder than a gathered one. With five buttons that was a tax you paid
+ * without noticing. With three it is the question: the bar is not what you do,
+ * it is what you spend the room's attention on. Depth moved from damage to
+ * attention, which is what it was supposed to be about.
+ *
+ * The guard-break moved with it. Anchor was the only answer to a braced body,
+ * so cutting it would have left bracing with no counter but patience. It is
+ * the GATHERED swing now -- wind up and go through the shield -- which costs a
+ * second of being easy to reach and the loudest noise on the meter. Same
+ * answer, asked of the blade and paid for in attention.
+ */
 const ABILITIES = {
   isaac: [
-    // THE BLOW. Not a poke on the way to the real abilities: it is where a
-    // Hearth-Warden's damage comes from now, and it is on a shorter beat than
-    // everything else on the bar so pressing it is a rhythm rather than a
-    // once-a-second decision you make between other decisions. Sixty-two units
-    // was inside a thrall's own swing; ninety-six is a step, not a hug.
-    { id: 'anchor', tag: 'ANCHOR', role: 'strike', name: 'Anchoring Strike', mark: '✦',
-      note: 'A shield bash that breaks a guard. Builds a Charge.',
-      cd: 0, gcd: 0.8, build: 1, reach: 96, dmg: 3.4 },
     { id: 'aegis', tag: 'AEGIS', role: 'ward', name: 'Aegis of Tor-Varden', mark: '◉',
       note: 'Spends three. A ring of Sun-Gold, and a moment behind the guard.',
       cd: 0, gcd: 1, cost: CHARGE_MAX, radius: 150, dmg: 3.2, mitigate: 2 },
-    { id: 'mass', tag: 'MASS', role: 'ward', name: 'Unyielding Mass', mark: '▣',
-      note: 'Rooted, unmovable, and half the harm for four seconds.',
-      cd: 12, gcd: 1, root: 4 },
-    { id: 'purge', tag: 'PURGE', role: 'mend', name: 'Grounding Purge', mark: '✚',
-      note: 'Channelled. Breaks the moment you are struck or move.',
-      cd: 14, gcd: 1, channel: 3, healPct: 0.15 },
     { id: 'guillotine', tag: 'GUILLOTINE', role: 'strike', name: 'Star-Forged Guillotine', mark: '⚔',
       note: 'Spends three. Comes down on one body, and on the Vulnerable it ends things.',
-      cd: 0, gcd: 1.25, cost: CHARGE_MAX, reach: 96, dmg: 7 }
+      cd: 0, gcd: 1.25, cost: CHARGE_MAX, reach: 96, dmg: 7 },
+    { id: 'purge', tag: 'PURGE', role: 'mend', name: 'Grounding Purge', mark: '✚',
+      note: 'Channelled. Breaks the moment you are struck or move.',
+      cd: 14, gcd: 1, channel: 3, healPct: 0.15 }
   ],
   zayd: [
-    // Zayd's is the same decision in his own idiom: a line rather than a bash,
-    // and it stays a line -- three hundred and forty units of it, through
-    // everything standing in the way. Same shorter beat, same reason.
-    { id: 'truth', tag: 'TRUTH', role: 'strike', name: 'Piercing Truth', mark: '↠',
-      note: 'A line of Azure through everything standing in it. Builds Tension.',
-      cd: 0, gcd: 0.8, build: 14, reach: 340, dmg: 2.2 },
     { id: 'nullzone', tag: 'NULL-ZONE', role: 'snare', name: 'Null-Zone Eruption', mark: '◍',
       note: 'Spends two fifths. A pool that slows what stands in it and eats what it is casting.',
       cd: 0, gcd: 1, costPct: 0.40, radius: 96, life: 7 },
-    { id: 'decrypt', tag: 'DECRYPT', role: 'snare', name: 'Focal Decryption', mark: '⌁',
+    { id: 'decrypt', tag: 'DECRYPT', role: 'snare', name: 'Focal Decryption', mark: '⑁',
       note: 'Off the beat. Snaps a cast, silences for three, and gives the Tension back.',
       cd: 8, gcd: 0, reach: 300, silence: 3 },
     { id: 'jars', tag: 'JARS', role: 'mend', name: 'Crimson-Infused Jars', mark: '⚱',
@@ -4183,6 +4212,19 @@ function gainCharge(n) {
     if (player.charges === CHARGE_MAX) shake(3);
   }
 }
+/* A swing that connected, paid once. `builtSwing` is the serial of the last
+ * press that paid, so every crescent from one press asks and only the first
+ * one gets an answer -- and a body cut by two separate presses pays twice,
+ * which is right: that is two swings.
+ */
+function bladeLanded(b) {
+  if (!b || b.swingNo === undefined) return;
+  if (player.builtSwing === b.swingNo) return;
+  player.builtSwing = b.swingNo;
+  if (player.hero === 'zayd') gainTension(BLADE_TENSION);
+  else gainCharge(BLADE_CHARGE);
+}
+
 function spendCharges(n) {
   player.charges = Math.max(0, (player.charges || 0) - n);
   player.chargePop = 1;
@@ -4192,36 +4234,6 @@ function spendCharges(n) {
    Kept apart from the table so the table stays readable as a list of terms.
    -------------------------------------------------------------------- */
 const ABILITY_DO = {
-
-  // A bash. It has to be delivered from inside touching distance, which is
-  // what makes it a decision rather than a second auto-attack.
-  anchor(a) {
-    const t = nearestBody(a.reach);
-    player.swing = SWING_TIME;
-    player.strike = 2;                       // the overhead form
-    if (!t) { toast('Nothing in reach', '#8c8168'); return; }
-    player.angle = Math.atan2(t.y - player.y, t.x - player.x);
-    if (Math.abs(Math.cos(player.angle)) > 0.25)
-      player.face = Math.cos(player.angle) < 0 ? -1 : 1;
-    // It breaks a guard. An anchor braces on a rhythm and eats most of what
-    // lands while it does, and the answer used to be only "wait" -- which is
-    // an answer, but it is the one the player was already giving. A shield
-    // bash is the other answer, and it is the reason to walk INTO the thing
-    // rather than round it.
-    const guarded = !!t.braced;
-    if (guarded) {
-      t.braced = false;
-      toast('Guard broken', '#ffd870');
-      ring(t.x, t.y, '#ffe6a8', 5, 58, 0.3);
-    }
-    damageEnemy(t, player.damage * a.dmg, player.x, player.y);
-    knock(t, player.angle, guarded ? 420 : 300);
-    freeze(guarded ? 0.05 : 0.04);
-    shake(guarded ? 8 : 6);
-    burst(t.x, t.y, '#ffd870', 10, 190);
-    ring(t.x, t.y, '#ffd870', 6, 44, 0.26);
-    gainCharge(a.build);
-  },
 
   // The ring. Everything in reach, and a moment of the guard afterwards.
   aegis(a) {
@@ -4238,14 +4250,6 @@ const ABILITY_DO = {
       knock(e, Math.atan2(e.y - player.y, e.x - player.x), 240);
     }
     player.mitigate = a.mitigate;
-  },
-
-  // Rooted. The trade is plain: you cannot leave, and almost nothing moves you.
-  mass(a) {
-    player.rooted = a.root;
-    player.mitigate = Math.max(player.mitigate || 0, a.root);
-    ring(player.x, player.y, '#e2b96a', 10, 60, 0.5);
-    toast('Rooted — unmovable', '#e2b96a');
   },
 
   // A channel, and the most fragile thing in the kit.
@@ -4269,30 +4273,6 @@ const ABILITY_DO = {
     burst(t.x, t.y, '#fff2c8', vuln ? 40 : 22, 380);
     damageEnemy(t, player.damage * a.dmg * (vuln ? VULN_MULT : 1), player.x, player.y);
     if (vuln) toast('The guard is broken', '#fff2c8');
-  },
-
-  // A line, not a target. It rewards putting a corridor between you and the
-  // horde, which is the whole of how Zayd is meant to be played.
-  truth(a) {
-    const ang = player.angle;
-    const ex = player.x + Math.cos(ang) * a.reach;
-    const ey = player.y + Math.sin(ang) * a.reach;
-    beams.push({ x: player.x, y: player.y, ex, ey, life: 0.24, max: 0.24 });
-    shake(4);
-    let hits = 0;
-    enemyGrid.query((player.x + ex) / 2, (player.y + ey) / 2, a.reach, _near);
-    for (let i = 0; i < _near.length; i++) {
-      const e = _near[i];
-      if (e.hp <= 0) continue;
-      // Distance from the body to the line, so everything standing in it is
-      // struck rather than only what the beam's centre passes through.
-      if (segDist(player.x, player.y, ex, ey, e.x, e.y) > e.r + 10) continue;
-      if (!clearShot(player.x, player.y, e.x, e.y)) continue;
-      damageEnemy(e, player.damage * a.dmg, player.x, player.y);
-      burst(e.x, e.y, '#5fd0ff', 6, 150);
-      hits++;
-    }
-    if (hits) { gainTension(a.build * hits); freeze(0.02); }
   },
 
   // A pool that holds ground. It does not kill; it decides where the fight
@@ -4463,7 +4443,6 @@ function updateAbilities(dt) {
   }
   if (player.chargePop > 0) player.chargePop = Math.max(0, player.chargePop - dt * 3);
   if (player.mitigate > 0) player.mitigate = Math.max(0, player.mitigate - dt);
-  if (player.rooted > 0) player.rooted = Math.max(0, player.rooted - dt);
   if (player.swapCd > 0) player.swapCd = Math.max(0, player.swapCd - dt);
   // Tension comes back slowly on its own. It is meant to be refilled by
   // interrupting something, not by standing still and waiting.
@@ -4980,14 +4959,19 @@ function updatePlayer(dt) {
     const target = Math.atan2(mv.y, mv.x);
     player.angle += angleDelta(player.angle, target) * Math.min(1, dt * 15);
     if (Math.abs(mv.x) > 0.12) player.face = mv.x < 0 ? -1 : 1;
-    // Rooted, and channelling, both mean the boots stay where they are. The
-    // stick still reads -- it is what lapses the channel -- but it moves
-    // nothing, which is the trade Unyielding Mass is asking you to make.
+    // Channelling means the boots stay where they are. The stick still reads
+    // -- it is what lapses the channel -- but it moves nothing.
+    //
+    // It used to test `rooted` as well, for Unyielding Mass. That ability is
+    // gone and nothing else ever set the flag, so the test could not fire:
+    // the whole of `rooted` was one producer and one consumer and both went
+    // together. Left in, it would read like a live rule to whoever came next.
+    //
     // Gathering a cleave halves the stride. Not a root -- you can still walk
     // out of a slam that lands while you are winding one -- but you are slow,
     // and that is what the blow is bought with: a second of being easy to
     // reach, spent up front, before you know whether it will land.
-    if (!(player.rooted > 0) && !player.channel) {
+    if (!player.channel) {
       const stride = (player.cleave || 0) > 0 ? CLEAVE_STRIDE : 1;
       moveEntity(player, mv.x * player.speed * stride * dt,
                          mv.y * player.speed * stride * dt);
@@ -5052,6 +5036,35 @@ const CONDUIT_EDGE   = 0.82;  // how far out "at the edge" is
 const COMBO_LEN      = 3;     // strikes to a chain
 const COMBO_WINDOW   = 1.6;   // ...as a multiple of the blade's own beat
 const COMBO_SWEEP    = 1.2;   // and what the last one is worth in width
+/* WHAT THE BLADE BUILDS, AND WHAT A GATHERED ONE BREAKS.
+ *
+ * The bar's two spenders used to be fed by the bar's own two strikes. Cutting
+ * those (see the note over ABILITIES) left the resource with no source, and
+ * the obvious fix is the better design anyway: the blade builds it. The attack
+ * you now have to ask for is what pays for the attack you choose the moment
+ * of, so the two halves of the fight are welded rather than parallel.
+ *
+ * ONCE PER SWING AND NOT PER CRESCENT. Twin Crescent and the Sundering brand
+ * put up to five arcs in the air off one press, and paying each of them would
+ * turn a boon that buys width into a boon that fills the bar instantly -- a
+ * level-40 Isaac would open every fight with a free Guillotine. So a swing
+ * carries a serial and pays out once, however many blades it threw.
+ *
+ * A landed one, too. Swinging at nothing builds nothing: the resource is for
+ * connecting, not for waving.
+ *
+ * THE GUARD-BREAK is a gathered blow at GUARD_BREAK or better. Anchoring
+ * Strike was the only answer to a braced body, and cutting it without moving
+ * this would have left bracing countered by patience alone -- which is the
+ * answer the player was already giving, and the one this whole arc is trying
+ * to stop being correct. Winding up and going through the shield costs a
+ * second of being easy to reach and the loudest noise on the meter, which is
+ * the trade the bar button never asked for.
+ */
+const BLADE_CHARGE   = 1;     // Sun-Gold, per landed swing -- three to a spender
+const BLADE_TENSION  = 14;    // Ley-Tension, per landed swing
+const GUARD_BREAK    = 0.55;  // the gather a shield gives way to
+
 const CLEAVE_MIN     = 0.25;  // a gather shorter than this is not a cleave
 const CLEAVE_BITE    = 3.4;   // what a full one is worth against a tap
 const CLEAVE_SWEEP   = 2.1;
@@ -5084,6 +5097,7 @@ function conduitRelease() {
     swingAt(player.conA, { bite: 1 + (CLEAVE_BITE - 1) * f,
                            sweep: 1 + (CLEAVE_SWEEP - 1) * f,
                            reach: 1 + (CLEAVE_REACH - 1) * f,
+                           breaks: f >= GUARD_BREAK,
                            heavy: true });
     // A gathered blow is the loudest thing a hero does, and pays for it.
     clamour(CLAMOUR_SWING + (CLAMOUR_HEAVY - CLAMOUR_SWING) * f);
@@ -5920,8 +5934,18 @@ function updateArcs(dt) {
         const e = _near[k];
         if (e.hp <= 0 || b.hit.indexOf(e) !== -1) continue;
         if (!inCrescent(b, e)) continue;
+        // The shield gives way BEFORE the blow is scored, so a gathered one
+        // lands whole rather than being eaten by the guard it just broke.
+        if (e.braced && b.breaks) {
+          e.braced = false;
+          toast('Guard broken', '#ffd870');
+          ring(e.x, e.y, '#ffe6a8', 5, 58, 0.3);
+          freeze(0.05);
+          shake(8);
+        }
         damageEnemy(e, b.dmg, b.x, b.y);
         b.hit.push(e);
+        bladeLanded(b);
       }
       // A totem is a thing standing on the floor and the blade cuts it like
       // anything else. Without this the only answer to one is to wait, which
@@ -8179,8 +8203,21 @@ function endRun(won) {
     stash.bounty = { day: run.bounty.day, done: true };
     stash.bountyArmed = false;
     const it = rollItem(0.9);
-    it.rarity = 'hallowed';                    // the promise is the tier
-    while (it.affixes.length < 4) {
+    /* THE PROMISE IS THE TIER, so the piece has to BE that tier -- and the
+     * count is read off the rarity rather than typed in here, so it cannot
+     * drift from the table.
+     *
+     * rollItem rolls a rarity of its own, and it can roll one ABOVE Hallowed:
+     * a Riven or a Mythic comes back with five affixes. Stamping the tier over
+     * the top and then only topping UP left those five in place, so about one
+     * bounty in three paid out a "Hallowed" piece carrying more affixes than
+     * Hallowed has -- an item every other part of the game reads as a
+     * four-affix epic. It has to be trimmed as well as filled.
+     */
+    const want = (RARITY.find(r => r.id === 'hallowed') || { affixes: 4 }).affixes;
+    it.rarity = 'hallowed';
+    if (it.affixes.length > want) it.affixes.length = want;
+    while (it.affixes.length < want) {
       const pool = SLOT_AFFIXES[it.slot].filter(
         id => !it.affixes.some(a => a.id === id));
       if (!pool.length) break;
