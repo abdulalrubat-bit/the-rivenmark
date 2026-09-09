@@ -850,6 +850,50 @@ from source — a green build is therefore evidence the APK matches its source,
 which a binary in git could never be. File for file, because checking only
 `index.html` would pass an APK with a stale bundle or no atlas in it at all.
 
+### The release bundle
+
+Play stores an **app bundle** and generates the APKs devices download, so an
+`.aab` is the only artefact the console takes for a release.
+`.github/workflows/android-release.yml` builds one — by hand from the Actions
+tab, or off a `v*` tag. Not on push: a bundle is uploaded once under a
+`versionCode` that can never be reused.
+
+    cd android && gradle :app:bundleRelease       -Privenmark.versionCode=1001       -Privenmark.keystore=/path/to/rivenmark.jks       -Privenmark.storePassword=… -Privenmark.keyAlias=… -Privenmark.keyPassword=…
+    # -> app/build/outputs/bundle/release/app-release.aab
+
+`versionCode` and `versionName` are properties with defaults in `build.gradle`,
+because Play accepts a `versionCode` exactly once and refuses a repeat *after*
+the upload — a number hard-coded in the file means a commit per release whose
+only purpose is incrementing an integer. CI defaults to `1000 + run_number`.
+
+**CI needs four secrets**, and the key never reaches the workspace — it is
+decoded to `$RUNNER_TEMP` and shredded in an `always()` step, so no glob and no
+artefact upload can carry it out:
+
+| secret | what |
+|---|---|
+| `RIVENMARK_KEYSTORE_BASE64` | `base64 -w0 rivenmark.jks` |
+| `RIVENMARK_STORE_PASSWORD` | the store password |
+| `RIVENMARK_KEY_ALIAS` | the key alias |
+| `RIVENMARK_KEY_PASSWORD` | the key password |
+
+> **The workflow checks the bundle is signed, and that check is not the obvious
+> one.** With no key, `build.gradle` leaves the bundle unsigned rather than
+> falling back to the debug key — and an unsigned bundle comes out under the
+> *same filename*, `app-release.aab`, so the name says nothing. Measured on
+> this repo's own output: `jarsigner -verify` **exits 0 for both**, printing
+> "jar verified." for one and "no manifest." for the other, so its exit status
+> is not a gate; and `-strict` exits 4 on a perfectly good self-signed release
+> key, so that is not a gate either. What separates them is the signature
+> block — two `META-INF/*.SF`/`*.RSA` entries when signed, none when not — so
+> that is what the workflow tests, together with jarsigner's actual verdict
+> text. A missing secret fails the build unless you tick `allow_unsigned`.
+
+The bundle's assets are verified the same way the APK's are, at `base/assets/`
+rather than `assets/`, and the `versionCode` that reached the merged manifest is
+read back and compared — a mistyped property would otherwise ship the default
+and Play would reject the upload for a reason pointing at the wrong thing.
+
 What the shell has to get right:
 
 - **Edge to edge.** The page is authored `viewport-fit=cover` and reads

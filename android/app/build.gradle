@@ -4,12 +4,33 @@ android {
     namespace 'com.rivenmark.game'
     compileSdk 34
 
+    /* THE VERSION, AND WHY IT CAN BE OVERRIDDEN FROM OUTSIDE.
+     *
+     * Play accepts a versionCode exactly once. Upload a bundle carrying one it
+     * has already seen and it is refused after the upload, not before -- so a
+     * number hard-coded here means every release needs a commit whose only
+     * purpose is to increment an integer, and means two builds off the same
+     * commit collide. The default stays in the file so a local build has a
+     * sane number; CI passes -Privenmark.versionCode with something that
+     * cannot repeat.
+     *
+     * versionName is the human half and is allowed to repeat, so it is only
+     * overridden when there is something to say.
+     */
+    /* Resolved above the block and ASSIGNED, not called. Written as
+     * `versionCode (expr) as Integer`, Groovy reads it as `versionCode(expr)`
+     * and casts the RETURN -- so the setter got a String, the cast got null,
+     * and the build died with "Value is null" pointing at the line rather than
+     * at the parse. */
+    def verCode = (project.findProperty('rivenmark.versionCode') ?: '2') as Integer
+    def verName = (project.findProperty('rivenmark.versionName') ?: '0.9.0') as String
+
     defaultConfig {
         applicationId "com.rivenmark.game"
         minSdk 24
         targetSdk 34
-        versionCode 2
-        versionName "0.9.0"
+        versionCode = verCode
+        versionName = verName
     }
 
     /* SIGNING, WITHOUT A KEY IN THE REPOSITORY.
