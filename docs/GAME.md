@@ -415,36 +415,65 @@ hotter. No new art, no new systems.
   the edge is the answer.
 - **The totem escort.** It calls shamans — up to three — who plant **on the
   ring**, inside the fire it is throwing, so the errand out to cut one goes
-  through the hazard. Each standing totem mends it **9.5% of its own life a
-  second**.
+  through the hazard. Each standing totem mends it a share of its own life a
+  second — **5.4% at the mouth, 16.7% at the deep end**, on a straight line in
+  depth.
 
-The mend rate is solved, not guessed. A Vanguard geared to a rung's own power,
-standing in reach and swinging with the bar on cooldown, does this much of the
-boss's pool per second:
+The mend is **solved, not guessed, and it has a slope**. A share of the boss's
+life looked like it was already depth-proof and it is not: the *hero's* damage
+as a share of that same life rises down the ladder, because the boss's life
+scales at `(1 + d × 1.6)` and the Vanguard's damage scales faster. One fixed
+share therefore meant two different fights. Measured at the old flat 9.5%, with
+a full escort of three:
 
-| rung 8 | rung 26 | rung 50 |
+| | typical hero | escort of three | |
+|---|---|---|---|
+| **rung 8** | 14.0%/s | 28.5%/s | **2.04×** |
+| **rung 50** | 26.8%/s | 28.5%/s | **1.06×** |
+
+At the rung that *teaches* the fight the escort was a **wall** — nothing you
+did to the boss mattered until the totems were down. At the rung that *ends*
+the ladder it was a **speed bump**, and against a lucky gear roll it mended
+half what the hero dealt, which is decoration.
+
+The old note here concluded that no value of `CRUCIBLE_MEND` fixes it, and
+that was right — no constant sits above a deep hero and below a shallow one
+when the two are 2× apart. It needed a **slope, not a better number**. The
+line is solved for one target: a full escort worth **1.5×** what a Vanguard
+geared for that rung deals, at both ends. That sets the whole encounter in one
+number.
+
+| three standing | two standing | one standing |
 |---|---|---|
-| 11.3%/s | 16.6%/s | 24.7%/s |
+| 1.5× your damage — the boss *gains* life | 1.0× — a dead heat | 0.5× — you win, slowly |
 
-So the window is above 24.7/3 = 8.2% and below 11.3%. At **9.5%** a single
-totem is never enough to save it at any rung, and three out-mend the Vanguard
-outright at the rung the fight is first met on. Cutting two of three is a win,
-which matters — cutting all three while the ring is turning is not always on
-offer.
+The same fight at every rung, and partial credit at every rung: cutting all
+three while the ring is turning is not always on offer, so cutting two has to
+be worth the walk.
 
-> **At the deep end the escort is a drag, not a wall.** Sampling seven gear
-> rolls rather than one, a rung-50 hero's damage against it runs **18–47%** of
-> its pool a second, with the full escort's 28.5% sitting inside that spread.
-> Whether three totems out-heal you at rung 50 depends on what your gear
-> rolled.
+> **On the instrument, which was the other half of the job.** This suite flaked
+> about one sweep in three, and every fix exposed the next one.
 >
-> This is §11's valley showing up inside a single encounter: the boss's life
-> scales at `(1 + d × 1.6)` and the hero's damage scales faster, so the escort
-> is worth less every rung exactly as the horde is. It is **recorded rather
-> than tuned away**, because no value of `CRUCIBLE_MEND` fixes it — lifting it
-> far enough to beat a lucky deep hero puts a *single* totem above a shallow
-> one, and the errand stops being finishable at the rung that teaches it.
-> `tools/suites/crucible.js` asserts what is true and prints the spread.
+> The check that went red asserted on the **minimum** of seven gear rolls. A
+> minimum does not settle — it gets *lower* the more you sample — so widening
+> the sample to make the check trustworthy made it stricter instead. Its
+> sibling asserted on the **maximum**, with the same flaw pointing the other
+> way: raising the sample from 7 to 19 to steady everything else made *that*
+> one start flaking. Improving an instrument must never fail a build. Both are
+> on the median now, with the tails printed.
+>
+> Seven rolls could not pin a median either. At rung 50 single rolls run from a
+> fifth of the boss's pool a second to well over the whole of it, and across
+> four runs of an unchanged build the median moved 29.2, 30.8, 31.6, 33.3 —
+> the instrument moving, not the encounter. **Nineteen** costs a minute and is
+> the difference between a number and a rumour; the first solve was fitted to
+> the seven-roll estimate and landed off-centre because of it.
+>
+> The band is sized from the observed wobble rather than chosen to look tight:
+> **1.15–1.90** around the 1.5 target, one sd clear either side. Narrow enough
+> to catch a design regression — the old flat mend reads 1.97× and 0.87× and
+> fails at both ends, naming the wall and the speed bump separately — and wide
+> enough not to police a rounding error. Seven consecutive clean runs.
 
 ### The uninvited
 

@@ -2155,26 +2155,61 @@ const FURNACE_HIT   = 1.15;   // what one costs, as a share of its own damage
  * flat number is a rounding error at the bottom of the ladder, and an
  * encounter built on one would simply stop existing there.
  *
- * The value is solved, not guessed. A Vanguard geared to a rung's own power,
- * standing in reach and swinging with the bar on cooldown, does this much of
- * the boss's health pool a second -- measured, three rungs across the ladder:
+ * AND SCALED WITH DEPTH, WHICH IT WAS NOT. Being a share of the boss's life
+ * looked like it was already depth-proof, and it is not, because the hero's
+ * damage as a share of that same life RISES down the ladder -- the boss's
+ * life scales at (1 + d*1.6) and the Vanguard's damage scales faster. So one
+ * fixed share meant one thing at the rung that teaches the fight and another
+ * thing entirely at the rung that ends it. Measured, seven gear rolls a rung,
+ * against a full escort of three at the old flat 0.095:
  *
- *     rung  8   165 dps against 1457 life   0.113 /s
- *     rung 26   351 dps against 2114 life   0.166 /s
- *     rung 50   738 dps against 2991 life   0.247 /s
+ *     rung  8   hero 14.0%/s (12.1-16.3)   escort 28.5%/s   2.04x
+ *     rung 50   hero 26.8%/s (19.5-57.3)   escort 28.5%/s   1.06x
  *
- * The design wants three totems to beat the best of those and one to lose to
- * the worst, which brackets it: above 0.247/3 = 0.082 and below 0.113. At
- * 0.095 all three standing out-mends every rung, two is a race the deep rungs
- * lose, and one is never enough to save it. So the errand is real and it is
- * also partial credit -- cutting two of three is a win, which matters,
- * because cutting all three while the ring is turning is not always on offer.
+ * Two point oh four is not a gate, it is a wall: nothing the Vanguard does to
+ * the boss matters at all until the totems are down. One point oh six is not
+ * a gate either, it is a speed bump you can ignore -- and against a lucky
+ * deep roll the escort mends half what the hero deals, so it is decoration.
+ * The encounter was two different fights wearing one name, and neither of
+ * them was the one it was designed to be.
  *
- * Those figures are a ceiling besides: they are a hero who never stops to
- * dodge. A real one is doing this between rotations, so the totems are worth
- * more in play than they are here.
+ * So the mend tracks the hero instead of standing still. The line below is
+ * SOLVED rather than fitted by eye: two rungs, two unknowns, and one target
+ * -- a full escort worth 1.5x what a Vanguard geared for that rung deals,
+ * at both ends. Against medians of 14.3%/s at d=0.157 and 33.0%/s at
+ * d=0.980 that is a mend of 0.0715 and 0.165, hence 0.054 and 0.167 at the
+ * ends of the line. One number then sets the whole encounter:
+ *
+ *     three standing   1.5x what the Vanguard deals   the boss gains life
+ *     two standing     1.0x                           a dead heat
+ *     one standing     0.5x                           you win, slowly
+ *
+ * That is the same fight at every rung, and it is partial credit at every
+ * rung, which is what matters: cutting all three while the ring is turning
+ * is not always on offer, and cutting two has to be worth the walk.
+ *
+ * A first pass fitted the line to the hero curve and halved it, which put
+ * the escort at 1.56x shallow and 1.31x deep -- better than 2.04 and 1.06,
+ * and still not the same fight. Solving for the target directly is what
+ * closed it.
+ *
+ * The medians above are themselves from NINETEEN gear rolls a rung and not
+ * seven. At seven they read 13.3 and 31.0 and moved by several points a run,
+ * and constants solved against a moving estimate land off-centre: that is
+ * what the first solve did. See the note on ROLLS in crucible.js.
+ *
+ * The old comment said "there is no value that works", and it was right --
+ * for a value. No constant can sit above a deep hero and below a shallow one
+ * when the two are 2x apart. It needed a slope, not a better number.
+ *
+ * These figures are a ceiling besides: a hero who never stops to dodge. A
+ * real one is doing this between rotations, so the totems are worth more in
+ * play than they are here.
  */
-const CRUCIBLE_MEND = 0.095;
+const CRUCIBLE_MEND_LO = 0.054;   // at the mouth
+const CRUCIBLE_MEND_HI = 0.167;   // ...and at the deep end
+const crucibleMend = () =>
+  CRUCIBLE_MEND_LO + (CRUCIBLE_MEND_HI - CRUCIBLE_MEND_LO) * (LEVEL ? LEVEL.depth : 0);
 const CRUCIBLE_CALL = 9.5;    // how often it calls another shaman
 const CRUCIBLE_KEEP = 3;      // and how many it will keep standing
 const CRUCIBLE_TEND = 340;    // a totem this close to it is one of its own
@@ -8010,7 +8045,7 @@ function updateCrucible(e, dt) {
   }
   e.tended = tending;
   if (tending > 0 && e.hp > 0 && e.hp < e.maxHp) {
-    e.hp = Math.min(e.maxHp, e.hp + e.maxHp * CRUCIBLE_MEND * tending * dt);
+    e.hp = Math.min(e.maxHp, e.hp + e.maxHp * crucibleMend() * tending * dt);
     if (!lowFx && Math.random() < 0.5 * tending)
       spark(e.x + rand(-50, 50), e.y + rand(-50, 50), e.x, e.y, '#9dbb5a');
   }
@@ -15813,7 +15848,7 @@ showScreen('splash');
 requestAnimationFrame(frame);
 </script>
 <script>
-/* generated from index.html 2209ad217a4d + overlay cc617bd09faa by tools/build-debug.js — do not edit */
+/* generated from index.html a39268e19e56 + overlay cc617bd09faa by tools/build-debug.js — do not edit */
 /* =============================================================================
    THE RIVENMARK — debug overlay
    Injected into debug.html by tools/build-debug.js. Never shipped in the
