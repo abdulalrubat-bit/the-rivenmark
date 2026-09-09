@@ -1,13 +1,28 @@
 name: Release AAB
 
-# The bundle Play takes. Deliberately NOT on push: an .aab is a thing you
-# upload once under a versionCode that can never be reused, so it is built when
+# The bundle Play takes. Deliberately NOT on every push: an .aab is uploaded
+# once under a versionCode that can never be reused, so it is built when
 # someone asks for it or when a version tag says a release is happening.
 #
 # WHY A BUNDLE AND NOT AN APK. Play stores an app bundle and generates the APKs
 # each device actually downloads, so this is the only artefact the console will
 # take for a new release. `android-debug.yml` still builds an APK, because an
 # APK is the thing you can sideload onto a phone and play.
+#
+# THIS REPLACED A GENERIC TEMPLATE, and the differences are all this repo's
+# shape rather than taste:
+#
+#   * There is no `gradlew` here. `chmod +x gradlew && ./gradlew` fails on the
+#     first line; the runner's own `gradle` is what the debug workflow uses.
+#   * The Gradle project root is `android/`, not the repo root, so every path
+#     is relative to that.
+#   * app/src/main/assets/ is GENERATED and gitignored. On a fresh checkout it
+#     does not exist, so a build that does not regenerate it ships a bundle
+#     with no game in it -- a WebView opening a page that is not there. That is
+#     what `syncGameAssets` is for, and it needs Node and phaser/node_modules
+#     to exist before Gradle runs.
+#   * Signing is done by Gradle from properties, not bolted on afterwards, so
+#     what the bundle is signed with is decided in one place.
 on:
   workflow_dispatch:
     inputs:
@@ -43,6 +58,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
 
       - uses: actions/setup-node@v4
         with:
@@ -52,7 +68,8 @@ jobs:
 
       # Gradle's syncGameAssets task runs android/sync-assets.js, which runs the
       # Phaser deploy -- esbuild and pngjs, neither of which exists in a fresh
-      # checkout. This has to come before Gradle, not after.
+      # checkout. This has to come before Gradle, not after: without it the
+      # build dies with ERR_MODULE_NOT_FOUND before it reaches a single task.
       - name: Install the Phaser build's tools
         working-directory: phaser
         run: npm ci --no-audit --no-fund
@@ -60,16 +77,16 @@ jobs:
       # NOTE: there is deliberately no `node android/sync-assets.js` step. The
       # app's preBuild depends on syncGameAssets, which does it -- so this
       # workflow also proves that wiring rather than working around it. A
-      # release built from a stale assets/ is the exact failure that made the
-      # task exist.
+      # release built from a stale or absent assets/ is the exact failure that
+      # made the task exist.
 
       # The version, resolved in one place so every later step and the artefact
       # name agree with what actually went into the manifest.
       #
       # ON THE DEFAULT. Play accepts a versionCode exactly once and refuses a
       # repeat AFTER the upload. `run_number` only ever increases, and the
-      # 1000 offset puts it clear of the 2 hard-coded in build.gradle. It is a
-      # default and not a rule: renaming or recreating this workflow file
+      # 1000 offset puts it clear of the 2 that is build.gradle's default. It
+      # is a default and not a rule: renaming or recreating this workflow file
       # resets run_number, which is precisely why the input exists.
       - name: Work out the version
         id: ver
@@ -96,19 +113,19 @@ jobs:
       - name: Unpack the signing key
         id: key
         env:
-          KS: ${{ secrets.RIVENMARK_KEYSTORE_BASE64 }}
+          KS: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
           if [ -z "$KS" ]; then
             echo "have=no" >> "$GITHUB_OUTPUT"
-            echo "::warning::No RIVENMARK_KEYSTORE_BASE64 secret — this bundle will be UNSIGNED."
+            echo "::warning::No KEYSTORE_BASE64 secret — this bundle will be UNSIGNED."
             exit 0
           fi
           printf '%s' "$KS" | base64 -d > "$RUNNER_TEMP/rivenmark.jks"
           # Prove it decoded to a keystore before Gradle fails with something
           # less obvious. The alias is not printed: it is a secret's value.
           keytool -list -keystore "$RUNNER_TEMP/rivenmark.jks" \
-                  -storepass '${{ secrets.RIVENMARK_STORE_PASSWORD }}' >/dev/null \
-            || { echo "::error::The keystore secret did not decode, or the store password is wrong."; exit 1; }
+                  -storepass '${{ secrets.KEYSTORE_PASSWORD }}' >/dev/null \
+            || { echo "::error::The keystore secret did not decode, or KEYSTORE_PASSWORD is wrong."; exit 1; }
           echo "have=yes" >> "$GITHUB_OUTPUT"
 
       - name: Bundle
@@ -119,9 +136,9 @@ jobs:
             args="$args -Privenmark.versionName=${{ steps.ver.outputs.name }}"
           if [ "${{ steps.key.outputs.have }}" = yes ]; then
             args="$args -Privenmark.keystore=$RUNNER_TEMP/rivenmark.jks"
-            args="$args -Privenmark.storePassword=${{ secrets.RIVENMARK_STORE_PASSWORD }}"
-            args="$args -Privenmark.keyAlias=${{ secrets.RIVENMARK_KEY_ALIAS }}"
-            args="$args -Privenmark.keyPassword=${{ secrets.RIVENMARK_KEY_PASSWORD }}"
+            args="$args -Privenmark.storePassword=${{ secrets.KEYSTORE_PASSWORD }}"
+            args="$args -Privenmark.keyAlias=${{ secrets.KEY_ALIAS }}"
+            args="$args -Privenmark.keyPassword=${{ secrets.KEY_PASSWORD }}"
           fi
           # Unquoted on purpose: these are flags, and none of the values that
           # reach here contain spaces. Gradle would take a single quoted blob
@@ -153,7 +170,7 @@ jobs:
             echo "::warning::UNSIGNED bundle, allowed by the allow_unsigned input. Play will not take it."
             echo "UNSIGNED — cannot be uploaded to Play" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "::error::The bundle is not signed. Set the four RIVENMARK_* secrets, or re-run with allow_unsigned to get an unsigned build on purpose."
+            echo "::error::The bundle is not signed. Set KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS and KEY_PASSWORD, or re-run with allow_unsigned to get an unsigned build on purpose."
             exit 1
           fi
 
@@ -161,10 +178,16 @@ jobs:
       # from source, file for file. The paths differ -- a bundle keeps the base
       # module's assets under base/assets/, not assets/ -- and checking only
       # index.html would pass a bundle with a stale core or no atlas at all.
+      #
+      # This is also what catches the worst failure available here: assets/ is
+      # generated and gitignored, so a build that did not regenerate it would
+      # produce a perfectly valid, perfectly signed bundle containing no game.
       - name: Check the bundle carries the game, every file of it
         run: |
           aab=android/app/build/outputs/bundle/release/app-release.aab
           src=android/app/src/main/assets
+          [ -d "$src" ] \
+            || { echo "::error::$src does not exist — nothing regenerated the game"; exit 1; }
           n=0
           for f in "$src"/*; do
             b=$(basename "$f")
@@ -176,6 +199,7 @@ jobs:
             n=$((n+1))
           done
           echo "$n asset(s) verified against source"
+          [ "$n" -gt 0 ] || { echo "::error::no assets at all — the bundle has no game in it"; exit 1; }
           # The three that would ship a black screen if they went missing.
           for must in index.html bundle.js atlas.png; do
             unzip -l "$aab" | grep -q "base/assets/$must" \

@@ -867,15 +867,16 @@ the upload — a number hard-coded in the file means a commit per release whose
 only purpose is incrementing an integer. CI defaults to `1000 + run_number`.
 
 **CI needs four secrets**, and the key never reaches the workspace — it is
-decoded to `$RUNNER_TEMP` and shredded in an `always()` step, so no glob and no
-artefact upload can carry it out:
+decoded to `$RUNNER_TEMP`, checked with `keytool` before Gradle sees it, and
+shredded in an `always()` step, so no glob and no artefact upload can carry it
+out and a failed build does not leave it behind:
 
 | secret | what |
 |---|---|
-| `RIVENMARK_KEYSTORE_BASE64` | `base64 -w0 rivenmark.jks` |
-| `RIVENMARK_STORE_PASSWORD` | the store password |
-| `RIVENMARK_KEY_ALIAS` | the key alias |
-| `RIVENMARK_KEY_PASSWORD` | the key password |
+| `KEYSTORE_BASE64` | `base64 -w0 rivenmark.jks` |
+| `KEYSTORE_PASSWORD` | the store password |
+| `KEY_ALIAS` | the key alias |
+| `KEY_PASSWORD` | the key password |
 
 > **The workflow checks the bundle is signed, and that check is not the obvious
 > one.** With no key, `build.gradle` leaves the bundle unsigned rather than
