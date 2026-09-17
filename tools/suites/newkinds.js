@@ -14,7 +14,10 @@ const {chromium}=require('playwright');
 const PAGE = f => process.env.RIVENMARK_PAGE ||
   ('file://' + require('path').join(__dirname, '..', '..', f));
 let pass=0,fail=0;
-const ok=(c,m)=>{ if(c){pass++;} else {fail++;console.log('  FAIL',m);} };
+/* 'x ' on a failure, and not 'FAIL': run-suites.js surfaces exactly that
+ * prefix when it summarises a sweep, so this suite reported its count and
+ * none of its reasons — which means re-running it alone to find out why. */
+const ok=(c,m)=>{ if(c){pass++;} else {fail++;console.log('  x',m);} };
 (async()=>{
 const b=await chromium.launch();
 const p=await(await b.newContext({viewport:{width:390,height:844}})).newPage();

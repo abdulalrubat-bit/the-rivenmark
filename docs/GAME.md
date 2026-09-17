@@ -121,7 +121,8 @@ them faster. Two attack systems at once, one of which nobody chose.
 It was measured twice, and the second measurement is why it went. First, when
 the swing was written down to 0.62 of a real blow to stop it winning fights on
 its own: **seven tenths** of every point of damage came off it and a sixth off
-the six buttons, with the bar's share *falling* with depth. That helped, and
+the buttons — six of them at the time; see §4 for why there are three now —
+with the bar's share *falling* with depth. That helped, and
 it did not fix anything — the second measurement, over ninety-six delves
 across six rungs, found the crescent still carrying **39% to 60%** of all
 damage dealt by a reference player *who never once touched the control*.
@@ -137,30 +138,87 @@ you cannot do any more is decline to fight.
 
 ## 4. The kit
 
-Six buttons, bottom-right, on a shared beat. `GCD_TIME` is **1.2s** and each
-ability multiplies it — the **primary is on 0.8**, everything else on 1.0, so
-pressing it is a rhythm rather than a decision you fit between other decisions.
-The beat locks the ability bar and *nothing else*: moving, swinging and
-drinking are never taken away.
+**Three buttons a hero, and it was five and four.** The width was the problem
+— not because nine abilities is hard to balance, but because nine abilities
+answered the wrong question. Every one of them was a way to deal damage or
+refuse it, so all of the depth sat in *which button*, and the delve around you
+was scenery you fought in front of.
+
+Each cut was a **second copy of a decision the player was already making**:
+
+- **Anchoring Strike** and **Piercing Truth** were the blade with extra steps.
+  When the automatic blade went, the Conduit became the attack, and a bar
+  button that also means "hit the thing in front of you" is the same decision
+  asked twice.
+- **Unyielding Mass** rooted you and halved harm for four seconds. It is the
+  stand-still button, and this game has spent the whole Silence arc saying
+  standing still is not a move — the Clamour decays on a clock so waiting buys
+  nothing, and since §6 made a long fight a loud one, standing in one actively
+  costs. An ability whose whole text is *"wait, safely"* was arguing with the
+  rest of the design and losing.
+
+**What replaced the width is the Clamour.** Every press of this bar is
+`CLAMOUR_CAST` — the loudest single thing a hero does, louder than a swing and
+louder than a gathered one. At five buttons that was a tax you paid without
+noticing. At three it is the question: the bar is not what you *do*, it is what
+you spend the room's attention on.
+
+### The blade pays for the bar
+
+Those two cuts took away the only source of Charge and Tension, and the
+replacement is the better design anyway: **a swing that lands builds it** — 1
+Charge for Isaac, 14 Tension for Zayd. Once per press, however many crescents
+that press threw (Twin Crescent and the Sundering brand put up to five arcs in
+the air, and paying each would turn a boon that buys *width* into one that
+opens every fight with a free Guillotine). A swing at empty floor builds
+nothing.
+
+So the attack you have to ask for pays for the attack you choose the moment of,
+and the two halves of a fight are welded rather than parallel.
+
+**The guard-break moved with it.** Anchoring Strike was the only answer to a
+braced body, so cutting it would have left bracing countered by patience —
+which is the answer the player was already giving. A blow **gathered to 55% or
+better** goes through a raised guard now. It costs a second of being easy to
+reach and makes the loudest noise on the meter: the price of walking *into*
+something rather than round it.
+
+`GCD_TIME` is **1.2s** and each ability multiplies it. The blade is the
+primary and beats faster than anything on the bar (0.62s against the bar's
+quickest 1.0), so pressing it is a rhythm rather than a decision you fit
+between other decisions. The beat locks the ability bar and *nothing else*:
+moving, swinging and drinking are never taken away.
 
 ### Isaac — Sun-Gold, and Charges (max 3)
 
 | | | |
 |---|---|---|
-| ✦ | **Anchoring Strike** | 3.4× the ward at reach 96. **Breaks a braced guard**, and throws what it hits. Builds a Charge. |
 | ◉ | **Aegis of Tor-Varden** | Spends three. 3.2× in a 150 ring, and a moment at half harm behind the guard. |
-| ▣ | **Unyielding Mass** | 12s. Rooted, unmovable, half harm, for four seconds. |
-| ✚ | **Grounding Purge** | 14s. Channelled three seconds for 15% of your life. Breaks the moment you are struck or move. |
 | ⚔ | **Star-Forged Guillotine** | Spends three. 7× on one body — and **×5 again** on the Metaphysically Vulnerable. |
+| ✚ | **Grounding Purge** | 14s. Channelled three seconds for 15% of your life. Breaks the moment you are struck or move. |
 
 ### Zayd — Azure, and Ley-Tension (max 100)
 
 | | | |
 |---|---|---|
-| ↠ | **Piercing Truth** | 2.2× in a **line** 340 long, through everything standing in it. Builds 14 Tension per body. |
 | ◍ | **Null-Zone Eruption** | Spends two fifths. A pool that slows what stands in it and **eats what it is casting**. |
 | ⌁ | **Focal Decryption** | 8s, **off the beat**. Snaps a cast at 300, silences for three, and gives the Tension back. |
 | ⚱ | **Crimson-Infused Jars** | Three to a delve. Instant, 45% of your life. |
+
+> **What it cost, measured.** The reference player's extraction rate fell from
+> **33/96 to 25/96**, and the fall is concentrated at the shallow end: rung 0
+> went 9/16 → **3/16**, rung 3 went 1/16 → 2/16, while rung 30 *rose* 5/16 →
+> 9/16 and rung 44 fell 14/16 → 9/16. Isaac lost a free strike on a 0.8s beat
+> and a survival cooldown, and the bot feels that hardest where it has no gear
+> to make up the difference.
+>
+> That is reported, not hidden, and it is not tuned away here. The bot is a
+> pessimistic yardstick — it does not kite and does not use the terrain — and
+> at 16 tries a rung the spread on an unchanged build is ±7, so rung 0 at 3/16
+> is a real signal but not a precise one. **Retuning against it is §11's job,
+> at `WINNABLE_TRIES=64`.** The mechanic is what landed here; the numbers are
+> the next question, and the bar being worth pressing survived the cut intact
+> (29% of all damage against the swing's 56%).
 
 ---
 
@@ -228,11 +286,14 @@ test a body already ran. Nothing else changes — no senses model, no cones.
 
 | | |
 |---|---|
-| `CLAMOUR_DECAY` **0.085**/s | a swing paid off in ~2.5s, a full meter in ~12 |
+| `CLAMOUR_DECAY` **0.085**/s | a swing paid off in ~1s, a gathered one in ~2.6, a full meter in ~12 |
 | `CLAMOUR_REACH` **0.85** | at full, `AGGRO_NEAR` 250 reaches **463** |
 | `CLAMOUR_SWING` **0.085** | a crescent, asked for |
 | `CLAMOUR_HEAVY` **0.22** | a gathered one, which is a real noise |
 | `CLAMOUR_CAST` **0.13** | anything off the bar |
+| `CLAMOUR_CRY` **0.085**/s | a fight at full cry — exactly one decay's worth |
+| `CLAMOUR_VOICES` **4** | bodies near you that add up to full cry |
+| `CLAMOUR_NEAR` **420** | ...and how near "near you" is |
 
 **What is loud is a short list, and short on purpose: things you chose.**
 Swinging, and spending. Being hit is not — you did not pick it. **Moving is
@@ -240,6 +301,41 @@ not loud at any speed**, and the meter **decays on a clock rather than on
 standing still**. Those two lines are the whole anti-stealth guarantee: a
 meter that only falls while you stand still *is* a stealth game, because it
 makes waiting the optimal move and turns every room into a pause.
+
+**And the fight makes its own noise, every second it lasts.** That list of
+chosen things left one exploit standing, and it is the obvious one: stop
+swinging, circle, let the meter drain, come back in. Under a meter that hears
+only your own blade, the quietest way through a room is to fight it as slowly
+as possible — creeping, arrived at from the opposite direction.
+
+So bodies up and around you feed the meter on a clock of their own. Not per
+blow landed, not per blow taken — being hit is still not loud, for the reason
+it never was — so the total noise of a fight is its **duration**, which is the
+one thing about a fight the player fully controls. Kill four things in five
+seconds and you pay five seconds of it; take twenty and you pay twenty. That
+is what makes the quiet play and the aggressive play the *same* play, which is
+the entire point of the meter. Before it, they were opposites.
+
+The rate is set against the decay rather than chosen for feel: at full cry it
+is exactly `CLAMOUR_DECAY`, so a fight you are only surviving **holds** the
+meter where it is and a fight you are winning climbs it. Measured, over five
+seconds from a meter at 0.6: an empty room loses **0.425**, one body up loses
+**0.319**, and four or more move it **0.001**. You cannot wait out a fight you
+are standing in the middle of. You can still walk away from one — that door is
+deliberately left open, because closing it makes the terrain an off switch,
+and because walking away already costs the thing that costs: the slag you did
+not collect while you were doing it.
+
+**It saturates, and that matters more than the rate.** A brawl is a brawl at
+four bodies or forty — noise that scaled with the crowd would make the deep
+rungs deafening through nothing the player did, and would hand the horde a
+meter that is supposed to be the hero's own. Forty measured **0.001**, the
+same as four.
+
+The guarantee is re-checked *under* the new term rather than assumed to
+survive it, because a per-second noise is exactly the kind of change that
+quietly makes stillness a move: the same fight, once stood through and once
+run through, moves the meter to **0.4986** either way.
 
 That is not asserted, it is measured. `dawdle.js` plays the same delves twice
 — once normally, once standing still whenever the meter is up — with a hero
@@ -361,7 +457,7 @@ the breaker's bracing, the gorger's slam, the shaman's totems — and drawn as a
 gorger at 45 units instead of 26, which is three times the footprint, tinted
 hotter. No new art, no new systems.
 
-- **The Anchor.** It never moves. The Anchoring Strike breaks its guard and
+- **The Anchor.** It never moves. A gathered blow breaks its guard and
   lands its damage but cannot relocate it, and this is stated in `knock()`
   rather than left to fall out of a large mass — "it cannot be moved" is a
   rule of the encounter, not a consequence of a number someone may retune.
@@ -377,36 +473,65 @@ hotter. No new art, no new systems.
   the edge is the answer.
 - **The totem escort.** It calls shamans — up to three — who plant **on the
   ring**, inside the fire it is throwing, so the errand out to cut one goes
-  through the hazard. Each standing totem mends it **9.5% of its own life a
-  second**.
+  through the hazard. Each standing totem mends it a share of its own life a
+  second — **5.4% at the mouth, 16.7% at the deep end**, on a straight line in
+  depth.
 
-The mend rate is solved, not guessed. A Vanguard geared to a rung's own power,
-standing in reach and swinging with the bar on cooldown, does this much of the
-boss's pool per second:
+The mend is **solved, not guessed, and it has a slope**. A share of the boss's
+life looked like it was already depth-proof and it is not: the *hero's* damage
+as a share of that same life rises down the ladder, because the boss's life
+scales at `(1 + d × 1.6)` and the Vanguard's damage scales faster. One fixed
+share therefore meant two different fights. Measured at the old flat 9.5%, with
+a full escort of three:
 
-| rung 8 | rung 26 | rung 50 |
+| | typical hero | escort of three | |
+|---|---|---|---|
+| **rung 8** | 14.0%/s | 28.5%/s | **2.04×** |
+| **rung 50** | 26.8%/s | 28.5%/s | **1.06×** |
+
+At the rung that *teaches* the fight the escort was a **wall** — nothing you
+did to the boss mattered until the totems were down. At the rung that *ends*
+the ladder it was a **speed bump**, and against a lucky gear roll it mended
+half what the hero dealt, which is decoration.
+
+The old note here concluded that no value of `CRUCIBLE_MEND` fixes it, and
+that was right — no constant sits above a deep hero and below a shallow one
+when the two are 2× apart. It needed a **slope, not a better number**. The
+line is solved for one target: a full escort worth **1.5×** what a Vanguard
+geared for that rung deals, at both ends. That sets the whole encounter in one
+number.
+
+| three standing | two standing | one standing |
 |---|---|---|
-| 11.3%/s | 16.6%/s | 24.7%/s |
+| 1.5× your damage — the boss *gains* life | 1.0× — a dead heat | 0.5× — you win, slowly |
 
-So the window is above 24.7/3 = 8.2% and below 11.3%. At **9.5%** a single
-totem is never enough to save it at any rung, and three out-mend the Vanguard
-outright at the rung the fight is first met on. Cutting two of three is a win,
-which matters — cutting all three while the ring is turning is not always on
-offer.
+The same fight at every rung, and partial credit at every rung: cutting all
+three while the ring is turning is not always on offer, so cutting two has to
+be worth the walk.
 
-> **At the deep end the escort is a drag, not a wall.** Sampling seven gear
-> rolls rather than one, a rung-50 hero's damage against it runs **18–47%** of
-> its pool a second, with the full escort's 28.5% sitting inside that spread.
-> Whether three totems out-heal you at rung 50 depends on what your gear
-> rolled.
+> **On the instrument, which was the other half of the job.** This suite flaked
+> about one sweep in three, and every fix exposed the next one.
 >
-> This is §11's valley showing up inside a single encounter: the boss's life
-> scales at `(1 + d × 1.6)` and the hero's damage scales faster, so the escort
-> is worth less every rung exactly as the horde is. It is **recorded rather
-> than tuned away**, because no value of `CRUCIBLE_MEND` fixes it — lifting it
-> far enough to beat a lucky deep hero puts a *single* totem above a shallow
-> one, and the errand stops being finishable at the rung that teaches it.
-> `tools/suites/crucible.js` asserts what is true and prints the spread.
+> The check that went red asserted on the **minimum** of seven gear rolls. A
+> minimum does not settle — it gets *lower* the more you sample — so widening
+> the sample to make the check trustworthy made it stricter instead. Its
+> sibling asserted on the **maximum**, with the same flaw pointing the other
+> way: raising the sample from 7 to 19 to steady everything else made *that*
+> one start flaking. Improving an instrument must never fail a build. Both are
+> on the median now, with the tails printed.
+>
+> Seven rolls could not pin a median either. At rung 50 single rolls run from a
+> fifth of the boss's pool a second to well over the whole of it, and across
+> four runs of an unchanged build the median moved 29.2, 30.8, 31.6, 33.3 —
+> the instrument moving, not the encounter. **Nineteen** costs a minute and is
+> the difference between a number and a rumour; the first solve was fitted to
+> the seven-roll estimate and landed off-centre because of it.
+>
+> The band is sized from the observed wobble rather than chosen to look tight:
+> **1.15–1.90** around the 1.5 target, one sd clear either side. Narrow enough
+> to catch a design regression — the old flat mend reads 1.97× and 0.87× and
+> fails at both ends, naming the wall and the speed bump separately — and wide
+> enough not to police a rounding error. Seven consecutive clean runs.
 
 ### The uninvited
 
@@ -466,8 +591,8 @@ Three things the floor may **not** touch, each for its own reason:
 - **The avatar and his escort.** His fight has one rule — break the Lieutenants
   to reach him — and a trap under them breaks it for you.
 
-> **On "forcing them in".** Measured: a plate is a 40-unit cell, and the
-> Anchoring Strike moves a thrall **15 units**, a guard-break 21, an ordinary
+> **On "forcing them in".** Measured: a plate is a 40-unit cell, and a
+> gathered blow moves a thrall **15 units**, a guard-break 21, an ordinary
 > crescent 9, a breaker 5. So the play is not *shoving*, it is **leading** —
 > you choose where to stand, the horde comes to you, and the floor is what it
 > crosses to get there. That is positioning, which is the one tactical input
@@ -618,7 +743,7 @@ than conjuring back a piece that was sold, tempered away or left in a delve.
 
 | | |
 |---|---|
-| Expected power | `4 + 116 × d^0.6` |
+| Expected power | `1 + 119 × d^0.6` |
 | Slag quota | `125 + d × 145` |
 | Regions in the pool | `1 + floor(d × 5)` |
 | Enemy **health** | `× (1 + d × 1.6)` |
@@ -699,8 +824,46 @@ delve throws did not scale with the ladder while the hero did.
    | 44 | 87 | 87–110 | ~1.1× |
 
    The game was sending people into delves it had told them they were ready
-   for. `d^0.6` fits every measured point and still starts at 4, so a Vanguard
-   who has never descended still qualifies for the proving ground.
+   for. `d^0.6` fits every measured point.
+
+   **And the floor of that curve was in the wrong units.** It read 4, written
+   down as "where a Vanguard who has never descended stands" — which is the
+   right intent and the wrong number, because `powerLevel()` starts a fresh
+   hero at **1**: no gear, level 1, `(1 × 2.1 + 0) / 2`. The gate-house and
+   the ladder each had a quantity called *power* and they were never the same
+   quantity.
+
+   `delveStanding` then compared the two by **subtraction** — fourteen points
+   clear is trivial, twelve points short is deadly — on a scale that runs 1 to
+   120 and is measured in ratios at every other point in the file. Twelve
+   points at the mouth is the first ten rungs; twelve points at the deep end is
+   one rung. The same word meant two different things depending where you read
+   it, and at the shallow end it meant the harshest of them.
+
+   Measured on a fresh stash, the front door showed **one rung "above your
+   weight" and fifty-one "far beyond you"** — not one delve in the game a new
+   player was told they could take, *including the one the gate-house was
+   recommending to them in the same breath*.
+
+   The floor is 1, and the bands are ratios: **1.35×** well within you, **0.90×**
+   an even match, **0.65×** above your weight. The thresholds come off the
+   retune rather than from feel — that curve was fitted so carrying about the
+   card's own number is what it takes to walk out, so a ratio near 1 *is* an
+   even match, by construction, at every depth. A fresh hero now reads the
+   proving ground as an even match and everything below it as beyond them,
+   which is both true and the only thing the screen needs to say.
+
+   `recommendedLevel()` lives in the core beside `delveStanding` for the same
+   reason: there are two gate-houses and they had already drifted. The canvas
+   build picked a rung with `pw >= L.power`, which is not the test its own
+   cards print; the Phaser build did not pick one at all and opened on rung 0
+   for everybody, so a hero geared for rung 47 was shown the first eight.
+
+   What this does *not* answer is **pacing** — how many delves it takes to
+   qualify for rung N. A bare hero reaches rung 20 at level 60; gear is what
+   carries you deeper (a full Regalia set at level 60 reads 103 and opens rung
+   47). Whether that climb is the right length is a question for the reference
+   player, not for the label on the card.
 
 > **On `ward`.** Scaling incoming damage was avoided for a long time on the
 > belief that it would make ward worth less every rung. It does not: ward is

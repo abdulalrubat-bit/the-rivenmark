@@ -293,8 +293,13 @@ const cardState = () => {
                disabled: bt.disabled, opacity: +getComputedStyle(bt).opacity };
     }));
   const tight = kit.filter(k => k.ink > k.chord);
+  /* The floor is a fixture control, not a claim about the bar: it says the
+   * query found buttons at all, so "none of them are tight" cannot pass on an
+   * empty list. It read >= 4 for a five-ability bar; the bar is three now (see
+   * the note over ABILITIES) and the floor moved with it rather than the
+   * check being loosened. */
   ck('every ability’s name fits inside the disc it is written on',
-     kit.length >= 4 && tight.length === 0,
+     kit.length >= 3 && tight.length === 0,
      kit.length + ' buttons, widest ' +
      kit.reduce((a, k) => k.ink / k.chord > a.ink / a.chord ? k : a, kit[0] || { ink: 0, chord: 1 }).tag +
      ' at ' + (kit[0] ? Math.max(...kit.map(k => k.ink)) : 0) + 'px in a ' +

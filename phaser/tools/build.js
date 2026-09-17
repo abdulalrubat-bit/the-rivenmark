@@ -4,6 +4,7 @@
    desktop and under Termux on the phone. `--watch` rebuilds on save.
 */
 import esbuild from 'esbuild';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -46,6 +47,33 @@ for (const f of ['hud.js']) {
       '  Prose in these comments must not quote identifiers with backticks.\n');
     process.exit(1);
   }
+}
+
+/* AND THE EXTRACTION ITSELF, WHICH NOTHING RAN.
+ *
+ * The block above fixed the second link of a two-link chain and left the
+ * first one open, which is the more interesting half of the same bug.
+ * index.html is the source of truth; extract-core.js lifts it into
+ * src/core/core.js; this file copies that into public/. Only the copy was
+ * automatic. So `npm run core` was a step a person had to remember, and the
+ * whole point of the note above is that a step a person has to remember is a
+ * step that is one day forgotten -- and when it is forgotten here the web
+ * build, the APK and every one of the sixteen smoke suites go on running the
+ * PREVIOUS rules while reporting green against the new ones. Auto-fire lived
+ * on for exactly this reason: deleted from index.html, still in the core an
+ * APK had been built from.
+ *
+ * Half a second, on every build. Quiet, because 108 lines of inventory in
+ * front of every suite is 108 lines nobody reads; never quiet about failing,
+ * because the extractor exits 1 with its whole explanation when the core has
+ * a hole in it, and that has to stop the build rather than scroll past.
+ */
+try {
+  execFileSync(process.execPath, [path.join(here, 'extract-core.js'), '--quiet'],
+               { stdio: 'inherit' });
+} catch {
+  console.error('\nextract-core.js failed — refusing to build a stale core.\n');
+  process.exit(1);
 }
 
 const core = path.join(here, '..', 'src', 'core', 'core.js');

@@ -37,14 +37,33 @@ const SHIP = [
   'icon-192.png', 'icon-512.png', 'icon-mask-512.png'
 ];
 
+/* THE ATLAS, PACKED HERE RATHER THAN ASKED FOR.
+ *
+ * This used to check the atlas was present and, if it was not, tell whoever
+ * ran the deploy to go and run `npm run atlas` themselves. That is the wrong
+ * shape twice over. It cannot catch the case that matters -- an atlas that
+ * exists and is OLDER than ../art, which passes the check and ships last
+ * week's sprites -- and android/sync-assets.js had already worked this out
+ * and packed one itself before calling in here, which is the same fix made
+ * in one of the two places that needed it.
+ *
+ * A second and a half, and now every route to a device packs from ../art:
+ * the web deploy, the APK, and anyone running this by hand.
+ */
+console.log('packing the atlas…');
+execFileSync(process.execPath, [path.join(here, 'pack-atlas.js')], { stdio: 'inherit' });
+
 console.log('building…');
 execFileSync(process.execPath, [path.join(here, 'build.js')], { stdio: 'inherit' });
 
+/* Still checked afterwards, as a post-condition rather than a prompt: the two
+ * commands above write everything in SHIP that is generated, so anything
+ * absent now is a tool that failed quietly, not a step somebody skipped.
+ */
 const missing = SHIP.filter(f => !fs.existsSync(path.join(PUB, f)));
 if (missing.length) {
-  // Usually the atlas, which is generated from ../art and is gitignored.
-  console.error('missing from public/: ' + missing.join(', ') +
-                '\nrun `npm run atlas` (and `npm run core`) first.');
+  console.error('missing from public/ after packing and building: ' + missing.join(', ') +
+                '\nthat is a tool that failed without saying so — do not ship this.');
   process.exit(1);
 }
 

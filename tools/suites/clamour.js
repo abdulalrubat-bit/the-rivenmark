@@ -189,6 +189,118 @@ const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''
     stick.active = false;
     o.decayRunning = +(1 - run.clamour).toFixed(4);
 
+    /* --- 7. A LONG FIGHT IS A LOUD FIGHT --------------------------------
+     *
+     * The half of the guarantee that section 3 leaves open. Everything there
+     * is a noise the player MADE, and a meter that only hears the hero's own
+     * blade has an obvious exploit: stop swinging, circle, let it drain, come
+     * back. That is creeping, arrived at from the other direction, and it
+     * would make the slowest fight the quietest one.
+     *
+     * So the fight makes noise on its own clock, and the readings below are
+     * about that clock rather than about any blow. The hero is unhurtable and
+     * the bodies unkillable throughout: this measures the meter, not who wins.
+     *
+     * THE BODIES STAND STILL (speed 0) everywhere except the last pair. A
+     * body that chases changes the very distance the tally is reading, so a
+     * fixture that let them run would be measuring the chase and reporting it
+     * as the rule. Where the check is about the hero moving, they keep their
+     * real speed instead, because there the chase is the point.
+     */
+    o.CLAMOUR_CRY = CLAMOUR_CRY;
+    o.CLAMOUR_VOICES = CLAMOUR_VOICES;
+    o.CLAMOUR_NEAR = CLAMOUR_NEAR;
+
+    const brawl = (n, at, still) => {
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 * 1.618;   // spread, not a neat ring
+        const r = at + (i % 5) * 26;               // ...and not all at one radius
+        const e = newBody('thrall', player.x + Math.cos(a) * r,
+                                    player.y + Math.sin(a) * r, 0);
+        e.awake = true; e.alert = 0; e.hp = e.maxHp = 1e6;
+        e.home = { x: e.x, y: e.y };
+        if (still !== false) e.speed = 0;
+        enemies.push(e);
+      }
+      enemyGrid.clear();
+      for (const e of enemies) enemyGrid.insert(e, e.x, e.y);
+    };
+    /* Hold for `secs` doing nothing but exist, in the engine's own order --
+     * updatePlayer reads the tally updateEnemies wrote on the frame before,
+     * exactly as update() does. Stepping the two by hand rather than calling
+     * update() keeps the horde's drip out of the room: one body arriving
+     * unasked would change the very count being measured.
+     *
+     * Returns the smallest cry seen, so a check that quietly lost its crowd
+     * says so instead of reporting a clean number about nothing.
+     */
+    const hold = (secs, moving) => {
+      let least = 1e9;
+      for (let i = 0; i < 60 * secs; i++) {
+        if (moving) { stick.active = true; stick.dx = 1; stick.dy = 0; stick.mag = 1; }
+        updatePlayer(1/60); updateEnemies(1/60);
+        least = Math.min(least, run.inCry || 0);
+      }
+      stick.active = false;
+      return least;
+    };
+
+    // The control first: an empty room, so every number below has something
+    // to be different from.
+    room(); run.clamour = 0.6; hold(5);
+    o.emptyRoom = +(0.6 - run.clamour).toFixed(4);
+
+    // A full cry. At CLAMOUR_VOICES bodies the rise is one decay's worth, so
+    // the meter should sit where it was put: you cannot wait out a fight you
+    // are standing in the middle of.
+    room(); brawl(CLAMOUR_VOICES, 110); run.clamour = 0.6;
+    o.fullCryLeast = hold(5);
+    o.fullCry = +(0.6 - run.clamour).toFixed(4);
+
+    // One body is not a brawl. It should still drain, only slower.
+    room(); brawl(1, 110); run.clamour = 0.6;
+    o.oneBodyLeast = hold(5);
+    o.oneBody = +(0.6 - run.clamour).toFixed(4);
+
+    // And it saturates. Forty bodies must be no louder than four, or the deep
+    // rungs are deafening through nothing the player did.
+    room(); brawl(40, 110); run.clamour = 0.6;
+    o.hordeLeast = hold(5);
+    o.horde = +(0.6 - run.clamour).toFixed(4);
+
+    // A fight across the room is not your fight.
+    room(); brawl(CLAMOUR_VOICES, CLAMOUR_NEAR + 260); run.clamour = 0.6;
+    o.farBrawlLeast = hold(5);
+    o.farBrawl = +(0.6 - run.clamour).toFixed(4);
+
+    // The HUD's tell is for discrete noises. A fight feeding the meter every
+    // frame must not pin it, or the flash stops meaning anything.
+    room(); brawl(CLAMOUR_VOICES, 110); run.clamour = 0.3;
+    hold(2);
+    o.popDuringFight = +(run.clamourPop || 0).toFixed(3);
+    conduitPress(); conduitRelease();
+    o.popOnSwing = +(run.clamourPop || 0).toFixed(3);
+
+    /* AND THE GUARANTEE, UNDER THE NEW TERM. This is the check the section
+     * exists for. Adding a per-second noise is exactly the kind of change
+     * that quietly makes standing still the better move, so it is measured
+     * the same way section 4 measures the decay: the same fight, once stood
+     * through and once run through. These bodies keep their real speed, so
+     * both heroes are in the same brawl.
+     *
+     * Short and close on purpose: 1.5 seconds at the hero's own speed cannot
+     * carry anyone out of CLAMOUR_NEAR from 40 units off, so a difference
+     * here is the rule and not the ruler. The least-cry readings are printed
+     * either way, so a fixture that DID lose its crowd cannot pass by it.
+     */
+    room(); brawl(CLAMOUR_VOICES, 40, false); run.clamour = 0.5;
+    o.fightStandingLeast = hold(1.5);
+    o.fightStanding = +run.clamour.toFixed(4);
+
+    room(); brawl(CLAMOUR_VOICES, 40, false); run.clamour = 0.5;
+    o.fightRunningLeast = hold(1.5, true);
+    o.fightRunning = +run.clamour.toFixed(4);
+
     /* --- 5. THE SETTLE ---------------------------------------------------
      * A body that has lost you walks home and lies down. Without it Clamour
      * is a ratchet and the meter is only a slower road to the same fully
@@ -338,6 +450,63 @@ const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''
      R.anchoredStaysUp ? '' : 'A BOSS WENT BACK TO SLEEP');
   ck('and neither does a body the run dripped in, which has no bed',
      R.homelessStaysUp === true);
+
+  // --- 7: a long fight is a loud fight -------------------------------------
+  ck('the control: an empty room drains',
+     R.emptyRoom > 0.3 && R.emptyRoom < 0.6,
+     'lost ' + R.emptyRoom.toFixed(3) + ' over 5s with nothing up');
+  ck('the fixture kept its crowd', R.fullCryLeast >= R.CLAMOUR_VOICES,
+     R.fullCryLeast + ' bodies in cry at the thinnest' +
+     (R.fullCryLeast >= R.CLAMOUR_VOICES ? '' : ' — NOTHING BELOW MEANS ANYTHING'));
+  ck('YOU CANNOT WAIT OUT A FIGHT YOU ARE STANDING IN',
+     Math.abs(R.fullCry) < 0.03,
+     'a full cry moved the meter ' + (R.fullCry <= 0 ? '+' : '-') +
+     Math.abs(R.fullCry).toFixed(3) + ' over 5s, against ' +
+     R.emptyRoom.toFixed(3) + ' lost in an empty room');
+  ck('one body is not a brawl',
+     R.oneBody > 0.2 && R.oneBody < R.emptyRoom,
+     'lost ' + R.oneBody.toFixed(3) + ' with one up, ' +
+     R.emptyRoom.toFixed(3) + ' with none — it drains, only slower');
+  /* These next two say a number is the SAME as another number, and that is a
+   * shape a broken mechanic satisfies for free: with the fight's noise turned
+   * off entirely, forty bodies are trivially no louder than four and a distant
+   * brawl is trivially no louder than an empty room. Both passed that way when
+   * the term was ablated, which is a check reporting on nothing.
+   *
+   * So each one now also carries the live reading it is a shape OF: that a
+   * near brawl is audibly different from an empty room. If the term dies, the
+   * sameness still holds and the control fails, which is the right way round.
+   */
+  const termIsLive = R.emptyRoom - R.fullCry > 0.2;
+  ck('and it saturates: forty are no louder than four',
+     termIsLive && Math.abs(R.horde - R.fullCry) < 0.02,
+     'four ' + R.fullCry.toFixed(3) + ', forty ' + R.horde.toFixed(3) +
+     ' (' + R.hordeLeast + ' in cry), against ' + R.emptyRoom.toFixed(3) +
+     ' in an empty room' +
+     (!termIsLive ? ' — BOTH ARE JUST THE DECAY: the fight makes no noise at all'
+       : Math.abs(R.horde - R.fullCry) < 0.02 ? ''
+       : ' — THE DEEP RUNGS ARE DEAFENING BY DEPTH ALONE'));
+  ck('a fight across the room is not your fight',
+     termIsLive && R.farBrawlLeast === 0 && Math.abs(R.farBrawl - R.emptyRoom) < 0.02,
+     R.farBrawlLeast + ' in cry at ' + (R.CLAMOUR_NEAR + 260) + ' units: drained ' +
+     R.farBrawl.toFixed(3) + ' against ' + R.emptyRoom.toFixed(3) +
+     ' with nothing up and ' + R.fullCry.toFixed(3) + ' with the same four near' +
+     (!termIsLive ? ' — WHICH ARE ALL THE SAME NUMBER: the term is dead' : ''));
+  ck('the fight moves the meter without flashing the tell',
+     R.popDuringFight < 0.05 && R.popOnSwing > 0.9,
+     'pop ' + R.popDuringFight.toFixed(2) + ' after two seconds of fighting, ' +
+     R.popOnSwing.toFixed(2) + ' the moment a blow is struck');
+  ck('the fixture kept its crowd through the moving pair',
+     R.fightStandingLeast >= R.CLAMOUR_VOICES && R.fightRunningLeast >= R.CLAMOUR_VOICES,
+     'standing ' + R.fightStandingLeast + ', running ' + R.fightRunningLeast +
+     ' in cry at the thinnest');
+  ck('AND A FIGHT COSTS THE SAME WHETHER YOU STAND IN IT OR RUN THROUGH IT',
+     Math.abs(R.fightStanding - R.fightRunning) < 0.002,
+     'standing ' + R.fightStanding.toFixed(4) + ', running ' +
+     R.fightRunning.toFixed(4) +
+     (Math.abs(R.fightStanding - R.fightRunning) < 0.002
+       ? ' — the new term did not make stillness a move'
+       : ' — THE FIGHT NOISE REWARDS ONE OF THEM, and it is the wrong one'));
 
   ck('no console errors', errs.length===0, errs.slice(0,2).join(' | '));
   console.log('\nPASS '+pass.length+'\n  '+pass.join('\n  '));

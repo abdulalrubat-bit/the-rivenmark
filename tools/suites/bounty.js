@@ -157,6 +157,12 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   ck('dying pays nothing and spends nothing',
      R.afterDeath.done === false && R.afterDeath.armed === true &&
      R.afterDeath.vault === 0);
+  /* This flaked about one run in three and it was right to: rollItem rolls its
+   * own rarity, sometimes above Hallowed, and the reward stamped the tier over
+   * the top while only topping the affixes UP -- so a five-affix Riven came
+   * out labelled Hallowed. The check was correct and the game was wrong, which
+   * is worth saying because a check that fails intermittently is the easiest
+   * thing in the world to write off as noise. */
   ck('extracting pays a Hallowed piece',
      R.paid.done && R.paid.vault === 1 && R.paid.rarity === 'hallowed' &&
      R.paid.affixes === 4,
