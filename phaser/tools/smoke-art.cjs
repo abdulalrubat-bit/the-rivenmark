@@ -78,6 +78,29 @@ const LONG = { kind: 'gorger', n: 10 };
    * to the baseline rather than to empty.
    */
   const existed = fs.existsSync(CUSTOM);
+  /* THE BASELINE IS READ OFF A GENERATED FILE, so generate it first.
+   *
+   * `before` comes from public/manifest.json, which describes the tree as of
+   * the last pack -- not as of now. Author a frame without packing and the
+   * baseline is a snapshot of a tree that no longer exists, so every count
+   * below is out by however many frames arrived in between, and the suite
+   * reports it as the packer miscounting. Packing here costs a second and a
+   * half and makes the snapshot true.
+   */
+  execFileSync(process.execPath, [path.join(__dirname, 'pack-atlas.js')], { stdio: 'ignore' });
+  /* ...AND THE OTHER HALF OF THAT LESSON, which the note above stops one step
+   * short of. Recording the baseline and deleting only what this suite wrote
+   * is not enough while what it writes can LAND ON TOP of real art: KIND is
+   * 'thrall', so the moment somebody authored a thrall the plant silently
+   * overwrote it and the cleanup then deleted it as one of its own. Measured,
+   * by authoring one: art-custom/bestiary/thrall-rest.png was gone after a
+   * single green run, with nothing in the output to say so.
+   *
+   * So anything a plant is about to cover is stashed here and put back byte
+   * for byte afterwards, and only paths that did NOT already exist are counted
+   * as this suite's additions.
+   */
+  const saved = new Map();
   const before = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'public', 'manifest.json'), 'utf8'));
   const wasScales = Object.keys(before.frame_scale || {}).length;
   const wasAuthored = (before.authored || []).length;
@@ -105,6 +128,8 @@ const LONG = { kind: 'gorger', n: 10 };
         }
       }
       const to = path.join(outDir, kind + '-' + pose + '.png');
+      // Somebody's actual art, about to be covered. Keep it.
+      if (fs.existsSync(to) && !saved.has(to)) saved.set(to, fs.readFileSync(to));
       fs.writeFileSync(to, PNG.sync.write(big));
       made.push(to);
     };
@@ -121,9 +146,16 @@ const LONG = { kind: 'gorger', n: 10 };
     const packed = execFileSync(process.execPath, [path.join(__dirname, 'pack-atlas.js')],
                                 { encoding: 'utf8' });
     const nAuth = (/(\d+) authored/.exec(packed) || [])[1];
+    /* Planted frames that landed on a name already authored do not RAISE the
+       count -- they replace it. Counting them as additions made this check
+       fail by exactly the number of real frames the tree already had, which
+       reads as the packer having lost one rather than as the sum being
+       wrong. */
+    const added = made.length - saved.size;
     ck('the packer takes them and says which are authored',
-       nAuth !== undefined && +nAuth === wasAuthored + made.length,
-       packed.trim().split('\n')[0] + ' (' + wasAuthored + ' before + ' + made.length + ' planted)');
+       nAuth !== undefined && +nAuth === wasAuthored + added,
+       packed.trim().split('\n')[0] + ' (' + wasAuthored + ' before + ' + added +
+       ' new' + (saved.size ? ', ' + saved.size + ' planted over existing art' : '') + ')');
 
     const man = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'public', 'manifest.json'), 'utf8'));
     const key = 'bestiary/' + KIND + '-rest';
@@ -638,7 +670,11 @@ const LONG = { kind: 'gorger', n: 10 };
     // Leave the tree as it was found, or the next build ships magenta thralls.
     // Only what this suite wrote: anything else under art-custom/ is somebody's
     // actual art and is none of this test's business.
-    for (const f of made) fs.rmSync(f, { force: true });
+    // Put back what was covered; remove only what was genuinely new.
+    for (const f of made) {
+      if (saved.has(f)) fs.writeFileSync(f, saved.get(f));
+      else fs.rmSync(f, { force: true });
+    }
     if (!existed) fs.rmSync(CUSTOM, { recursive: true, force: true });
     execFileSync(process.execPath, [path.join(__dirname, 'pack-atlas.js')], { stdio: 'ignore' });
   }
