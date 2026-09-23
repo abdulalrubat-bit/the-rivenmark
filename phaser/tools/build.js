@@ -12,14 +12,11 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const watch = process.argv.includes('--watch');
 
-/* The extracted core, into the directory the page actually serves.
+/* The core, into the directory the page actually serves.
  *
- * extract-core.js writes src/core/core.js; index.html loads public/core.js.
- * Nothing joined the two, so it was a hand copy -- and a hand copy that is
- * forgotten leaves the game running the PREVIOUS core with no sign of it.
- * That is the same hazard the suites had with a stale bundle, and it is worse
- * here: a stale bundle is stale presentation, a stale core is stale rules.
- * Copied on every build, and the suites all build first.
+ * src/core/core.js is the game's rules and the file you edit; the page loads
+ * public/core.js. Copied on every build, so the served copy can never be a
+ * previous version of the rules -- the suites all build first.
  */
 /* A BACKTICK INSIDE THE CSS.
  *
@@ -49,30 +46,19 @@ for (const f of ['hud.js']) {
   }
 }
 
-/* AND THE EXTRACTION ITSELF, WHICH NOTHING RAN.
+/* NO HOLES IN THE CORE.
  *
- * The block above fixed the second link of a two-link chain and left the
- * first one open, which is the more interesting half of the same bug.
- * index.html is the source of truth; extract-core.js lifts it into
- * src/core/core.js; this file copies that into public/. Only the copy was
- * automatic. So `npm run core` was a step a person had to remember, and the
- * whole point of the note above is that a step a person has to remember is a
- * step that is one day forgotten -- and when it is forgotten here the web
- * build, the APK and every one of the sixteen smoke suites go on running the
- * PREVIOUS rules while reporting green against the new ones. Auto-fire lived
- * on for exactly this reason: deleted from index.html, still in the core an
- * APK had been built from.
- *
- * Half a second, on every build. Quiet, because 108 lines of inventory in
- * front of every suite is 108 lines nobody reads; never quiet about failing,
- * because the extractor exits 1 with its whole explanation when the core has
- * a hole in it, and that has to stop the build rather than scroll past.
+ * Every function core.js calls must be declared in it or supplied by the
+ * host. tools/check-core.js scans for the ones that are neither, and a build
+ * with one stops here rather than shipping a ReferenceError to the one code
+ * path nobody tried. It used to be the extractor's job, when the core was cut
+ * out of the canvas build; there is no canvas build now.
  */
 try {
-  execFileSync(process.execPath, [path.join(here, 'extract-core.js'), '--quiet'],
+  execFileSync(process.execPath, [path.join(here, 'check-core.js'), '--quiet'],
                { stdio: 'inherit' });
 } catch {
-  console.error('\nextract-core.js failed — refusing to build a stale core.\n');
+  console.error('\ncheck-core.js failed — refusing to build a core with a hole in it.\n');
   process.exit(1);
 }
 
