@@ -64,7 +64,14 @@ jobs:
         with:
           node-version: '20'
 
+      # packages: only platform-tools. The action's default list also names
+      # the legacy `tools` package, which the runner's cmdline-tools no longer
+      # carry -- sdkmanager exits 1 on it, and every Android build died in
+      # setup before reaching Gradle. Gradle fetches the platform and build
+      # tools it needs itself; the licences the action accepts cover that.
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
 
       # Gradle's syncGameAssets task runs android/sync-assets.js, which runs the
       # Phaser deploy -- esbuild and pngjs, neither of which exists in a fresh
@@ -88,18 +95,35 @@ jobs:
       # 1000 offset puts it clear of the 2 that is build.gradle's default. It
       # is a default and not a rule: renaming or recreating this workflow file
       # resets run_number, which is precisely why the input exists.
+      #
+      # THE INPUTS ARRIVE AS ENVIRONMENT, NOT AS TEXT IN THE SCRIPT. A
+      # `${{ inputs.x }}` inside `run:` is pasted into the script before bash
+      # sees it, so a version name with a quote in it was shell code. They are
+      # checked here as well, because both end up as Gradle flags and in a
+      # manifest, and neither is a place for anything but a version.
       - name: Work out the version
         id: ver
+        env:
+          IN_CODE: ${{ inputs.version_code }}
+          IN_NAME: ${{ inputs.version_name }}
+          RUN_NUMBER: ${{ github.run_number }}
         run: |
-          code='${{ inputs.version_code }}'
-          [ -n "$code" ] || code=$(( 1000 + ${{ github.run_number }} ))
-          name='${{ inputs.version_name }}'
+          code="$IN_CODE"
+          [ -n "$code" ] || code=$(( 1000 + RUN_NUMBER ))
+          name="$IN_NAME"
           if [ -z "$name" ] && [ "${GITHUB_REF_TYPE}" = tag ]; then
             name="${GITHUB_REF_NAME#v}"          # v0.9.1 -> 0.9.1
           fi
+          [[ "$code" =~ ^[1-9][0-9]{0,9}$ ]] \
+            || { echo "::error::versionCode must be a positive whole number, got '$code'."; exit 1; }
+          [ -z "$name" ] || [[ "$name" =~ ^[0-9A-Za-z][0-9A-Za-z._+-]{0,39}$ ]] \
+            || { echo "::error::versionName may only hold letters, digits and . _ + -"; exit 1; }
           echo "code=$code" >> "$GITHUB_OUTPUT"
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          echo "versionCode $code, versionName ${name:-<build.gradle's>}"
+          # No apostrophe inside ${name:-...}: bash reads it as an unclosed
+          # quote, and this line was a syntax error that failed the step on
+          # every run -- the workflow had never been run, so nothing said so.
+          echo "versionCode $code, versionName ${name:-from build.gradle}"
 
       # THE KEY NEVER TOUCHES THE WORKSPACE.
       #
@@ -114,6 +138,7 @@ jobs:
         id: key
         env:
           KS: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PW: ${{ secrets.KEYSTORE_PASSWORD }}
         run: |
           if [ -z "$KS" ]; then
             echo "have=no" >> "$GITHUB_OUTPUT"
@@ -124,26 +149,31 @@ jobs:
           # Prove it decoded to a keystore before Gradle fails with something
           # less obvious. The alias is not printed: it is a secret's value.
           keytool -list -keystore "$RUNNER_TEMP/rivenmark.jks" \
-                  -storepass '${{ secrets.KEYSTORE_PASSWORD }}' >/dev/null \
+                  -storepass:env STORE_PW >/dev/null \
             || { echo "::error::The keystore secret did not decode, or KEYSTORE_PASSWORD is wrong."; exit 1; }
           echo "have=yes" >> "$GITHUB_OUTPUT"
 
       - name: Bundle
         working-directory: android
+        env:
+          VER_CODE: ${{ steps.ver.outputs.code }}
+          VER_NAME: ${{ steps.ver.outputs.name }}
+          HAVE_KEY: ${{ steps.key.outputs.have }}
+          STORE_PW: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PW: ${{ secrets.KEY_PASSWORD }}
         run: |
-          args="--no-daemon --console=plain -Privenmark.versionCode=${{ steps.ver.outputs.code }}"
-          [ -n "${{ steps.ver.outputs.name }}" ] && \
-            args="$args -Privenmark.versionName=${{ steps.ver.outputs.name }}"
-          if [ "${{ steps.key.outputs.have }}" = yes ]; then
-            args="$args -Privenmark.keystore=$RUNNER_TEMP/rivenmark.jks"
-            args="$args -Privenmark.storePassword=${{ secrets.KEYSTORE_PASSWORD }}"
-            args="$args -Privenmark.keyAlias=${{ secrets.KEY_ALIAS }}"
-            args="$args -Privenmark.keyPassword=${{ secrets.KEY_PASSWORD }}"
+          # An array, so each flag is exactly one argument whatever is in it --
+          # a password with a space or a quote in it used to split or break.
+          args=(--no-daemon --console=plain "-Privenmark.versionCode=$VER_CODE")
+          [ -n "$VER_NAME" ] && args+=("-Privenmark.versionName=$VER_NAME")
+          if [ "$HAVE_KEY" = yes ]; then
+            args+=("-Privenmark.keystore=$RUNNER_TEMP/rivenmark.jks"
+                   "-Privenmark.storePassword=$STORE_PW"
+                   "-Privenmark.keyAlias=$KEY_ALIAS"
+                   "-Privenmark.keyPassword=$KEY_PW")
           fi
-          # Unquoted on purpose: these are flags, and none of the values that
-          # reach here contain spaces. Gradle would take a single quoted blob
-          # as one argument and reject it.
-          gradle $args :app:bundleRelease
+          gradle "${args[@]}" :app:bundleRelease
 
       # IS IT ACTUALLY SIGNED? This is the whole reason the step exists, and it
       # is not the check you would write first.
@@ -158,6 +188,8 @@ jobs:
       # What does separate them is the signature block: two META-INF entries
       # (.SF and .RSA) when signed, none when not.
       - name: Check the bundle is signed
+        env:
+          ALLOW_UNSIGNED: ${{ inputs.allow_unsigned }}
         run: |
           aab=android/app/build/outputs/bundle/release/app-release.aab
           [ -f "$aab" ] || { echo "::error::No bundle at $aab"; exit 1; }
@@ -166,7 +198,7 @@ jobs:
           echo "signature blocks: $blocks; jarsigner says: ${verdict:-nothing}"
           if [ "$blocks" -gt 0 ] && [ "$verdict" = "jar verified." ]; then
             echo "SIGNED" >> "$GITHUB_STEP_SUMMARY"
-          elif [ "${{ inputs.allow_unsigned }}" = "true" ]; then
+          elif [ "$ALLOW_UNSIGNED" = "true" ]; then
             echo "::warning::UNSIGNED bundle, allowed by the allow_unsigned input. Play will not take it."
             echo "UNSIGNED — cannot be uploaded to Play" >> "$GITHUB_STEP_SUMMARY"
           else

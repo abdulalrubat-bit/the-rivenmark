@@ -14,6 +14,17 @@
 const VERSION = 'dev';
 const CACHE = 'rivenmark-' + VERSION;
 
+/* UNSTAMPED MEANS DEVELOPMENT, AND DEVELOPMENT MUST NOT BE CACHED.
+ *
+ * Only tools/deploy.js stamps VERSION. The copy in public/ -- the one
+ * `npm run serve` hands a phone on the same wifi -- stays 'dev' forever, so
+ * cache-first under a name that never changes meant the phone kept serving
+ * the first bundle it ever saw, rebuild after rebuild, with nothing to say so.
+ * Unstamped, this worker installs, clears every rivenmark cache it finds
+ * (including one a phone is already stuck on), and lets every request go to
+ * the network. */
+const DEV = VERSION === 'dev';
+
 // Everything needed to boot with no network at all. Listed rather than
 // discovered: a worker that caches whatever happens to be requested caches a
 // half-loaded first visit and then serves it forever.
@@ -36,6 +47,7 @@ self.addEventListener('install', e => {
   // Take over at once rather than waiting for every tab to close. A game is
   // one tab, and the alternative is an update that lands whenever.
   self.skipWaiting();
+  if (DEV) return;
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)));
 });
 
@@ -43,12 +55,13 @@ self.addEventListener('activate', e => {
   e.waitUntil((async () => {
     // Drop every older build's cache. Two full copies of a 3MB shell on a
     // phone is not free, and a stale one can never be served by accident.
-    for (const k of await caches.keys()) if (k !== CACHE) await caches.delete(k);
+    for (const k of await caches.keys()) if (DEV || k !== CACHE) await caches.delete(k);
     await self.clients.claim();
   })());
 });
 
 self.addEventListener('fetch', e => {
+  if (DEV) return;                               // straight to the network
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);

@@ -121,6 +121,46 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     setHardcore(false);
     o.wornInSoftcore = honoured();
     o.honoursKey = !!read(HON);
+
+    // --- no door out of a lost fight ---------------------------------------
+    // "Relaunch" is the stash read back off disk into a fresh mode switch --
+    // exactly what opening the app does -- so the mark is proved to reach the
+    // key rather than only to sit in memory.
+    const relaunch = () => { hardcore = false; setHardcore(true); };
+    setHardcore(true);
+    stash = blankStash(); furnish();
+    startRun('isaac', LEVELS[4].id, 'riven');
+    o.markedOnDisk = !!(read(HC) || {}).delving;
+    relaunch();
+    o.afterWalkOut = worth();
+    o.fellAwayNotice = hcFellAway;
+
+    // The control: a delve that ENDED is not a delve walked out of.
+    stash = blankStash(); furnish();
+    startRun('isaac', LEVELS[4].id, 'riven');
+    endRun(true);
+    o.markAfterExtract = !!(read(HC) || {}).delving;
+    relaunch();
+    o.afterExtractRelaunch = worth();
+    o.noticeSpent = hcFellAway === false;
+
+    // Abandoning, from play and from the pause card.
+    for (const from of ['play', 'pause']) {
+      stash = blankStash(); furnish();
+      startRun('isaac', LEVELS[4].id, 'riven');
+      state = from;
+      o['abandon_' + from] = { died: abandonDelve(), state, left: worth(),
+                               onDisk: (read(HC) || {}).delving };
+    }
+
+    // And the ordinary game keeps its retreat, and is never marked.
+    setHardcore(false);
+    stash = blankStash(); furnish();
+    startRun('isaac', LEVELS[4].id, 'riven');
+    o.softMarked = !!(read(STD) || {}).delving;
+    o.softAbandonIsDeath = abandonDelve();
+    o.softStateAfter = state;
+
     localStorage.clear();
     return o;
   });
@@ -175,6 +215,29 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
      R.hueAfter.isaac);
   ck('the trophy outlives the character', R.afterLaterDeath === true && R.honoursKey);
   ck('and is worn in the ordinary game too', R.wornInSoftcore === true);
+
+  ck('a Hardcore delve marks the stash on disk as it begins', R.markedOnDisk === true);
+  ck('and closing the app inside it is the death it was',
+     R.afterWalkOut.gear === 0 && R.afterWalkOut.coins === 0 && R.afterWalkOut.hall === 0,
+     'kept ' + R.afterWalkOut.gear + ' pieces, ' + R.afterWalkOut.coins + ' coin');
+  ck('and the gate-house is told why', R.fellAwayNotice === true);
+  // The control: without it the two checks above pass on a build that wipes
+  // every Hardcore stash on every launch.
+  ck('a delve that ended takes the mark off again', R.markAfterExtract === false);
+  ck('so relaunching after an extraction keeps everything',
+     R.afterExtractRelaunch.gear === 8 && R.afterExtractRelaunch.hall === 8,
+     'kept ' + R.afterExtractRelaunch.gear + ' pieces');
+  ck('and the notice goes once a new life begins', R.noticeSpent);
+  for (const from of ['play', 'pause']) {
+    const a = R['abandon_' + from];
+    ck('abandoning from ' + from + ' is a death, through the death card',
+       a.died === true && a.state === 'over' && a.left.gear === 0 && a.left.coins === 0,
+       'died ' + a.died + ', state ' + a.state + ', kept ' + a.left.gear);
+    ck('and leaves nothing marked behind it (' + from + ')', a.onDisk === false);
+  }
+  ck('the ordinary game is never marked', R.softMarked === false);
+  ck('and abandoning there is still only a retreat',
+     R.softAbandonIsDeath === false && R.softStateAfter === 'play');
 
   ck('no console errors', errs.length === 0, errs.slice(0, 3).join(' | '));
   console.log('\nPASS ' + pass.length + '\n  ' + pass.join('\n  '));

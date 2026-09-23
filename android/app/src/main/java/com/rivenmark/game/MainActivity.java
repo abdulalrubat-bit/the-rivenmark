@@ -1,6 +1,7 @@
 package com.rivenmark.game;
 
 import android.annotation.SuppressLint;
+import android.content.pm.ApplicationInfo;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.view.View;
@@ -94,7 +95,14 @@ public class MainActivity extends AppCompatActivity {
         });
 
         // Debug build only: lets chrome://inspect attach to the running game.
-        WebView.setWebContentsDebuggingEnabled(true);
+        // The comment always said so and the call never checked -- so a
+        // release build shipped a WebView any USB-connected computer could
+        // open, read and drive. FLAG_DEBUGGABLE is set by the debug build type
+        // and never by release, so this is the build deciding, not a constant
+        // someone has to remember to flip.
+        if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+            WebView.setWebContentsDebuggingEnabled(true);
+        }
 
         web.loadUrl(ORIGIN + "/assets/index.html");
     }

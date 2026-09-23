@@ -48,12 +48,21 @@ try {
   process.exit(1);
 }
 
+/* Where the suites find Playwright. They live up here, outside any package,
+ * so a bare require('playwright') only resolved on a machine that happened to
+ * have it installed globally. It is a devDependency of phaser/ now, and this
+ * points the suites at it -- ahead of anything already on NODE_PATH. */
+const SUITE_ENV = { ...process.env,
+  NODE_PATH: [path.join(here, '..', 'phaser', 'node_modules'), process.env.NODE_PATH]
+    .filter(Boolean).join(path.delimiter) };
+
 let bad = 0, totalPass = 0, totalFail = 0;
 for (const s of run) {
   let out = '';
   try {
     out = execFileSync(process.execPath, [path.join(DIR, s + '.js')],
-                       { encoding: 'utf8', timeout: 420000, stdio: ['ignore', 'pipe', 'pipe'] });
+                       { encoding: 'utf8', timeout: 420000, stdio: ['ignore', 'pipe', 'pipe'],
+                         env: SUITE_ENV });
   } catch (e) {
     out = (e.stdout || '') + (e.stderr || '');
   }

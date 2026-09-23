@@ -42,14 +42,13 @@
       localStorage.setItem(key(), JSON.stringify(stash));
     } catch (e) {}
   };
-  // The canvas build's version migrates old saves; this is the part that
-  // matters here — read it back if it is there, start clean if it is not.
+  // Reading is the host's; deciding what a save is allowed to say is the
+  // core's sanitizeStash, the same one the canvas build uses. This used to be
+  // a bare Object.assign, which trusted every item, cap and number on disk.
   window.loadStash = () => {
     let st = null;
     try { st = JSON.parse(localStorage.getItem(key())); } catch (e) {}
-    if (!st || typeof st !== 'object') return blankStash();
-    const base = blankStash();
-    return Object.assign(base, st, { gear: Object.assign(base.gear, st.gear || {}) });
+    return sanitizeStash(st);
   };
 
   // Hardcore's own three. The honours are a separate key on purpose: they are

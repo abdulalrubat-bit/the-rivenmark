@@ -19,6 +19,7 @@ import { Screens } from './screens.js';
 import { Title } from './title.js';
 import { Overlay } from './overlay.js';
 import { Atmosphere } from './atmosphere.js';
+import { screenOrigin, pinToScreen, cssPoint } from './screen.js';
 
 // The core's palette is CSS hex strings; Phaser wants numbers.
 const hex = (css, fallback) => {
@@ -104,7 +105,8 @@ const STANDING = { pillar: 26, barrel: 12, crate: 11, urn: 10, banner: 16,
           BOLT_WIND, CHANT_WIND, breathScale, deathPose, DIE_MS, flinchOffset,
           lowFx,
           WALK_STEP, WALK_PACE, update, startRun, resetRun, loadStash,
-          hardcore, loadHardcoreMode, ENEMY_TYPES */
+          hardcore, loadHardcoreMode, ENEMY_TYPES, settleUnfinishedDelve,
+          abandonDelve */
 
 /* A body drawn with another body's art, and how much bigger it is than the
  * thing it borrowed from. Derived from the two radii rather than typed in, so
@@ -198,6 +200,8 @@ export class Delve extends Phaser.Scene {
       // which mode they were in by dying in the wrong one.
       hardcore = loadHardcoreMode();
       stash = loadStash();
+      // A Hardcore delve the app was closed in the middle of is a death.
+      settleUnfinishedDelve();
       const t0 = performance.now();
       if (this.gated) {
         /* THE GAME OPENS AT THE GATE-HOUSE.
@@ -317,9 +321,7 @@ export class Delve extends Phaser.Scene {
     this.dbg = this.add.text(8, 0, '', {
       fontFamily: 'ui-monospace, monospace', fontSize: '12px', color: '#cebe9e'
     }).setOrigin(0, 1).setScrollFactor(0).setDepth(1e6).setVisible(false);
-    const placeDbg = () => this.dbg.setPosition(8, this.scale.displaySize.height - 96);
-    placeDbg();
-    this.scale.on('resize', placeDbg);
+    // Placed every frame in update(), off the screen's origin (see screen.js).
 
     if (!this.game.__diagMounted) {
       this.game.__diagMounted = true;
@@ -409,6 +411,10 @@ export class Delve extends Phaser.Scene {
    * the last one.
    */
   abandonRun() {
+    // In Hardcore, walking out is dying: the core ends the run and raises the
+    // death card, and the world stays under it exactly as it does for any
+    // other death. Its "To the gate-house" comes back here with the run over.
+    if (abandonDelve()) return;
     this.clearWorldArt();
     state = 'menu';
     resetRun();
@@ -583,14 +589,17 @@ export class Delve extends Phaser.Scene {
    * is cheap and a wall popping in at the edge of the screen is not.
    */
   cullDressing(force) {
-    const c = this.cameras.main;
+    // worldView, not scrollX + width: the camera is sized in device pixels and
+    // zoomed about its middle, so that sum is three screens wide on a DPR-3
+    // phone and kept two thirds of the dressing needlessly switched on.
+    const v = this.cameras.main.worldView;
     if (!force && this.culledAt &&
-        Math.abs(c.scrollX - this.culledAt.x) < 96 &&
-        Math.abs(c.scrollY - this.culledAt.y) < 96) return;
-    this.culledAt = { x: c.scrollX, y: c.scrollY };
+        Math.abs(v.x - this.culledAt.x) < 96 &&
+        Math.abs(v.y - this.culledAt.y) < 96) return;
+    this.culledAt = { x: v.x, y: v.y };
     const M = 160;
-    const x0 = c.scrollX - M, y0 = c.scrollY - M;
-    const x1 = c.scrollX + c.width + M, y1 = c.scrollY + c.height + M;
+    const x0 = v.x - M, y0 = v.y - M;
+    const x1 = v.right + M, y1 = v.bottom + M;
     for (const list of [this.wallImgs, this.propImgs]) {
       if (!list) continue;
       for (const im of list) {
@@ -849,8 +858,10 @@ export class Delve extends Phaser.Scene {
    *
    * The core already owns the whole state machine -- stickStart, stickMove,
    * stickEnd and moveVector, with its own dead zone and throttle curve -- so
-   * this only feeds it pointer positions. Phaser's pointer.x/y are already in
-   * game space, which is what those functions expect.
+   * this only feeds it pointer positions -- in CSS pixels, which is what
+   * STICK_MAX and the dead zone are measured in. Phaser's pointer.x/y are game
+   * coordinates, and the game is sized in device pixels, so fed raw on a DPR-3
+   * phone the stick hit full throttle at a third of the throw it was tuned for.
    *
    * Only pointers that land on the canvas get here: the HUD is DOM above it
    * and swallows its own events, so a thumb on an ability button can never
@@ -861,10 +872,13 @@ export class Delve extends Phaser.Scene {
     this.input.on('pointerdown', pt => {
       if (state !== 'play') return;
       if (stick.active) return;        // one finger owns the stick at a time
-      stickStart(pt.id, pt.x, pt.y);
+      const p = cssPoint(this, pt);
+      stickStart(pt.id, p.x, p.y);
     });
     this.input.on('pointermove', pt => {
-      if (stick.active && pt.id === stick.id) stickMove(pt.x, pt.y);
+      if (!stick.active || pt.id !== stick.id) return;
+      const p = cssPoint(this, pt);
+      stickMove(p.x, p.y);
     });
     const release = pt => { if (stick.active && pt.id === stick.id) stickEnd(); };
     this.input.on('pointerup', release);
@@ -880,10 +894,11 @@ export class Delve extends Phaser.Scene {
 
   /* The stick, drawn where the thumb put it. Two rings: where the finger went
    * down, and where it is now. Screen space, so it does not scroll with the
-   * world.
+   * world -- and pinned to the screen's origin, see screen.js.
    */
-  drawStick() {
+  drawStick(o) {
     const gfx = this.stickGfx;
+    pinToScreen(gfx, o);
     gfx.clear();
     if (!stick.active) return;
     gfx.lineStyle(2, 0xd6b26e, 0.45);
@@ -1051,10 +1066,11 @@ export class Delve extends Phaser.Scene {
     this.syncChests(time);
     this.syncLoot(time);
     this.cullDressing();
+    const o = screenOrigin(this);
     this.fx.draw(time);
-    this.overlay.draw(time);
-    this.air.draw(time);
-    this.drawStick();
+    this.overlay.draw(time, o);
+    this.air.draw(time, o);
+    this.drawStick(o);
     this.hud.sync();
     const atGate = !!(run.gateOpen && portal && portal.inside && state === 'play');
     if (this.gateBtn.hidden === atGate) this.gateBtn.hidden = !atGate;
@@ -1070,6 +1086,10 @@ export class Delve extends Phaser.Scene {
     // sync from the button, so there is one answer and it is the DOM's.
     const wantDbg = document.documentElement.classList.contains('diag-on');
     if (this.dbg.visible !== wantDbg) this.dbg.setVisible(wantDbg);
+    if (wantDbg) {
+      const dx = o.x + 8, dy = o.y + this.scale.displaySize.height - 96;
+      if (this.dbg.x !== dx || this.dbg.y !== dy) this.dbg.setPosition(dx, dy);
+    }
     if (st && wantDbg && (time | 0) % 8 === 0) {
       this.dbg.setText(
         LEVEL.name + '\n' +

@@ -25,6 +25,7 @@
     "icons": "node tools/make-icons.js",
     "deploy": "node tools/deploy.js",
     "smoke:pwa": "node tools/smoke-pwa.cjs",
+    "smoke:dpr": "node tools/smoke-dpr.cjs",
     "smoke:prof": "node tools/smoke-prof.cjs",
     "smoke:art": "node tools/smoke-art.cjs",
     "smoke:mass": "node tools/smoke-mass.cjs",
@@ -36,6 +37,7 @@
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
+    "playwright": "1.56.1",
     "pngjs": "^7.0.0"
   }
 }

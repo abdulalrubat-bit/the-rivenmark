@@ -195,7 +195,47 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
      back.ambush+' champions in the ring');
   ck('the ambush stands on ground, not in rock', back.reachable);
   ck('and it forces the ley-gate open', back.forced && await p.evaluate(()=>portal.active));
-  ck('the corpse is spent once taken', back.cleared && back.taken);
+  ck('the corpse is claimed once taken', back.taken);
+  // Not spent yet: the finds are only in the bag, and the bag is not saved.
+  ck('but it stays owed until the run is settled', !back.cleared);
+
+  // ---- a claimed corpse, and the three ways a run can end -----------------
+  // Walked out of: the app closes (a reload is exactly that) with the claim
+  // in the bag. It used to be cleared off the disk at the claim, so this lost
+  // every find in it for good.
+  ck('claim it and close the app, and it is still waiting', await (async()=>{
+    await p.reload(); await sleep(700);
+    return p.evaluate(()=>{ stash=loadStash();
+      return !!stash.corpse && stash.corpse.items.length===4 && stash.corpse.coins===500; });
+  })());
+  const claim = () => { if (!run.corpse) return false;   // nothing was owed
+                        player.x = run.corpse.x; player.y = run.corpse.y;
+                        updateCorpse(1/60); return !!run.corpse.taken; };
+  const out = await p.evaluate(`(()=>{
+    const claim = ${claim.toString()};
+    startRun('isaac', LEVELS[3].id, 'riven');
+    const took = claim();
+    endRun(true);
+    return { took, corpse: stash.corpse, vault: stash.vault.length, coins: stash.coins };
+  })()`);
+  ck('claim it and extract, and it is spent -- banked, not owed twice',
+     out.took && out.corpse === null && out.vault >= 4 && out.coins >= 500,
+     'corpse ' + JSON.stringify(out.corpse) + ', ' + out.vault + ' in the vault');
+  const died = await p.evaluate(`(()=>{
+    const claim = ${claim.toString()};
+    stash=blankStash();
+    stash.corpse={level_id:LEVELS[3].id,hero:'isaac',x:100,y:100,
+                  items:[rollItem(0.5),rollItem(0.5)],coins:9};
+    startRun('isaac', LEVELS[3].id, 'riven');
+    const took = claim();
+    endRun(false);
+    return { took, items: stash.corpse && stash.corpse.items.length,
+             txt: el.overSub.textContent };
+  })()`);
+  ck('claim it and die, and what it held goes into the new corpse',
+     died.took && died.items === 2, died.items + ' finds');
+  ck('without being told the old one was lost', !/older corpse is gone/.test(died.txt),
+     died.txt.slice(0, 90));
 
   const second = await p.evaluate(()=>{
     stash=blankStash();
