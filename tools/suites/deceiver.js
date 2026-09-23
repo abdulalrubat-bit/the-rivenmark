@@ -15,17 +15,17 @@ const { chromium } = require('playwright');
 // source. verify-core uses it to run the SAME file against index.html and
 // against the extracted core; it used to rewrite the URL with a string
 // replace, which silently stopped matching the moment this line changed.
-const PAGE = f => process.env.RIVENMARK_PAGE ||
-  ('file://' + require('path').join(__dirname, '..', '..', f));
+const pages = require('./_pages.js');
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''));
 
-(async()=>{
+(async () => {
+  await pages.serve();
   const b=await chromium.launch();
   const p=await (await b.newContext({viewport:{width:390,height:844}})).newPage();
   const errs=[]; p.on('pageerror',e=>errs.push(e.message));
   p.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
-  await p.goto(PAGE('index.html')); await sleep(900);
+  await p.goto(pages.core()); await sleep(900);
 
   const R = await p.evaluate(()=>{
     const o={};
@@ -326,27 +326,40 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   // Where the crystal actually lands. It was first placed on its own copy of
   // the map's arithmetic and drawn straight THROUGH the map, with its label
   // clipped off the right edge on top of that -- so this is measured rather
-  // than reasoned about.
-  const lay = await p.evaluate(()=>{
-    stash=blankStash();saveStash();startRun('isaac',LEVELS[24].id,'riven');
+  // than reasoned about, on the HUD that ships: the map and the crystal are
+  // the Phaser overlay's, the boss bar and the thumb buttons are the DOM HUD.
+  const gp = await (await b.newContext({viewport:{width:390,height:844}, isMobile:true,
+                                        hasTouch:true})).newPage();
+  gp.on('pageerror',e=>errs.push(e.message));
+  await gp.goto(pages.game('nogate&nogov'));
+  await gp.waitForFunction(()=>state==='play' && __game.scene.getScene('delve').overlay,
+                           null, {timeout:30000});
+  const lay = await gp.evaluate(async ()=>{
+    const sc=__game.scene.getScene('delve');
+    sc.newRun('isaac', LEVELS[24].id, 'riven');
     run.banner=0; enemies.length=0; spawnDeceiver(); run.dawn=60;
+    player.hp=player.maxHp=1e9;
+    await new Promise(r=>setTimeout(r,500));
     const c=dawnCrystalRect(), m=minimapBox();
-    const bar={x:12, y:HUD_H+view.safeT+8, w:view.w-24-view.safeR, h:BOSS_BAR_H};
-    // The map's stone surround overhangs the panel, so the box to stay out of
-    // is the panel grown by that overhang.
+    const rect=el=>{ if(!el) return null; const r=el.getBoundingClientRect();
+      return {x:r.left,y:r.top,w:r.width,h:r.height}; };
+    const bar=rect(document.querySelector('#hud .boss'));
     const map={x:m.x-m.over, y:m.y-m.over, w:m.s+m.over*2, h:m.s+m.over*2};
-    ctx.font='600 8px ui-monospace, Menlo, monospace';
-    const labelW=ctx.measureText('FALSE DAWN').width;
-    const kit=document.getElementById('kitBar');
-    const k=kit?kit.getBoundingClientRect():null;
-    return { c, map, bar, labelW, kitTop:k?k.top:null, view:{w:view.w,h:view.h,safeR:view.safeR} };
+    const labelW=sc.overlay.dawnLabel.width;
+    const tops=[...document.querySelectorAll('#hud .kit button, #hud .swap button')]
+      .map(b=>b.getBoundingClientRect().top);
+    return { c, map, bar, labelW, shown: sc.overlay.dawnLabel.visible,
+             kitTop: tops.length ? Math.min(...tops) : null,
+             view:{w:view.w,h:view.h,safeR:view.safeR||0} };
   });
+  await gp.close();
   const hits=(a,b)=>a.x<b.x+b.w && b.x<a.x+a.w && a.y<b.y+b.h && b.y<a.y+a.h;
   ck('the crystal is clear of the map', !hits(lay.c, lay.map),
      'crystal '+Math.round(lay.c.x)+','+Math.round(lay.c.y)+' against a map ending at '+
      Math.round(lay.map.y+lay.map.h));
-  ck('and clear of his own health bar', !hits(lay.c, lay.bar));
-  ck('its label stays on the screen', lay.c.x + lay.c.w - lay.labelW >= 0 &&
+  ck('and clear of his own health bar', !!lay.bar && !hits(lay.c, lay.bar),
+     lay.bar ? 'bar ends at '+Math.round(lay.bar.y+lay.bar.h) : 'no boss bar up');
+  ck('its label stays on the screen', lay.shown && lay.c.x + lay.c.w - lay.labelW >= 0 &&
      lay.c.x + lay.c.w <= lay.view.w - lay.view.safeR,
      'right-aligned, ' + Math.round(lay.labelW) + 'px wide off a ' +
      Math.round(lay.c.w) + 'px column');
@@ -357,5 +370,5 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
 
   console.log('\nPASS '+pass.length+'\n  '+pass.join('\n  '));
   console.log('\nFAIL '+fail.length+(fail.length?'\n  '+fail.join('\n  '):''));
-  await b.close(); process.exit(fail.length?1:0);
+  await b.close(); pages.stop(); process.exit(fail.length?1:0);
 })();
