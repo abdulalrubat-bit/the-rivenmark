@@ -106,7 +106,7 @@ const STANDING = { pillar: 26, barrel: 12, crate: 11, urn: 10, banner: 16,
           lowFx,
           WALK_STEP, WALK_PACE, update, startRun, resetRun, loadStash,
           hardcore, loadHardcoreMode, ENEMY_TYPES, settleUnfinishedDelve,
-          abandonDelve */
+          abandonDelve, stepDelve */
 
 /* A body drawn with another body's art, and how much bigger it is than the
  * thing it borrowed from. Derived from the two radii rather than typed in, so
@@ -975,7 +975,8 @@ export class Delve extends Phaser.Scene {
   update(time, dtMs) {
     this.adaptFx(time);
     const dt = Math.min(0.05, dtMs / 1000);      // the core's own MAX_DT clamp
-    if (this.stepping && state === 'play') update(dt);
+    // stepDelve, not update: it is update behind the hit-stop (see the core).
+    if (this.stepping && state === 'play') stepDelve(dt);
 
     // Bodies: one sprite each, pooled. Sorted by y, which is what makes a
     // crowd read as standing on a floor rather than floating over it.

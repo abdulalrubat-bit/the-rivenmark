@@ -4502,6 +4502,18 @@ function freeze(seconds) {
   hitStop = Math.min(HITSTOP_MAX, Math.max(hitStop, seconds));
 }
 
+/* ONE FRAME OF A DELVE, as the host steps it. The hit-stop lives here: a heavy
+ * landing freezes the world -- not the picture -- for a beat, spent in real
+ * time so a run of them punctuates a fight rather than stalling it. It was a
+ * rule of the canvas build's frame loop, which is why the Phaser build, which
+ * called update() directly, never froze on a blow at all. Returns whether the
+ * world moved. */
+function stepDelve(dt) {
+  if (hitStop > 0) { hitStop = Math.max(0, hitStop - dt); return false; }
+  update(dt);
+  return true;
+}
+
 // Is the bar locked? Everything on the global cooldown asks this first.
 const onGCD = () => (player.gcd || 0) > 0;
 

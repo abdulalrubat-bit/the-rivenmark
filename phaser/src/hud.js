@@ -114,6 +114,13 @@ const CSS = `
    kit and the diagnostics button on top of both. */
 #hud .kit{position:absolute;right:10px;bottom:124px;display:grid;gap:8px;
      grid-template-columns:repeat(3,56px);pointer-events:auto}
+/* A 360px phone is the narrowest common screen, and at 56px the kit's left key
+   crossed into the stick's half by fourteen pixels. 52 is still well over a
+   thumb, and the row clears the middle line. */
+@media (max-width:374px){
+  #hud .kit{grid-template-columns:repeat(3,52px);gap:6px}
+  #hud .kit button,#hud .swap button{width:52px;height:52px}
+}
 
 /* THE CONDUIT: where the attack lives.
  *
@@ -279,7 +286,12 @@ const CSS = `
 #hud button.ready:before{box-shadow:inset 0 1px 0 rgba(214,178,110,.4),
      0 0 0 1px rgba(0,0,0,.85)}
 #hud button:active:before{background:linear-gradient(rgba(64,74,90,.9),rgba(26,32,44,.96)),#2a2419}
-#hud .swap{position:absolute;right:204px;bottom:16px;pointer-events:auto}
+/* Above the kit, on the right edge -- not beside the Conduit, where it used to
+   be. There it sat in the left half of the glass, which belongs to the stick:
+   a left thumb coming down anywhere there starts the stick, and one that came
+   down on the swap called the other hero in mid-fight instead of moving.
+   Measured by kit.js, which holds every key to the right half. */
+#hud .swap{position:absolute;right:10px;bottom:190px;pointer-events:auto}
 /* The other hero is not an ability, so it does not take an ability's colour.
    Bone, which is what the rest of the frame is written in. */
 #hud .swap button{--role:#cebe9e}
