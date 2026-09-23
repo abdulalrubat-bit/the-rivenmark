@@ -64,7 +64,14 @@ jobs:
         with:
           node-version: '20'
 
+      # packages: only platform-tools. The action's default list also names
+      # the legacy `tools` package, which the runner's cmdline-tools no longer
+      # carry -- sdkmanager exits 1 on it, and every Android build died in
+      # setup before reaching Gradle. Gradle fetches the platform and build
+      # tools it needs itself; the licences the action accepts cover that.
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
 
       # Gradle's syncGameAssets task runs android/sync-assets.js, which runs the
       # Phaser deploy -- esbuild and pngjs, neither of which exists in a fresh
