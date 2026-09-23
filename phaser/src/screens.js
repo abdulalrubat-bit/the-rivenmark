@@ -406,6 +406,13 @@ export class Screens {
   /* Which delve, and who goes down. The ladder is long, so this shows the
    * rungs around the one you can actually handle rather than all fifty-two. */
   renderGatehouse() {
+    // The hero last taken down, not Isaac for everybody: the stash remembers
+    // who that was, and the canvas gate-house opened on them. Once only -- a
+    // pick made here stands until the next session.
+    if (!this.heroFromStash) {
+      this.heroFromStash = true;
+      if (stash && HEROES[stash.hero]) this.pick.hero = stash.hero;
+    }
     // stashPower(), not powerLevel(). powerLevel takes (gear, level) and
     // called bare returns NaN -- which then compares false against every rung
     // and quietly labelled the whole ladder "an even match".
