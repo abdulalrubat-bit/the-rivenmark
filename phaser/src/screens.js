@@ -19,7 +19,8 @@
           VENDOR, vendorCost, canAfford, vendorBuy, HALL, hallTier,
           HALL_MAX, hallBuy, vaultCap, loadoutCap, saveLoadout, applyLoadout,
           deleteLoadout, discardFromVault, gearCtx, closeGear, compareLines,
-          bagCap, player, LOADOUT_MAX, stashCtx */
+          bagCap, player, LOADOUT_MAX, stashCtx, sortBag, bagShown, isUpgrade,
+          BAG_SORTS, bagSort, bagFilter */
 
 const CSS = `
 /* The safe areas, same as the HUD -- see the note at the top of hud.js. The
@@ -95,6 +96,13 @@ const CSS = `
 #screens .drop{flex:none;min-width:44px;min-height:44px;border-radius:6px;padding:0 6px;
   background:#191510;border:1px solid #4a3f30;color:#8c8168;font:inherit}
 #screens .drop.armed{border-color:#c0392b;color:#ffb4a0;background:#2a1612}
+/* The vault's order and filter. Chips rather than a menu: one tap each, and
+   the one in force is the lit one. */
+#screens .chips{display:flex;flex-wrap:wrap;gap:5px;margin:0 0 8px}
+#screens .chip{min-height:40px;min-width:40px;padding:0 10px;border-radius:20px;
+  background:#191510;border:1px solid #4a3f30;color:#a89878;font:inherit;font-size:12px}
+#screens .chip.on{border-color:#d6b26e;color:#f0e2c2;background:#2a2015}
+#screens .upmark{color:#8fd08a;margin-left:4px}
 /* What a carried piece would change against what is worn, per stat. */
 #screens .cmp{display:block;margin-top:3px;font-size:11px}
 #screens .cmp .up{color:#8fd08a}
@@ -688,6 +696,11 @@ export class Screens {
     // the core's gear context is pointed there. The canvas build showed this
     // when a piece was selected; here every row carries it, as the bag does.
     gearCtx = stashCtx();
+    // In the order and under the filter chosen -- the core's own, bagSort and
+    // bagFilter, which the canvas bag used. Sorting reorders the vault itself,
+    // so every index below is a real position in it.
+    sortBag(gearCtx);
+    const shown = bagShown(gearCtx);
     this.root.innerHTML =
       '<div class="card">' +
         '<h1>The Forge</h1>' +
@@ -708,16 +721,22 @@ export class Screens {
         '</div>' +
         this.presets() +
         '<p class="sub">The vault &mdash; ' + stash.vault.length + ' of ' + cap + '</p>' +
-        '<div class="rows">' +
-          (stash.vault.length
-            ? stash.vault.map((it, i) =>
-                '<div class="pair"><button class="row" type="button" data-on="' + i + '">' +
-                this.itemCard(it, 'wear', this.compareHtml(it)) + '</button>' +
+        this.vaultBar() +
+        '<div class="rows" id="vaultRows">' +
+          (shown.length
+            ? shown.map(({ it, i }) =>
+                '<div class="pair"><button class="row' + (isUpgrade(it, stash.gear) ? ' up' : '') +
+                '" type="button" data-on="' + i + '" data-uid="' + it.uid + '">' +
+                this.itemCard(it, isUpgrade(it, stash.gear)
+                  ? 'wear<span class="upmark">\u25b2</span>' : 'wear',
+                  this.compareHtml(it)) + '</button>' +
                 '<button class="drop' + (this.dropArmed === i ? ' armed' : '') +
                 '" type="button" data-drop="' + i + '" aria-label="discard">' +
                 (this.dropArmed === i ? 'discard?' : '\u2715') + '</button></div>').join('')
-            : '<div class="row"><span class="empty">Nothing here yet. ' +
-              'Champions and the avatar carry the Regalia.</span></div>') +
+            : '<div class="row"><span class="empty">' + (stash.vault.length
+                ? 'Nothing in the vault matches that.'
+                : 'Nothing here yet. Champions and the avatar carry the Regalia.') +
+              '</span></div>') +
         '</div>' +
       '</div>';
 
@@ -755,12 +774,47 @@ export class Screens {
         this.note = name ? name + ' is let go. Nothing in it was touched.' : null;
         done();
       }));
+    this.root.querySelectorAll('[data-sort]').forEach(b =>
+      b.addEventListener('click', () => {
+        const at = BAG_SORTS.findIndex(x => x.id === bagSort);
+        bagSort = BAG_SORTS[(at + 1) % BAG_SORTS.length].id;
+        done();
+      }));
+    this.root.querySelectorAll('[data-filter]').forEach(b =>
+      b.addEventListener('click', () => {
+        const f = b.dataset.filter;
+        bagFilter = bagFilter === f && f !== 'all' ? 'all' : f;
+        done();
+      }));
     const sv = this.root.querySelector('#saveKit');
     if (sv) sv.addEventListener('click', () => {
       const L = saveLoadout();
       this.note = L.name + ' saved \u2014 the kit you are wearing, as it is now.';
       done();
     });
+  }
+
+  /* THE VAULT'S ORDER AND FILTER. It holds sixty pieces, and up to a hundred
+   * and twenty with the Hall's Vault built out; a list that long in the order
+   * things were found is a list nobody can use. One chip cycles the order
+   * (power, slot, rarity, newest), and the rest filter: everything, only what
+   * beats what is worn, or one slot -- a slot chip tapped again clears it. The
+   * two rings are one chip, as they are one kind of thing. */
+  vaultBar() {
+    const order = (BAG_SORTS.find(x => x.id === bagSort) || BAG_SORTS[0]).name;
+    const chip = (f, label) => '<button class="chip' + (bagFilter === f ? ' on' : '') +
+      '" type="button" data-filter="' + f + '">' + label + '</button>';
+    const seen = new Set();
+    const slots = SLOTS.filter(sl => {
+      const k = sl.id === 'ring2' ? 'ring1' : sl.id;
+      if (seen.has(k)) return false; seen.add(k); return true;
+    });
+    return '<div class="chips" id="vaultBar">' +
+      '<button class="chip on" type="button" data-sort="1">Order: ' + order + '</button>' +
+      chip('all', 'All') + chip('up', '\u25b2 Upgrades') +
+      slots.map(sl => chip(sl.id, sl.mark + ' ' + (sl.id === 'ring1' ? 'Rings' : sl.name)))
+        .join('') +
+      '</div>';
   }
 
   /* KIT PRESETS. A preset is a list of item ids, so wearing one takes each

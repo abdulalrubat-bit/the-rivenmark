@@ -11,26 +11,17 @@ const { chromium } = require('playwright');
 // source. verify-core uses it to run the SAME file against index.html and
 // against the extracted core; it used to rewrite the URL with a string
 // replace, which silently stopped matching the moment this line changed.
-const PAGE = f => process.env.RIVENMARK_PAGE ||
-  ('file://' + require('path').join(__dirname, '..', '..', f));
-// The gate-house is behind the splash now: the stations live on a tab bar and
-// the bar does not exist until you have entered. Idempotent, so it is safe to
-// call before every station click however the test got there.
-async function enterHub(pg){
-  const onSplash = await pg.$eval('#splash', e=>e.classList.contains('on')).catch(()=>false);
-  if (!onSplash) return;
-  await pg.click('#toGatehouse');
-  await new Promise(r=>setTimeout(r,220));
-}
+const pages = require('./_pages.js');
 
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''));
-(async()=>{
+(async () => {
+  await pages.serve();
   const b=await chromium.launch();
   const p=await (await b.newContext({viewport:{width:430,height:900}})).newPage();
   const errs=[]; p.on('pageerror',e=>errs.push(e.message));
   p.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
-  await p.goto(PAGE('index.html')); await sleep(700);
+  await p.goto(pages.core()); await sleep(700);
 
   const seed = () => p.evaluate(()=>{
     stash=blankStash(); stash.xp=xpForLevel(30);
@@ -40,55 +31,11 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
     saveStash(); bagSort='power'; bagFilter='all';
   });
 
-  // ---- every slot is nameable in a grid ----------------------------------
-  const marks = await p.evaluate(async ()=>{
-    // Measure the strip rather than writing its length down here as well.
-    // It was hardcoded at ten cells, and grew to thirty-five the moment the
-    // icons went per-base -- a number kept in two places is a number that
-    // will disagree.
-    const url = getComputedStyle(document.documentElement)
-                  .getPropertyValue('--icons').trim().replace(/^url\(|\)$/g,'');
-    const img = new Image();
-    await new Promise(r => { img.onload = img.onerror = r; img.src = url; });
-    const CELL = 20;
-    const cells = Math.round(img.naturalWidth / CELL);
-    // and the CSS has to scale the strip by that same count or every icon is
-    // one of its neighbours
-    const probe = document.createElement('i');
-    probe.className = 'ico'; probe.style.setProperty('--sz','20px');
-    document.body.appendChild(probe);
-    const bg = getComputedStyle(probe).backgroundSize;
-    probe.remove();
-    const bases = new Set();
-    for (const k in BASES) for (const b of BASES[k]) bases.add(b);
-    return {
-      all: SLOTS.every(s => ICON[s.id] !== undefined),
-      distinct: new Set(SLOTS.map(s=>ICON[s.id])).size,
-      slots: SLOTS.length,
-      cells, decoded: img.naturalWidth > 0, height: img.naturalHeight,
-      sheet: url.slice(0, 30),
-      inRange: Object.values(ICON).every(i => Number.isInteger(i) && i >= 0 && i < cells),
-      cssWidth: bg,
-      cssOk: bg.indexOf((cells*20)+'px') === 0,
-      everyBase: [...bases].every(b => ICON[b] !== undefined),
-      missing: [...bases].filter(b => ICON[b] === undefined).slice(0,3),
-      baseKeysReal: Object.keys(ICON).filter(k =>
-        k[0] === k[0].toUpperCase() && !bases.has(k)).slice(0,3)
-    };
-  });
-  ck('the icon strip decodes', marks.decoded,
-     marks.cells+' cells of 20px, '+marks.height+'px tall');
-  ck('every slot has an icon', marks.all);
-  ck('and only the two rings share one', marks.distinct===marks.slots-1,
-     marks.distinct+' icons for '+marks.slots+' slots');
-  ck('every icon is inside the strip', marks.inRange);
-  ck('and the CSS scales it by the same count', marks.cssOk, marks.cssWidth);
-  ck('every base name has its own icon', marks.everyBase,
-     marks.missing.length ? 'missing '+marks.missing.join(', ') : '');
-  ck('and no icon names a base that does not exist', marks.baseKeysReal.length===0,
-     marks.baseKeysReal.join(', '));
-  ck('and the strip travels with the page -- no external file',
-     /^"?data:image\/png;base64,/.test(marks.sheet), marks.sheet.slice(0,26)+'...');
+  /* The canvas build's bag drew each piece and each slot filter from an
+   * embedded strip of pixel icons, and eight checks here held that strip to
+   * its CSS. The Forge that ships names pieces and marks slots with glyphs
+   * instead, so they went with the canvas build; icons for the Forge are on
+   * the roadmap as polish. */
 
   // ---- sorting ------------------------------------------------------------
   const sorted = await p.evaluate(()=>{
@@ -147,97 +94,68 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   ck('nothing is not an upgrade', !up.none);
 
   // ---- the screen ---------------------------------------------------------
-  await seed();
-  await p.evaluate(()=>{ state='menu'; showScreen('splash'); });
-  await sleep(120);
-  await enterHub(p); await p.click('#toKit'); await sleep(350);
-  const bar = await p.evaluate(()=>({
-    chips: [...document.querySelectorAll('#bagBar .chip')].map(
-             c => c.textContent.trim() || (c.querySelector('.ico') ? 'ico' : '?')),
-    chipIcons: document.querySelectorAll('#bagBar .chip .ico').length,
-    cells: document.querySelectorAll('#bagGrid .cellbtn').length,
-    ups: document.querySelectorAll('#bagGrid .cup').length,
-    icons: document.querySelectorAll('#bagGrid .cellbtn .ico').length,
-    // the old rarity diamond outspecified .ico and squashed every icon to
-    // eleven pixels; assert the box the icon actually gets
-    box: (()=>{ const i=document.querySelector('#bagGrid .cellbtn .ico');
-                const c=getComputedStyle(i); return c.width+' x '+c.height; })() }));
-  ck('the bag has an order control and a filter for every slot',
-     bar.chips.length === 2 + 1 + 7, bar.chips.join(' '));
-  ck('and the slot filters are drawn as icons, not letters',
-     bar.chipIcons === 7, bar.chipIcons + ' icon chips');
-  ck('and marks which cells beat what is worn', bar.ups>0,
-     bar.ups+' of '+bar.cells+' marked');
-  ck('every filled cell draws its item icon', bar.icons>0,
-     bar.icons+' icons');
-  ck('at the size it asked for', bar.box === '28px x 28px', bar.box);
+  // The Forge that ships: an order chip, All, Upgrades, a chip a slot.
+  const g=await (await b.newContext({viewport:{width:430,height:900}})).newPage();
+  g.on('pageerror',e=>errs.push(e.message));
+  g.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
+  await g.goto(pages.game('norun'));
+  await g.waitForFunction(()=>typeof blankStash==='function', null, {timeout:30000});
+  await g.evaluate(()=>{ localStorage.clear();
+    stash=blankStash(); stash.xp=xpForLevel(30);
+    for(const sl of SLOTS) stash.gear[sl.id]=rollItem(0.45, sl.id);
+    for(let i=0;i<44;i++) stash.vault.push(rollItem(Math.random()));
+    stash.vault.push(rollSetPiece('blade')); itemSeq=500; saveStash(); });
+  await g.goto(pages.game());
+  await g.waitForSelector('#screens.up #descend', {timeout:30000});
+  await g.click('#screens [data-tab="gear"]'); await sleep(300);
+  const bar = await g.evaluate(()=>({
+    sort: document.querySelectorAll('#vaultBar [data-sort]').length,
+    filters: [...document.querySelectorAll('#vaultBar [data-filter]')].map(c=>c.dataset.filter),
+    marked: [...document.querySelectorAll('#vaultBar [data-filter]')]
+      .filter(c=>SLOT_BY_ID[c.dataset.filter])
+      .every(c=>c.textContent.trim().startsWith(SLOT_BY_ID[c.dataset.filter].mark)),
+    rows: document.querySelectorAll('#vaultRows [data-on]').length,
+    ups: document.querySelectorAll('#vaultRows [data-on].up').length }));
+  ck('the vault has an order control and a filter for every slot',
+     bar.sort===1 && bar.filters.length === 2 + 7, bar.filters.join(' '));
+  ck('and each slot filter carries the slot’s mark', bar.marked);
+  ck('and marks which pieces beat what is worn', bar.ups>0,
+     bar.ups+' of '+bar.rows+' marked');
 
   // cycling the order control
-  const first = await p.evaluate(()=>document.querySelector('#bagBar .chip').textContent);
-  await p.click('#bagBar .chip:nth-child(1)'); await sleep(200);
-  const second = await p.evaluate(()=>document.querySelector('#bagBar .chip').textContent);
-  ck('tapping the order control changes the order', first!==second,
-     first.trim()+' -> '+second.trim());
+  const label = () => g.$eval('#vaultBar [data-sort]', e=>e.textContent.trim());
+  const first = await label();
+  await g.click('#vaultBar [data-sort]'); await sleep(200);
+  const second = await label();
+  ck('tapping the order control changes the order', first!==second, first+' -> '+second);
 
   // filtering to one slot
-  await p.click('#bagBar .chip:nth-child(4)'); await sleep(200);
-  const filt = await p.evaluate(()=>{
-    const C = { gear: stash.gear, bag: stash.vault };
-    return { filter: bagFilter,
-             cells: document.querySelectorAll('#bagGrid .cellbtn').length,
-             allBlades: bagShown(C).every(o=>o.it.slot==='blade') };
-  });
-  ck('a slot chip shows only that slot', filt.filter==='blade' && filt.allBlades,
-     filt.cells+' blades');
-  await p.click('#bagBar .chip:nth-child(4)'); await sleep(200);
-  ck('and tapping it again clears the filter',
-     await p.evaluate(()=>bagFilter)==='all');
+  await g.click('#vaultBar [data-filter="blade"]'); await sleep(200);
+  const filt = await g.evaluate(()=>({ filter: bagFilter,
+    shown: [...document.querySelectorAll('#vaultRows [data-on]')]
+             .map(r=>stash.vault[+r.dataset.on].slot) }));
+  ck('a slot chip shows only that slot',
+     filt.filter==='blade' && filt.shown.length>0 && filt.shown.every(s=>s==='blade'),
+     filt.shown.length+' blades');
+  await g.click('#vaultBar [data-filter="blade"]'); await sleep(200);
+  ck('and tapping it again clears the filter', await g.evaluate(()=>bagFilter)==='all');
 
-  // ---- the selection survives a re-sort ----------------------------------
-  const keep = await p.evaluate(()=>{
-    bagFilter='all'; bagSort='found'; renderGear();
-    const C = gearCtx;
-    // pick something that is definitely not first under the other orders
-    const idx = 7;
-    const uid = C.bag[idx].uid;
-    gearSel = { from:'bag', index: idx, uid };
-    bagSort = 'power'; renderGear();
-    const at = C.bag.findIndex(x=>x.uid===uid);
-    return { uid, held: gearSel && gearSel.uid, index: gearSel && gearSel.index,
-             at, item: selectedItem() && selectedItem().uid };
-  });
-  ck('a selection follows its item through a re-sort',
-     keep.held===keep.uid && keep.index===keep.at && keep.item===keep.uid,
-     'uid '+keep.uid+' now at '+keep.at);
-
-  const gone = await p.evaluate(()=>{
-    const C = gearCtx;
-    gearSel = { from:'bag', index: 0, uid: -12345 };   // never existed
-    renderGear();
-    return gearSel;
-  });
-  ck('and an item that is no longer there clears the selection', gone===null);
-
-  // ---- equipping still equips the thing you tapped -----------------------
-  const eq = await p.evaluate(()=>{
-    stash=blankStash();
-    for(const sl of SLOTS) stash.gear[sl.id]=rollItem(0.3, sl.id);
-    for(let i=0;i<25;i++) stash.vault.push(rollItem(Math.random()));
-    saveStash();
-    openGear('stash');
-    bagSort='power'; bagFilter='all'; renderGear();
-    const C = gearCtx;
-    const target = C.bag.find(it=>it.slot==='boots') || C.bag[0];
-    gearSel = { from:'bag', index: C.bag.indexOf(target), uid: target.uid };
-    renderGear();                       // re-sorts under the selection
-    equipSelected();
-    return { worn: stash.gear[target.slot] && stash.gear[target.slot].uid,
-             wanted: target.uid,
-             stillInBag: stash.vault.some(x=>x.uid===target.uid) };
-  });
-  ck('equipping equips the item that was selected, not the cell',
-     eq.worn===eq.wanted, 'wore '+eq.worn+', wanted '+eq.wanted);
-  ck('and it leaves the vault when it does', !eq.stillInBag);
+  // ---- equipping equips the piece you tapped, whatever the order ----------
+  // The canvas bag had a selection that had to follow its item through a
+  // re-sort; the Forge wears a piece on the tap, so the promise is that the
+  // row tapped after a re-sort is the piece that ends up worn.
+  await g.click('#vaultBar [data-sort]'); await sleep(200);
+  const want = await g.evaluate(()=>{
+    const r=[...document.querySelectorAll('#vaultRows [data-on]')]
+      .find(r=>stash.vault[+r.dataset.on].slot==='boots');
+    return r ? +r.dataset.uid : null; });
+  await g.click('#vaultRows [data-uid="'+want+'"]'); await sleep(200);
+  const eq = await g.evaluate(w=>({ worn: stash.gear.boots && stash.gear.boots.uid,
+    stillInVault: stash.vault.some(x=>x.uid===w) }), want);
+  ck('equipping wears the piece that was tapped, not whatever is in its place',
+     want!==null && eq.worn===want, 'wore '+eq.worn+', tapped '+want);
+  ck('and it leaves the vault when it does', !eq.stillInVault);
+  await g.close();
 
   /* --- THE FOUNTAIN -------------------------------------------------------
    * A coffer used to hand you a number and drop one thing ten units away,
@@ -317,5 +235,5 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   ck('no console errors', errs.length===0, errs.slice(0,3).join(' | '));
   console.log('\nPASS '+pass.length+'\n  '+pass.join('\n  '));
   console.log('\nFAIL '+fail.length+(fail.length?'\n  '+fail.join('\n  '):''));
-  await b.close(); process.exit(fail.length?1:0);
+  await b.close(); pages.stop(); process.exit(fail.length?1:0);
 })();
