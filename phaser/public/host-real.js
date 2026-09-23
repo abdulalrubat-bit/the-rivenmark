@@ -45,10 +45,34 @@
   // Reading is the host's; deciding what a save is allowed to say is the
   // core's sanitizeStash, the same one the canvas build uses. This used to be
   // a bare Object.assign, which trusted every item, cap and number on disk.
+  //
+  // THE BACKUP. Every save that reads back cleanly is copied beside itself as
+  // the last good one. If the main save will not parse -- a write cut off by
+  // the phone killing the app, storage damaged -- the backup is loaded
+  // instead of a blank stash, and `stashRecovered` says so, so the game can
+  // tell the player rather than quietly handing them less than they had.
+  const BAK = () => key() + '.bak';
+  const readSave = k => {
+    try {
+      const v = JSON.parse(localStorage.getItem(k));
+      return v && typeof v === 'object' && !Array.isArray(v) ? v : null;
+    } catch (e) { return null; }
+  };
+  window.stashRecovered = false;
   window.loadStash = () => {
-    let st = null;
-    try { st = JSON.parse(localStorage.getItem(key())); } catch (e) {}
-    return sanitizeStash(st);
+    let st = readSave(key());
+    if (st) {
+      try { localStorage.setItem(BAK(), JSON.stringify(st)); } catch (e) {}
+    } else {
+      let raw = null;
+      try { raw = localStorage.getItem(key()); } catch (e) {}
+      if (raw !== null) {                      // there WAS a save, and it is damaged
+        st = readSave(BAK());
+        window.stashRecovered = !!st;
+      }
+    }
+    try { return sanitizeStash(st); }
+    catch (e) { return sanitizeStash(readSave(BAK())); }   // never, but never a crash
   };
 
   // Hardcore's own three. The honours are a separate key on purpose: they are
@@ -62,8 +86,11 @@
   window.saveHonours = h => {
     try { localStorage.setItem(HONOURS_KEY, JSON.stringify(h)); } catch (e) {}
   };
+  // The backup goes with it: a Hardcore death that a backup could undo is not
+  // a death.
   window.dropHardcoreStash = () => {
-    try { localStorage.removeItem(HC_STASH_KEY); } catch (e) {}
+    try { localStorage.removeItem(HC_STASH_KEY); localStorage.removeItem(HC_STASH_KEY + '.bak'); }
+    catch (e) {}
   };
   // Which mode was last taken up. Read once at boot -- a player who closed the
   // app inside a Hardcore life must not come back to their softcore kit and

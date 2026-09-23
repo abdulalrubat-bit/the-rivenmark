@@ -6883,8 +6883,40 @@ function blankStash() {
            bounty: null, bountyArmed: false,
            // A Hardcore delve in progress. See settleUnfinishedDelve.
            delving: false,
-           hall: { vault: 0, forge: 0, reliquary: 0, wardstone: 0 } };
+           hall: { vault: 0, forge: 0, reliquary: 0, wardstone: 0 },
+           // Which shape of save this is. See STASH_MIGRATIONS.
+           v: STASH_VERSION };
 }
+
+/* SAVE VERSIONS. A save carries the version of the shape it was written in,
+ * and loading walks it forward one step at a time through the migrations
+ * below before sanitizeStash filters it. Version 0 is every save written
+ * before the stamp existed; stepping it to 1 is the stamp itself. A change to
+ * the save's shape adds a step here, rather than a guess in the loader.
+ *
+ * A save from a NEWER build than this one (a downgrade) is not walked back --
+ * there is no way down -- but it is still filtered, so it loads whatever this
+ * build can understand of it and never crashes on the rest. */
+const STASH_VERSION = 1;
+const STASH_MIGRATIONS = [
+  st => st                                     // 0 -> 1: the version stamp
+];
+function migrateStash(st) {
+  let v = Math.max(0, Math.floor(finite(st.v, 0)));
+  while (v < STASH_VERSION && STASH_MIGRATIONS[v]) { st = STASH_MIGRATIONS[v](st) || st; v++; }
+  return st;
+}
+
+// A number from disk: a finite one, or the default. `+x || 0` let Infinity
+// through, and a save holding Infinity coins is a save that buys everything.
+function finite(x, d) {
+  const n = typeof x === 'number' ? x : typeof x === 'string' && x.trim() !== '' ? +x : NaN;
+  return Number.isFinite(n) ? n : d;
+}
+// Is `k` one of the table's own keys? Every id table here is a plain object,
+// so HEROES['constructor'] is truthy -- and a save naming its hero
+// 'constructor' passed the check and broke the game later instead of here.
+const owns = (tbl, k) => typeof k === 'string' && Object.prototype.hasOwnProperty.call(tbl, k);
 
 /* WHAT A SAVE IS ALLOWED TO SAY, split from where it is read.
  *
@@ -6896,46 +6928,48 @@ function blankStash() {
  * longer exists. This half touches nothing but its argument, so it goes into
  * the core and loadStash is one line of reading and a call. */
 function sanitizeStash(st) {
-  if (!st || typeof st !== 'object') return blankStash();
+  if (!st || typeof st !== 'object' || Array.isArray(st)) return blankStash();
+  st = migrateStash(st);
   const out = blankStash();
   // Anything on disk is last session's data and may predate a change to the
   // slots or the affix table, so it is filtered rather than trusted.
-  if (st.gear) for (const sl of SLOTS) {
-    if (validItem(st.gear[sl.id], sl.id)) out.gear[sl.id] = st.gear[sl.id];
+  if (st.gear && typeof st.gear === 'object') for (const sl of SLOTS) {
+    if (validItem(st.gear[sl.id], sl.id)) out.gear[sl.id] = mendItem(st.gear[sl.id]);
   }
   if (Array.isArray(st.vault)) {
-    out.vault = st.vault.filter(it => validItem(it)).slice(0, vaultCap());
+    out.vault = st.vault.filter(it => validItem(it)).slice(0, vaultCap()).map(mendItem);
   }
-  if (HEROES[st.hero]) out.hero = st.hero;
-  out.seq = +st.seq || 0;
-  out.xp = Math.max(0, +st.xp || 0);
+  if (owns(HEROES, st.hero)) out.hero = st.hero;
+  out.seq = Math.max(0, finite(st.seq, 0));
+  out.xp = Math.max(0, finite(st.xp, 0));
   out.level = levelForXp(out.xp);            // derived, never trusted from disk
-  out.coins = Math.max(0, +st.coins || 0);
-  out.pity = clamp(+st.pity || 0, 0, 20);
-  if (REGION_BY_ID[st.region]) out.region = st.region;
+  out.coins = Math.max(0, finite(st.coins, 0));
+  out.pity = clamp(finite(st.pity, 0), 0, 20);
+  if (owns(REGION_BY_ID, st.region)) out.region = st.region;
   // Only today's claim is worth keeping. Yesterday's is not a record of
   // anything, and a stale one that outlived its day would lock out the daily.
-  if (st.bounty && typeof st.bounty === 'object' && +st.bounty.day === dayStamp())
-    out.bounty = { day: +st.bounty.day, done: !!st.bounty.done };
+  if (st.bounty && typeof st.bounty === 'object' && finite(st.bounty.day, -1) === dayStamp())
+    out.bounty = { day: dayStamp(), done: !!st.bounty.done };
   out.bountyArmed = !!st.bountyArmed;
   out.delving = !!st.delving;
   // Tiers are the only thing on disk that cannot be re-earned, so they are
   // filtered as carefully as the gear: an id that no longer exists is dropped
   // rather than carried, and a tier above the ceiling is clamped to it.
   if (st.hall && typeof st.hall === 'object') {
-    for (const h of HALL) out.hall[h.id] = clamp(+st.hall[h.id] || 0, 0, HALL_MAX);
+    for (const h of HALL) out.hall[h.id] = clamp(Math.floor(finite(st.hall[h.id], 0)), 0, HALL_MAX);
   }
   // Loadouts hold item ids, not items, so a preset can never resurrect a
   // piece that has since been sold, tempered away or left in a delve.
   if (Array.isArray(st.loadouts)) {
-    out.loadouts = st.loadouts.slice(0, loadoutCap()).map(L => ({
-      name: String(L && L.name || 'Kit').slice(0, 18),
-      hero: HEROES[L && L.hero] ? L.hero : 'isaac',
+    out.loadouts = st.loadouts.filter(L => L && typeof L === 'object')
+      .slice(0, loadoutCap()).map(L => ({
+      name: (typeof L.name === 'string' && L.name ? L.name : 'Kit').slice(0, 18),
+      hero: owns(HEROES, L.hero) ? L.hero : 'isaac',
       slots: (() => {
         const o = {};
         for (const sl of SLOTS) {
-          const v = L && L.slots && L.slots[sl.id];
-          o[sl.id] = typeof v === 'number' ? v : null;
+          const v = L.slots && typeof L.slots === 'object' ? L.slots[sl.id] : null;
+          o[sl.id] = typeof v === 'number' && Number.isFinite(v) ? v : null;
         }
         return o;
       })()
@@ -6944,26 +6978,62 @@ function sanitizeStash(st) {
   // The corpse is filtered like everything else: a level id that no longer
   // exists, or items that no longer validate, simply stop being owed to you.
   const cp = st.corpse;
-  if (cp && typeof cp === 'object' && LEVEL_BY_ID[cp.level_id]) {
+  if (cp && typeof cp === 'object' && owns(LEVEL_BY_ID, cp.level_id)) {
     const items = Array.isArray(cp.items)
-      ? cp.items.filter(it => validItem(it)).slice(0, CORPSE_CARRY) : [];
-    const coins = Math.max(0, +cp.coins || 0);
+      ? cp.items.filter(it => validItem(it)).slice(0, CORPSE_CARRY).map(mendItem) : [];
+    const coins = Math.max(0, finite(cp.coins, 0));
     if (items.length || coins) {
       out.corpse = { level_id: cp.level_id,
-                     hero: HEROES[cp.hero] ? cp.hero : 'isaac',
-                     x: +cp.x || 0, y: +cp.y || 0, items, coins };
+                     hero: owns(HEROES, cp.hero) ? cp.hero : 'isaac',
+                     x: clamp(finite(cp.x, 0), 0, WORLD.w), y: clamp(finite(cp.y, 0), 0, WORLD.h),
+                     items, coins };
     }
   }
+  // Ids. A piece that came in without one gets one above every id in the
+  // save, and the counter moves past them all, so nothing handed out later
+  // can collide with a piece already owned.
+  const held = [...SLOTS.map(sl => out.gear[sl.id]), ...out.vault,
+                ...(out.corpse ? out.corpse.items : [])].filter(Boolean);
+  let top = out.seq;
+  for (const it of held) if (it.uid !== null) top = Math.max(top, it.uid);
+  for (const it of held) if (it.uid === null) it.uid = ++top;
+  out.seq = top;
   return out;
 }
 
+/* Is this a piece the game can hold? Every nested record is checked for its
+ * SHAPE before anything is read off it: this used to read `a.id` straight off
+ * each affix, so one `null` in a save's affix list threw inside the loader and
+ * took the whole stash down with it -- a crash at startup, every startup.
+ * It never throws now; anything it cannot vouch for is simply not a piece. */
+const AFFIX_SANE = 1e5;          // no real affix value is anywhere near this
 function validItem(it, slotId) {
-  if (!it || typeof it !== 'object') return false;
-  if (!SLOT_BY_ID[it.slot]) return false;
+  if (!it || typeof it !== 'object' || Array.isArray(it)) return false;
+  if (!owns(SLOT_BY_ID, it.slot)) return false;
   if (slotId && it.slot !== slotId) return false;
   if (!RARITY.some(r => r.id === it.rarity)) return false;
-  if (!Array.isArray(it.affixes)) return false;
-  return it.affixes.every(a => AFFIX_BY_ID[a.id] && isFinite(a.v));
+  if (!Array.isArray(it.affixes) || it.affixes.length > 12) return false;
+  for (const a of it.affixes) {
+    if (!a || typeof a !== 'object') return false;
+    if (!owns(AFFIX_BY_ID, a.id)) return false;
+    if (typeof a.v !== 'number' || !Number.isFinite(a.v) || Math.abs(a.v) > AFFIX_SANE) return false;
+  }
+  return true;
+}
+
+/* A valid piece, with the parts that are safe to repair repaired rather than
+ * the piece thrown away: a name or base that is not text, or an id that is
+ * not a number. The affixes are copied down to what they are, so nothing
+ * else a save smuggled in rides along on them. */
+function mendItem(it) {
+  const out = Object.assign({}, it);
+  out.affixes = it.affixes.map(a => ({ id: a.id, v: a.v }));
+  if (typeof out.base !== 'string' || !out.base) out.base = SLOT_BY_ID[it.slot].name;
+  if (typeof out.name !== 'string' || !out.name) out.name = out.base;
+  out.name = out.name.slice(0, 80);
+  if (!Number.isFinite(out.uid)) out.uid = null;     // given a fresh one by sanitizeStash
+  if (out.set !== undefined && out.set !== SET_ID) delete out.set;
+  return out;
 }
 
 let stash = blankStash();
