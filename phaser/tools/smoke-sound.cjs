@@ -1,0 +1,162 @@
+#!/usr/bin/env node
+/* The sound engine: when it may play, how much at once, where from, and the
+ * switch that turns it off.
+ *
+ * Headless Chromium has a real AudioContext with a silent output, so what is
+ * measured here is the engine's own bookkeeping -- what it agreed to play and
+ * what it refused -- and the context's state, not what came out of a speaker.
+ * Whether a sound is GOOD is for a person with headphones.
+ *
+ * WHAT WOULD MAKE THIS VACUOUS. An engine that plays nothing passes every
+ * "it was dropped" check, so each refusal is measured beside the same call
+ * being accepted: the flood lets exactly one through, the far sound is refused
+ * where the near one plays, and muted is checked against unmuted.
+ */
+const { chromium } = require('playwright');
+const buildOnce = require('./build-once.cjs');
+const { spawn } = require('child_process');
+const path = require('path');
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const pass = [], fail = [];
+const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note ? '  [' + note + ']' : ''));
+
+(async () => {
+  buildOnce();
+  const PORT = process.env.PORT || '8295';
+  const srv = spawn(process.execPath, [path.join(__dirname, 'serve.js')],
+                    { env: { ...process.env, PORT }, stdio: 'ignore' });
+  await sleep(800);
+  const b = await chromium.launch();
+  const ctxB = await b.newContext({ viewport: { width: 390, height: 844 } });
+  const p = await ctxB.newPage();
+  const errs = [];
+  p.on('pageerror', e => errs.push(e.message));
+  p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
+  const S = () => p.evaluate(() => __sound.stats());
+  const URL = 'http://localhost:' + PORT + '/?nogate&nogov';
+
+  try {
+    await p.goto(URL);
+    await p.evaluate(() => { try { localStorage.removeItem('rivenmark.sound.v1'); } catch (e) {} });
+    await p.goto(URL);
+    await p.waitForFunction(() => state === 'play' && window.__sound, null, { timeout: 30000 });
+    await p.evaluate(() => { for (const e of enemies) e.awake = false;
+      player.hp = player.maxHp = 1e9; player.invuln = 1e9; });
+
+    /* ---- nothing before a gesture ---------------------------------------- */
+    ck('no sound is possible before the page is touched',
+       (await S()).state === 'locked' && await p.evaluate(() => sfx('ui') === false));
+
+    // A tap on the middle of the playfield: a gesture, and nothing it lands on.
+    await p.mouse.click(195, 330);
+    await p.waitForFunction(() => __sound.stats().state === 'running', null, { timeout: 5000 })
+      .catch(() => {});
+    ck('the first tap wakes it', (await S()).state === 'running', (await S()).state);
+    ck('and it starts unmuted', (await S()).muted === false);
+
+    /* ---- the core's hook reaches it ---------------------------------------- */
+    const before = (await S()).played;
+    const took = await p.evaluate(() => sfx('ui'));
+    ck('sfx() from the core plays a sound', took === true && (await S()).played === before + 1);
+    ck('an unknown sound is refused, not thrown',
+       await p.evaluate(() => sfx('no-such-sound') === false));
+
+    /* ---- a flood is thinned ------------------------------------------------ */
+    await sleep(200);
+    const flood = await p.evaluate(() => {
+      let n = 0; for (let i = 0; i < 100; i++) if (sfx('ui')) n++; return n; });
+    ck('a hundred of the same sound in one frame plays once', flood === 1, flood + ' played');
+
+    // The engine-wide cap, with a recipe whose own limits are out of the way.
+    const capped = await p.evaluate(() => {
+      __sound.define('smoke-long', { max: 1000, gap: 0, make: (ctx, out, t) => {
+        const o = ctx.createOscillator(), g = ctx.createGain(); g.gain.value = 0.0001;
+        o.connect(g); g.connect(out); o.start(t); o.stop(t + 2); return 2; } });
+      let n = 0; for (let i = 0; i < 100; i++) if (sfx('smoke-long')) n++;
+      return { n, voices: __sound.stats().voices, cap: __sound.stats().cap };
+    });
+    ck('everything at once is held to the voice cap',
+       capped.voices <= capped.cap && capped.n > 1, capped.n + ' played, cap ' + capped.cap);
+    await sleep(2200);          // let the long voices finish
+
+    /* ---- where a sound is -------------------------------------------------- */
+    const place = await p.evaluate(() => {
+      __sound.define('smoke-here', { max: 1000, gap: 0, make: () => 0.05 });
+      const at = dx => { const ok = sfx('smoke-here', player.x + dx, player.y);
+        return ok ? __sound.log[__sound.log.length - 1] : null; };
+      return { here: at(0), right: at(400), left: at(-400), far: at(3000) };
+    });
+    ck('a sound at the hero is full and centred',
+       place.here && place.here.vol === 1 && place.here.pan === 0, JSON.stringify(place.here));
+    ck('one to the right is heard on the right, and quieter',
+       place.right && place.right.pan > 0.5 && place.right.vol < 1, JSON.stringify(place.right));
+    ck('one to the left is heard on the left',
+       place.left && place.left.pan < -0.5, JSON.stringify(place.left));
+    ck('one far across the map is not played at all', place.far === null);
+
+    /* ---- the switch on the HUD --------------------------------------------- */
+    const btn = '#hud .hold .snd';
+    ck('the HUD has a sound switch, showing on',
+       await p.$eval(btn, e => !e.classList.contains('off') && e.getAttribute('aria-pressed') === 'true'));
+    await p.click(btn); await sleep(300);
+    const off = await S();
+    ck('pressing it mutes', off.muted === true);
+    ck('and puts the context to sleep, not just at zero', off.state === 'suspended', off.state);
+    ck('and the switch shows it',
+       await p.$eval(btn, e => e.classList.contains('off') && e.getAttribute('aria-pressed') === 'false'));
+    ck('nothing plays while muted', await p.evaluate(() => sfx('ui') === false));
+    ck('the game is not paused by it', await p.evaluate(() => state === 'play'));
+
+    /* ---- remembered -------------------------------------------------------- */
+    await p.reload();
+    await p.waitForFunction(() => state === 'play' && window.__sound, null, { timeout: 30000 });
+    await p.mouse.click(195, 330); await sleep(300);
+    ck('muted is remembered across a reload', (await S()).muted === true);
+    ck('and the switch comes back showing it',
+       await p.$eval(btn, e => e.classList.contains('off')));
+    ck('and a tap does not wake a muted engine', (await S()).state !== 'running', (await S()).state);
+
+    /* ---- the switch on the pause screen, agreeing with the HUD ------------- */
+    await p.click('#hud .hold button'); await sleep(300);
+    const pl = () => p.$eval('#screens .snd', e => e.textContent);
+    ck('the pause screen has the switch too, reading off', /off/i.test(await pl()), await pl());
+    const n0 = (await S()).played;
+    await p.click('#screens .snd'); await sleep(400);
+    ck('turning it on there turns it on', (await S()).muted === false && (await S()).state === 'running');
+    ck('the label follows', /on/i.test(await pl()), await pl());
+    ck('the HUD switch agrees', await p.$eval(btn, e => !e.classList.contains('off')));
+    ck('and turning it on answers with a sound', (await S()).played === n0 + 1);
+    // Re-opening the card must not stack a watcher per visit.
+    for (let i = 0; i < 5; i++) {
+      await p.click('#screens .go'); await sleep(150);
+      await p.click('#hud .hold button'); await sleep(150);
+    }
+    const w = await p.evaluate(() => __sound.watchers.length);
+    ck('opening the pause screen again and again does not pile up listeners', w <= 3, w + ' watchers');
+    await p.click('#screens .go'); await sleep(200);
+
+    /* ---- the background ----------------------------------------------------- */
+    const vis = async hidden => {
+      await p.evaluate(h => { Object.defineProperty(document, 'hidden', { get: () => h, configurable: true });
+        document.dispatchEvent(new Event('visibilitychange')); }, hidden);
+      await sleep(300); return (await S()).state; };
+    ck('sent to the background, it sleeps', await vis(true) === 'suspended');
+    ck('and wakes when it comes back', await vis(false) === 'running');
+
+    /* ---- the rules page stays silent ---------------------------------------- */
+    const t = await ctxB.newPage();
+    await t.goto('http://localhost:' + PORT + '/core-test.html');
+    await t.waitForFunction(() => typeof resetRun === 'function', null, { timeout: 15000 });
+    ck('the core-only page has the hook as a silent no-op',
+       await t.evaluate(() => typeof sfx === 'function' && sfx('ui') === undefined && !window.__sound));
+    await t.close();
+
+    ck('no console errors', errs.length === 0, errs.slice(0, 3).join(' | '));
+  } catch (e) {
+    ck('the suite got all the way through', false, e.message.split('\n')[0]);
+  }
+  console.log('\nPASS ' + pass.length + '\n  ' + pass.join('\n  '));
+  console.log('\nFAIL ' + fail.length + (fail.length ? '\n  ' + fail.join('\n  ') : ''));
+  await b.close(); srv.kill();
+  process.exit(fail.length ? 1 : 0);
+})();

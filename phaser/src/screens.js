@@ -232,7 +232,19 @@ export class Screens {
         '<p class="sub">The delve waits. It does not wait kindly.</p>' +
         '<button class="go" type="button">Press on</button>' +
         '<button class="alt" type="button">' + leave + '</button>' +
+        '<button class="alt snd" type="button"></button>' +
       '</div>';
+    // Sound, where a player looks for it: on the screen that stops the game.
+    // The HUD has the same switch; both follow the engine, so they agree.
+    const snd = this.root.querySelector('.snd'), eng = window.__sound;
+    if (eng) {
+      const label = m => {
+        if (!snd.isConnected && snd.textContent) return false;
+        snd.textContent = m ? 'Sound: off' : 'Sound: on';
+      };
+      eng.onMute(label);
+      snd.addEventListener('click', () => eng.toggle());
+    } else snd.remove();
     this.root.querySelector('.go').addEventListener('click', () => {
       if (typeof resumeRun === 'function') resumeRun();
       else this.show(null);
