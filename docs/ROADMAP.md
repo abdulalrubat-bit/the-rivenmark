@@ -57,7 +57,7 @@ Synthesised with Web Audio, no files. One small engine, one switch.
       slams, a surge held and a corpse reclaimed
 - [x] Bosses: arrival, their big moves, their fall
 - [x] Menus: taps, buying, building, equipping, discarding, descending
-- [ ] Ambience, then music — last, once the effects are right
+- [x] Ambience, then music — a bed per region and the hearth; a generative score that follows the game (hearth, delve, boss, hold)
 
 ## Polish, found on the way
 

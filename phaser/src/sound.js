@@ -7,8 +7,12 @@
  *
  * The chain is short on purpose:
  *
- *   voice -> panner -> gain --\
- *   voice -> panner -> gain ---+-> master -> limiter -> speakers
+ *   voice -> panner -> gain --+-> fx ----\
+ *   voice -> panner -> gain --/           +-> master -> limiter -> speakers
+ *   ambience and music (music.js) -> music --/
+ *
+ * Two buses, so a player can turn the music down without losing the fight,
+ * or the other way round. Both volumes are remembered with the mute.
  *
  * THE LIMITER is a compressor set hard (ratio 12, fast attack). A hundred
  * thralls dying in one frame is a real event in this game, and without it the
@@ -130,7 +134,9 @@ export function limiter(ctx) {
 class Engine {
   constructor() {
     this.ctx = null;
-    this.muted = readMuted();
+    const pr = readPrefs();
+    this.muted = pr.muted;
+    this.vol = { fx: pr.fx, music: pr.music };
     this.hidden = typeof document !== 'undefined' && document.hidden;
     this.voices = [];            // { name, end } for everything still sounding
     this.last = Object.create(null);
@@ -156,6 +162,9 @@ class Engine {
       this.master.gain.value = this.muted ? 0 : MASTER;
       const lim = limiter(ctx);
       this.master.connect(lim); lim.connect(ctx.destination);
+      this.fx = ctx.createGain(); this.fx.gain.value = this.vol.fx;
+      this.music = ctx.createGain(); this.music.gain.value = this.vol.music;
+      this.fx.connect(this.master); this.music.connect(this.master);
       // One second of white noise, made once and shared by every burst.
       const n = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
       const d = n.getChannelData(0);
@@ -177,7 +186,7 @@ class Engine {
 
   setMuted(on) {
     this.muted = !!on;
-    try { localStorage.setItem(MUTE_KEY, JSON.stringify({ muted: this.muted })); } catch (e) {}
+    this.save();
     if (this.master) {
       const t = this.ctx.currentTime;
       this.master.gain.cancelScheduledValues(t);
@@ -190,6 +199,20 @@ class Engine {
    * the context is actually running, so the player hears that it worked. The
    * press itself is a gesture, so this is also where a context that has never
    * been unlocked gets unlocked. */
+  save() {
+    try { localStorage.setItem(MUTE_KEY, JSON.stringify({ muted: this.muted, fx: this.vol.fx,
+                                                          music: this.vol.music })); } catch (e) {}
+  }
+
+  /* 'fx' or 'music', 0..1. */
+  setVolume(bus, v) {
+    if (!(bus in this.vol)) return;
+    this.vol[bus] = Math.max(0, Math.min(1, +v || 0));
+    this.save();
+    const node = this[bus];
+    if (node && this.ctx) node.gain.setTargetAtTime(this.vol[bus], this.ctx.currentTime, 0.03);
+  }
+
   toggle() {
     this.unlock();
     const on = this.muted;
@@ -246,7 +269,7 @@ class Engine {
       const p = ctx.createStereoPanner(); p.pan.value = pan;
       p.connect(g); out = p;
     }
-    g.connect(this.master);
+    g.connect(this.fx);
     const t = now + 0.005;
     // The core calls this from inside the fight -- damageEnemy, hurtPlayerBy --
     // so a recipe that throws must cost a sound, never the frame.
@@ -283,9 +306,11 @@ class Engine {
     };
   }
 }
-function readMuted() {
-  try { return !!(JSON.parse(localStorage.getItem(MUTE_KEY)) || {}).muted; }
-  catch (e) { return false; }
+function readPrefs() {
+  let o = {};
+  try { o = JSON.parse(localStorage.getItem(MUTE_KEY)) || {}; } catch (e) {}
+  const v = x => (typeof x === 'number' && x >= 0 && x <= 1 ? x : 1);
+  return { muted: !!o.muted, fx: v(o.fx), music: v(o.music) };
 }
 
 export const sound = new Engine();

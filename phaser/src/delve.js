@@ -22,6 +22,7 @@ import { Atmosphere } from './atmosphere.js';
 import { screenOrigin, pinToScreen, cssPoint } from './screen.js';
 import { installSound } from './sound.js';
 import './sounds.js';
+import { Score } from './music.js';
 
 // The core's palette is CSS hex strings; Phaser wants numbers.
 const hex = (css, fallback) => {
@@ -295,6 +296,7 @@ export class Delve extends Phaser.Scene {
     window.showScreen = name => this.screens.show(name);
     // Before the HUD, which puts a switch on it.
     this.sound = installSound();
+    this.score = window.__score = new Score(this.sound);
     this.wireInput();
     this.hud = new Hud();
     // Stepping through is a deliberate act, not something you do by walking
@@ -1059,11 +1061,26 @@ export class Delve extends Phaser.Scene {
     this.gov.begin(time);
   }
 
+  /* What the music should be doing: [mode, place]. A boss or an invader up
+   * is the boss music; standing in an open gate is the hold; otherwise the
+   * delve is the delve and everything else is the gate-house hearth. */
+  musicFor() {
+    if (state === 'play' || state === 'pause' || (state === 'gear' && gearCtx && gearCtx.live)) {
+      const place = REGION ? REGION.id : null;
+      if ((run.boss && run.boss.hp > 0) || (run.invader && run.invader.hp > 0)) return ['boss', place];
+      if (run.gateOpen && portal.inside) return ['hold', place];
+      return ['delve', place];
+    }
+    if (state === 'over') return ['over', null];
+    return ['hearth', 'hearth'];
+  }
+
   update(time, dtMs) {
     this.adaptFx(time);
     const dt = Math.min(0.05, dtMs / 1000);      // the core's own MAX_DT clamp
     // stepDelve, not update: it is update behind the hit-stop (see the core).
     if (this.stepping && state === 'play') stepDelve(dt);
+    this.score.set(...this.musicFor());
 
     // Bodies: one sprite each, pooled. Sorted by y, which is what makes a
     // crowd read as standing on a floor rather than floating over it.

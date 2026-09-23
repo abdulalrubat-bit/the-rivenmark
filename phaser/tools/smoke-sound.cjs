@@ -365,8 +365,18 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
       player.hp = player.maxHp = 1e9; player.invuln = 1e9; });
     // Waits of a second and more: the boss sounds are long and space themselves.
     const boss = async (f, arg) => { await sleep(1100); return since(f, arg); };
+    const M = () => p.evaluate(() => __score.stats());
+    await sleep(1200);
+    const mDelve = await M();
+    ck('in a delve the music is the delve’s, in its own region',
+       mDelve.mode === 'delve' && mDelve.place === await p.evaluate(() => REGION.id), JSON.stringify(mDelve));
+    ck('and the region’s ambience is playing', mDelve.bed === true);
+    ck('and the score has played something', mDelve.notes > 0, mDelve.notes + ' notes');
     const ar = await boss(() => { portal.x = player.x + 200; portal.y = player.y; spawnDeceiver(); });
     ck('the Deceiver arriving is heard', ar.includes('arrive'), ar.join());
+    const nBoss = (await M()).notes; await sleep(2200); const mb = await M();
+    ck('with a boss up, the music turns to the war-drum', mb.mode === 'boss' && mb.notes - nBoss >= 2,
+       mb.mode + ', ' + (mb.notes - nBoss) + ' beats in 2.2s');
     const bl = await boss(async () => { run.boss.blink = 0; await new Promise(r => setTimeout(r, 300)); });
     ck('his blink is heard', bl.includes('blink'), bl.join());
     const mi = await boss(async () => { run.boss.split = 0; await new Promise(r => setTimeout(r, 300)); });
@@ -404,6 +414,18 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     const menu = async (sel, f) => { const n0 = await p.evaluate(() => __sound.played);
       await sleep(250); if (sel) await p.click(sel); if (f) await f(); await sleep(250);
       return p.evaluate(n0 => __sound.log.filter(l => l.n > n0).map(l => l.name), n0); };
+    await sleep(600);
+    const mh = await p.evaluate(() => __score.stats());
+    ck('at the gate-house the music is the hearth', mh.mode === 'hearth' && mh.bed === true, JSON.stringify(mh));
+    // The two volumes: set, heard by the buses, and remembered.
+    const vol = await p.evaluate(async () => { __sound.setVolume('music', 0); __sound.setVolume('fx', 0.5);
+      await new Promise(r => setTimeout(r, 400));
+      const o = { music: __sound.music.gain.value, fx: __sound.fx.gain.value,
+                  kept: JSON.parse(localStorage.getItem('rivenmark.sound.v1')) };
+      __sound.setVolume('music', 1); __sound.setVolume('fx', 1); return o; });
+    ck('music can be turned down on its own', vol.music < 0.01 && vol.fx > 0.45 && vol.fx < 0.55,
+       JSON.stringify(vol));
+    ck('and both volumes are remembered', vol.kept && vol.kept.music === 0 && vol.kept.fx === 0.5);
     const tb = await menu('#screens .tabs [data-tab="vendor"]');
     ck('a tab tapped clicks', tb.includes('tap'), tb.join());
     const by = await menu('#screens [data-buy="reliquary"]');
