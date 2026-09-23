@@ -1,5 +1,5 @@
 {
-  "generated_from": "index.html",
+  "generated_from": "tools/forge/forge.js",
   "supersample": 2,
   "gait_poses": 8,
   "heroes": [
@@ -17,9 +17,10 @@
     "gorger",
     "flayer",
     "shaman",
-    "lieutenant"
+    "lieutenant",
+    "crucible"
   ],
-  "sprite_count": 226,
+  "sprite_count": 227,
   "kinds": {
     "thrall": {
       "radius": 13,
@@ -129,6 +130,16 @@
       "slag": 12,
       "role": "press",
       "colour": "#c2352a",
+      "introduced_at_depth": null
+    },
+    "crucible": {
+      "radius": 45,
+      "life": 820,
+      "damage": 30,
+      "stride": 0,
+      "slag": 30,
+      "role": "press",
+      "colour": "#ff5a24",
       "introduced_at_depth": null
     }
   },
