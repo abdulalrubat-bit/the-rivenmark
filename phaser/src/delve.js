@@ -106,7 +106,7 @@ const STANDING = { pillar: 26, barrel: 12, crate: 11, urn: 10, banner: 16,
           lowFx,
           WALK_STEP, WALK_PACE, update, startRun, resetRun, loadStash,
           hardcore, loadHardcoreMode, ENEMY_TYPES, settleUnfinishedDelve,
-          abandonDelve, stepDelve */
+          abandonDelve, stepDelve, pauseRun, resumeRun, openGear, closeGear */
 
 /* A body drawn with another body's art, and how much bigger it is than the
  * thing it borrowed from. Derived from the two radii rather than typed in, so
@@ -888,10 +888,32 @@ export class Delve extends Phaser.Scene {
     this.input.on('gameout', () => stickEnd());
 
     // Desktop: the same keys the canvas build takes, into the same Set.
-    this.input.keyboard?.on('keydown', e => keys.add(e.key.toLowerCase()));
+    // The commands as well as the movement: Escape or P holds and releases
+    // the delve, I or B opens the bag and closes it again. The canvas build
+    // had both; the port kept only the movement keys.
+    this.input.keyboard?.on('keydown', e => {
+      const k = e.key.toLowerCase();
+      if (k === 'escape' || k === 'p') {
+        if (state === 'gear') closeGear();
+        else if (state === 'play') pauseRun();
+        else if (state === 'pause') resumeRun();
+        return;
+      }
+      if (k === 'i' || k === 'b') {
+        if (state === 'gear') closeGear();
+        else if (state === 'play') openGear('run');
+        return;
+      }
+      keys.add(k);
+    });
     this.input.keyboard?.on('keyup',   e => keys.delete(e.key.toLowerCase()));
     // A window that loses focus mid-delve must not leave a key held down.
     window.addEventListener('blur', () => { keys.clear(); stickEnd(); });
+    // Put down in the middle of a fight -- another app, the lock button, a
+    // call -- and the delve is held, not left running for the moment it comes
+    // back. The APK's activity does this through onPause; this is the same for
+    // the web build and the installed PWA, which had nothing.
+    document.addEventListener('visibilitychange', () => { if (document.hidden) pauseRun(); });
   }
 
   /* The stick, drawn where the thumb put it. Two rings: where the finger went
