@@ -7936,15 +7936,19 @@ function compareLines(it) {
     }
   };
   add(it, 1); add(worn, -1);
-  const NAMES = { damage:'damage', maxHp:'life', ward:'ward', speed:'stride',
+  const NAMES = { damage:'damage', maxHp:'life', ward:'harm turned', speed:'stride',
                   range:'reach', sweep:'sweep', fireDelay:'swing time',
                   magnet:'draw', regen:'mending' };
   const out = [];
   for (const k in totals) {
     const v = totals[k];
     if (Math.abs(v) < 0.005) continue;
-    const pct = k.endsWith('%');
-    const stat = pct ? k.slice(0, -1) : k;
+    const mul = k.endsWith('%');
+    const stat = mul ? k.slice(0, -1) : k;
+    // Ward is a flat fraction of harm turned (0.07 is 7%), not a multiplier and
+    // not a whole number -- printed like one it read "-0.0 ward".
+    const pct = mul || stat === 'ward';
+    if (pct && Math.round(v * 100) === 0) continue;   // nothing a player could feel
     // less swing time is better, so its sign reads backwards
     const good = stat === 'fireDelay' ? v < 0 : v > 0;
     const txt = pct ? (v > 0 ? '+' : '') + Math.round(v * 100) + '%'
