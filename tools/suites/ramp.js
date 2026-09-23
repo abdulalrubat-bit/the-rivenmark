@@ -11,26 +11,17 @@ const { chromium } = require('playwright');
 // source. verify-core uses it to run the SAME file against index.html and
 // against the extracted core; it used to rewrite the URL with a string
 // replace, which silently stopped matching the moment this line changed.
-const PAGE = f => process.env.RIVENMARK_PAGE ||
-  ('file://' + require('path').join(__dirname, '..', '..', f));
-// The gate-house is behind the splash now: the stations live on a tab bar and
-// the bar does not exist until you have entered. Idempotent, so it is safe to
-// call before every station click however the test got there.
-async function enterHub(pg){
-  const onSplash = await pg.$eval('#splash', e=>e.classList.contains('on')).catch(()=>false);
-  if (!onSplash) return;
-  await pg.click('#toGatehouse');
-  await new Promise(r=>setTimeout(r,220));
-}
+const pages = require('./_pages.js');
 
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''));
-(async()=>{
+(async () => {
+  await pages.serve();
   const b=await chromium.launch();
   const p=await (await b.newContext({viewport:{width:430,height:900}})).newPage();
   const errs=[]; p.on('pageerror',e=>errs.push(e.message));
   p.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
-  await p.goto(PAGE('index.html')); await sleep(700);
+  await p.goto(pages.core()); await sleep(700);
   await p.evaluate(()=>{ window.requestAnimationFrame = () => 0; });
 
   // ---- what each rung is allowed to contain ------------------------------
@@ -138,20 +129,31 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   ck('the opening line of a ramp delve is its lesson',
      !!said.note && said.banner && !said.custom, said.note);
 
-  await p.evaluate(()=>{ state='menu'; showScreen('splash'); });
-  await sleep(120);
-  await enterHub(p); await p.click('#toDelve'); await sleep(400);
-  const cards = await p.evaluate(()=>{
-    const r=[...document.querySelectorAll('#levelPick .rung')];
-    return { teach: r.filter(c=>c.querySelector('.teach')).length,
-             first: r[0].querySelector('.teach') &&
-                    r[0].querySelector('.teach').textContent };
+  /* And the ladder says it too, on the ramp rungs only -- asked of the
+   * gate-house that ships. It shows a window of rungs around the one picked,
+   * so a rung near the end of the ramp is picked to put ramp rungs and
+   * ordinary ones in the same window. */
+  const g = await (await b.newContext({viewport:{width:390,height:844}})).newPage();
+  g.on('pageerror',e=>errs.push(e.message));
+  await g.goto(pages.game());
+  await g.waitForSelector('#screens.up #descend', {timeout:30000});
+  await g.click('#screens [data-level="'+(await g.evaluate(n=>LEVELS[n-2].id, N))+'"]');
+  await sleep(200);
+  const cards = await g.evaluate(()=>{
+    const rows=[...document.querySelectorAll('#screens [data-level]')];
+    return rows.map(r=>({ id:r.dataset.level,
+                          lesson:(LEVEL_BY_ID[r.dataset.level]||{}).lesson||null,
+                          teach:r.querySelector('.teach') ? r.querySelector('.teach').textContent : null }));
   });
-  ck('and the ladder says it too, on the ramp rungs only', cards.teach===N,
-     cards.teach+' cards carry one: "'+cards.first+'"');
+  const ramp = cards.filter(c=>c.lesson), plain = cards.filter(c=>!c.lesson);
+  ck('and the ladder says it too, on the ramp rungs only',
+     ramp.length>0 && plain.length>0 &&
+     ramp.every(c=>c.teach===c.lesson) && plain.every(c=>c.teach===null),
+     ramp.length+' ramp rungs carry their line, '+plain.length+' others carry none: "'+
+     (ramp[0]&&ramp[0].teach)+'"');
 
   ck('no console errors', errs.length===0, errs.slice(0,3).join(' | '));
   console.log('\nPASS '+pass.length+'\n  '+pass.join('\n  '));
   console.log('\nFAIL '+fail.length+(fail.length?'\n  '+fail.join('\n  '):''));
-  await b.close(); process.exit(fail.length?1:0);
+  await b.close(); pages.stop(); process.exit(fail.length?1:0);
 })();

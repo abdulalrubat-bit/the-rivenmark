@@ -13,19 +13,11 @@
  * and they are the reason the rest is here.
  */
 const { chromium } = require('playwright');
-const PAGE = f => process.env.RIVENMARK_PAGE ||
-  ('file://' + require('path').join(__dirname, '..', '..', f));
-async function enterHub(pg){
-  const onSplash = await pg.$eval('#splash', e=>e.classList.contains('on')).catch(()=>false);
-  if (!onSplash) return;
-  await pg.click('#toGatehouse');
-  await new Promise(r=>setTimeout(r,220));
-}
-async function beginRun(p){
-  await enterHub(p); await p.click('#toDelve');
-  await new Promise(r => setTimeout(r, 150));
-  await p.click('#beginRun');
-  await new Promise(r => setTimeout(r, 500));
+const pages = require('./_pages.js');
+// Into a delve: see pages.descend.
+async function beginRun(p, hero, diff) {
+  await pages.descend(p, { hero, diff });
+  await new Promise(r => setTimeout(r, 300));
 }
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 // 'x ' on a failure, because run-suites.js surfaces exactly that prefix when
@@ -34,12 +26,13 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const pass=[],fail=[];
 const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''));
 
-(async()=>{
+(async () => {
+  await pages.serve();
   const b=await chromium.launch();
   const p=await (await b.newContext({viewport:{width:430,height:900}})).newPage();
   const errs=[]; p.on('pageerror',e=>errs.push(e.message));
   p.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
-  await p.goto(PAGE('index.html'));
+  await p.goto(pages.core());
   await beginRun(p);
 
   /* An empty room with one sleeping body a fixed distance off, so every
@@ -511,5 +504,5 @@ const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''
   ck('no console errors', errs.length===0, errs.slice(0,2).join(' | '));
   console.log('\nPASS '+pass.length+'\n  '+pass.join('\n  '));
   console.log('\nFAIL '+fail.length+(fail.length?'\n  '+fail.join('\n  '):''));
-  await b.close(); process.exit(fail.length?1:0);
+  await b.close(); pages.stop(); process.exit(fail.length?1:0);
 })();

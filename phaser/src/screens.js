@@ -44,7 +44,11 @@ const CSS = `
  * the face is clipped to the padding box and the band to the border box, so
  * the border IS the band and the radius follows both.
  */
-#screens .card{width:min(340px,92vw);border:3px solid transparent;border-radius:10px;
+/* The width is the CONTENT's: 16px of padding and a 3px border sit outside it,
+   38px in all. Written as 92vw, a 360px Android -- one of the commonest phones
+   there is -- got a 369px card and a page that scrolled sideways. The cap
+   leaves 6px either side at every size, and 390px and up are unchanged. */
+#screens .card{width:min(340px,calc(100vw - 50px));border:3px solid transparent;border-radius:10px;
   /* The face must be OPAQUE. Half-transparent, the band underneath shows
      straight through it -- the band is painted over the whole border box, and
      the face only clips WHERE it lands, not what is beneath -- so the top of
@@ -81,6 +85,8 @@ const CSS = `
   background-origin:border-box;background-clip:padding-box,border-box;
   box-shadow:inset 0 1px 0 rgba(214,178,110,.22)}
 #screens .row small{color:#8c8168;display:block}
+#screens .row .teach{display:block;color:#c9a86a;font-style:italic;font-size:11px;
+  margin-top:3px;line-height:1.35}
 /* A row with a second, smaller control beside it: discard on a vault piece,
    let go on a preset. Kept apart from the row so the big target does the
    common thing and the rare, permanent one needs its own deliberate tap. */
@@ -462,7 +468,13 @@ export class Screens {
             ((v) =>
             '<button class="row' + (this.pick.level === l.id ? ' on' : '') +
             '" data-level="' + l.id + '" type="button"><span>' + l.name +
-            '<small>power ' + l.power + ' · ' + l.quota + ' slag</small></span>' +
+            '<small>power ' + l.power + ' · ' + l.quota + ' slag</small>' +
+            // The teaching ramp: each of the first rungs adds one kind and
+            // says what it is. The canvas ladder carried the line; this one
+            // had dropped it, so the lesson was only ever the banner on the
+            // way in -- after the choice it was meant to inform.
+            (l.lesson ? '<span class="teach">' + l.lesson + '</span>' : '') +
+            '</span>' +
             '<small class="verdict" style="color:' + v.colour + '">' + v.text +
             '</small></button>')(delveStanding(l, power))).join('') +
         '</div>' +

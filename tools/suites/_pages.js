@@ -51,7 +51,21 @@ async function serve() {
   return base;
 }
 
+/* Into a delve, the way the old gate-house's Begin button went: the hero,
+ * rung and difficulty picked, defaulting to what that screen defaulted to --
+ * Isaac, the rung recommendedLevel names for the stash's power, Riven. The
+ * suites used to click through three screens of the canvas build's menus to
+ * get here; the menus are Phaser's now and smoke:boot drives them, so a suite
+ * about what happens INSIDE a delve starts one directly. */
+async function descend(p, o = {}) {
+  await p.evaluate(o => {
+    const level = o.level || recommendedLevel(stashPower());
+    startRun(o.hero || stash.hero || 'isaac', level, o.diff || 'riven');
+  }, o);
+}
+
 module.exports = {
+  descend,
   serve,
   core: () => process.env.RIVENMARK_PAGE || base + 'core-test.html',
   game: (q = '') => base + 'index.html' + (q ? '?' + q.replace(/^\?/, '') : ''),

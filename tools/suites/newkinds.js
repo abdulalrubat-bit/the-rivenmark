@@ -11,8 +11,9 @@ const {chromium}=require('playwright');
 // source. verify-core uses it to run the SAME file against index.html and
 // against the extracted core; it used to rewrite the URL with a string
 // replace, which silently stopped matching the moment this line changed.
-const PAGE = f => process.env.RIVENMARK_PAGE ||
-  ('file://' + require('path').join(__dirname, '..', '..', f));
+// The forge page: the core for the rules, and the sprites the new kinds must
+// have been forged with.
+const pages = require('./_pages.js');
 let pass=0,fail=0;
 /* 'x ' on a failure, and not 'FAIL': run-suites.js surfaces exactly that
  * prefix when it summarises a sweep, so this suite reported its count and
@@ -22,7 +23,7 @@ const ok=(c,m)=>{ if(c){pass++;} else {fail++;console.log('  x',m);} };
 const b=await chromium.launch();
 const p=await(await b.newContext({viewport:{width:390,height:844}})).newPage();
 const errs=[];p.on('pageerror',e=>errs.push(e.message));
-await p.goto(PAGE('index.html'));
+await p.goto(pages.forge());
 await new Promise(r=>setTimeout(r,900));
 const R=await p.evaluate(()=>{
   const o={};
@@ -77,24 +78,9 @@ const R=await p.evaluate(()=>{
   for(let i=0;i<200;i++) updateGloom(0.05);
   o.gloom = {cast:+g1.toFixed(2), afterTenSeconds:+run.gloom.toFixed(2)};
 
-  // And it has to actually reach the screen. A curse whose only evidence is a
-  // number ticking down is not a curse; measure the frame it produces.
-  window.requestAnimationFrame=()=>0;
-  const lum=()=>{ draw(2);
-    const d=ctx.getImageData(0,0,canvas.width,canvas.height).data;
-    const W=canvas.width,H=canvas.height;
-    let all=0,edge=0,ne=0,n=0;
-    for(let y=0;y<H;y+=3)for(let x=0;x<W;x+=3){
-      const i=(y*W+x)*4, l=d[i]*0.3+d[i+1]*0.6+d[i+2]*0.1;
-      all+=l; n++;
-      if(x<W*0.12||x>W*0.88||y<H*0.12||y>H*0.88){edge+=l;ne++;}
-    }
-    return {all:all/n, edge:edge/ne}; };
-  run.gloom=0;              const gOff=lum();
-  run.gloom=GLOOM_TIME*0.5; const gOn=lum();
-  run.gloom=0;
-  o.dim = { all:+(100*(1-gOn.all/gOff.all)).toFixed(1),
-            edge:+(100*(1-gOn.edge/gOff.edge)).toFixed(1), lowFx };
+  /* Whether the gloom reaches the screen was measured here off the canvas
+   * build's own frame. That renderer is gone; the Phaser build draws the
+   * gloom, and smoke:air measures it taking the light there. */
   return o;
 });
 
@@ -152,8 +138,6 @@ ok(R.bledThroughIFrames, 'a wound ticks through i-frames');
 ok(R.bleedEnds, 'a wound runs out');
 ok(R.gloom.cast>0, 'gloom lands');
 ok(R.gloom.afterTenSeconds===0, 'gloom lifts, got '+R.gloom.afterTenSeconds);
-ok(R.dim.all>12, 'gloom visibly takes the light: '+R.dim.all+'% dimmer overall');
-ok(R.dim.edge>R.dim.all, 'and it closes in from the edges: '+R.dim.edge+'% there');
 
 ok(errs.length===0, 'no page errors: '+errs.join('|'));
 console.log('\n'+pass+' passed, '+fail+' failed');

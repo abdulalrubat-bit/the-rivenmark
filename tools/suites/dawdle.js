@@ -22,8 +22,7 @@
  * a strategy, and a strategy that wins shows up loudly or is not a strategy.
  */
 const { chromium } = require('playwright');
-const PAGE = f => process.env.RIVENMARK_PAGE ||
-  ('file://' + require('path').join(__dirname, '..', '..', f));
+const pages = require('./_pages.js');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const pass = [], fail = [];
 /* 'x ' on a failure: run-suites.js surfaces exactly that prefix when it
@@ -35,15 +34,13 @@ const RUNGS = [3, 17, 30];
 const TRIES = Math.max(6, +(process.env.DAWDLE_TRIES || 10));
 
 (async () => {
+  await pages.serve();
   const b = await chromium.launch();
   const p = await (await b.newContext({ viewport: { width: 390, height: 844 } })).newPage();
   const errs = []; p.on('pageerror', e => errs.push(e.message));
   p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
-  await p.goto(PAGE('index.html'));
-  await p.click('#toGatehouse').catch(() => {});
-  await sleep(220);
-  await p.click('#toDelve'); await sleep(150);
-  await p.click('#beginRun'); await sleep(500);
+  await p.goto(pages.core());
+  await pages.descend(p); await sleep(300);
 
   /* One delve, played by a bot that is deliberately as simple as it can be
    * and still finish: walk to the nearest slag-carrying body, tap it, walk to
@@ -245,5 +242,5 @@ const TRIES = Math.max(6, +(process.env.DAWDLE_TRIES || 10));
   ck('no console errors', errs.length === 0, errs.slice(0, 2).join(' | '));
   console.log('\nPASS ' + pass.length + '\n  ' + pass.join('\n  '));
   console.log('\nFAIL ' + fail.length + (fail.length ? '\n  ' + fail.join('\n  ') : ''));
-  await b.close(); process.exit(fail.length ? 1 : 0);
+  await b.close(); pages.stop(); process.exit(fail.length ? 1 : 0);
 })();
