@@ -10,7 +10,7 @@ point of the document.
 
 - **Repository:** `abdulalrubat-bit/the-rivenmark` (private)
 - **Ships as:** an Android WebView APK, and an installable PWA
-- **Built from:** `phaser/` — see *Two builds* at the end
+- **Built from:** `phaser/` — see *One game, one engine* at the end
 
 ---
 
@@ -1061,27 +1061,23 @@ bundle; `tools/export-art.js` writes `art/` at 2× from the same forge, and
 
 ---
 
-## 16. Two builds, one game
+## 16. One game, one engine
 
-**The Phaser build in `phaser/` is the game.** It is what the APK carries, what
-is deployed, and the only build whose look is maintained.
+**The Phaser build in `phaser/` is the game.** It is what the APK carries,
+what is deployed, and the only build there is.
 
-| | `index.html` (canvas) | `phaser/` |
-|---|---|---|
-| What it is | the simulation's source of truth | the game |
-| Ships | no | APK and web |
-| Runs from `file://` | yes, no build step | no — `npm run serve` |
-| On an Adreno 840 | 20fps, effects already shed | a locked 60 |
-| Its UI | frozen | maintained |
+It was ported from a single-file canvas build, `index.html`. The port lifted
+that file's simulation out whole, and for a while `npm run verify` ran the same
+suites against both and proved they agreed. The canvas build has now been
+retired: the simulation is `phaser/src/core/core.js`, edited by hand, and
+everything drawn is the rest of `phaser/src`. The sprite forge that drew the
+art was kept as a tool, `tools/forge/`, which `tools/export-art.js` uses to
+regenerate `art/`.
 
-Every line of simulation lives in `index.html` and is lifted out **whole** by
-`phaser/tools/extract-core.js` into `phaser/src/core/core.js`; `npm run verify`
-then runs the same suites against both and proves they agree. Change how the
-game *behaves* in the canvas build. Change how it *looks* in `phaser/src`.
-
-The extractor refuses a core with a hole in it — it has twice caught logic
-being silently dropped into the host, including a Hardcore death that would
-never have wiped anything in the build that actually ships.
+`phaser/tools/check-core.js` runs with every build and refuses a core that
+reaches for the page. Its predecessor, the extractor, twice caught logic being
+silently dropped into the host, including a Hardcore death that would never
+have wiped anything in the build that shipped.
 
 ### Performance
 
@@ -1103,7 +1099,8 @@ rate goes — it has never fired on this hardware, which is the point of it. A
 
 ### The safety net
 
-**36 canvas suites / ~959 checks**, and **13 Phaser suites**. The discipline
+**40 rules suites / 1,013 checks** in `tools/suites`, and **19 Phaser smoke
+suites** that check what is drawn. The discipline
 they are written to:
 
 - Measure, do not guess. Ablate. Revert-prove.

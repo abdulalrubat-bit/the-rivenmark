@@ -15,7 +15,7 @@ grow past it later.
 - [x] Hardcore can be escaped: *Abandon the delve*, or closing the app mid-fight,
       skips the death wipe — both now count as death (`hardcore`, `smoke:boot`)
 - [x] Saves are loaded unchecked in the build that ships — the validation is
-      the core's `sanitizeStash` now, and both builds use it (`saves`)
+      the core's `sanitizeStash` now (`saves`)
 - [x] Corpse loot vanishes if you pick it up and then abandon or close the app
       — the claim is settled when the run ends now (`extract`)
 - [x] WebView debugging is switched on in release builds — debug builds only
@@ -25,8 +25,20 @@ grow past it later.
 - [x] `npm run verify` needs Playwright but `package.json` does not list it
 - [x] Dev server: `public`-prefix path check, crash on a malformed `%`
 - [x] Dev builds: the service worker caches `dev` forever on localhost
-- [x] Remove `w2.txt`–`w5.txt` (`debug.html` stays: it is generated on
-      purpose and two suites load it)
+- [x] Remove `w2.txt`–`w5.txt`
+
+## Phase 1½ — One engine
+
+- [x] The game is Phaser only. The canvas build (`index.html`, `debug.html`)
+      is retired; `phaser/src/core/core.js` is the hand-edited simulation,
+      guarded by `check-core.js` and the rules suites
+- [x] What only the old UI could do, rebuilt: difficulty choice, kit presets,
+      discard, the bag mid-delve
+- [x] What the port had quietly lost, restored: hit-stop, camera shake, hit
+      flash, the hurt vignette, broken props, keyboard and Back, ramp lessons,
+      comparisons, vault sort and filter (`smoke:feel`, `smoke:kit`, suites)
+- [x] Swap sits above the kit, clear of it at every phone width
+- [x] The sprite forge kept as an art tool (`tools/forge/`)
 
 ## Phase 2 — Sound
 
@@ -50,6 +62,9 @@ Synthesised with Web Audio, no files. One small engine, one switch.
       which fall back to Georgia
 - [ ] The gate arrow can sit over the minimap's corner
 - [ ] Gloom "closes in from the edges" has no Phaser check yet (newkinds.js)
+- [ ] A dev panel (god mode, seeds, jump to a region) — the canvas build's
+      `debug.html` had one; Phaser has the diagnostics dump, the profiler and
+      the `?nogate` / `?nogov` / `?norun` flags
 
 ## Phase 3 — Settings and learning to play
 
@@ -60,8 +75,9 @@ Synthesised with Web Audio, no files. One small engine, one switch.
 
 ## Phase 4 — Content
 
-- [ ] The third boss: design, then build (the canvas build is where the
-      behaviour goes; `phaser/src` is where it is drawn)
+- [ ] The third boss: design, then build (behaviour in
+      `phaser/src/core/core.js`, drawing in the rest of `phaser/src`, art in
+      `tools/forge/`)
 - [ ] Rung 52 as a milestone: a proper moment when you reach the bottom,
       without closing the ladder
 - [ ] **Before any rung past 52:** difficulty is `d = i / (LEVEL_COUNT - 1)`,

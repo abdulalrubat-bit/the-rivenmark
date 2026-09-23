@@ -99,8 +99,8 @@ android {
  * would have shipped a build of the game that no longer existed, and the only
  * way to find out would have been to play it on a phone.
  *
- * Never up to date, deliberately. Its real inputs are index.html, the whole
- * of phaser/src and the whole of art/ -- declaring those is a list that goes
+ * Never up to date, deliberately. Its real inputs are the whole of
+ * phaser/src, phaser/public and art/ -- declaring those is a list that goes
  * stale in precisely the way this task exists to prevent, and the script it
  * calls is four seconds and does its own change detection downstream.
  *

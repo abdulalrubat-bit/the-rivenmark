@@ -1,26 +1,16 @@
-/* Moved out of a scratch directory and into the repo.
- *
- * These suites were the entire safety net for a 14,000-line single file, and
- * they lived only in /tmp -- one container restart from gone, and certain to
- * go when the session that made them ended. The page they drive is found
- * relative to this file now instead of by an absolute path, so they run from
- * any clone, on a desktop or under Termux.
- */
+/* Run through tools/run-suites.js, or alone with node. Which page it drives --
+ * the core, the game or the forge -- is in ./_pages.js. */
 const { chromium } = require('playwright');
-// RIVENMARK_PAGE points the suite at a different page without touching its
-// source. verify-core uses it to run the SAME file against index.html and
-// against the extracted core; it used to rewrite the URL with a string
-// replace, which silently stopped matching the moment this line changed.
-const PAGE = f => process.env.RIVENMARK_PAGE ||
-  ('file://' + require('path').join(__dirname, '..', '..', f));
+const pages = require('./_pages.js');
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''));
-(async()=>{
+(async () => {
+  await pages.serve();
   const b=await chromium.launch();
   const p=await (await b.newContext({viewport:{width:430,height:900}})).newPage();
   const errs=[]; p.on('pageerror',e=>errs.push(e.message));
   p.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
-  await p.goto(PAGE('index.html')); await sleep(700);
+  await p.goto(pages.core()); await sleep(700);
 
   /* A rung to run the epithet tests on. The mutators are the DECEIVER's -- they
    * set his blink, his mirages, his guard -- and every third rung past the ramp
@@ -32,7 +22,7 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
    * avatar cannot silently point this at the wrong one again. */
   const RUNG = await p.evaluate(() =>
     LEVELS.findIndex((L, i) => i > RAMP.length + 4 && L.boss === 'deceiver'));
-  if (RUNG < 0) { console.log('\nFAIL 1\n  x no Deceiver rung past the ramp'); await b.close(); process.exit(1); }
+  if (RUNG < 0) { console.log('\nFAIL 1\n  x no Deceiver rung past the ramp'); await b.close(); pages.stop(); process.exit(1); }
 
   // ---- the roll -----------------------------------------------------------
   const roll = await p.evaluate(()=>{
@@ -218,5 +208,5 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   ck('no console errors', errs.length===0, errs.slice(0,3).join(' | '));
   console.log('\nPASS '+pass.length+'\n  '+pass.join('\n  '));
   console.log('\nFAIL '+fail.length+(fail.length?'\n  '+fail.join('\n  '):''));
-  await b.close(); process.exit(fail.length?1:0);
+  await b.close(); pages.stop(); process.exit(fail.length?1:0);
 })();

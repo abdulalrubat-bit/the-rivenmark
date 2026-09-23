@@ -1,26 +1,24 @@
 # phaser/
 
-The Rivenmark, moving from hand-written canvas 2D to Phaser — developed
-on-device under Termux.
+The Rivenmark, on Phaser. It is developed on the phone under Termux.
 
-**This is the game.** It is what the APK carries, what is deployed to the web,
-and the only build whose look is maintained — see *Two builds, one game* in the
-root README.
+**This is the game.** It is what the APK carries and what is deployed to the
+web. The canvas build it was ported from has been retired. See *One game, one
+engine* in the root README.
 
 It began as a proving ground for two questions about whether the port was
-possible at all, and both are long settled; that scene is still here and still
-reachable at `?scene=proving`, because it remains the quickest way to ask what
-the renderer costs. Everything else is the delve.
+possible at all, and both are long settled. That scene is still reachable at
+`?scene=proving`, because it is still the quickest way to ask what the
+renderer costs. Everything else is the delve.
 
-The canvas build at `../index.html` has not been retired and is not going to
-be: it is the simulation's source of truth, lifted out of that file whole by
-`tools/extract-core.js` and proved identical by `npm run verify`. What it no
-longer is, is the thing a player sees. Simulation changes go there; anything
-touching the HUD, the menus or the screens goes in `src/`.
+`src/core/core.js` is the simulation, and it is edited directly. It is a
+classic script whose top-level names are globals, and `tools/check-core.js`
+(run by every build) refuses one that touches the page. Anything touching the
+HUD, the menus or the screens goes in the rest of `src/`.
 
 ## Why move at all
 
-The canvas build draws every body with its own `drawImage`, and the cost of a
+The canvas build drew every body with its own `drawImage`, and the cost of a
 frame is per-call, not per-pixel: measured on a software rasteriser, 158 wall
 tiles cost 4.5ms while a single blit of a 1548×2456 image cost nothing
 measurable. A GPU renderer batches draws that share a texture, which is the
@@ -31,7 +29,8 @@ input, physics — this game already has, written to fit it.
 
 ## What actually has to be rewritten
 
-Less than it looks. Measured against `../index.html`, 13,601 lines:
+Less than it looked. Measured against the canvas build's `index.html`, 13,601
+lines:
 
 | | lines | moves across |
 |---|---:|---|
@@ -95,11 +94,15 @@ behind it are the same object the HUD is.
 | `npm run smoke:loop` | 27 checks — dying, the outcome, the gate-house, descending again |
 | `npm run smoke:forge` | 13 checks — equipping, and that worn gear reaches the hero |
 | `npm run smoke:spend` | 13 checks — the vendor and the hall, and that coin buys what it says |
+| `npm run smoke:dpr` | the stick, the minimap and the gate arrow on high-DPR phones |
+| `npm run smoke:kit` | the kit and the Swap button do not collide at phone widths |
+| `npm run smoke:feel` | a blow lands: the camera shakes, the body flashes, the edges go red |
+| `npm run smoke:boot` | the gate-house, the difficulty choice, and hardcore |
 | `npm run smoke` | 13 checks — the proving scene and the diagnostics dump |
-| `npm run verify` | the canvas suites against the extracted core |
+| `npm run suites` | the rules suites in `../tools/suites`, against this build |
 
 `smoke:loop` also covers the two things a delve can end with that the canvas
-build has had all along and this one only recently grew: holding a delve, and
+build had all along and this one grew late: holding a delve, and
 walking out of one without banking anything.
 
 One thing never sheds, and the numbers are the second: `floatDmg` and
@@ -155,14 +158,13 @@ baked once into canvas textures at boot and then drawn as ordinary images. A
 gradient rasterised once is free; a gradient built per frame is what made the
 canvas build slow.
 
-**And a profiler, so the two builds can be compared.** `profile`, next to
+**And a profiler.** `profile`, next to
 *copy diagnostics*, ablates each layer in turn — walls, dressing, scenery,
 bodies, pickups, gate, fx, beacons, numbers, overlay, fog, motes, vignette,
 light — and reports the median delivered frame with each one switched off. The
-canvas build has the same thing in `tools/debug-overlay.js`, deliberately with
-the same method, statistics and report shape, so a profile taken from each on
-the SAME phone reads side by side. That comparison is the only thing that can
-say whether moving engines bought anything.
+canvas build had the same thing, with the same method, statistics and report
+shape, so a profile from each on the SAME phone read side by side. That is
+how the move was shown to have bought something.
 
 Ablation, because no clock in the process can see rasterising — the same
 finding as the governor below. Vsync clamps the result from underneath, so a
@@ -328,11 +330,11 @@ native, pngjs is pure JS, and esbuild ships an `android-arm64` binary.
 ## Two things that cannot run on the phone
 
 - **`../tools/export-art.js`** needs Chromium to re-forge the sprites from the
-  drawing code. `art/` is committed, so a phone never needs to run it — but
-  after changing a forge function in `../index.html` you must re-export on a
-  desktop and re-run `npm run atlas`.
-- **The Playwright suites**, for the same reason. The canvas build's 29 suites
-  stay a desktop job.
+  drawing code in `../tools/forge/`. `art/` is committed, so a phone never
+  needs to run it — but after changing a forge function you must re-export on
+  a desktop and re-run `npm run atlas`.
+- **The Playwright suites**, for the same reason. The rules suites and the
+  smoke suites stay a desktop job.
 
 ## `public/` is generated
 
@@ -342,38 +344,23 @@ hand.
 
 ## The core
 
-`src/core/core.js` is **generated** by `npm run core` from `../index.html`. Do
-not edit it; edit the canvas build and re-run. The canvas build is still the
-live game, and a port that forks the logic by hand drifts the moment anything
-is tuned.
+`src/core/core.js` is the simulation: config and tuning, maths, the spatial
+hash, world generation, collision, entities and spawning, the kit, input, the
+horde, the bosses, the stash and the economy. It is **edited by hand**.
 
-What comes across: config and tuning, maths, the spatial hash, world
-generation, collision, entities and spawning, the kit, input, the whole
-simulation, and the enemy ecosystem and Deceiver encounter that live in the
-canvas build's UI section but are simulation wherever they sit. 493 statements,
-271kB. What stays behind: 16 drawing functions and 47 page-bound ones.
+It began as a mechanical extraction from the canvas build, and until that
+build was retired `npm run verify` ran the canvas suites against both and
+proved they agreed. Now it is the only copy, so what guards it is:
 
-At the foot of the generated file is a list of what the host must supply —
-generated too, so it cannot go stale. `src/host/stubs.js` provides them.
+- **`tools/check-core.js`**, run by every build. The core is loaded as a
+  classic script beside the bundle, and it must not reach for the page: no
+  DOM, no canvas, no drawing. A core that does fails the build.
+- **The rules suites** in `../tools/suites`, run with `npm run suites`. Most
+  of them load `core-test.html`, which is the core with no Phaser at all, so
+  a rule is tested without a renderer in the way.
+- **The smoke suites** here, which check that what the core says is what is
+  drawn.
 
-### It is verified, not asserted
-
-`npm run verify` runs the canvas build's own suites against the extracted core
-and compares them, suite by suite, in the same session. A suite that asserts
-about the renderer or the DOM is reported as not comparable rather than quietly
-dropped — deciding that by hand, one failure at a time, is indistinguishable
-from excluding whatever happens to be failing.
-
-Six suites are comparable, and all six match assertion for assertion:
-
-| suite | |
-|---|---|
-| roles | 25/25 |
-| lieuts | 16/16 |
-| bosses | 24/24 |
-| invader | 19/19 |
-| eco | 25/25 |
-| crescent | 7/7 |
-
-That is 116 assertions about spawning, roles, bosses, the invader, the enemy
-ecosystem and the blade, all holding against a core with no renderer at all.
+Its top-level `const` and `let` names are globals, but not properties of
+`window`. Code in `src/` uses them by their bare names (`player`, `bagCap()`),
+never as `window.player`.

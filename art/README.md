@@ -3,10 +3,10 @@
 Every sprite the game draws, as PNG files.
 
 **This folder is generated. Do not hand-edit anything in it.** The art lives in
-`index.html` as drawing code; running the exporter deletes this folder and
+`tools/forge/forge.js` as drawing code; running the exporter deletes this folder and
 rebuilds it, so a hand-edit is a change that disappears the next time anyone
 runs it. To change how something looks, change the forge function in
-`index.html` and re-export.
+`tools/forge/forge.js` and re-export.
 
 ```
 node tools/export-art.js

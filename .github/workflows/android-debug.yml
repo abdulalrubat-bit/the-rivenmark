@@ -1,7 +1,7 @@
 name: Debug APK
 
 # The APK is built in CI rather than committed: a binary in git goes stale the
-# moment index.html changes, and this way every push produces one that provably
+# moment the game changes, and this way every push produces one that provably
 # matches the source it was built from.
 # main only on push: a claude/** branch with an open PR was matching both this
 # and pull_request, so every PR built the APK twice for the same commit.

@@ -12,7 +12,7 @@
     "dev": "node tools/build.js --watch & node tools/serve.js",
     "smoke": "node tools/smoke.cjs",
     "check": "node tools/check-core.js",
-    "verify": "node tools/verify-core.cjs",
+    "suites": "node ../tools/run-suites.js",
     "smoke:delve": "node tools/smoke-delve.cjs",
     "smoke:play": "node tools/smoke-play.cjs",
     "smoke:fx": "node tools/smoke-fx.cjs",

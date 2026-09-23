@@ -146,7 +146,7 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
      wedge.hot.every(v => v > 0.2) && wedge.later.every((v, i) => v < wedge.hot[i]),
      'just cast ' + wedge.hot.join(' ') + '  ->  0.7s later ' + wedge.later.join(' '));
 
-  // Three since the bar was cut; see the note over ABILITIES in index.html.
+  // Three since the bar was cut; see the note over ABILITIES in the core.
   ck('with a button for every ability and a swap',
      hud.buttons===3 && hud.swap && hud.pips===3,
      hud.buttons+' buttons, '+hud.pips+' charge pips');

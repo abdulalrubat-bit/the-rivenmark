@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* Run the canvas build's suites.
+/* Run the suites: the game's rules, its screens and its art.
  *
  *   node tools/run-suites.js            # all of them
  *   node tools/run-suites.js eco gait   # only these
@@ -27,26 +27,6 @@ if (unknown.length) {
   process.exit(1);
 }
 
-/* THE DEBUG BUILD IS GENERATED, SO REGENERATE IT.
- *
- * combat2 and dbgtest load debug.html, which build-debug.js writes from
- * index.html. Nothing was rebuilding it, so it drifted -- FIFTY-ONE commits
- * behind, discovered when the automatic blade was deleted from index.html and
- * those two suites carried on passing because their copy still had it. Two
- * suites had been testing a build from weeks earlier and reporting green.
- *
- * A stale generated artefact that a test reads is worse than no test: it says
- * the thing works when what works is a copy of the thing from before the
- * change. So it is rebuilt here, every run, before anything reads it. It
- * takes about a tenth of a second.
- */
-try {
-  execFileSync(process.execPath, [path.join(here, 'build-debug.js')], { stdio: 'ignore' });
-} catch (e) {
-  console.error('could not rebuild debug.html — combat2 and dbgtest would be ' +
-                'testing a stale build, so stopping here');
-  process.exit(1);
-}
 
 /* Where the suites find Playwright. They live up here, outside any package,
  * so a bare require('playwright') only resolved on a machine that happened to
@@ -61,15 +41,13 @@ const SUITE_ENV = { ...process.env,
  * Every suite opens its page through PAGE(), which takes RIVENMARK_PAGE when
  * it is set. Pointed here at phaser/public/core-test.html -- the rules with no
  * renderer, served the way the game is -- so the ~1100 checks are about the
- * core that ships, built fresh first so they cannot test a stale copy.
- *
- * --canvas runs them against the old single-file build instead, for as long
- * as it exists, to compare the two while suites are being moved over. */
-const CANVAS = process.argv.includes('--canvas');
+ * core that ships, built fresh first so they cannot test a stale copy. The
+ * suites that ask about the game itself, or the sprite forge, open those
+ * through ./suites/_pages.js from the same server. */
 const PHASER = path.join(here, '..', 'phaser');
 const PORT = process.env.SUITE_PORT || '8163';
 let server = null;
-if (!CANVAS) {
+{
   try {
     execFileSync(process.execPath, [path.join(PHASER, 'tools', 'build.js')], { stdio: 'ignore' });
   } catch (e) {

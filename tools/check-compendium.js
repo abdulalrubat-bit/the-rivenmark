@@ -3,7 +3,7 @@
 
    The compendium is a world-building document and it states a great many
    numbers. A document that quietly disagrees with the game is worse than no
-   document at all -- it is a source someone will trust -- and index.html is
+   document at all -- it is a source someone will trust -- and the core is
    tuned constantly, so these WILL drift. Every figure the mechanical books
    claim is read back off the running game here and compared.
 
@@ -18,7 +18,12 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 (async()=>{
   const b=await chromium.launch();
   const p=await (await b.newContext()).newPage();
-  await p.goto('file://'+require('path').join(__dirname,'..','index.html')); await sleep(900);
+  // The rules as the game ships them: the core, on its test page, built fresh
+  // so the numbers read are the current ones.
+  require('child_process').execFileSync(process.execPath,
+    [require('path').join(__dirname,'..','phaser','tools','build.js')], { stdio: 'ignore' });
+  await p.goto('file://'+require('path').join(__dirname,'..','phaser','public','core-test.html'));
+  await sleep(900);
   const g = await p.evaluate(()=>{
     const A=id=>ABILITY_BY_ID[id];
     return {

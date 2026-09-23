@@ -12,18 +12,18 @@
  * and they are the same for everybody.
  */
 const { chromium } = require('playwright');
-const PAGE = f => process.env.RIVENMARK_PAGE ||
-  ('file://' + require('path').join(__dirname, '..', '..', f));
+const pages = require('./_pages.js');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const pass = [], fail = [];
 const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note ? '  [' + note + ']' : ''));
 
 (async () => {
+  await pages.serve();
   const b = await chromium.launch();
   const p = await (await b.newContext({ viewport: { width: 390, height: 844 } })).newPage();
   const errs = []; p.on('pageerror', e => errs.push(e.message));
   p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
-  await p.goto(PAGE('index.html')); await sleep(900);
+  await p.goto(pages.core()); await sleep(900);
 
   const R = await p.evaluate(() => {
     const o = {};
@@ -115,8 +115,8 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     stash = loadStash();
     // The BEHAVIOUR, not the representation. bountyDone() compares the day, so
     // a stale record is already harmless whether or not loadStash tidies it
-    // away -- and the two builds tidy differently. Asserting "the record is
-    // gone" made this suite claim a difference between them that no player
+    // away -- and the canvas build and this one tidied it differently. Asserting "the record is
+    // gone" made this suite claim a difference that no player
     // could ever observe.
     o.staleDropped = !bountyDone();
     o.staleKeptRecord = !!stash.bounty;
@@ -183,5 +183,5 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   ck('no console errors', errs.length === 0, errs.slice(0, 3).join(' | '));
   console.log('\nPASS ' + pass.length + '\n  ' + pass.join('\n  '));
   console.log('\nFAIL ' + fail.length + (fail.length ? '\n  ' + fail.join('\n  ') : ''));
-  await b.close(); process.exit(fail.length ? 1 : 0);
+  await b.close(); pages.stop(); process.exit(fail.length ? 1 : 0);
 })();

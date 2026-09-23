@@ -1,32 +1,22 @@
-/* Moved out of a scratch directory and into the repo.
- *
- * These suites were the entire safety net for a 14,000-line single file, and
- * they lived only in /tmp -- one container restart from gone, and certain to
- * go when the session that made them ended. The page they drive is found
- * relative to this file now instead of by an absolute path, so they run from
- * any clone, on a desktop or under Termux.
- */
+/* Run through tools/run-suites.js, or alone with node. Which page it drives --
+ * the core, the game or the forge -- is in ./_pages.js. */
 // The crescent is the attack -- the swing is animation, and every point of
 // damage rides the arc. So the thing that matters is WHEN it arrives: a blow
 // that lands after the swing that threw it has finished reads as two attacks.
 // What is checked here is that it now lands inside the swing, and that making
 // it fast did not make it start missing.
 const { chromium } = require('playwright');
-// RIVENMARK_PAGE points the suite at a different page without touching its
-// source. verify-core uses it to run the SAME file against index.html and
-// against the extracted core; it used to rewrite the URL with a string
-// replace, which silently stopped matching the moment this line changed.
-const PAGE = f => process.env.RIVENMARK_PAGE ||
-  ('file://' + require('path').join(__dirname, '..', '..', f));
+const pages = require('./_pages.js');
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''));
 
-(async()=>{
+(async () => {
+  await pages.serve();
   const b=await chromium.launch();
   const p=await (await b.newContext({viewport:{width:390,height:844}})).newPage();
   const errs=[]; p.on('pageerror',e=>errs.push(e.message));
   p.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
-  await p.goto(PAGE('index.html')); await sleep(900);
+  await p.goto(pages.core()); await sleep(900);
 
   const R = await p.evaluate(()=>{
     const o={};
@@ -175,5 +165,5 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
 
   console.log('\nPASS '+pass.length+'\n  '+pass.join('\n  '));
   console.log('\nFAIL '+fail.length+(fail.length?'\n  '+fail.join('\n  '):''));
-  await b.close(); process.exit(fail.length?1:0);
+  await b.close(); pages.stop(); process.exit(fail.length?1:0);
 })();

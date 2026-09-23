@@ -3106,7 +3106,7 @@ function nearestFoe(R) {
  * is not gone, it simply has to be asked for.
  *
  * A POSTSCRIPT WORTH KEEPING. Cutting it broke SEVEN test fixtures across
- * both builds, and every one of them in the same way:
+ * what were then two builds, and every one of them in the same way:
  *
  *   swing.js       measuring the recoil of blows it was not throwing
  *   crucible.js    measuring what a Vanguard can do to a boss, while only
@@ -4101,7 +4101,7 @@ const VULN_MULT  = 5;      // and what the Guillotine does to a body under it
  *   mend    it gives life back
  *   snare   it takes something away from them
  *
- * Data and not UI, so both builds read the same answer and neither invents its
+ * Data and not UI, so every screen reads the same answer and none invents its
  * own mapping from ability to colour.
  */
 /* --- THE BAR, CUT TO THREE ------------------------------------------------
@@ -5035,9 +5035,9 @@ function updatePlayer(dt) {
    to the blade instead it also means the Quickening boon and a Quick affix
    speed the chain up, which is what anyone would expect them to do.
 
-   The state machine lives here, in the core, rather than in either host: the
-   canvas build and the Phaser build both drive it through the same three
-   calls, and the suites drive it without a pointer at all.
+   The state machine lives here, in the core, rather than in the host: the
+   HUD drives it through the same three calls, and the suites drive it
+   without a pointer at all.
    ---------------------------------------------------------------------- */
 const CONDUIT_TAP    = 0.20;  // a press shorter than this, undragged, is a tap
 const CONDUIT_HOLD   = 0.45;  // held at the edge this long and it starts gathering
@@ -6650,8 +6650,8 @@ const relicMult = () => DIFF.setRate * (hardcore ? HC_LOOT : 1);
 const honoured = () => !!loadHonours().crimson;
 // The trophy, worn. A Vanguard who carried the whole Regalia out of one life
 // swings in crimson from then on, in either mode and for ever -- which is what
-// makes it a trophy rather than a line in a menu. Asked here by both builds so
-// they cannot disagree about what colour the blade is.
+// makes it a trophy rather than a line in a menu. Asked here, once, so
+// nothing that draws the blade can disagree about its colour.
 const CRIMSON = '#e0563f';
 const crescentHue = heroId =>
   (honoured() ? CRIMSON : (HEROES[heroId] || HEROES.isaac).magic);
@@ -6659,8 +6659,8 @@ const crescentHue = heroId =>
 /* Putting one kit down and picking the other up. Nothing is destroyed: the two
  * stashes are separate keys, so switching is only a matter of which one is
  * live. Split the same way the wipe is -- the RULE here, the one page-bound
- * line beside it -- because the core cannot reach localStorage and this must
- * behave identically in both builds. */
+ * line beside it -- because the core cannot reach localStorage and the suites
+ * must be able to run the rule without a page. */
 function setHardcore(on) {
   if (hardcore === !!on) return;
   hardcore = !!on;
@@ -6820,7 +6820,7 @@ function blankStash() {
  * no item checked against today's affix table, no vault cap, a level taken
  * from disk instead of worked out from the xp, a corpse from a rung that no
  * longer exists. This half touches nothing but its argument, so it goes into
- * the core and both builds' loadStash is one line of reading and a call. */
+ * the core and loadStash is one line of reading and a call. */
 function sanitizeStash(st) {
   if (!st || typeof st !== 'object') return blankStash();
   const out = blankStash();
@@ -8191,7 +8191,7 @@ function breathScale(e) {
  * instead: rotating the foot vector (0, f) by rot moves the foot to
  * (-f sin rot, f cos rot), and offsetting the whole sprite by the difference
  * puts it back where it fell. Shared rather than written twice, because the
- * two builds have to agree on it exactly.
+ * sprite and the suites have to agree on it exactly.
  *
  * The fade is late and quick -- a body that starts dissolving as it begins to
  * fall reads as a summon being dismissed, not as something being killed.
