@@ -186,6 +186,21 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     body('thrall', 50, 0); step(STEP);
     o.c09.withTarget = castAbility('guillotine') && player.charges === 0;
 
+    // --- the practice room is sealed off: even in Hardcore, nothing lasts ---------
+    {
+      setHardcore(true);
+      stash = blankStash(); stash.coins = 321; stash.xp = 777; saveStash();
+      const before = JSON.stringify(loadStash());
+      startPractice('isaac');
+      const markedDelving = !!stash.delving;
+      for (const e of enemies) if (!e.dummy) damageEnemy(e, 1e9, player.x, player.y);
+      step(1); endRun(false);
+      const after = loadStash();
+      o.practice = { room: run.room, markedDelving, wiped: after.coins !== 321,
+                     same: JSON.stringify(after) === before, over: state };
+      setHardcore(false);
+    }
+
     // 12. the classic controls are still the classic controls
     fresh('classic'); s0 = sw(); conduitPress(); step(0.25); conduitRelease(); o.classic250 = sw() - s0;
     setControls('new');
@@ -245,6 +260,9 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   ck('a Guillotine with nothing in reach is refused before it spends (C09)',
      R.c09.took === false && R.c09.charges === 3 && R.c09.why === 'no-target', JSON.stringify(R.c09));
   ck('...and with a body in reach it goes', R.c09.withTarget === true);
+  ck('practice in Hardcore does not mark a delve begun', R.practice.markedDelving === false);
+  ck('and dying in it wipes nothing and banks nothing', !R.practice.wiped && R.practice.same,
+     JSON.stringify(R.practice));
   ck('the classic controls are still there (C01 still happens in them)', R.classic250 === 0,
      R.classic250 + ' swings');
   ck('no console errors', errs.length === 0, errs.slice(0, 3).join(' | '));

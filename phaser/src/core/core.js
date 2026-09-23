@@ -8588,6 +8588,19 @@ function buildCombatRoom() {
   return enemies.length;
 }
 
+/* The practice room, from the gate-house: the rung-0 ground with the combat
+ * room's stations, and deliberately NOT startRun -- that marks a Hardcore
+ * delve as begun, and closing the app in the middle of practice must never
+ * count as a death. endRun sees run.room and settles nothing. */
+function startPractice(heroId) {
+  resetRun(heroId, LEVELS[0].id, 'riven');
+  state = 'play';
+  buildCombatRoom();
+  buildKit();
+  syncHeroSkin();
+  showScreen(null);
+}
+
 function updateDummy(e, dt) {
   e.pace = 0;
   if (e.dummy === 'orbit') {
@@ -8885,6 +8898,17 @@ function endRun(won) {
   attackCancel('end');
   state = 'over';
   stickEnd();
+  // Practice is sealed off from everything that lasts: no records, no
+  // banking, no corpse, and above all no Hardcore wipe. Nothing was carried
+  // in or out of the room, so nothing is settled on the way out of it.
+  if (run.room) {
+    el.overTitle.innerHTML = '<em>Practice</em>';
+    el.overSub.textContent = 'Nothing was carried in, and nothing is carried out.';
+    el.overStats.innerHTML = '<div>Time<b>' + fmtTime(run.time) + '</b></div>' +
+                             '<div>Slain<b>' + run.kills + '</b></div>';
+    showScreen('over');
+    return;
+  }
   // A Hardcore death is the heaviest sound in the game, because it is the
   // heaviest thing that can happen in it.
   sfx(won ? 'extract' : 'death', undefined, undefined, !won && hardcore ? 1 : 0.5);

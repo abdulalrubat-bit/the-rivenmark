@@ -307,6 +307,16 @@ export class Delve extends Phaser.Scene {
     this.screens = new Screens((hero, level, diff) => this.newRun(hero, level, diff),
                                () => this.abandonRun());
     window.showScreen = name => this.screens.show(name);
+    // The practice room: the rung-0 ground, emptied and restocked with the
+    // combat room's stations. Unseeded -- the seed is for measuring, not play.
+    this.screens.onPractice = hero => {
+      this.clearWorldArt();
+      startPractice(hero);
+      run.banner = 0;
+      this.paintStatics();
+      this.hero.setPosition(player.x, player.y);
+      this.culledAt = null;
+    };
     // Before the HUD, which puts a switch on it.
     this.sound = installSound();
     this.score = window.__score = new Score(this.sound);

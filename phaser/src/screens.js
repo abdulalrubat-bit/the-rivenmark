@@ -187,6 +187,7 @@ export class Screens {
 
     this.onDescend = onDescend;
     this.onAbandon = onAbandon || (() => {});
+    this.onPractice = () => {};
     this.root = document.createElement('div');
     this.root.id = 'screens';
     document.body.appendChild(this.root);
@@ -232,8 +233,9 @@ export class Screens {
    * one life, for the same reason: it is the direction that cannot be undone.
    */
   renderPaused(armed) {
-    const hc = typeof hardcore !== 'undefined' && hardcore;
-    const leave = !hc ? 'Abandon the delve'
+    // Practice costs nothing to leave, even in Hardcore: nothing is at stake.
+    const hc = typeof hardcore !== 'undefined' && hardcore && !(run && run.room);
+    const leave = run && run.room ? 'Leave practice' : !hc ? 'Abandon the delve'
       : armed ? 'Tap again \u2014 this ends your life'
               : 'Abandon the delve \u2014 in Hardcore, this is death';
     this.root.innerHTML =
@@ -244,7 +246,19 @@ export class Screens {
         '<button class="go" type="button">Press on</button>' +
         '<button class="alt" type="button">' + leave + '</button>' +
         '<button class="alt snd" type="button"></button>' +
+        '<button class="alt ctl" type="button"></button>' +
       '</div>';
+    // Which controls. The new ones are the game; the classic Conduit is kept
+    // one tap away so the two can be compared on the same phone. Saved.
+    const ctl = this.root.querySelector('.ctl');
+    const ctlLabel = () => { ctl.textContent = 'Controls: ' +
+      (controlScheme === 'classic' ? 'classic (tap / drag / hold at rim)' : 'new (hold to strike, heavy button)'); };
+    ctlLabel();
+    ctl.addEventListener('click', () => {
+      setControls(controlScheme === 'classic' ? 'new' : 'classic');
+      try { localStorage.setItem('rivenmark.controls.v1', controlScheme); } catch (e) {}
+      ctlLabel();
+    });
     // Sound, where a player looks for it: on the screen that stops the game.
     // The HUD has the same switch; both follow the engine, so they agree.
     const snd = this.root.querySelector('.snd'), eng = window.__sound;
@@ -520,6 +534,10 @@ export class Screens {
         this.daily() +
         this.ground() +
         this.oneLife() +
+        // The combat room: a place to try the controls against targets that
+        // stand still, walk a circle, raise a guard, and shoot back. Nothing
+        // is carried in or out of it.
+        '<button class="alt" type="button" id="practice">Practice room</button>' +
         '<button class="go pinned" type="button" id="descend">Descend</button>' +
       '</div>';
 
@@ -562,6 +580,10 @@ export class Screens {
     this.root.querySelector('#descend').addEventListener('click', () => {
       this.root.classList.remove('up');
       snd('descend'); this.onDescend(this.pick.hero, this.pick.level, this.pick.diff);
+    });
+    this.root.querySelector('#practice').addEventListener('click', () => {
+      this.root.classList.remove('up');
+      snd('descend'); this.onPractice(this.pick.hero);
     });
   }
 
