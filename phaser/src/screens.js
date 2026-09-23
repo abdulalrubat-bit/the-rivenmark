@@ -10,7 +10,7 @@
  * it survives the renderer.
  */
 
-/* global hcFellAway, player, run, stash, state, LEVELS, LEVEL, LEVEL_BY_ID, HEROES,
+/* global hcFellAway, DIFFICULTIES, player, run, stash, state, LEVELS, LEVEL, LEVEL_BY_ID, HEROES,
           startRun, endRun, stepThrough, blankStash, el, stashPower, resumeRun,
           REGION_BY_ID, REGION_RELIC, hardcore, setHardcore, honoured, delveStanding,
           recommendedLevel,
@@ -145,7 +145,7 @@ const CSS = `
 `;
 
 export class Screens {
-  /* onDescend(hero, levelId) starts a delve; onAbandon() throws the current
+  /* onDescend(hero, levelId, diffId) starts a delve; onAbandon() throws the current
    * one away and comes back up. Both belong to the scene rather than here:
    * beginning or ending a delve means destroying and rebuilding every sprite
    * in it, and a menu has no business knowing that. */
@@ -159,7 +159,9 @@ export class Screens {
     this.root = document.createElement('div');
     this.root.id = 'screens';
     document.body.appendChild(this.root);
-    this.pick = { hero: 'isaac', level: null };
+    // Difficulty is chosen per visit, as the canvas build did, and starts at
+    // Riven -- the game as it is meant to be played -- every session.
+    this.pick = { hero: 'isaac', level: null, diff: 'riven' };
     this.name = null;
   }
 
@@ -266,6 +268,23 @@ export class Screens {
    * Only shown where there is a choice. On the first rungs the pool is one
    * region and a picker with one option in it is furniture.
    */
+  /* HOW HARD. Three difficulties were built into the rules -- a delve to learn
+   * on, the game as it is, and one where the Regalia surfaces -- and until now
+   * only the canvas build could choose between them: this build always played
+   * Riven. The multipliers are shown because they are the real trade, and the
+   * note says what they mean in a sentence. */
+  difficulty() {
+    return '<p class="sub">How hard the delve comes at you.</p>' +
+      '<div class="rows" id="diffRows">' +
+      DIFFICULTIES.map(D =>
+        '<button class="row' + (this.pick.diff === D.id ? ' on' : '') +
+        '" data-diff="' + D.id + '" type="button"><span>' + D.name +
+        '<small>' + D.note + '</small></span>' +
+        '<small class="verdict">threat \u00d7' + D.threat.toFixed(2) +
+        ' \u00b7 loot \u00d7' + D.lootRate.toFixed(2) + '</small></button>').join('') +
+      '</div>';
+  }
+
   ground() {
     const L = LEVEL_BY_ID[this.pick.level];
     if (!L || !L.regions || L.regions.length < 2) {
@@ -335,10 +354,12 @@ export class Screens {
     // clear it -- so it is the only place that answers "again" correctly.
     const hero = (run && run.hero) || this.pick.hero;
     const lvl = (run && run.level_id) || this.pick.level;
+    const diff = (run && run.diff_id) || this.pick.diff;
     this.root.querySelector('.go').addEventListener('click', () => {
       this.pick.hero = hero;
       if (lvl) this.pick.level = lvl;
-      this.onDescend(hero, lvl);
+      this.pick.diff = diff;
+      this.onDescend(hero, lvl, diff);
     });
     /* THROUGH THE SAME DOOR AS ABANDONING, NOT STRAIGHT TO THE CARD.
      *
@@ -425,6 +446,7 @@ export class Screens {
             '<small class="verdict" style="color:' + v.colour + '">' + v.text +
             '</small></button>')(delveStanding(l, power))).join('') +
         '</div>' +
+        this.difficulty() +
         this.daily() +
         this.ground() +
         this.oneLife() +
@@ -435,6 +457,8 @@ export class Screens {
       b.addEventListener('click', () => { this.pick.hero = b.dataset.hero; this.renderGatehouse(); }));
     this.root.querySelectorAll('[data-level]').forEach(b =>
       b.addEventListener('click', () => { this.pick.level = b.dataset.level; this.renderGatehouse(); }));
+    this.root.querySelectorAll('[data-diff]').forEach(b =>
+      b.addEventListener('click', () => { this.pick.diff = b.dataset.diff; this.renderGatehouse(); }));
     const bt = this.root.querySelector('#bountyRow');
     if (bt) bt.addEventListener('click', () => {
       const b = todaysBounty();
@@ -467,7 +491,7 @@ export class Screens {
     this.wireTabs();
     this.root.querySelector('#descend').addEventListener('click', () => {
       this.root.classList.remove('up');
-      this.onDescend(this.pick.hero, this.pick.level);
+      this.onDescend(this.pick.hero, this.pick.level, this.pick.diff);
     });
   }
 

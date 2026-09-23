@@ -285,7 +285,7 @@ export class Delve extends Phaser.Scene {
     // The loop around a delve. showScreen is the core's own way of saying
     // "the run is over" or "you are back at the gate-house", so it is routed
     // here rather than second-guessed.
-    this.screens = new Screens((hero, level) => this.newRun(hero, level),
+    this.screens = new Screens((hero, level, diff) => this.newRun(hero, level, diff),
                                () => this.abandonRun());
     window.showScreen = name => this.screens.show(name);
     this.wireInput();
@@ -375,10 +375,10 @@ export class Delve extends Phaser.Scene {
    * from the old one has to go: the wall graphic, the scenery, and the body
    * sprites, which are pooled and would otherwise show the last delve's dead.
    */
-  newRun(hero, levelId) {
+  newRun(hero, levelId, diffId) {
     this.clearWorldArt();
     state = 'play';
-    startRun(hero, levelId, 'riven');
+    startRun(hero, levelId, diffId || 'riven');
     run.banner = 0;
     this.paintStatics();
     this.hero.setPosition(player.x, player.y);
