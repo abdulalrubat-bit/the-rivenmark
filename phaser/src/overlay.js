@@ -282,6 +282,7 @@ export class Overlay {
    * nobody sees. Bright and beating once the gate is awake, dim before.
    */
   arrow(g, t) {
+    this.arrowAt = null;
     if (!portal) return;
     // All in CSS pixels. worldView is the part of the world actually on
     // screen, in world units, which ARE CSS pixels; scrollX with the camera's
@@ -298,7 +299,18 @@ export class Overlay {
     const dx = Math.cos(a), dy = Math.sin(a);
     const k = Math.min((cx - m) / Math.max(1e-6, Math.abs(dx)),
                        ((H - m - mTop) / 2) / Math.max(1e-6, Math.abs(dy)));
-    const px = cx + dx * k, py = cy + dy * k;
+    let px = cx + dx * k, py = cy + dy * k;
+    // The map owns the top-right corner, and an arrow drawn over it covers
+    // the very dot it points at. Slide it along the edge it rides, off the
+    // map's frame -- left along the top, or down the right side, whichever
+    // is the shorter move -- so it still points the same way.
+    const box = minimapBox(), R = 15 + 5, o = box.over || 0;
+    const bx0 = box.x - o - R, bx1 = box.x + box.s + o + R;
+    const by0 = box.y - o - R, by1 = box.y + box.s + o + R;
+    if (px > bx0 && px < bx1 && py > by0 && py < by1) {
+      if (px - bx0 < by1 - py) px = bx0; else py = by1;
+    }
+    this.arrowAt = { x: px, y: py };
     const col = portal.active ? hex(PAL.arcane, 0x5cb8ff) : 0x7a6e58;
     const al = 0.55 + (portal.active ? 0.4 * Math.abs(Math.sin(t * 3)) : 0.1);
 

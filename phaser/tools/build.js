@@ -54,23 +54,29 @@ for (const f of ['hud.js']) {
  * path nobody tried. It used to be the extractor's job, when the core was cut
  * out of the canvas build; there is no canvas build now.
  */
-try {
-  execFileSync(process.execPath, [path.join(here, 'check-core.js'), '--quiet'],
-               { stdio: 'inherit' });
-} catch {
-  console.error('\ncheck-core.js failed — refusing to build a core with a hole in it.\n');
-  process.exit(1);
-}
-
 const core = path.join(here, '..', 'src', 'core', 'core.js');
 const served = path.join(here, '..', 'public', 'core.js');
-if (fs.existsSync(core)) {
-  const from = fs.readFileSync(core);
-  if (!fs.existsSync(served) || !fs.readFileSync(served).equals(from)) {
-    fs.writeFileSync(served, from);
-    console.log('core.js -> public/ (' + (from.length / 1024 | 0) + 'kB)');
+
+// Check the core, then copy it to where the page loads it. Returns whether it
+// went through; a one-off build stops on a failure, a watch keeps watching.
+function syncCore() {
+  try {
+    execFileSync(process.execPath, [path.join(here, 'check-core.js'), '--quiet'],
+                 { stdio: 'inherit' });
+  } catch {
+    console.error('\ncheck-core.js failed — refusing to serve a core with a hole in it.\n');
+    return false;
   }
+  if (fs.existsSync(core)) {
+    const from = fs.readFileSync(core);
+    if (!fs.existsSync(served) || !fs.readFileSync(served).equals(from)) {
+      fs.writeFileSync(served, from);
+      console.log('core.js -> public/ (' + (from.length / 1024 | 0) + 'kB)');
+    }
+  }
+  return true;
 }
+if (!syncCore() && !watch) process.exit(1);
 
 const opts = {
   entryPoints: [path.join(here, '..', 'src', 'main.js')],
@@ -89,7 +95,22 @@ const opts = {
 if (watch) {
   const ctx = await esbuild.context(opts);
   await ctx.watch();
-  console.log('watching src/ — ctrl-c to stop');
+  /* THE CORE IS NOT IN THE BUNDLE, so esbuild's watch never sees it change:
+   * it is a classic script the page loads beside bundle.js. It used to be
+   * checked and copied once, when the watch started, and an edit to the rules
+   * after that left the page serving the old ones with nothing to say so
+   * (the analysis' R03). So the core and the two host files it is checked
+   * against are watched too, and every save re-checks and re-copies it. */
+  const hosts = ['host-stubs.js', 'host-real.js'].map(f => path.join(here, '..', 'public', f));
+  let pending = null;
+  for (const f of [core, ...hosts]) {
+    if (!fs.existsSync(f)) continue;
+    fs.watch(f, () => {
+      clearTimeout(pending);
+      pending = setTimeout(() => { if (syncCore()) console.log('core re-checked and served'); }, 120);
+    });
+  }
+  console.log('watching src/ and the core — ctrl-c to stop');
 } else {
   await esbuild.build(opts);
 }

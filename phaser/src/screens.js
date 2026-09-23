@@ -28,6 +28,8 @@ import { settings, setSetting, setControlsSaved, SHAKES, QUALITIES } from './set
 const snd = (name, mag) => { if (typeof window.sfx === 'function') window.sfx(name, undefined, undefined, mag); };
 
 const CSS = `
+#screens .sub.warn{color:#e8c060;border-left:2px solid #c9863e;padding-left:8px}
+
 /* Settings: a row that holds a slider instead of being a button. */
 #screens .row.slide{display:flex;align-items:center;gap:10px}
 #screens .row.slide input[type=range]{flex:1;min-width:0;accent-color:#c9a45a}
@@ -68,8 +70,13 @@ const CSS = `
   background-origin:border-box;background-clip:padding-box,border-box;
   padding:16px;box-shadow:0 12px 40px rgba(0,0,0,.6),inset 0 1px 0 rgba(150,172,200,.18);
   margin:16px 0}
+/* The display face: Cinzel (SIL OFL, public/), for titles only. The
+   body stays Georgia, which reads better small. swap: a title is never
+   invisible while the face loads. */
+@font-face{font-family:Cinzel;font-weight:400;font-display:swap;src:url(cinzel-400.woff2) format("woff2")}
+@font-face{font-family:Cinzel;font-weight:600;font-display:swap;src:url(cinzel-600.woff2) format("woff2")}
 /* The title takes the rule the gate-house plates have. */
-#screens h1{font:22px Georgia,"Times New Roman",serif;color:#eee0c0;margin:0 0 10px;
+#screens h1{font:600 21px Cinzel,Georgia,"Times New Roman",serif;letter-spacing:.5px;color:#eee0c0;margin:0 0 10px;
   padding-bottom:8px;border-bottom:1px solid rgba(166,124,58,.45);
   box-shadow:0 1px 0 rgba(0,0,0,.6)}
 #screens h1 em{font-style:normal;color:#d6b26e}
@@ -169,7 +176,14 @@ const CSS = `
 /* The name and its affixes are one column and must own the space they need,
    or the piece's power and the word for what tapping does drift left and land
    at the end of the affix line -- "+13% damage take off" read as one phrase. */
-#screens .item>span:first-child{flex:1;min-width:0}
+#screens .item>span:first-of-type{flex:1;min-width:0}
+/* Item icons: one 20px pixel cell per base off icons.png (35 cells), drawn at
+   2x and kept hard-edged. The slot's own cell stands in for an empty slot. */
+#screens .ico{flex:0 0 auto;width:30px;height:30px;margin-top:1px;
+  background:url(icons.png) no-repeat;background-size:1050px 30px;
+  background-position:calc(var(--i,0) * -30px) 0;
+  image-rendering:pixelated;image-rendering:crisp-edges}
+#screens .ico.none{opacity:.3;filter:grayscale(.8)}
 #screens .item .aff{color:#8c8168;font-size:11px;display:block;margin-top:2px;line-height:1.35}
 #screens .pw{color:#d6b26e;white-space:nowrap;text-align:right;flex:none}
 /* And the word is a tag, not more text. It is the only part of a row that
@@ -180,6 +194,19 @@ const CSS = `
   background:rgba(20,17,14,.6)}
 #screens .empty{color:#6a6154;font-style:italic}
 `;
+
+/* Cells of icons.png (tools/build-art.py's strip, carried over from the
+ * canvas build). The first ten are the slot fallbacks and loose glyphs; every
+ * base after that has its own picture. Both rings share one. */
+const ICON = { blade: 0, offhand: 1, mail: 2, girdle: 3, boots: 4, amulet: 5,
+               ring1: 6, ring2: 6, ring: 6, coin: 7, skull: 8, gem: 9,
+               'Longsword': 10, 'Falchion': 11, 'Warblade': 12, 'Glaive': 13, 'Cleaver': 14,
+               'Kite Shield': 15, 'Buckler': 16, 'Warding Focus': 17, 'Tower Shield': 18,
+               'Ringmail': 19, 'Scale Hauberk': 20, 'Plated Coat': 21, 'Padded Jack': 22,
+               'Leather Girdle': 23, 'Plated Belt': 24, 'Sash of Cord': 25,
+               'Marching Boots': 26, 'Greaves': 27, 'Soft Treads': 28,
+               'Bone Amulet': 29, 'Ley-Charm': 30, 'Sun Pendant': 31,
+               'Iron Band': 32, 'Signet': 33, 'Twisted Ring': 34 };
 
 export class Screens {
   /* onDescend(hero, levelId, diffId) starts a delve; onAbandon() throws the current
@@ -521,6 +548,21 @@ export class Screens {
 
   /* Which delve, and who goes down. The ladder is long, so this shows the
    * rungs around the one you can actually handle rather than all fifty-two. */
+  /* What the player must be told about their save, at the door: that the
+   * last one could not be written (and why it matters), or that it was
+   * damaged and the backup was loaded instead. Never silent. */
+  saveNotice() {
+    const out = [];
+    if (window.saveTrouble)
+      out.push('<b>Your progress could not be saved</b> (' + window.saveTrouble + '). ' +
+               'The phone\u2019s storage may be full; free some space before you descend.');
+    if (window.stashRecovered && !this.toldRecovered) {
+      this.toldRecovered = true;
+      out.push('Your last save was damaged, so the one before it was loaded instead.');
+    }
+    return out.length ? '<p class="sub warn">' + out.join('<br>') + '</p>' : '';
+  }
+
   renderGatehouse() {
     // The hero last taken down, not Isaac for everybody: the stash remembers
     // who that was, and the canvas gate-house opened on them. Once only -- a
@@ -562,7 +604,7 @@ export class Screens {
 
     this.root.innerHTML =
       '<div class="card">' +
-        '<h1>The Gate-House</h1>' +
+        '<h1>The Gate-House</h1>' + this.saveNotice() +
         this.tabs('splash') +
         '<p class="sub">Choose a rung and one of the Clear-Sighted.</p>' +
         this.purse() +
@@ -767,6 +809,7 @@ export class Screens {
         '<h1>The Hall</h1>' + this.tabs('hall') + this.purse() +
         (this.note ? '<p class="sub">' + this.note + '</p>' : '') +
         '<p class="sub">What you build here outlasts every delve.</p>' +
+        this.silenced() +
         '<div class="rows">' + rows + '</div>' +
       '</div>';
 
@@ -779,6 +822,13 @@ export class Screens {
         this.note = why ? 'The mason shakes his head — ' + why + '.' : 'Built.';
         this.renderHall();
       }));
+  }
+  /* The ending, kept: once the whole Choir has been silenced and carried out
+   * of, the Hall says so, and how many times. */
+  silenced() {
+    const n = typeof honours === 'function' ? (honours().silence || 0) : 0;
+    return n ? '<p class="sub honour">\u25c8 The Silent Choir, Whole, was silenced' +
+               (n > 1 ? ' ' + n + ' times' : '') + '. The ladder stays open.</p>' : '';
   }
   wireTabs() {
     this.root.querySelectorAll('[data-tab]').forEach(b =>
@@ -795,10 +845,17 @@ export class Screens {
    */
   /* One piece, as a row's contents: its name in its rarity's colour, what it
    * does, its power, and the word for what tapping does. */
+  /* The icon for a piece: its own base if the strip has one, else its slot's. */
+  static ico(key, none) {
+    const i = ICON[key] !== undefined ? ICON[key] : 0;
+    return '<i class="ico' + (none ? ' none' : '') + '" style="--i:' + i + '" aria-hidden="true"></i>';
+  }
+
   itemCard(it, act, extra) {
     const r = RARITY.find(x => x.id === it.rarity) || RARITY[0];
     const aff = it.affixes.map(a => affixText(a, stash.hero)).filter(Boolean).join(' · ');
-    return '<span class="item"><span><b style="color:' + r.colour + '">' + it.name +
+    const key = ICON[it.base] !== undefined ? it.base : it.slot;
+    return '<span class="item">' + Screens.ico(key) + '<span><b style="color:' + r.colour + '">' + it.name +
            '</b><span class="aff">' + (aff || '&mdash;') + '</span>' + (extra || '') +
            '</span>' +
            // The number is the piece's power; the word is what tapping does.
@@ -832,7 +889,7 @@ export class Screens {
             return '<button class="row" type="button" data-off="' + sl.id + '"' +
               (it ? '' : ' disabled') + '>' +
               (it ? this.itemCard(it, 'take off')
-                  : '<span class="item"><span>' + sl.mark + ' ' + sl.name +
+                  : '<span class="item">' + Screens.ico(sl.id, true) + '<span>' + sl.name +
                     '<span class="aff empty">nothing worn</span></span></span>') +
               '</button>';
           }).join('') +
@@ -996,7 +1053,7 @@ export class Screens {
           SLOTS.map(sl => {
             const it = C.gear[sl.id];
             return '<div class="row">' + (it ? this.itemCard(it, null)
-              : '<span class="item"><span>' + sl.mark + ' ' + sl.name +
+              : '<span class="item">' + Screens.ico(sl.id, true) + '<span>' + sl.name +
                 '<span class="aff empty">nothing worn</span></span></span>') + '</div>';
           }).join('') +
         '</div>' +

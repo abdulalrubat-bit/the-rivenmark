@@ -37,12 +37,22 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   await gp.goto(pages.game('nogate&nogov'));
   await gp.waitForFunction(()=>state==='play' && !!document.getElementById('gateBtn'),
                            null, {timeout:30000});
+  /* The live delve keeps running under this, so the hero is HELD in the gate
+   * (and nothing is awake to shove or strike him out of it) until it opens,
+   * and then the wait is for the button itself -- not a fixed sleep, and not
+   * a swallowed timeout. It failed once in a combined run and passed alone;
+   * if it ever fails again, the note says where the hero and the gate were. */
   await gp.evaluate(()=>{ run.tech=LEVEL.quota; run.bossCalled=true; run.bossDown=true;
-                          player.x=portal.x; player.y=portal.y; });
-  await gp.waitForFunction(()=>run.gateOpen, null, {timeout:20000}).catch(()=>{});
-  await sleep(300);
-  ck('a step-through control appears in the open gate',
-     await gp.evaluate(()=>!document.getElementById('gateBtn').hidden));
+                          for (const e of enemies) e.awake=false;
+                          player.invuln=1e9; player.hp=player.maxHp=1e9;
+                          window.__hold=setInterval(()=>{ player.x=portal.x; player.y=portal.y; }, 30); });
+  const opened = await gp.waitForFunction(()=>run.gateOpen, null, {timeout:20000}).then(()=>true, ()=>false);
+  const shown = opened && await gp.waitForSelector('#gateBtn:not([hidden])', {timeout:5000}).then(()=>true, ()=>false);
+  const why = shown ? '' : JSON.stringify(await gp.evaluate(()=>({ state, gateOpen: run.gateOpen,
+    inside: portal.inside, active: portal.active, channel: +(portal.channel||0).toFixed(2),
+    off: Math.round(Math.hypot(player.x-portal.x, player.y-portal.y)), hp: Math.round(player.hp) })));
+  await gp.evaluate(()=>clearInterval(window.__hold));
+  ck('a step-through control appears in the open gate', shown, why);
   await gp.evaluate(()=>{ player.x=portal.x+900; });
   await sleep(300);
   ck('and hides when you walk out of it',

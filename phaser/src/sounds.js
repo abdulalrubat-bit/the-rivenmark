@@ -459,3 +459,68 @@ define('descend', { max: 1, gap: 1, vol: 0.7, make(ctx, out, t, mag, noise) {
   tone(ctx, out, t, { f0: 110, f1: 41, a: 0.05, d: 1.1, peak: 0.35 });
   return ring(ctx, out, t, { f: 147, d: 1.2, peak: 0.08, bend: 0.9, ratios: [1, 2.0] });
 } });
+
+/* ---- the Silent Choir ---------------------------------------------------------
+ * The one boss that is heard more than seen: every event in the fight is a
+ * voice. Built from a vowel -- two formant bands over a sung pitch with a slow
+ * vibrato -- so it reads as singing, not as an instrument.
+ */
+function sung(ctx, out, t, f, dur, level) {
+  const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f;
+  const vib = ctx.createOscillator(), vd = ctx.createGain();
+  vib.frequency.value = 5.2; vd.gain.value = f * 0.012;
+  vib.connect(vd); vd.connect(o.frequency);
+  const f1 = ctx.createBiquadFilter(); f1.type = 'bandpass'; f1.frequency.value = 520; f1.Q.value = 6;
+  const f2 = ctx.createBiquadFilter(); f2.type = 'bandpass'; f2.frequency.value = 900; f2.Q.value = 8;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(level, t + Math.min(0.4, dur * 0.3));
+  g.gain.setValueAtTime(level, t + dur * 0.6);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(f1); o.connect(f2); f1.connect(g); f2.connect(g); g.connect(out);
+  o.start(t); vib.start(t); o.stop(t + dur + 0.05); vib.stop(t + dur + 0.05);
+  return dur;
+}
+
+// A singer drawing breath: the warning. Heard across the room -- this is the
+// moment to act.
+define('choirwind', { max: 2, gap: 0.3, vol: 0.6, far: 0.55, make(ctx, out, t, mag, noise) {
+  noiseBurst(ctx, out, t, noise, { type: 'bandpass', q: 1.2, f0: 600, f1: 2200, a: 0.9, d: 0.5, peak: 0.12 });
+  return 0.6 + sung(ctx, out, t + 0.6, 196, 1.3, 0.06);
+} });
+
+// A note landing: the sung pitch rising a step with each one, so the chord
+// is heard climbing toward the fifth.
+define('choirnote', { max: 1, gap: 0.5, vol: 0.8, far: 0.7, make(ctx, out, t, mag) {
+  const steps = [0, 3, 5, 7, 10];
+  const k = Math.max(0, Math.min(4, Math.round((mag || 0) * 5) - 1));   // which note of five
+  const f = 220 * Math.pow(2, steps[k] / 12);
+  sung(ctx, out, t, f, 1.6, 0.12);
+  return sung(ctx, out, t, f * 1.5, 1.6, 0.05);
+} });
+
+// A singer falling: the voice cut off mid-vowel.
+define('choirfall', { max: 2, gap: 0.2, vol: 0.6, make(ctx, out, t, mag, noise) {
+  sung(ctx, out, t, 262, 0.35, 0.08);
+  return noiseBurst(ctx, out, t + 0.25, noise, { f0: 1400, f1: 120, a: 0.004, d: 0.4, peak: 0.25 });
+} });
+
+// ...and rising again: the vowel coming back, up from nothing.
+define('choirrise', { max: 2, gap: 0.3, vol: 0.55, make(ctx, out, t) {
+  return sung(ctx, out, t, 175, 1.0, 0.07);
+} });
+
+// Stilled for good: a bell, and no voice after it.
+define('stilled', { max: 1, gap: 0.3, vol: 0.7, make(ctx, out, t, mag, noise) {
+  noiseBurst(ctx, out, t, noise, { f0: 900, f1: 80, a: 0.004, d: 0.6, peak: 0.3 });
+  return ring(ctx, out, t, { f: 147, d: 1.6, peak: 0.14, bend: 0.97, ratios: [1, 2.0, 2.4, 3.0] });
+} });
+
+// The whole chord: every voice at once, and then nothing.
+define('chord', { max: 1, gap: 2, vol: 0.9, far: 0.9, make(ctx, out, t, mag, noise) {
+  noiseBurst(ctx, out, t, noise, { f0: 5000, f1: 200, a: 0.02, d: 1.6, peak: 0.3 });
+  tone(ctx, out, t, { f0: 44, f1: 30, a: 0.02, d: 1.8, peak: 0.5 });
+  let len = 0;
+  for (const f of [220, 262, 330, 392, 440]) len = Math.max(len, sung(ctx, out, t, f, 1.9, 0.045));
+  return len;
+} });

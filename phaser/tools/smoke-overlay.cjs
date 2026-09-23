@@ -159,6 +159,28 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
      arrowDelta + ' pixels changed at the play area’s east edge (' +
      arrowAt.x + ',' + arrowAt.y + ') when the gate went out of view');
 
+  // Toward the top-right corner the edge the arrow rides runs under the map,
+  // and it used to be drawn straight over it -- over the dot it points at.
+  // Every bearing through that corner is swept, so the one that would land
+  // on the map is among them.
+  const corner = await p.evaluate(async () => {
+    const sc = window.__game.scene.getScene('delve'), c = sc.cameras.main;
+    const b = window.minimapBox(), o = b.over || 0, R = 15;
+    let worst = null, drawn = 0;
+    for (let a = -1.45; a <= 0.05; a += 0.05) {
+      portal.x = player.x + Math.cos(a) * 4000; portal.y = player.y + Math.sin(a) * 4000;
+      for (let i = 0; i < 2; i++) await new Promise(r => requestAnimationFrame(r));
+      const at = sc.overlay.arrowAt; if (!at) continue; drawn++;
+      const nx = Math.max(b.x - o, Math.min(at.x, b.x + b.s + o));
+      const ny = Math.max(b.y - o, Math.min(at.y, b.y + b.s + o));
+      const gap = Math.hypot(at.x - nx, at.y - ny) - R;
+      if (!worst || gap < worst.gap) worst = { gap: +gap.toFixed(1), a: +a.toFixed(2) };
+    }
+    return { drawn, worst };
+  });
+  ck('the arrow never sits on the map', corner.drawn > 20 && corner.worst.gap >= 0,
+     corner.drawn + ' bearings, closest ' + JSON.stringify(corner.worst));
+
   // --- the boss bar --------------------------------------------------------
   const boss = await p.evaluate(async () => {
     const r = sel => { const e = document.querySelector(sel); if (!e) return null;

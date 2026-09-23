@@ -111,6 +111,34 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
      ['bundle.js', 'core.js', 'atlas.png', 'atlas.json'].every(f => held.includes(f)),
      held.length + ' entries' + (held.length ? ': ' + held.slice(0, 6).join(', ') + '…' : ''));
 
+  // --- other apps on the same origin ----------------------------------------
+  // The site this ships on serves other apps too, and caches are per origin.
+  // A stand-in for one of theirs is made, the worker is installed afresh so
+  // its activation runs again, and the stand-in must still be there.
+  const neighbour = await p.evaluate(async () => {
+    const r = await navigator.serviceWorker.getRegistration();
+    if (!r || !r.active) return { none: true };
+    const url = r.active.scriptURL, scope = r.scope;
+    const c = await caches.open('other-app-v1');
+    await c.put(new URL('elsewhere.txt', location.origin + '/').href, new Response('theirs'));
+    // A NEW script URL, or the browser revives the old registration and its
+    // activation -- the thing being tested -- never runs again. The first
+    // version of this passed against the old worker for exactly that reason.
+    const r2 = await navigator.serviceWorker.register(url.split('?')[0] + '?again=' + Date.now(), { scope });
+    await new Promise(res => {
+      const w = r2.installing || r2.waiting || r2.active;
+      if (!w || w.state === 'activated') return res();
+      w.addEventListener('statechange', () => { if (w.state === 'activated') res(); });
+      setTimeout(res, 8000);
+    });
+    const keys = await caches.keys();
+    return { keys, kept: keys.includes('other-app-v1'), mine: keys.filter(k => k.startsWith('rivenmark-')).length };
+  });
+  ck('another app\u2019s cache on the same site survives this worker activating',
+     neighbour.kept === true, JSON.stringify(neighbour.keys || neighbour));
+  ck('...and this worker still keeps exactly one cache of its own', neighbour.mine === 1,
+     (neighbour.mine) + ' rivenmark caches');
+
   // --- offline -------------------------------------------------------------
   // The actual question. Everything above can pass while this fails.
   await ctx.setOffline(true);

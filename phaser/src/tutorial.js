@@ -15,6 +15,7 @@
  * drag and hold at the rim, because that is what the player has.
  */
 import { settings, setSetting } from './settings.js';
+import { bossBarDrop } from './overlay.js';
 
 const CSS = `
 #tut{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 92px);
@@ -119,7 +120,12 @@ export class Tutorial {
   tick() {
     if (!this.active) return;
     const live = state === 'play';
-    if (this.el) this.el.style.display = live ? '' : 'none';
+    if (this.el) {
+      this.el.style.display = live ? '' : 'none';
+      // Below the boss bar when there is one, never over it.
+      const drop = bossBarDrop() + 'px';
+      if (this.el.style.marginTop !== drop) this.el.style.marginTop = drop;
+    }
     if (state === 'over' || state === 'menu') return this.finish(false, true);
     if (live && STEPS[this.i].done(this)) this.next();
   }

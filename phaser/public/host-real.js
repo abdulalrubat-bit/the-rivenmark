@@ -36,11 +36,22 @@
   window.saveBest = b => {
     try { localStorage.setItem(STORE_KEY, JSON.stringify(b)); } catch (e) {}
   };
+  // A save that fails is NOT silent any more (the analysis' R09): it used to
+  // be swallowed, and a phone whose storage was full simply stopped keeping
+  // progress with nothing to say so. `saveTrouble` is what the gate-house
+  // reads to tell the player; a later save that goes through clears it.
+  window.saveTrouble = null;
   window.saveStash = () => {
     try {
       stash.seq = itemSeq;
       localStorage.setItem(key(), JSON.stringify(stash));
-    } catch (e) {}
+      window.saveTrouble = null;
+      return true;
+    } catch (e) {
+      window.saveTrouble = (e && e.name) || 'unknown';
+      if (typeof clog === 'function') clog('save', 'failed', { why: window.saveTrouble });
+      return false;
+    }
   };
   // Reading is the host's; deciding what a save is allowed to say is the
   // core's sanitizeStash, the same one the canvas build uses. This used to be

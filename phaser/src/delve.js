@@ -132,7 +132,7 @@ function bodyLookScale(e) {
  * dark body with a molten mouth, and a flat orange over the whole of it loses
  * the body and keeps only the glow.
  */
-const LOOK_TINT = { crucible: 0xffab7a };
+const LOOK_TINT = { crucible: 0xffab7a, singer: 0xd8ccff };
 
 export class Delve extends Phaser.Scene {
   constructor() { super('delve'); }
@@ -807,7 +807,7 @@ export class Delve extends Phaser.Scene {
    */
   castProgress(e) {
     if ((e.chanting || 0) > 0) return Math.max(0, 1 - e.chanting / CHANT_WIND);
-    if ((e.casting || 0) > 0) return Math.max(0, 1 - e.casting / BOLT_WIND);
+    if ((e.casting || 0) > 0) return Math.max(0, 1 - e.casting / (e.castMax || BOLT_WIND));
     return -1;
   }
 

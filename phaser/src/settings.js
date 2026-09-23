@@ -70,7 +70,9 @@ const PULSES = {
   gateopen: () => 60,
   fall: () => [60, 40, 90],
   death: () => [80, 60, 160],
-  extract: () => 40
+  extract: () => 40,
+  choirnote: () => [20, 30, 20],
+  chord: () => [120, 60, 200]
 };
 let lastPulse = 0;
 export function pulse(name, mag) {
