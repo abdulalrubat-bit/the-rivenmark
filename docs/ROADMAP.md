@@ -44,12 +44,17 @@ grow past it later.
 
 Synthesised with Web Audio, no files. One small engine, one switch.
 
-- [ ] The engine: a master volume, a limiter, voices that cannot pile up
-      when a hundred thralls die in one frame
-- [ ] Combat: the swing, the crescent, a hit, a kill, a hit taken
-- [ ] The kit: each ability, charges/tension filling, a cooldown ready
-- [ ] The run: slag pickup, a coffer opening, the gate waking, stepping through,
-      death, extraction
+- [x] The engine: a master volume, a limiter, voices that cannot pile up
+      when a hundred thralls die in one frame — plus a mute switch on the HUD
+      and the pause card (`smoke:sound`)
+- [x] Combat: the swing, the crescent, a hit, a kill, a hit taken — and a
+      blow into a guard, and one on the tethered Deceiver
+- [x] The kit: each ability, charges/tension filling, a cooldown ready — and
+      a press that cannot fire, an ability used on nothing, a channel held or
+      broken
+- [x] The run: slag pickup, a coffer opening, the gate waking, stepping through,
+      death, extraction — and the quota, gear by rarity, a full bag, blasts,
+      slams, a surge held and a corpse reclaimed
 - [ ] Bosses: arrival, their big moves, their fall
 - [ ] Menus: taps, buying, forging
 - [ ] Ambience, then music — last, once the effects are right
@@ -62,6 +67,9 @@ Synthesised with Web Audio, no files. One small engine, one switch.
       which fall back to Georgia
 - [ ] The gate arrow can sit over the minimap's corner
 - [ ] Gloom "closes in from the edges" has no Phaser check yet (newkinds.js)
+- [ ] `clamour`'s "a loud hero is harder to shake" fails about one run in
+      six, on `main` too: its fixture sits near a range edge that the
+      generated room sometimes moves. Find why before trusting it
 - [ ] A dev panel (god mode, seeds, jump to a region) — the canvas build's
       `debug.html` had one; Phaser has the diagnostics dump, the profiler and
       the `?nogate` / `?nogov` / `?norun` flags

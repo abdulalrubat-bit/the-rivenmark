@@ -36,4 +36,7 @@
   if (g.saveBest === undefined) g.saveBest = noop;
   if (g.saveHonours === undefined) g.saveHonours = noop;
   if (g.refreshBestLine === undefined) g.refreshBestLine = noop;
+  // sfx(name, x, y, mag): something the player should hear. src/sound.js
+  // claims it in the game; on the test page it stays silent.
+  if (g.sfx === undefined) g.sfx = noop;
 })(typeof window !== 'undefined' ? window : globalThis);

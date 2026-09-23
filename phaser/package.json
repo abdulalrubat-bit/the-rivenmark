@@ -32,7 +32,8 @@
     "smoke:art": "node tools/smoke-art.cjs",
     "smoke:mass": "node tools/smoke-mass.cjs",
     "smoke:conduit": "node tools/smoke-conduit.cjs",
-    "smoke:boot": "node tools/smoke-boot.cjs"
+    "smoke:boot": "node tools/smoke-boot.cjs",
+    "smoke:sound": "node tools/smoke-sound.cjs"
   },
   "dependencies": {
     "phaser": "^4.2.1"

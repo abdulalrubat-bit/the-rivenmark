@@ -20,6 +20,8 @@ import { Title } from './title.js';
 import { Overlay } from './overlay.js';
 import { Atmosphere } from './atmosphere.js';
 import { screenOrigin, pinToScreen, cssPoint } from './screen.js';
+import { installSound } from './sound.js';
+import './sounds.js';
 
 // The core's palette is CSS hex strings; Phaser wants numbers.
 const hex = (css, fallback) => {
@@ -291,6 +293,8 @@ export class Delve extends Phaser.Scene {
     this.screens = new Screens((hero, level, diff) => this.newRun(hero, level, diff),
                                () => this.abandonRun());
     window.showScreen = name => this.screens.show(name);
+    // Before the HUD, which puts a switch on it.
+    this.sound = installSound();
     this.wireInput();
     this.hud = new Hud();
     // Stepping through is a deliberate act, not something you do by walking

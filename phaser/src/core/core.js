@@ -3149,6 +3149,10 @@ function swingAt(base, o) {
     const a = base + (i === 0 ? 0 : (i % 2 ? 1 : -1) * step * Math.ceil(i / 2));
     releaseCrescent(a, fan ? 0 : i * 0.055, k);
   }
+  // One sound per swing, however many crescents it threw: the blade, and the
+  // magic leaving it. More crescents is a fuller sound, not more of them.
+  sfx('swing', undefined, undefined, k.heavy ? 1 : 0.5);
+  sfx('crescent', undefined, undefined, clamp((player.shots - 1) / 3, 0, 1));
   player.swing    = SWING_TIME * (k.heavy ? 1.7 : 1);
   player.recov    = 0;
   player.swingA   = base;
@@ -3505,6 +3509,7 @@ function openChest(ch) {
   burst(ch.x, ch.y, K.colour, 18, 190);
   ring(ch.x, ch.y, K.colour, 8, 46, 0.4);
   floatDmg(ch.x, ch.y - 12, coin, 'coin');
+  sfx('coffer', ch.x, ch.y);
 
   // SLAG, in a cluster. Coin is banked the instant the lid comes up and is
   // therefore not a reason to walk anywhere; slag has to be picked up off the
@@ -3853,6 +3858,8 @@ function updateSlams(dt) {
     s.t += dt;
     if (!s.struck && s.t >= s.wind) {
       s.struck = true;
+      sfx(s.pillar ? 'crumble' : (s.barrel || s.husk) ? 'blast' : 'slam', s.x, s.y,
+          s.barrel || s.fracture ? 1 : 0.5);
       if (s.barrel) {
         const dmg = 62 * (1 + (LEVEL.depth || 0));
         blastAt(s.x, s.y, s.r, dmg, '#ff9a3c');
@@ -3924,11 +3931,13 @@ function updateDrops(dt) {
         syncBagBadge();
         burst(d0.x, d0.y, rarityOf(d0.item).colour, 8, 150);
         toast(d0.item.name, rarityOf(d0.item).colour);
+        // Rarer is brighter: the one place a sound is allowed to be.
+        sfx('gear', undefined, undefined, RARITY.indexOf(rarityOf(d0.item)) / Math.max(1, RARITY.length - 1));
         continue;
       }
       // Bag full: leave it on the floor rather than silently binning it, and
       // say so once rather than every frame it is touched.
-      if (!run.bagWarned) { run.bagWarned = 2.5; toast('Bag full', '#c9863e'); }
+      if (!run.bagWarned) { run.bagWarned = 2.5; toast('Bag full', '#c9863e'); sfx('deny'); }
       d0.pulled = false;
       d0.vx = -(dx / d) * 90; d0.vy = -(dy / d) * 90;
     }
@@ -3979,6 +3988,7 @@ function claimCorpse() {
     took++;
   }
   const left = c.items.length - took;
+  sfx('corpse', c.x, c.y);
   run.found += took;
   run.coins += c.coins;
   syncBagBadge();
@@ -4185,7 +4195,11 @@ function abilityBlock(a) {
 
 function castAbility(id) {
   const a = ABILITY_BY_ID[id];
-  if (!a || abilityBlock(a)) return false;
+  if (!a) return false;
+  const block = abilityBlock(a);
+  // A press that does nothing still has to answer, or it reads as a missed
+  // tap and gets pressed again. 'no' is the game not running: nothing to say.
+  if (block) { if (block !== 'no') sfx('deny'); return false; }
   if (a.cost) spendCharges(a.cost);
   if (a.costPct) { player.tension = Math.max(0, (player.tension || 0) - TENSION_MAX * a.costPct);
                    player.chargePop = 1; }
@@ -4207,7 +4221,8 @@ function gainCharge(n) {
   player.charges = Math.min(CHARGE_MAX, was + (n || 1));
   if (player.charges !== was) {
     player.chargePop = 1;
-    if (player.charges === CHARGE_MAX) shake(3);
+    if (player.charges === CHARGE_MAX) { shake(3); sfx('charged'); }
+    else sfx('charge', undefined, undefined, player.charges / CHARGE_MAX);
   }
 }
 /* A swing that connected, paid once. `builtSwing` is the serial of the last
@@ -4237,6 +4252,7 @@ const ABILITY_DO = {
   aegis(a) {
     ring(player.x, player.y, '#ffd870', 12, a.radius, 0.42);
     burst(player.x, player.y, '#ffe9b0', 26, 320);
+    sfx('aegis');
     shake(9);
     freeze(0.05);
     enemyGrid.query(player.x, player.y, a.radius, _near);
@@ -4253,6 +4269,7 @@ const ABILITY_DO = {
   // A channel, and the most fragile thing in the kit.
   purge(a) {
     player.channel = { id: a.id, left: a.channel, total: a.channel };
+    sfx('purge');
     stickEnd();
   },
 
@@ -4262,9 +4279,10 @@ const ABILITY_DO = {
     const t = nearestBody(a.reach);
     player.swing = SWING_TIME * 1.6;
     player.strike = 2;
-    if (!t) { toast('Nothing in reach', '#8c8168'); return; }
+    if (!t) { toast('Nothing in reach', '#8c8168'); sfx('fizzle'); return; }
     player.angle = Math.atan2(t.y - player.y, t.x - player.x);
     const vuln = (t.vuln || 0) > 0;
+    sfx('guillotine', t.x, t.y, vuln ? 1 : 0.5);
     freeze(0.08);
     shake(vuln ? 16 : 11);
     ring(t.x, t.y, vuln ? '#fff2c8' : '#ffd870', 8, vuln ? 190 : 120, 0.5);
@@ -4281,6 +4299,7 @@ const ABILITY_DO = {
                  pulse: 0 });
     ring(player.x, player.y, '#b07cff', 10, a.radius, 0.44);
     burst(player.x, player.y, '#7a4fd0', 22, 250);
+    sfx('nullzone');
     shake(6);
   },
 
@@ -4295,9 +4314,11 @@ const ABILITY_DO = {
       // which is the whole of what this ability is.
       if (player.cds) player.cds.decrypt = a.cd * 0.2;
       toast('Nothing is casting', '#8c8168');
+      sfx('fizzle');
       return;
     }
     silence(t, a.silence);
+    sfx('decrypt', t.x, t.y);
     gainTension(TENSION_MAX);
     beams.push({ x: player.x, y: player.y, ex: t.x, ey: t.y, life: 0.2, max: 0.2,
                  hue: '#b07cff' });
@@ -4315,6 +4336,7 @@ const ABILITY_DO = {
     const heal = player.maxHp * a.healPct;
     player.hp = Math.min(player.maxHp, player.hp + heal);
     floatDmg(player.x, player.y - player.r * 1.4, heal, 'heal');
+    sfx('jars');
     burst(player.x, player.y, '#c2352a', 20, 200);
     ring(player.x, player.y, '#e0563f', 8, 54, 0.36);
   }
@@ -4338,7 +4360,18 @@ function segDist(ax, ay, bx, by, px, py) {
 function gainTension(n) {
   const was = player.tension || 0;
   player.tension = Math.min(TENSION_MAX, was + n);
-  if (player.tension !== was) player.chargePop = 1;
+  if (player.tension !== was) { player.chargePop = 1; tensionHeard(was, player.tension); }
+}
+
+/* Tension fills continuously, so it cannot tick on every gain the way a pip
+ * does. It is heard where it MEANS something: each time it crosses another
+ * Null-Zone's worth, and when it is full. */
+const TENSION_STEP = 0.40;
+function tensionHeard(was, now) {
+  if (now >= TENSION_MAX && was < TENSION_MAX) return sfx('charged');
+  const step = TENSION_MAX * TENSION_STEP;
+  if (Math.floor(now / step) > Math.floor(was / step))
+    sfx('charge', undefined, undefined, now / TENSION_MAX);
 }
 
 // Who is actually mid-cast. A cantor winding a bolt and a shaman winding a
@@ -4436,7 +4469,12 @@ function knock(e, ang, force) {
 function updateAbilities(dt) {
   if (player.cds) {
     for (const k in player.cds) {
-      if (player.cds[k] > 0) player.cds[k] = Math.max(0, player.cds[k] - dt);
+      if (player.cds[k] > 0) {
+        player.cds[k] = Math.max(0, player.cds[k] - dt);
+        // Ready again. Only for the kit in hand: the other hero's clocks run
+        // down too, and a chime for a button you cannot see is noise.
+        if (player.cds[k] === 0 && heroKit().some(a => a.id === k)) sfx('ready');
+      }
     }
   }
   if (player.chargePop > 0) player.chargePop = Math.max(0, player.chargePop - dt * 3);
@@ -4445,7 +4483,9 @@ function updateAbilities(dt) {
   // Tension comes back slowly on its own. It is meant to be refilled by
   // interrupting something, not by standing still and waiting.
   if (player.hero === 'zayd' && (player.tension || 0) < TENSION_MAX) {
-    player.tension = Math.min(TENSION_MAX, (player.tension || 0) + TENSION_REGEN * dt);
+    const was = player.tension || 0;
+    player.tension = Math.min(TENSION_MAX, was + TENSION_REGEN * dt);
+    tensionHeard(was, player.tension);
   }
 
   const c = player.channel;
@@ -4455,7 +4495,7 @@ function updateAbilities(dt) {
     if (a.healPct) {
       player.hp = Math.min(player.maxHp, player.hp + player.maxHp * a.healPct * dt);
     }
-    if (c.left <= 0) { player.channel = null; toast('Grounded', '#9dbb5a'); }
+    if (c.left <= 0) { player.channel = null; toast('Grounded', '#9dbb5a'); sfx('mend'); }
   }
 }
 
@@ -4470,6 +4510,7 @@ function breakChannel(why) {
   // being interrupted is to press it again immediately.
   if (a && a.cd) { player.cds = player.cds || {}; player.cds[a.id] = a.cd; }
   toast(why === 'hurt' ? 'The channel breaks' : 'You move, and it lapses', '#8c8168');
+  sfx('lapse');
 }
 
 /* --- the beat of a fight ----------------------------------------------------
@@ -4753,6 +4794,7 @@ function hurtPlayerBy(dmg, fx, fy, sized) {
   burst(player.x + (ox - player.x) * 0.5, player.y + (oy - player.y) * 0.5,
         PAL.blood, 10, 180);
   floatDmg(player.x, player.y - player.r * 1.2, taken, 'taken');
+  sfx('hurt', undefined, undefined, clamp(taken / Math.max(1, player.maxHp) * 4, 0, 1));
   if (player.hp <= 0) { player.hp = 0; endRun(false); }
 }
 
@@ -4807,6 +4849,7 @@ function damageEnemy(e, dmg, fx, fy) {
   if (e.kind === 'deceiver' && escortAlive()) {
     burst(e.x, e.y, '#e8c060', 3, 120);
     floatWord(e.x, e.y - e.r * 0.9, 'TETHERED', 'tether');
+    sfx('tether', e.x, e.y);
     return;
   }
   // A braced anchor eats most of it. It cannot move or swing while it does,
@@ -4846,6 +4889,8 @@ function damageEnemy(e, dmg, fx, fy) {
   // a scratch, and the number should read like whichever it was.
   floatDmg(e.x, e.y - e.r * 0.9, dmg,
            soaked ? 'soaked' : dmg > e.maxHp * 0.34 ? 'heavy' : 'hit');
+  // The kill has its own sound below, so a killing blow is not also a hit.
+  if (e.hp > 0) sfx(soaked ? 'block' : 'hit', e.x, e.y, weight);
   // Every wound on an escort pushes the crystal. Killing them is how you get
   // to him, and it is also how the clock runs down -- which is the whole
   // shape of the fight in one line.
@@ -4917,6 +4962,7 @@ function damageEnemy(e, dmg, fx, fy) {
     // The beat. A big body is worth a longer one, and the ring gives the
     // break an edge that expands rather than a puff that fades.
     const big = e.r > 18;
+    sfx('kill', e.x, e.y, clamp((e.r - 8) / 18, 0, 1));
     freeze(KILL_FREEZE * (big ? 1.6 : 1));
     shake(KILL_SHAKE * (big ? 2 : 1));
     burst(e.x, e.y, e.color, big ? 18 : 10, 210);
@@ -4933,7 +4979,11 @@ function damageEnemy(e, dmg, fx, fy) {
 // Slag is experience. It is banked on the hero at the end of the delve rather
 // than spent on a card mid-fight, so the run is never interrupted to choose.
 function collectTech(v) {
+  const was = run.tech;
   run.tech += v;
+  // The quota is the turn in a delve -- it is what calls the avatar -- so it
+  // gets its own sound rather than one more pickup.
+  if (was < LEVEL.quota && run.tech >= LEVEL.quota) sfx('quota');
 }
 
 function updatePlayer(dt) {
@@ -6007,6 +6057,8 @@ function updateLoot(dt) {
     l.x += l.vx * dt; l.y += l.vy * dt;
 
     if (d < player.r + 10) {
+      // Climbs with the quota, so the pickups themselves say how close you are.
+      sfx('slag', l.x, l.y, clamp(run.tech / Math.max(1, LEVEL.quota), 0, 1));
       collectTech(l.value);
       burst(l.x, l.y, PAL.gold, 5, 120);
       continue;
@@ -6434,14 +6486,23 @@ function updatePortal(dt) {
   }
   portal.active = (run.tech >= LEVEL.quota && run.bossDown) || run.forcedOpen;
   if (!portal.active) { portal.channel = 0; portal.inside = false; return; }
+  // The gate waking is heard across the delve: it is the way out, and the
+  // player may be nowhere near it. Placed, so it says which way.
+  if (!run.gateHeard) { run.gateHeard = true; sfx('gate', portal.x, portal.y); }
   const inside = dist2(player.x, player.y, portal.x, portal.y) < PORTAL_R * PORTAL_R;
   portal.inside = inside;
 
   if (!run.gateOpen) {
     // Winding it open. Nothing is escalating yet.
     if (inside) {
+      const was = portal.channel;
       portal.channel = Math.min(LEVEL.channel, portal.channel + dt);
+      // Winding it is heard in quarters, climbing, so the wait can be counted.
+      const q = c => Math.floor(c / LEVEL.channel * 4);
+      if (q(portal.channel) > q(was) && portal.channel < LEVEL.channel)
+        sfx('wind', undefined, undefined, portal.channel / LEVEL.channel);
       if (portal.channel >= LEVEL.channel) {
+        sfx('gateopen');
         run.gateOpen = true;
         run.holdTime = 0;
         run.holdTicks = 0;
@@ -6506,6 +6567,7 @@ function updatePortal(dt) {
                            (1 + (LEVEL.depth || 0)));
     run.coins += pay;
     toast('Surge ' + run.holdTicks + ' held \u00b7 ' + pay + ' coin', PAL.coin);
+    sfx('surge');
     // Every other surge, and not the best rolls until late: a piece per surge
     // arms you against the surge that follows it, and the hold ends up paying
     // for its own difficulty.
@@ -8294,6 +8356,9 @@ function endRun(won) {
   if (state === 'over') return;
   state = 'over';
   stickEnd();
+  // A Hardcore death is the heaviest sound in the game, because it is the
+  // heaviest thing that can happen in it.
+  sfx(won ? 'extract' : 'death', undefined, undefined, !won && hardcore ? 1 : 0.5);
 
   const b = loadBest();
   b.runs = (b.runs || 0) + 1;

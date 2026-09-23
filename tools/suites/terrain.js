@@ -187,10 +187,19 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
                            null, {timeout:30000});
   const drawn = await gp.evaluate(async ()=>{
     const sc = __game.scene.getScene('delve');
-    const b = sc.breakables.find(x => x.pr.kind === 'pillar') || sc.breakables[0];
+    const b = sc.breakables.find(x => x.pr.kind === 'pillar' && !x.pr.gone) ||
+              sc.breakables.find(x => !x.pr.gone);
     if (!b) return { none: true };
-    player.x = b.pr.x; player.y = b.pr.y + 120;     // so it is on screen
-    await new Promise(r=>setTimeout(r,400));
+    for (const e of enemies) e.awake = false;
+    // Stood beside it until it is actually on screen. A fixed wait was not
+    // enough on a slow frame: the camera eases after the hero, and until it
+    // arrives the prop is culled -- which made "before" false half the time
+    // and the check below measure nothing.
+    const t0 = performance.now();
+    do {
+      player.x = b.pr.x; player.y = b.pr.y + 120;
+      await new Promise(r=>setTimeout(r,100));
+    } while (!b.img.visible && performance.now() - t0 < 4000);
     const before = b.img.visible;
     hurtProp(b.pr, 1);                              // struck, not broken
     await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));

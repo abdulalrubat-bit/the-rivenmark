@@ -108,6 +108,10 @@ const CSS = `
      font:9px/13px ui-monospace,monospace;font-style:normal;text-align:center;padding:0 2px;
      box-sizing:border-box}
 #hud .hold .bag.full i{border-color:#e8c060;color:#e8c060}
+/* Sound, the third of the row. Off is the note struck through and dimmed,
+   not a different glyph: the same shape in two states reads as a switch. */
+#hud .hold .snd{font-size:15px}
+#hud .hold .snd.off{color:#5a5244;text-decoration:line-through}
 /* The kit sits bottom-right in two rows of three. Its own bottom edge, the
    swap beside it rather than above it, and the resource meter over it are all
    placed so nothing lands on anything else -- measured in the play test, not
@@ -424,6 +428,7 @@ export class Hud {
         '<span class="cd"></span></button></div>' +
       '<div class="hold"><button type="button" title="hold" aria-label="hold">❙❙</button>' +
         '<button type="button" class="bag" title="bag" aria-label="bag">\u25a3<i>0</i></button>' +
+        '<button type="button" class="snd" title="sound" aria-label="sound" aria-pressed="true">\u266a</button>' +
       '</div>' +
       '<div class="kit"></div>' +
       '<div class="conduit"><span class="ring"></span><span class="chg"></span>' +
@@ -474,6 +479,12 @@ export class Hud {
     this.bagCount = root.querySelector('.hold .bag i');
     this.bagSig = '';
     this.bagBtn.addEventListener('click', () => g.openGear('run'));
+    this.sndBtn = root.querySelector('.hold .snd');
+    this.sndBtn.addEventListener('click', () => g.__sound && g.__sound.toggle());
+    if (g.__sound) g.__sound.onMute(m => {
+      this.sndBtn.classList.toggle('off', m);
+      this.sndBtn.setAttribute('aria-pressed', String(!m));
+    });
 
     this.hero = null;      // which kit is currently built
     this.sig = '';         // last rendered button state, to skip DOM churn
