@@ -65,11 +65,12 @@ android {
         }
         release {
             /* NOT shrunk, deliberately. There is almost no Java here -- one
-             * activity and a WebView -- so R8 has nothing worth removing, and
-             * what it would remove is exactly what it cannot see: the
-             * @JavascriptInterface methods the page calls by name across the
-             * bridge. Shrinking a shell like this trades nothing for a class
-             * of bug that only appears in the build you ship.
+             * activity and a WebView -- so R8 has nothing worth removing. And
+             * the day a JS-to-native bridge is added (the ad SDK in
+             * docs/GAME.md would be one), R8 would strip exactly what it
+             * cannot see: @JavascriptInterface methods the page calls by name.
+             * Shrinking a shell like this trades nothing for a class of bug
+             * that only appears in the build you ship.
              */
             minifyEnabled false
             shrinkResources false
