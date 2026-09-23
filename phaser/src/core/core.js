@@ -4189,7 +4189,11 @@ function abilityBlock(a) {
 
 function castAbility(id) {
   const a = ABILITY_BY_ID[id];
-  if (!a || abilityBlock(a)) return false;
+  if (!a) return false;
+  const block = abilityBlock(a);
+  // A press that does nothing still has to answer, or it reads as a missed
+  // tap and gets pressed again. 'no' is the game not running: nothing to say.
+  if (block) { if (block !== 'no') sfx('deny'); return false; }
   if (a.cost) spendCharges(a.cost);
   if (a.costPct) { player.tension = Math.max(0, (player.tension || 0) - TENSION_MAX * a.costPct);
                    player.chargePop = 1; }
@@ -4211,7 +4215,8 @@ function gainCharge(n) {
   player.charges = Math.min(CHARGE_MAX, was + (n || 1));
   if (player.charges !== was) {
     player.chargePop = 1;
-    if (player.charges === CHARGE_MAX) shake(3);
+    if (player.charges === CHARGE_MAX) { shake(3); sfx('charged'); }
+    else sfx('charge', undefined, undefined, player.charges / CHARGE_MAX);
   }
 }
 /* A swing that connected, paid once. `builtSwing` is the serial of the last
@@ -4241,6 +4246,7 @@ const ABILITY_DO = {
   aegis(a) {
     ring(player.x, player.y, '#ffd870', 12, a.radius, 0.42);
     burst(player.x, player.y, '#ffe9b0', 26, 320);
+    sfx('aegis');
     shake(9);
     freeze(0.05);
     enemyGrid.query(player.x, player.y, a.radius, _near);
@@ -4257,6 +4263,7 @@ const ABILITY_DO = {
   // A channel, and the most fragile thing in the kit.
   purge(a) {
     player.channel = { id: a.id, left: a.channel, total: a.channel };
+    sfx('purge');
     stickEnd();
   },
 
@@ -4266,9 +4273,10 @@ const ABILITY_DO = {
     const t = nearestBody(a.reach);
     player.swing = SWING_TIME * 1.6;
     player.strike = 2;
-    if (!t) { toast('Nothing in reach', '#8c8168'); return; }
+    if (!t) { toast('Nothing in reach', '#8c8168'); sfx('fizzle'); return; }
     player.angle = Math.atan2(t.y - player.y, t.x - player.x);
     const vuln = (t.vuln || 0) > 0;
+    sfx('guillotine', t.x, t.y, vuln ? 1 : 0.5);
     freeze(0.08);
     shake(vuln ? 16 : 11);
     ring(t.x, t.y, vuln ? '#fff2c8' : '#ffd870', 8, vuln ? 190 : 120, 0.5);
@@ -4285,6 +4293,7 @@ const ABILITY_DO = {
                  pulse: 0 });
     ring(player.x, player.y, '#b07cff', 10, a.radius, 0.44);
     burst(player.x, player.y, '#7a4fd0', 22, 250);
+    sfx('nullzone');
     shake(6);
   },
 
@@ -4299,9 +4308,11 @@ const ABILITY_DO = {
       // which is the whole of what this ability is.
       if (player.cds) player.cds.decrypt = a.cd * 0.2;
       toast('Nothing is casting', '#8c8168');
+      sfx('fizzle');
       return;
     }
     silence(t, a.silence);
+    sfx('decrypt', t.x, t.y);
     gainTension(TENSION_MAX);
     beams.push({ x: player.x, y: player.y, ex: t.x, ey: t.y, life: 0.2, max: 0.2,
                  hue: '#b07cff' });
@@ -4319,6 +4330,7 @@ const ABILITY_DO = {
     const heal = player.maxHp * a.healPct;
     player.hp = Math.min(player.maxHp, player.hp + heal);
     floatDmg(player.x, player.y - player.r * 1.4, heal, 'heal');
+    sfx('jars');
     burst(player.x, player.y, '#c2352a', 20, 200);
     ring(player.x, player.y, '#e0563f', 8, 54, 0.36);
   }
@@ -4342,7 +4354,18 @@ function segDist(ax, ay, bx, by, px, py) {
 function gainTension(n) {
   const was = player.tension || 0;
   player.tension = Math.min(TENSION_MAX, was + n);
-  if (player.tension !== was) player.chargePop = 1;
+  if (player.tension !== was) { player.chargePop = 1; tensionHeard(was, player.tension); }
+}
+
+/* Tension fills continuously, so it cannot tick on every gain the way a pip
+ * does. It is heard where it MEANS something: each time it crosses another
+ * Null-Zone's worth, and when it is full. */
+const TENSION_STEP = 0.40;
+function tensionHeard(was, now) {
+  if (now >= TENSION_MAX && was < TENSION_MAX) return sfx('charged');
+  const step = TENSION_MAX * TENSION_STEP;
+  if (Math.floor(now / step) > Math.floor(was / step))
+    sfx('charge', undefined, undefined, now / TENSION_MAX);
 }
 
 // Who is actually mid-cast. A cantor winding a bolt and a shaman winding a
@@ -4440,7 +4463,12 @@ function knock(e, ang, force) {
 function updateAbilities(dt) {
   if (player.cds) {
     for (const k in player.cds) {
-      if (player.cds[k] > 0) player.cds[k] = Math.max(0, player.cds[k] - dt);
+      if (player.cds[k] > 0) {
+        player.cds[k] = Math.max(0, player.cds[k] - dt);
+        // Ready again. Only for the kit in hand: the other hero's clocks run
+        // down too, and a chime for a button you cannot see is noise.
+        if (player.cds[k] === 0 && heroKit().some(a => a.id === k)) sfx('ready');
+      }
     }
   }
   if (player.chargePop > 0) player.chargePop = Math.max(0, player.chargePop - dt * 3);
@@ -4449,7 +4477,9 @@ function updateAbilities(dt) {
   // Tension comes back slowly on its own. It is meant to be refilled by
   // interrupting something, not by standing still and waiting.
   if (player.hero === 'zayd' && (player.tension || 0) < TENSION_MAX) {
-    player.tension = Math.min(TENSION_MAX, (player.tension || 0) + TENSION_REGEN * dt);
+    const was = player.tension || 0;
+    player.tension = Math.min(TENSION_MAX, was + TENSION_REGEN * dt);
+    tensionHeard(was, player.tension);
   }
 
   const c = player.channel;
@@ -4459,7 +4489,7 @@ function updateAbilities(dt) {
     if (a.healPct) {
       player.hp = Math.min(player.maxHp, player.hp + player.maxHp * a.healPct * dt);
     }
-    if (c.left <= 0) { player.channel = null; toast('Grounded', '#9dbb5a'); }
+    if (c.left <= 0) { player.channel = null; toast('Grounded', '#9dbb5a'); sfx('mend'); }
   }
 }
 
@@ -4474,6 +4504,7 @@ function breakChannel(why) {
   // being interrupted is to press it again immediately.
   if (a && a.cd) { player.cds = player.cds || {}; player.cds[a.id] = a.cd; }
   toast(why === 'hurt' ? 'The channel breaks' : 'You move, and it lapses', '#8c8168');
+  sfx('lapse');
 }
 
 /* --- the beat of a fight ----------------------------------------------------

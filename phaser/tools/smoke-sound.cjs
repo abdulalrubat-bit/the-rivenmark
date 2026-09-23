@@ -142,6 +142,60 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     const hurt = await since(() => { player.invuln = 0; hurtPlayerBy(20); player.invuln = 1e9; });
     ck('taking a blow is heard', hurt.includes('hurt'), hurt.join());
 
+    /* ---- the kit is heard ---------------------------------------------------- */
+    // Every ability through castAbility, the path a button press takes.
+    const ready = () => p.evaluate(() => { player.gcd = 0; player.channel = null;
+      player.cds = {}; });
+    const kit = async f => { await ready(); await sleep(320); return since(f); };
+    const tick = await kit(() => { player.charges = 0; gainCharge(1); });
+    ck('a charge gained ticks', tick.includes('charge') && !tick.includes('charged'), tick.join());
+    const full = await kit(() => { player.charges = CHARGE_MAX - 1; gainCharge(1); });
+    ck('the last charge is a chord, not a tick', full.includes('charged') && !full.includes('charge'), full.join());
+    const aeg = await kit(() => { player.charges = CHARGE_MAX; castAbility('aegis'); });
+    ck('Aegis is heard', aeg.includes('aegis'), aeg.join());
+    const no = await kit(() => { player.charges = 0; castAbility('guillotine'); });
+    ck('a press that cannot fire says "not yet"', no.includes('deny') && !no.includes('guillotine'), no.join());
+    const fz = await kit(() => { for (const e of enemies) e.hp = 0; enemies.length = 0;
+      player.charges = CHARGE_MAX; castAbility('guillotine'); });
+    ck('Guillotine on nothing fizzles', fz.includes('fizzle'), fz.join());
+    // A body pushed now is not in the spatial grid until the next frame, and
+    // the kit finds its targets through the grid -- so place, then wait.
+    const place1 = (dx, casting) => p.evaluate(([dx, casting]) => {
+      const e = newBody('thrall', player.x + dx, player.y, 0);
+      e.awake = false; e.hp = e.maxHp = 1e6; if (casting) e.casting = 1e6;
+      enemies.push(e); }, [dx, casting]);
+    await place1(40, false);
+    const gl = await kit(() => { player.charges = CHARGE_MAX; castAbility('guillotine'); });
+    ck('Guillotine on a body is heard', gl.includes('guillotine'), gl.join());
+    const pg = await kit(() => { castAbility('purge'); });
+    ck('Purge starting is heard', pg.includes('purge'), pg.join());
+    const md = await since(async () => { player.channel.left = 0.02;
+      await new Promise(r => setTimeout(r, 250)); });
+    ck('held to the end, it mends', md.includes('mend'), md.join());
+    const lp = await kit(() => { castAbility('purge'); breakChannel('hurt'); });
+    ck('broken, it lapses', lp.includes('lapse'), lp.join());
+    const rd = await kit(async () => { player.cds = { purge: 0.05 };
+      await new Promise(r => setTimeout(r, 250)); });
+    ck('a cooldown coming round chimes', rd.includes('ready'), rd.join());
+    const other = await kit(async () => { player.cds = { nullzone: 0.05 };
+      await new Promise(r => setTimeout(r, 250)); });
+    ck('but not for the other hero’s kit', !other.includes('ready'), other.join());
+    const tn = await kit(() => { player.tension = TENSION_MAX * 0.35; gainTension(TENSION_MAX * 0.1); });
+    ck('Tension crossing a Null-Zone’s worth ticks', tn.includes('charge'), tn.join());
+    const tq = await kit(() => { player.tension = TENSION_MAX * 0.5; gainTension(TENSION_MAX * 0.05); });
+    ck('but not every little gain', !tq.includes('charge') && !tq.includes('charged'), tq.join());
+    const nz = await kit(() => { player.tension = TENSION_MAX; castAbility('nullzone'); });
+    ck('Null-Zone is heard', nz.includes('nullzone'), nz.join());
+    const dc = await kit(() => { castAbility('decrypt'); });
+    ck('Decrypt with nothing casting fizzles', dc.includes('fizzle') && !dc.includes('decrypt'), dc.join());
+    await place1(60, true);
+    const dh = await kit(() => { player.tension = 0; castAbility('decrypt'); });
+    ck('Decrypt snapping a cast is heard, and the Tension it gives back',
+       dh.includes('decrypt') && dh.includes('charged'), dh.join());
+    const jr = await kit(() => { player.jars = 1; castAbility('jars'); });
+    ck('the Jars are heard', jr.includes('jars'), jr.join());
+    await p.evaluate(() => { for (const e of enemies) e.hp = 0; enemies.length = 0; });
+
     /* ---- a hundred die at once ---------------------------------------------- */
     await sleep(600);
     const mass = await p.evaluate(() => {
