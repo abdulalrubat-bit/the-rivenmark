@@ -404,7 +404,7 @@ export function asText(d) {
     d.combat ? Object.entries(d.combat).map(([k, n]) => k.padEnd(28) + n).join('\n') : null,
     d.combatTail && d.combatTail.length ? '--- last ' + d.combatTail.length + ' combat events ---' : null,
     d.combatTail && d.combatTail.length ? d.combatTail.map(e => {
-      const rest = Object.keys(e).filter(k => !['at', 't', 'k', 'r'].includes(k) && e[k] !== undefined)
+      const rest = Object.keys(e).filter(k => !['n', 'at', 't', 'k', 'r'].includes(k) && e[k] !== undefined)
         .map(k => k + '=' + e[k]).join(' ');
       return String(e.at).padStart(8) + 'ms  ' + (e.k + (e.r ? ' ' + e.r : '')).padEnd(24) + rest;
     }).join('\n') : null,

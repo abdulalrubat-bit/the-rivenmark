@@ -5231,8 +5231,12 @@ const CLEAVE_STRIDE  = 0.45;  // what it costs to stand there gathering
  * point is partly to see what a hit-stop costs. */
 const COMBAT_LOG_MAX = 400;
 const combatLog = [];
+// Every entry is numbered, so "what happened since" can be asked by number
+// even once the oldest entries have been let go.
+let combatSeq = 0;
 function clog(k, r, extra) {
-  const e = { at: Math.round(performance.now()), t: run ? +(+run.time || 0).toFixed(3) : 0, k, r: r || '' };
+  const e = { n: ++combatSeq, at: Math.round(performance.now()),
+              t: run ? +(+run.time || 0).toFixed(3) : 0, k, r: r || '' };
   if (extra) for (const key in extra) e[key] = extra[key];
   combatLog.push(e);
   if (combatLog.length > COMBAT_LOG_MAX) combatLog.shift();

@@ -24,6 +24,7 @@ import { installSound } from './sound.js';
 import './sounds.js';
 import { Score } from './music.js';
 import { settings, applyAll } from './settings.js';
+import { Tutorial } from './tutorial.js';
 
 // The core's palette is CSS hex strings; Phaser wants numbers.
 const hex = (css, fallback) => {
@@ -322,6 +323,7 @@ export class Delve extends Phaser.Scene {
     // Before the HUD, which puts a switch on it.
     this.sound = installSound();
     this.score = window.__score = new Score(this.sound);
+    this.tutorial = new Tutorial();
     this.wireInput();
     this.hud = new Hud();
     // Stepping through is a deliberate act, not something you do by walking
@@ -417,6 +419,7 @@ export class Delve extends Phaser.Scene {
     this.paintStatics();
     this.hero.setPosition(player.x, player.y);
     this.culledAt = null;
+    this.tutorial.maybeStart();         // the first real delve teaches itself
   }
 
   /* Everything drawn from a delve, unmade. Its own method because two things
@@ -1125,6 +1128,7 @@ export class Delve extends Phaser.Scene {
     if (this.stepping && state === 'play') advanceDelve(dtMs / 1000);
     else resetStepClock();
     this.score.set(...this.musicFor());
+    this.tutorial.tick();
 
     // Bodies: one sprite each, pooled. Sorted by y, which is what makes a
     // crowd read as standing on a floor rather than floating over it.

@@ -85,8 +85,10 @@ Synthesised with Web Audio, no files. One small engine, one switch.
       shake, hit flashes, effects quality, controls (`smoke:settings`)
 - [x] Vibration on the moments that matter (hit taken, big kill, gate, a boss
       falling, death), its own switch; the APK declares VIBRATE
-- [ ] Teach the controls on the first delve — the stick and the Conduit's
-      three touches — shown once, skippable, replayable from settings
+- [x] Teach the controls on the first delve — walk, strike, aim, the heavy,
+      an ability, and what getting out keeps and dying loses (Hardcore spelled
+      out) — each step finished by doing it; skippable, replayable from
+      settings, never in practice (`smoke:tutorial`)
 
 ## Phase 4 — Content
 

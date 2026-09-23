@@ -34,7 +34,8 @@
     "smoke:conduit": "node tools/smoke-conduit.cjs",
     "smoke:boot": "node tools/smoke-boot.cjs",
     "smoke:sound": "node tools/smoke-sound.cjs",
-    "smoke:settings": "node tools/smoke-settings.cjs"
+    "smoke:settings": "node tools/smoke-settings.cjs",
+    "smoke:tutorial": "node tools/smoke-tutorial.cjs"
   },
   "dependencies": {
     "phaser": "^4.2.1"
