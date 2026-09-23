@@ -34,7 +34,8 @@ const SHIP = [
   'index.html', 'app.webmanifest', 'sw.js',
   'host-stubs.js', 'host-real.js', 'core.js', 'bundle.js',
   'atlas.png', 'atlas.json', 'manifest.json',
-  'icon-192.png', 'icon-512.png', 'icon-mask-512.png'
+  'icon-192.png', 'icon-512.png', 'icon-mask-512.png',
+  'cinzel-400.woff2', 'cinzel-600.woff2', 'OFL-Cinzel.txt', 'icons.png'
 ];
 
 /* THE ATLAS, PACKED HERE RATHER THAN ASKED FOR.

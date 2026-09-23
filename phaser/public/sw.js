@@ -50,7 +50,10 @@ const SHELL = [
   'manifest.json',
   'app.webmanifest',
   'icon-192.png',
-  'icon-512.png'
+  'icon-512.png',
+  'cinzel-400.woff2',
+  'cinzel-600.woff2',
+  'icons.png'
 ];
 
 self.addEventListener('install', e => {

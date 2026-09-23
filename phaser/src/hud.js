@@ -343,7 +343,7 @@ const CSS = `
    sets it from where the map ends, since that is the one band on a phone
    screen that is neither chrome nor the fight. See the note there. */
 #hud .banner{position:absolute;left:14px;right:14px;top:26%;text-align:center;font-size:19px;
-     color:#eee0c0;text-shadow:0 2px 6px #000;font-family:Georgia,serif}
+     color:#eee0c0;text-shadow:0 2px 6px #000;font-family:Cinzel,Georgia,serif}
 #hud .banner small{display:block;font-size:12px;color:#a89878;margin-top:4px;font-style:italic}
 /* When the boss bar is already carrying his name, the banner is only the line
    about what to do -- so that line IS the banner, not a subtitle under nothing. */

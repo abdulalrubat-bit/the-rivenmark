@@ -61,11 +61,11 @@ Synthesised with Web Audio, no files. One small engine, one switch.
 
 ## Polish, found on the way
 
-- [ ] Item icons in the Forge and the bag (the canvas build had a pixel-icon
+- [x] Item icons in the Forge and the bag (the canvas build had a pixel-icon
       strip per base; the Phaser menus name pieces with glyphs only)
-- [ ] The display face (Cinzel, fonts/) is not used by the Phaser menus,
+- [x] The display face (Cinzel, fonts/) is not used by the Phaser menus,
       which fall back to Georgia
-- [ ] The gate arrow can sit over the minimap's corner
+- [x] The gate arrow can sit over the minimap's corner (`smoke:overlay`)
 - [ ] Gloom "closes in from the edges" has no Phaser check yet (newkinds.js)
 - [ ] `clamour`'s "a loud hero is harder to shake" fails about one run in
       six, on `main` too: its fixture sits near a range edge that the
@@ -92,19 +92,22 @@ Synthesised with Web Audio, no files. One small engine, one switch.
 
 ## Phase 4 — Content
 
-- [ ] The third boss: design, then build (behaviour in
-      `phaser/src/core/core.js`, drawing in the rest of `phaser/src`, art in
-      `tools/forge/`)
-- [ ] Rung 52 as a milestone: a proper moment when you reach the bottom,
-      without closing the ladder
+- [x] The third boss: the Silent Choir — five anchored singers round the
+      gate, notes to break, three together to still; rung 19, then every third
+      (`choir`)
+- [x] Rung 52 as a milestone: the whole Choir (seven voices); silencing it
+      and getting out is the ending — told on the card, kept in the Hall, and
+      the ladder stays open (`ending`)
 - [x] **Before any rung past 52:** difficulty was `d = i / (LEVEL_COUNT - 1)`,
       so adding a rung silently made every existing rung easier. Pinned to the
       rung (`CURVE_DEEP`); a 70-rung ladder leaves all 52 unchanged (`ladder`)
 
 ## Phase 5 — Balance
 
-- [ ] The mid-ladder bump (rungs 3–17), measured with `winnable.js` either
-      side of each change
+- [x] The mid-ladder bump (rungs 3–17), measured with `winnable.js` either
+      side of each change: burning ground and bursts hurt the hero less while
+      they are being learned (0.4 at rung 2, whole by 27). Reference player,
+      40 a rung: 3 7→11, 9 8→13, 17 12→21, 30 20→29; overall 42%→56%
 
 ## Phase 6 — Google Play
 

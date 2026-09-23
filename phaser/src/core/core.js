@@ -3819,6 +3819,34 @@ const PILLAR_R    = 78;
 // hero's life is a blow the player was never offered the chance to avoid.
 const PILLAR_FUSE = 0.5;
 
+/* THE GROUND IS KINDER WHILE IT IS STILL BEING LEARNED.
+ *
+ * Burning ground and bursts arrived at full weight at the end of the teaching
+ * ramp, and they were most of what killed the reference player between rungs
+ * 3 and 17 -- more than the horde -- so the middle of the ladder was harder
+ * than the bottom of it. What the hero takes from them now ramps in: 0.4 of
+ * it at rung 2, the whole of it by rung 27. Only the hero's share: a barrel
+ * is exactly as good a weapon against the horde.
+ *
+ * Measured with winnable.js, 40 delves a rung, reference player out of:
+ *     rung      3      9     17     30     44
+ *     before   7/40   8/40  12/40  20/40  33/40
+ *     to 18   17/40  17/40  14/40  24/40  33/40
+ *     to 27   11/40  13/40  21/40  29/40  34/40
+ * Ending the ramp at the Choir's rung left 17 barely eased and the dip moved
+ * there, so it runs on to 27. At forty delves a rung the spread is about five
+ * either way (3 and 9 read 17 and 11-13 under nearly the same numbers); the
+ * shape is what counts, and the ladder no longer gets EASIER as it goes down
+ * past 17. Overall 42% -> 56%.
+ */
+const GROUND_EASE = 0.4;
+const GROUND_EASE_TO = 27;        // the rung it is whole by
+function groundEase() {
+  const d = (LEVEL && LEVEL.depth) || 0;
+  const a = rungDepth(2), b = rungDepth(GROUND_EASE_TO);
+  return GROUND_EASE + (1 - GROUND_EASE) * clamp((d - a) / (b - a), 0, 1);
+}
+
 // Everything in reach, player included. Scenery does not take sides.
 // `pierce` forces the hit through the player's i-frames. A pitch barrel should
 // land whether or not you were just clipped by something -- one blast, one
@@ -3859,7 +3887,7 @@ function blastAt(x, y, r, dmg, hue, pierce) {
   const pr2 = dist2(player.x, player.y, x, y);
   if (pr2 < r * r) {
     const near = 0.35 + 0.65 * (1 - clamp(Math.sqrt(pr2) / r, 0, 1));
-    const toll = dmg * 0.4 * near;
+    const toll = dmg * 0.4 * near * groundEase();
     if (pierce === false) {
       hurtPlayerBy(toll, x, y);
     } else {
@@ -3929,7 +3957,7 @@ function updateHazards(dt) {
       // also touching you.
       const was = player.invuln;
       player.invuln = 0;
-      hurtPlayerBy(h.dps * HAZARD_TICK, h.x, h.y, h.sized);
+      hurtPlayerBy(h.dps * HAZARD_TICK * groundEase(), h.x, h.y, h.sized);
       player.invuln = Math.max(player.invuln, was);
     }
   }
