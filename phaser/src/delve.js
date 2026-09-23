@@ -204,6 +204,11 @@ export class Delve extends Phaser.Scene {
       // which mode they were in by dying in the wrong one.
       hardcore = loadHardcoreMode();
       stash = loadStash();
+      // Which controls: the saved choice (settings), or ?controls= for a
+      // test, or the new ones.
+      setControls(new URLSearchParams(location.search).get('controls') ||
+                  (() => { try { return localStorage.getItem('rivenmark.controls.v1'); } catch (e) { return null; } })() ||
+                  'new');
       // A Hardcore delve the app was closed in the middle of is a death.
       settleUnfinishedDelve();
       const t0 = performance.now();
@@ -230,6 +235,7 @@ export class Delve extends Phaser.Scene {
          * same room every time -- &seed=N for another, &hero=zayd for him. */
         const q = new URLSearchParams(location.search);
         const room = q.get('room') === 'combat';
+        if (q.get('controls')) setControls(q.get('controls'));
         if (room) seedRandom(+q.get('seed') || 1);
         const hero = HEROES[q.get('hero')] ? q.get('hero') : 'isaac';
         state = 'play';
@@ -978,11 +984,22 @@ export class Delve extends Phaser.Scene {
         else if (state === 'play') openGear('run');
         return;
       }
+      // Space is the attack on a keyboard (new controls): press to strike,
+      // hold to keep striking, aimed by the assist.
+      if (k === ' ' && controlScheme !== 'classic') {
+        if (!e.repeat && state === 'play') attackPress();
+        return;
+      }
       keys.add(k);
     });
-    this.input.keyboard?.on('keyup',   e => keys.delete(e.key.toLowerCase()));
-    // A window that loses focus mid-delve must not leave a key held down.
-    window.addEventListener('blur', () => { keys.clear(); stickEnd(); });
+    this.input.keyboard?.on('keyup', e => {
+      const k = e.key.toLowerCase();
+      if (k === ' ' && controlScheme !== 'classic') { attackRelease(); return; }
+      keys.delete(k);
+    });
+    // A window that loses focus mid-delve must not leave a key held down --
+    // or an attack.
+    window.addEventListener('blur', () => { keys.clear(); stickEnd(); attackCancel('blur'); });
     // Put down in the middle of a fight -- another app, the lock button, a
     // call -- and the delve is held, not left running for the moment it comes
     // back. The APK's activity does this through onPause; this is the same for
@@ -1086,7 +1103,11 @@ export class Delve extends Phaser.Scene {
     this.adaptFx(time);
     const dt = Math.min(0.05, dtMs / 1000);      // the core's own MAX_DT clamp
     // stepDelve, not update: it is update behind the hit-stop (see the core).
-    if (this.stepping && state === 'play') stepDelve(dt);
+    // The simulation's own fixed step: the real time that passed, and the core
+    // runs as many 60Hz steps as it covers. Anything but play resets the clock,
+    // so coming back from a pause or a menu is not a burst of stored-up steps.
+    if (this.stepping && state === 'play') advanceDelve(dtMs / 1000);
+    else resetStepClock();
     this.score.set(...this.musicFor());
 
     // Bodies: one sprite each, pooled. Sorted by y, which is what makes a

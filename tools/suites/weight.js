@@ -153,25 +153,36 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     // Spent on the kill and NOT on the hit. At the measured rate -- two and a
     // half landings a second against about four fifths of a kill -- a freeze
     // per landing is a stutter, and a freeze per kill is punctuation.
-    {
-      const e = body('thrall', 1e6);
+    //
+    // THAT WAS THE CLASSIC RULE, and it is kept under the classic controls so
+    // the two can be compared. The combat analysis measured what it cost --
+    // ten kills in a second stopped the world, movement and all, for half the
+    // frames -- so under the new controls an ordinary kill does not freeze at
+    // all, and has to carry its weight in the shake, the spray, the recoil and
+    // the sound. Both are measured here, each against the other.
+    const stops = scheme => {
+      setControls(scheme);
+      const r = {};
+      let e = body('thrall', 1e6);
       still();
       damageEnemy(e, e.maxHp * 0.9, player.x, player.y);   // nearly all of it
-      o.frozeOnHit = +hitStop.toFixed(4);
+      r.onHit = +hitStop.toFixed(4);
       still();
       damageEnemy(e, e.maxHp * 10, player.x, player.y);    // and now it dies
-      o.frozeOnKill = +hitStop.toFixed(4);
-      o.underCap = hitStop <= HITSTOP_MAX + 1e-9;
-    }
-    // A big body is worth a longer beat than a thrall.
-    {
-      let e = body('thrall'); still();
+      r.onKill = +hitStop.toFixed(4);
+      r.underCap = hitStop <= HITSTOP_MAX + 1e-9;
+      e = body('thrall'); still();
       damageEnemy(e, 1e6, player.x, player.y);
-      o.smallKillFreeze = +hitStop.toFixed(4);
+      r.small = +hitStop.toFixed(4);
       e = body('gorger'); still();
       damageEnemy(e, 1e6, player.x, player.y);
-      o.bigKillFreeze = +hitStop.toFixed(4);
-    }
+      r.big = +hitStop.toFixed(4);
+      still();
+      return r;
+    };
+    o.classic = stops('classic');
+    o.fresh = stops('new');
+    o.frozeOnHit = Math.max(o.classic.onHit, o.fresh.onHit);
 
     // --- the camera ---------------------------------------------------------
     // A heavy landing moves it; a scratch leaves it alone, or a fight against
@@ -206,7 +217,8 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     // --- and it is the ORDINARY swing that gets all of this ------------------
     // The whole point. A crescent -- no ability, no button -- carried through
     // updateArcs must freeze, shake and recoil like anything else.
-    {
+    for (const scheme of ['classic', 'new']) {
+      setControls(scheme);
       const e = body('thrall');
       e.hp = e.maxHp = 12;                     // one crescent kills it
       still();
@@ -214,12 +226,12 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
       const before = particles.length;
       releaseCrescent(0, 0);                   // due east, at the standing body
       for (let i = 0; i < 40 && e.hp > 0; i++) updateArcs(1 / 60);
-      o.arcKilled = e.hp <= 0;
-      o.arcFroze = +hitStop.toFixed(4);
-      o.arcShook = +cam.shake.toFixed(3);
-      o.arcParticles = particles.length - before;
-      o.arcMoved = +(e.x - x0).toFixed(2);
+      o['arc_' + scheme] = { killed: e.hp <= 0, froze: +hitStop.toFixed(4), shook: +cam.shake.toFixed(3),
+                             particles: particles.length - before, moved: +(e.x - x0).toFixed(2) };
+      still();
     }
+    setControls('new');
+    o.arcKilled = o.arc_new.killed && o.arc_classic.killed;
     return o;
   });
 
@@ -247,11 +259,14 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
 
   ck('the ordinary hit does NOT freeze the world', R.frozeOnHit === 0,
      'hitStop ' + R.frozeOnHit + ' after a blow taking 90% of a body');
-  ck('the kill does', R.frozeOnKill > 0, 'hitStop ' + R.frozeOnKill);
-  ck('and never past the cap', R.underCap === true, 'cap is HITSTOP_MAX');
-  ck('a big body breaking is worth a longer beat than a thrall',
-     R.bigKillFreeze > R.smallKillFreeze,
-     R.smallKillFreeze + 's for a thrall, ' + R.bigKillFreeze + 's for a gorger');
+  ck('classic controls: the kill does', R.classic.onKill > 0, 'hitStop ' + R.classic.onKill);
+  ck('and never past the cap', R.classic.underCap === true, 'cap is HITSTOP_MAX');
+  ck('classic controls: a big body breaking is worth a longer beat than a thrall',
+     R.classic.big > R.classic.small,
+     R.classic.small + 's for a thrall, ' + R.classic.big + 's for a gorger');
+  ck('new controls: an ordinary kill does NOT stop the world, thrall or gorger',
+     R.fresh.onKill === 0 && R.fresh.small === 0 && R.fresh.big === 0,
+     'hitStop ' + R.fresh.onKill + ' / ' + R.fresh.small + ' / ' + R.fresh.big);
 
   ck('a scratch leaves the camera alone', R.shakeScratch === 0,
      'shake ' + R.shakeScratch + ' off 2% of a body');
@@ -264,10 +279,13 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
      R.pScratch + ' scratch → ' + R.pHeavy + ' heavy → ' + R.pKill + ' kill');
 
   ck('a plain crescent kills with all of it', R.arcKilled === true);
-  ck('the swing nobody pressed a button for gets the weight too',
-     R.arcFroze > 0 && R.arcShook > 0 && R.arcParticles > 6,
-     'froze ' + R.arcFroze + 's, shook ' + R.arcShook + ', ' +
-     R.arcParticles + ' particles');
+  const A = R.arc_new, C = R.arc_classic;
+  ck('a plain crescent’s kill still lands with weight: shake, spray and recoil',
+     A.shook > 0 && A.particles > 6 && C.shook > 0 && C.particles > 6,
+     'new: shook ' + A.shook + ', ' + A.particles + ' particles; classic: shook ' + C.shook +
+     ', ' + C.particles);
+  ck('...frozen under the classic controls, not under the new',
+     C.froze > 0 && A.froze === 0, 'classic ' + C.froze + 's, new ' + A.froze + 's');
 
   ck('no console errors', errs.length === 0, errs.slice(0, 3).join(' | '));
   console.log('\nPASS ' + pass.length + '\n  ' + pass.join('\n  '));

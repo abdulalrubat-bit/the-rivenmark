@@ -70,6 +70,11 @@ Synthesised with Web Audio, no files. One small engine, one switch.
 - [ ] `clamour`'s "a loud hero is harder to shake" fails about one run in
       six, on `main` too: its fixture sits near a range edge that the
       generated room sometimes moves. Find why before trusting it
+- [ ] `crucible`'s "the escort is the same gate at both ends" fails about one
+      run in three: the rung-50 hero median rides the gear lottery (single
+      rolls 19%/s to 76%/s). Seeded, it reads identically under both control
+      schemes, so it is the dice, not the controls. Seed the gear rolls, or
+      widen the sample
 - [ ] A dev panel (god mode, seeds, jump to a region) — the canvas build's
       `debug.html` had one; Phaser has the diagnostics dump, the profiler and
       the `?nogate` / `?nogov` / `?norun` flags

@@ -4,7 +4,7 @@
  * The analysis (docs/ROADMAP.md, "Combat first") names nine ways the attack
  * can let a player down, C01 to C09, each from a reproduction. This script
  * runs every one of them again, in the combat room, and writes what it found
- * to docs/COMBAT_BASELINE.md -- so the claims are checked rather than carried,
+ * to docs/COMBAT_BASELINE.<scheme>.md -- so the claims are checked rather than carried,
  * and so the same script run after the controls change is the before/after.
  *
  * The world is stepped here, frame by frame at 60Hz, with the scene's own
@@ -14,7 +14,7 @@
  * what they are about is what the HUD does with a thumb.
  *
  * Run: node tools/combat-baseline.js   (builds, serves, and writes the doc)
- *      CONTROLS=classic|new             which scheme to measure, once there are two
+ *      CONTROLS=classic                 the old Conduit, kept for comparison (default: new)
  */
 const { chromium } = require('playwright');
 const fs = require('fs');
@@ -23,7 +23,7 @@ const { execFileSync, spawn } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
 const PORT = process.env.PORT || '8311';
-const CONTROLS = process.env.CONTROLS || '';
+const CONTROLS = process.env.CONTROLS === 'classic' ? 'classic' : 'new';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 (async () => {
@@ -51,34 +51,42 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
         step(secs) { let lost = 0; const n = Math.round(secs * 60);
           for (let i = 0; i < n; i++) if (!stepDelve(1 / 60)) lost++; return lost; },
         reset() {
-          conduitRelease(); player.conDown = false; player.cleave = 0; player.conAim = false;
+          B.release(); attackCancel('reset'); player.conDown = false; player.cleave = 0; player.conAim = false;
           player.fireTimer = 0; player.combo = 0; player.comboT = 0; hitStop = 0;
           player.hp = player.maxHp = 1e9; player.invuln = 1e9; player.gcd = 0; player.cds = {};
           for (const e of enemies) if (!e.dummy) e.awake = false;
         },
-        swings() { return player.swingNo || 0; }
+        swings() { return player.swingNo || 0; },
+        // The scheme's own three calls, so the same reproduction measures either.
+        press() { if (controlScheme === 'classic') conduitPress(); else attackPress(); },
+        aim(a, m) { if (controlScheme === 'classic') conduitAim(a, m); else attackAim(a, m); },
+        release() { if (controlScheme === 'classic') conduitRelease(); else attackRelease(); }
       };
     });
 
     const R = await p.evaluate(() => {
       const o = {};
       // C01: a still press held a little past the tap window.
-      B.reset(); let s0 = B.swings(); conduitPress(); B.step(0.25); conduitRelease();
+      B.reset(); let s0 = B.swings(); B.press(); B.step(0.25); B.release();
       o.c01 = { held250: B.swings() - s0 };
-      B.reset(); B.step(0.5); s0 = B.swings(); conduitPress(); B.step(0.15); conduitRelease();
+      B.reset(); B.step(0.5); s0 = B.swings(); B.press(); B.step(0.15); B.release();
       o.c01.held150 = B.swings() - s0;
 
-      // C02: a second tap while the blade is still coming round.
-      B.reset(); B.step(0.5); s0 = B.swings();
-      conduitPress(); B.step(1 / 60); conduitRelease();
-      B.step(player.fireDelay * 0.5);
-      conduitPress(); B.step(1 / 60); conduitRelease();
-      B.step(player.fireDelay * 1.5);
-      o.c02 = { taps: 2, swings: B.swings() - s0, delay: +player.fireDelay.toFixed(3) };
+      // C02: a second tap while the blade is still coming round -- 0.1s before
+      // it is ready (inside the new controls' buffer), and at half the beat
+      // (well outside it).
+      const early = lead => { B.reset(); B.step(0.5); const a0 = B.swings();
+        B.press(); B.step(1 / 60); B.release();
+        B.step(player.fireDelay - lead);
+        B.press(); B.step(1 / 60); B.release();
+        B.step(player.fireDelay * 1.5);
+        return B.swings() - a0; };
+      o.c02 = { near: early(0.1), half: early(player.fireDelay * 0.5), delay: +player.fireDelay.toFixed(3),
+                expiredLogged: combatLog.some(e => e.k === 'press' && e.r === 'expired') };
 
       // C03: aiming out near the edge and holding -- when does it stop swinging?
       B.reset(); B.step(0.5); s0 = B.swings();
-      conduitPress(); conduitAim(0, 0.9);
+      B.press(); B.aim(0, 0.9);
       let firstGather = null, swingsBefore = 0, swingsAfter = 0;
       for (let i = 0; i < 60; i++) {
         const before = B.swings(); B.step(1 / 60);
@@ -86,16 +94,16 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
         if (B.swings() > before) { if (firstGather === null) swingsBefore++; else swingsAfter++; }
       }
       const strideGathering = (player.cleave || 0) > 0 ? CLEAVE_STRIDE : 1;
-      conduitRelease();
+      B.release();
       o.c03 = { gatherAt: firstGather && +firstGather.toFixed(3), swingsBefore, swingsAfter,
                 stride: strideGathering };
 
       // C04: the same edge, reached after half a second inside it.
       B.reset(); B.step(0.5);
-      conduitPress(); conduitAim(0, 0.5); B.step(0.5);
-      conduitAim(0, 0.9); B.step(1 / 60);
+      B.press(); B.aim(0, 0.5); B.step(0.5);
+      B.aim(0, 0.9); B.step(1 / 60);
       o.c04 = { cleaveOneFrameAfterEdge: +(player.cleave || 0).toFixed(3) };
-      conduitRelease();
+      B.release();
 
       // C07: ten kills in a second -- how much of that second does the world stand still?
       B.reset(); B.step(0.5);
@@ -139,7 +147,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     await p.mouse.move(box.x - 3, box.y, { steps: 4 });
     const c05 = await p.evaluate(() => ({
       knob: getComputedStyle(document.querySelector('#hud .conduit')).getPropertyValue('--knob').trim(),
-      simAiming: !!player.conAim, simMag: +(player.conMag || 0).toFixed(2) }));
+      simAiming: controlScheme === 'classic' ? !!player.conAim : typeof player.atkAim === 'number',
+      simMag: +((controlScheme === 'classic' ? player.conMag : player.atkMag) || 0).toFixed(2) }));
     await p.mouse.up();
 
     await p.evaluate(() => { B.reset(); __game.scene.getScene('delve').stepping = true; });
@@ -149,9 +158,10 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     const c06 = await p.evaluate(() => {
       const el = document.querySelector('#hud .conduit');
       const cleave = +(player.cleave || 0).toFixed(2);
+      const n0 = combatLog.length;
       el.dispatchEvent(new PointerEvent('pointercancel', { pointerId: 1, bubbles: true }));
-      const last = combatLog.filter(e => e.k === 'release').slice(-1)[0];
-      return { cleaveBeforeCancel: cleave, releaseLogged: last ? last.r : 'none' };
+      const last = combatLog.slice(n0).filter(e => e.k === 'release' || e.k === 'cancel').slice(-1)[0];
+      return { cleaveBeforeCancel: cleave, releaseLogged: last ? (last.k === 'cancel' ? 'cancel' : last.r) : 'none' };
     });
     await p.mouse.up();
 
@@ -160,10 +170,11 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     row('C01', 'A still press held past 200ms does nothing.',
         `held 250ms: ${R.c01.held250} swings; held 150ms: ${R.c01.held150}`, R.c01.held250 === 0);
     row('C02', 'A tap while the blade is still coming round is lost, not queued.',
-        `2 taps (the second at half the ${R.c02.delay}s beat): ${R.c02.swings} swing${R.c02.swings === 1 ? '' : 's'}`,
-        R.c02.swings < 2);
+        `second tap 0.1s before ready: ${R.c02.near} swings of 2; at half the ${R.c02.delay}s beat: ` +
+        `${R.c02.half} of 2${R.c02.expiredLogged ? ' (logged as expired)' : ' (silently)'}`,
+        R.c02.near < 2);
     row('C03', 'Aiming out near the edge turns into a gather, stops the swings and slows the stride.',
-        `gather began at ${R.c03.gatherAt}s; ${R.c03.swingsBefore} swings before it, ${R.c03.swingsAfter} after; stride x${R.c03.stride}`,
+        `gather began at ${R.c03.gatherAt === null ? 'never' : R.c03.gatherAt + 's'}; ${R.c03.swingsBefore} swings before it, ${R.c03.swingsAfter} after; stride x${R.c03.stride}`,
         R.c03.gatherAt !== null && R.c03.swingsAfter === 0);
     row('C04', 'Reaching the edge after a long press gathers at once.',
         `one frame after reaching the edge (0.5s into the press): gather ${R.c04.cleaveOneFrameAfterEdge}`,
@@ -204,7 +215,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     errs.length ? 'Page errors: ' + errs.slice(0, 3).join(' | ') : 'No page errors.',
     ''
   ].join('\n');
-  const out = path.join(ROOT, 'docs', 'COMBAT_BASELINE' + (CONTROLS ? '.' + CONTROLS : '') + '.md');
+  const out = path.join(ROOT, 'docs', 'COMBAT_BASELINE.' + CONTROLS + '.md');
   fs.writeFileSync(out, md);
   console.log(md);
   process.exit(0);

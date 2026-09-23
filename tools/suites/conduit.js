@@ -160,10 +160,15 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
      * swing gets its chance too -- against a body in reach, with no input.
      * It must come out untouched.
      */
+    // Counted as the BLADE's work -- swings and crescents -- not as the body's
+    // health: the room is placed at random, and a trap or a barrel under it
+    // took a third of a million off the body in one run while the thumb did
+    // nothing at all. What this asks is whether the thumb did anything.
     room(); const t5 = foe(70);
-    const hp0 = t5.hp;
-    for (let i = 0; i < 60 * 4; i++) update(1 / 60);
-    o.idleKilled = hp0 - t5.hp;
+    const sw0 = player.swingNo || 0;
+    let arcsSeen = 0;
+    for (let i = 0; i < 60 * 4; i++) { const n = arcs.length; update(1 / 60); arcsSeen += Math.max(0, arcs.length - n); }
+    o.idleKilled = (player.swingNo || 0) - sw0 + arcsSeen;
     // ...and a tap in an empty room still swings, rather than silently
     // doing nothing, which is the whole complaint this answers.
     room();
@@ -180,9 +185,8 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
      R.tapArcs ? 'tap put out ' + R.tapDmg + ' damage, so the silence above is ' +
                  'the blade and not the fixture'
                : 'NOTHING FIRED EITHER WAY — the check above proves nothing');
-  ck('and a thumb that does nothing kills nothing', R.idleKilled === 0,
-     Math.round(R.idleKilled) + ' off a body over four seconds of the whole ' +
-     'update loop');
+  ck('and a thumb that does nothing swings nothing', R.idleKilled === 0,
+     R.idleKilled + ' swings or crescents over four seconds of the whole update loop');
   ck('and a tap in an empty room still swings', R.tapInTheDark === true);
 
   ck('taps chain, and the chain resets when it finishes',

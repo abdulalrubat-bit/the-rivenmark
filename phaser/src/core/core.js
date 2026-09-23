@@ -4540,8 +4540,29 @@ let hitStop = 0;
 
 // Freeze the simulation for a moment. Called at the point of impact, not at
 // the point of the swing: the pause has to land with the blow.
-function freeze(seconds) {
-  if (seconds > hitStop) clog('freeze', '', { s: +seconds.toFixed(3) });
+/* `kind` is 'routine' for the beat an ordinary kill is worth, and anything
+ * else for the big moments (a heavy blow, the Aegis, the Guillotine, a boss's
+ * move). Under the new controls a routine freeze does not happen at all --
+ * the kill is felt through the flash, the recoil, the shake and the sound,
+ * and the hero keeps moving -- and the big ones share FREEZE_BUDGET: at most
+ * that much of the world stopped in any one-second window, however many
+ * land. The window is on stepClock, which runs through a freeze as well as
+ * outside one, so a freeze cannot buy itself more freeze. The classic
+ * controls keep the old rule, so the two can be compared. */
+const FREEZE_BUDGET = 0.12;
+let stepClock = 0;
+const freezesSpent = [];            // [when, seconds] granted inside the window
+function freeze(seconds, kind) {
+  if (controlScheme !== 'classic') {
+    if (kind === 'routine') return;
+    while (freezesSpent.length && freezesSpent[0][0] <= stepClock - 1) freezesSpent.shift();
+    let used = 0;
+    for (const f of freezesSpent) used += f[1];
+    seconds = Math.min(seconds, FREEZE_BUDGET - used);
+    if (seconds <= hitStop) return;
+    freezesSpent.push([stepClock, seconds - hitStop]);
+  }
+  if (seconds > hitStop) clog('freeze', kind || '', { s: +seconds.toFixed(3) });
   hitStop = Math.min(HITSTOP_MAX, Math.max(hitStop, seconds));
 }
 
@@ -4552,6 +4573,7 @@ function freeze(seconds) {
  * called update() directly, never froze on a blow at all. Returns whether the
  * world moved. */
 function stepDelve(dt) {
+  stepClock += dt;
   if (hitStop > 0) { hitStop = Math.max(0, hitStop - dt); return false; }
   update(dt);
   return true;
@@ -4968,7 +4990,7 @@ function damageEnemy(e, dmg, fx, fy) {
     // break an edge that expands rather than a puff that fades.
     const big = e.r > 18;
     sfx('kill', e.x, e.y, clamp((e.r - 8) / 18, 0, 1));
-    freeze(KILL_FREEZE * (big ? 1.6 : 1));
+    freeze(KILL_FREEZE * (big ? 1.6 : 1), 'routine');
     shake(KILL_SHAKE * (big ? 2 : 1));
     burst(e.x, e.y, e.color, big ? 18 : 10, 210);
     ring(e.x, e.y, e.color, 3, e.r * 2.4, 0.22);
@@ -5058,7 +5080,7 @@ function updatePlayer(dt) {
   }
   if (player.regen > 0) player.hp = Math.min(player.maxHp, player.hp + player.regen * dt);
 
-  updateConduit(dt);
+  if (controlScheme === 'classic') updateConduit(dt); else updateAttack(dt);
 }
 
 /* --- THE CONDUIT ----------------------------------------------------------
@@ -5300,6 +5322,152 @@ function updateConduit(dt) {
     player.fireTimer = player.fireDelay;
   }
 }
+
+/* === THE BLADE, REBUILT ===================================================
+ *
+ * What the Conduit above does to a thumb, measured (docs/COMBAT_BASELINE.md):
+ * a still press held past 200ms does nothing; a tap while the blade is still
+ * coming round is lost; aiming out near the rim quietly turns the attack into
+ * a gather, stops the swings and slows the walk; a cancelled touch fires a
+ * heavy blow; and every kill stops the world, movement and all -- half of all
+ * frames, in a second of ten kills. Each is a way for a correct input to do
+ * the wrong thing, and a player feels all of them as "it's not fluid".
+ *
+ * So the attack is a CONTRACT now, and every input is either carried out,
+ * held a moment, or refused with a reason in the combat log:
+ *
+ *   press       strikes now if the blade is ready -- the next simulation step
+ *   held        strikes again every time the blade comes round, for as long as
+ *               it is held; how far the thumb is from the middle changes WHERE
+ *               the blow goes and nothing else
+ *   aim         a drag past the host's deadzone aims by hand; brought back to
+ *               the middle, the host says so (attackNeutral) and aim goes back
+ *               to the assist -- the knob and the simulation agree
+ *   early       a press while the blade is still coming round waits in ONE slot
+ *               and strikes the moment it is ready, if it is ready within
+ *               ATTACK_BUFFER; older than that it has expired (a hold, though,
+ *               is still a hold, and strikes on the beat regardless)
+ *   cancelled   a touch the system took away (pointercancel, lost capture),
+ *               a pause, a swap, a death or a new delve: the intent is
+ *               dropped -- never turned into a blow
+ *
+ * The heavy blow is not here: it is its own control (see HEAVY), because a
+ * gesture that changes meaning with thumb distance is the thing being fixed.
+ *
+ * The old Conduit is kept whole behind controlScheme 'classic', so the two
+ * can be compared on the same phone.
+ * ------------------------------------------------------------------------ */
+const ATTACK_BUFFER = 0.125;  // seconds an early press waits. Provisional: the
+                              // analysis asks for 100-150ms, tried on a phone
+let controlScheme = 'new';
+function setControls(s) {
+  attackCancel('scheme');
+  if (player) { player.conDown = false; player.cleave = 0; player.conAim = false; }
+  controlScheme = s === 'classic' ? 'classic' : 'new';
+  return controlScheme;
+}
+
+function attackPress() {
+  if (!player) return;
+  player.atkHeld = true;
+  // One slot. A new press replaces an older one rather than queueing behind
+  // it: two quick taps inside one beat are one strike, not a backlog.
+  player.atkQ = { age: 0 };
+  clog('press', player.fireTimer > 0 ? 'early ' + player.fireTimer.toFixed(3) + 's' : 'ready');
+}
+function attackAim(angle, mag) {
+  if (!player) return;
+  if (typeof player.atkAim !== 'number') clog('aim', 'manual');
+  player.atkAim = angle;
+  player.atkMag = clamp(mag, 0, 1);
+}
+function attackNeutral() {
+  if (!player) return;
+  if (typeof player.atkAim === 'number') clog('aim', 'neutral');
+  player.atkAim = null;
+  player.atkMag = 0;
+}
+// Letting go stops the repeat. A press already waiting in the slot stays
+// owed: a quick tap during the recovery is a strike when the blade is ready.
+function attackRelease() {
+  if (!player || !player.atkHeld) return;
+  player.atkHeld = false;
+  clog('release', 'lift');
+}
+function attackCancel(why) {
+  if (!player) return;
+  if (player.atkHeld || player.atkQ) clog('cancel', why || '');
+  player.atkHeld = false;
+  player.atkQ = null;
+  player.atkAim = null;
+  player.atkMag = 0;
+  heavyCancel(why);
+}
+
+function updateAttack(dt) {
+  if ((player.comboT || 0) > 0) {
+    player.comboT -= dt;
+    if (player.comboT <= 0) { player.combo = 0; player.comboT = 0; }
+  }
+  if ((player.comboPop || 0) > 0) player.comboPop = Math.max(0, player.comboPop - dt * 2.5);
+  if (player.fireTimer > 0) player.fireTimer = Math.max(0, player.fireTimer - dt);
+  const q = player.atkQ;
+  if (q) q.age += dt;
+  if (player.fireTimer > 0) return;
+  if (heavyBusy()) return;                   // the heavy owns the blade while it is up
+  if (q && !player.atkHeld && q.age > ATTACK_BUFFER + 1e-9) {
+    clog('press', 'expired', { waited: +q.age.toFixed(3) });
+    player.atkQ = null;
+    return;
+  }
+  if (q || player.atkHeld) {
+    player.atkQ = null;
+    lightStrike();
+  }
+}
+
+/* One light blow. The same chain the tapped Conduit had -- three in rhythm
+ * and the third goes wide -- because a held attack keeps the rhythm for you. */
+function lightStrike() {
+  const manual = typeof player.atkAim === 'number';
+  const last = player.combo || 0;
+  const n = (player.comboT || 0) > 0 ? Math.min(COMBO_LEN, last + 1) : 1;
+  const finisher = n >= COMBO_LEN;
+  swingAt(manual ? player.atkAim : aimAngle(), { bite: 1, sweep: finisher ? COMBO_SWEEP : 1 });
+  clamour(CLAMOUR_SWING);
+  player.combo = finisher ? 0 : n;
+  player.comboT = finisher ? 0 : player.fireDelay * COMBO_WINDOW;
+  player.comboPop = finisher ? 1 : 0.6;
+  if (finisher) ring(player.x, player.y, HEROES[player.hero].magic, 10, 54, 0.22);
+  player.fireTimer = player.fireDelay;
+  clog('swing', manual ? 'manual' : 'assist', finisher ? { finisher: true } : undefined);
+}
+
+/* HEAVY: the gathered blow, on its own control. Filled in with the heavy
+ * button; until then there is no heavy to cancel and it never holds the blade. */
+function heavyCancel(why) {}
+function heavyBusy() { return false; }
+
+/* THE STEP. The simulation runs at a fixed 60Hz whatever the screen does, so
+ * a blow, a cooldown and a stride come out the same at 30, 60, 90 or 120
+ * frames a second. The host hands over the real time that passed; this runs
+ * as many whole steps as that covers. A stall longer than STEP_CATCHUP (a
+ * phone that stopped for a moment) is not paid back in a burst -- that would
+ * be a quarter-second of the fight arriving at once -- but logged and resumed. */
+const STEP = 1 / 60;
+const STEP_CATCHUP = 0.25;
+const STEP_BURST = 8;
+let stepAcc = 0;
+function advanceDelve(realDt) {
+  if (!(realDt > 0)) return 0;
+  if (realDt > STEP_CATCHUP) { clog('stall', '', { ms: Math.round(realDt * 1000) }); realDt = STEP; }
+  stepAcc += realDt;
+  let n = 0;
+  while (stepAcc >= STEP - 1e-9 && n < STEP_BURST) { stepDelve(STEP); stepAcc -= STEP; n++; }
+  if (n === STEP_BURST) stepAcc = 0;
+  return n;
+}
+function resetStepClock() { stepAcc = 0; }
 
 /* Swarm navigation.
    Steering straight at the player works in an open arena and fails in a maze:
@@ -7650,6 +7818,7 @@ function swapBlocked() {
 function swapHero() {
   if (swapBlocked()) return false;
   const from = player.hero, to = otherHero();
+  attackCancel('swap');
 
   breakChannel('swap');
   // Bank what this one is carrying, then take up what the other was left with.
@@ -7706,6 +7875,8 @@ let kitCache = {};
 /* --- run lifecycle ------------------------------------------------------ */
 
 function resetRun(heroId, levelId, diffId) {
+  attackCancel('restart');
+  resetStepClock();
   const hero = heroId || (run && run.hero) || 'isaac';
   DIFF = DIFF_BY_ID[diffId || (run && run.diff_id) || DIFF.id] || DIFF_BY_ID.riven;
   LEVEL = LEVEL_BY_ID[levelId || (run && run.level_id) || LEVELS[0].id] || LEVELS[0];
@@ -8311,6 +8482,7 @@ function updateDummy(e, dt) {
 
 function pauseRun() {
   if (state !== 'play') return;
+  attackCancel('pause');
   state = 'pause';
   stickEnd();
   keys.clear();
@@ -8583,6 +8755,7 @@ function indexBreakables() {
 
 function endRun(won) {
   if (state === 'over') return;
+  attackCancel('end');
   state = 'over';
   stickEnd();
   // A Hardcore death is the heaviest sound in the game, because it is the

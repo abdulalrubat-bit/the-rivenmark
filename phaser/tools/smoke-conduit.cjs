@@ -23,7 +23,10 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   const errs = [];
   p.on('pageerror', e => errs.push(e.message));
   p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
-  await p.goto('http://localhost:' + PORT + '/?nogate');
+  // The classic Conduit -- tap, drag, and a gather held at the rim -- kept
+  // behind the controls setting for comparison. The new controls' contract
+  // is suites/controls.js; their heavy is its own button.
+  await p.goto('http://localhost:' + PORT + '/?nogate&controls=classic');
   let booted = false;
   for (let i = 0; i < 40 && !booted; i++) {
     await sleep(250);

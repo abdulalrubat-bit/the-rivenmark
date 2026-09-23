@@ -354,6 +354,10 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
     };
 
     window.__delve = function (idx, hero, wantPower) {
+      // The bot's thumb is the classic Conduit's -- taps, drags and a gather
+      // held at the rim -- so it plays under those controls until it is taught
+      // the new ones along with the heavy button, which its gathers become.
+      setControls('classic');
       const L = LEVELS[idx];
       // The power to gear to, when asking "what would it actually take here?"
       // rather than "is the rung's own advice good?". Defaults to the rung's.

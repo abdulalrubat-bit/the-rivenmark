@@ -539,7 +539,7 @@ export class Hud {
       id = e.pointerId;
       const v = vec(e); ox = v.x; oy = v.y;
       try { el.setPointerCapture(id); } catch (err) { /* ignore */ }
-      g.conduitPress();
+      if (controlScheme === 'classic') g.conduitPress(); else g.attackPress();
     });
 
     el.addEventListener('pointermove', e => {
@@ -548,24 +548,30 @@ export class Hud {
       const v = vec(e);
       const dx = v.x - ox, dy = v.y - oy;
       const d = Math.hypot(dx, dy);
-      if (d < DEAD) { show(0, 0, 0); return; }
+      // Back in the middle. The new controls TELL the simulation, so the knob
+      // and the aim cannot disagree (the classic ones did not: C05).
+      if (d < DEAD) { show(0, 0, 0); if (controlScheme !== 'classic') g.attackNeutral(); return; }
       const mag = Math.min(1, d / R);
-      g.conduitAim(Math.atan2(dy, dx), mag);
+      if (controlScheme === 'classic') g.conduitAim(Math.atan2(dy, dx), mag);
+      else g.attackAim(Math.atan2(dy, dx), mag);
       const k = Math.min(d, R);
       show(dx / d * k, dy / d * k, mag);
     });
 
-    const up = e => {
+    const up = (e, cancelled) => {
       if (e.pointerId !== id) return;
       e.preventDefault();
       try { el.releasePointerCapture(id); } catch (err) { /* ignore */ }
       id = null;
       show(0, 0, 0);
-      g.conduitRelease();
+      if (controlScheme === 'classic') g.conduitRelease();
+      // A touch the system took away is not a release: nothing is fired.
+      else if (cancelled) g.attackCancel('pointer');
+      else g.attackRelease();
     };
-    el.addEventListener('pointerup', up);
-    el.addEventListener('pointercancel', up);
-    el.addEventListener('lostpointercapture', up);
+    el.addEventListener('pointerup', e => up(e, false));
+    el.addEventListener('pointercancel', e => up(e, true));
+    el.addEventListener('lostpointercapture', e => up(e, true));
     el.addEventListener('contextmenu', e => e.preventDefault());
   }
 
