@@ -22,10 +22,17 @@ const TYPES = { '.html':'text/html', '.js':'text/javascript', '.map':'applicatio
                 '.json':'application/json', '.png':'image/png', '.css':'text/css' };
 
 http.createServer((req, res) => {
-  const url = decodeURIComponent(req.url.split('?')[0]);
+  // A malformed escape (a lone '%') made decodeURIComponent throw, and an
+  // uncaught throw here takes the whole server down mid-suite.
+  let url;
+  try { url = decodeURIComponent(req.url.split('?')[0]); }
+  catch (e) { res.writeHead(400); return res.end('bad request'); }
   let file = path.join(ROOT, url === '/' ? 'index.html' : url);
-  // Never serve outside public/, however the path is written.
-  if (!path.resolve(file).startsWith(path.resolve(ROOT))) {
+  // Never serve outside public/, however the path is written. Measured as a
+  // RELATIVE path, not as a string prefix: "/x/public-old" starts with
+  // "/x/public" too, so a prefix test let a sibling directory through.
+  const rel = path.relative(path.resolve(ROOT), path.resolve(file));
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
     res.writeHead(403); return res.end('no');
   }
   fs.readFile(file, (err, buf) => {

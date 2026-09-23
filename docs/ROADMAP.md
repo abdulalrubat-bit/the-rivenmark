@@ -16,13 +16,17 @@ grow past it later.
       skips the death wipe — both now count as death (`hardcore`, `smoke:boot`)
 - [x] Saves are loaded unchecked in the build that ships — the validation is
       the core's `sanitizeStash` now, and both builds use it (`saves`)
-- [ ] Corpse loot vanishes if you pick it up and then abandon or close the app
-- [ ] WebView debugging is switched on in release builds
-- [ ] Release workflow pastes its inputs straight into shell (use `env:`)
-- [ ] `npm run verify` needs Playwright but `package.json` does not list it
-- [ ] Dev server: `public`-prefix path check, crash on a malformed `%`
-- [ ] Dev builds: the service worker caches `dev` forever on localhost
-- [ ] Remove `w2.txt`–`w5.txt` and `debug.html` from the repo
+- [x] Corpse loot vanishes if you pick it up and then abandon or close the app
+      — the claim is settled when the run ends now (`extract`)
+- [x] WebView debugging is switched on in release builds — debug builds only
+      (compiles in CI; there is no Android SDK in the dev container)
+- [x] Release workflow pastes its inputs straight into shell (use `env:`) —
+      also fixed a syntax error that failed its version step on every run
+- [x] `npm run verify` needs Playwright but `package.json` does not list it
+- [x] Dev server: `public`-prefix path check, crash on a malformed `%`
+- [x] Dev builds: the service worker caches `dev` forever on localhost
+- [x] Remove `w2.txt`–`w5.txt` (`debug.html` stays: it is generated on
+      purpose and two suites load it)
 
 ## Phase 2 — Sound
 

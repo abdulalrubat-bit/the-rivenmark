@@ -78,13 +78,16 @@ const CORE_URL = 'http://localhost:' + PORT + '/core-test.html';
 // SLOTS before initialization" when the real fault was LEVEL, three hundred
 // statements earlier). Load the page once on its own first and report that
 // directly.
-const CANVAS_URL = 'file:///home/user/neon-extraction/index.html';
 
 function run(file, page) {
   try {
     const out = execFileSync(process.execPath, [file], {
       encoding: 'utf8', timeout: 420000,
-      env: { ...process.env, NODE_PATH: '/opt/node22/lib/node_modules',
+      // Playwright is this package's devDependency; the suites live outside
+      // it, so they are pointed here rather than at one machine's globals.
+      env: { ...process.env,
+             NODE_PATH: [path.join(__dirname, '..', 'node_modules'), process.env.NODE_PATH]
+               .filter(Boolean).join(path.delimiter),
              ...(page ? { RIVENMARK_PAGE: page } : {}) }
     });
     return parse(out);
