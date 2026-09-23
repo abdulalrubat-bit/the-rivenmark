@@ -11,26 +11,17 @@ const { chromium } = require('playwright');
 // source. verify-core uses it to run the SAME file against index.html and
 // against the extracted core; it used to rewrite the URL with a string
 // replace, which silently stopped matching the moment this line changed.
-const PAGE = f => process.env.RIVENMARK_PAGE ||
-  ('file://' + require('path').join(__dirname, '..', '..', f));
-// The gate-house is behind the splash now: the stations live on a tab bar and
-// the bar does not exist until you have entered. Idempotent, so it is safe to
-// call before every station click however the test got there.
-async function enterHub(pg){
-  const onSplash = await pg.$eval('#splash', e=>e.classList.contains('on')).catch(()=>false);
-  if (!onSplash) return;
-  await pg.click('#toGatehouse');
-  await new Promise(r=>setTimeout(r,220));
-}
+const pages = require('./_pages.js');
 
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''));
-(async()=>{
+(async () => {
+  await pages.serve();
   const b=await chromium.launch();
   const p=await (await b.newContext({viewport:{width:430,height:900}})).newPage();
   const errs=[]; p.on('pageerror',e=>errs.push(e.message));
   p.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
-  await p.goto(PAGE('index.html')); await sleep(700);
+  await p.goto(pages.core()); await sleep(700);
 
   // ---- laying a stone -----------------------------------------------------
   const buy = await p.evaluate(()=>{
@@ -112,7 +103,10 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
     return true;
   });
   await p.reload(); await sleep(700);
-  const back = await p.evaluate(()=>({ hall: {...stash.hall}, coins: stash.coins }));
+  // Read back as the game reads it at boot. The core page has no boot of its
+  // own; the canvas build's ran loadStash as it loaded.
+  const back = await p.evaluate(()=>{ stash=loadStash();
+    return { hall: {...stash.hall}, coins: stash.coins }; });
   ck('the hall outlives the session',
      back.hall.vault===2 && back.hall.wardstone===3 && back.coins===77,
      JSON.stringify(back.hall));
@@ -131,29 +125,32 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
      junk.keys);
 
   // ---- the screen ---------------------------------------------------------
-  await p.evaluate(()=>{ stash=blankStash(); stash.coins=99999; saveStash();
-                         refreshHallLine(); state='menu'; showScreen('splash'); });
-  await sleep(150);
-  await enterHub(p); await p.click('#toHall'); await sleep(300);
-  ck('the hall has a card for every station',
-     (await p.$$('#hallList .card')).length===4);
-  const before = await p.evaluate(()=>stash.coins);
-  await p.click('#hallList .card:nth-child(2)'); await sleep(200);
-  ck('picking one shows its three stones',
-     (await p.$$('#hallDetail .hrow')).length===3);
-  await p.click('#hallDetail [data-lay]'); await sleep(250);
-  const laid = await p.evaluate(()=>({ coins: stash.coins, forge: hallTier('forge'),
-                                       note: ($('hnote')||{}).textContent,
-                                       line: el.hallLine.textContent }));
-  ck('and laying it spends the coin', laid.forge===1 && laid.coins < before,
+  // The Hall that ships: a tab in the Phaser gate-house, one row a station,
+  // each saying how many of its three stones are laid; tapping lays the next.
+  const g=await (await b.newContext({viewport:{width:430,height:900}})).newPage();
+  g.on('pageerror',e=>errs.push(e.message));
+  await g.goto(pages.game('norun'));
+  await g.waitForFunction(()=>typeof blankStash==='function', null, {timeout:30000});
+  await g.evaluate(()=>{ localStorage.clear(); stash=blankStash(); stash.coins=99999; saveStash(); });
+  await g.goto(pages.game());
+  await g.waitForSelector('#screens.up #descend', {timeout:30000});
+  await g.click('#screens [data-tab="hall"]'); await sleep(300);
+  ck('the hall has a row for every station',
+     (await g.$$('#screens [data-hall]')).length===4);
+  const row = id => g.$eval('#screens [data-hall="'+id+'"]', e=>e.textContent);
+  ck('each says how many of its three stones are laid', /0 of 3/.test(await row('forge')));
+  const before = await g.evaluate(()=>stash.coins);
+  await g.click('#screens [data-hall="forge"]'); await sleep(250);
+  const laid = await g.evaluate(()=>({ coins: stash.coins, forge: hallTier('forge'),
+    note: [...document.querySelectorAll('#screens .sub')].map(e=>e.textContent).join(' ') }));
+  ck('and laying one spends the coin', laid.forge===1 && laid.coins < before,
      before+' -> '+laid.coins);
-  ck('the screen says so', /laid/.test(laid.note||''), laid.note);
-  // The caption reads in an eight-pixel line under a tab now, so it counts
-  // rather than narrates. What matters is that it still counts.
-  ck('and the tab keeps count', /^1\/12$/.test((laid.line||'').trim()), laid.line);
+  ck('the screen says so', /Built/.test(laid.note||''), laid.note);
+  ck('and the station keeps count', /1 of 3/.test(await row('forge')));
+  await g.close();
 
   ck('no console errors', errs.length===0, errs.slice(0,3).join(' | '));
   console.log('\nPASS '+pass.length+'\n  '+pass.join('\n  '));
   console.log('\nFAIL '+fail.length+(fail.length?'\n  '+fail.join('\n  '):''));
-  await b.close(); process.exit(fail.length?1:0);
+  await b.close(); pages.stop(); process.exit(fail.length?1:0);
 })();
