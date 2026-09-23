@@ -794,7 +794,7 @@ export class Screens {
       '<div class="card">' +
         '<h1>The Bag</h1>' +
         '<p class="sub">Carried so far &mdash; ' + C.bag.length + ' of ' + C.cap +
-          '. It banks only if you walk out with it.</p>' +
+          '. It banks only if you walk out with it; sort it at the gate-house.</p>' +
         '<div class="rows">' +
           (C.bag.length
             ? C.bag.map(it => '<div class="row">' + this.itemCard(it, null, lines(it)) +
