@@ -19,7 +19,7 @@
           VENDOR, vendorCost, canAfford, vendorBuy, HALL, hallTier,
           HALL_MAX, hallBuy, vaultCap, loadoutCap, saveLoadout, applyLoadout,
           deleteLoadout, discardFromVault, gearCtx, closeGear, compareLines,
-          bagCap, player, LOADOUT_MAX */
+          bagCap, player, LOADOUT_MAX, stashCtx */
 
 const CSS = `
 /* The safe areas, same as the HUD -- see the note at the top of hud.js. The
@@ -677,6 +677,10 @@ export class Screens {
 
   renderForge() {
     const cap = typeof vaultCap === 'function' ? vaultCap() : stash.vault.length;
+    // What each vault piece would change is read against the stash's kit, so
+    // the core's gear context is pointed there. The canvas build showed this
+    // when a piece was selected; here every row carries it, as the bag does.
+    gearCtx = stashCtx();
     this.root.innerHTML =
       '<div class="card">' +
         '<h1>The Forge</h1>' +
@@ -701,7 +705,7 @@ export class Screens {
           (stash.vault.length
             ? stash.vault.map((it, i) =>
                 '<div class="pair"><button class="row" type="button" data-on="' + i + '">' +
-                this.itemCard(it, 'wear') + '</button>' +
+                this.itemCard(it, 'wear', this.compareHtml(it)) + '</button>' +
                 '<button class="drop' + (this.dropArmed === i ? ' armed' : '') +
                 '" type="button" data-drop="' + i + '" aria-label="discard">' +
                 (this.dropArmed === i ? 'discard?' : '\u2715') + '</button></div>').join('')
@@ -781,15 +785,19 @@ export class Screens {
    * is for the gate-house -- a menu you can change your kit in is a pause
    * button that also heals the fight. The delve is stopped while it is open
    * (the core's openGear), and Back is the core's closeGear. */
+  /* What a piece would change against what is worn in its slot, per stat --
+   * the core's compareLines, which reads gearCtx for "what is worn". */
+  compareHtml(it) {
+    const c = typeof compareLines === 'function' ? compareLines(it) : [];
+    if (!c.length) return '<span class="cmp">no change against what you wear</span>';
+    return '<span class="cmp">' + c.map(x =>
+      '<span class="' + (x.good ? 'up' : 'down') + '">' + x.txt + ' ' + x.name +
+      '</span>').join(' \u00b7 ') + '</span>';
+  }
+
   renderBag() {
     const C = gearCtx;
-    const lines = it => {
-      const c = typeof compareLines === 'function' ? compareLines(it) : [];
-      if (!c.length) return '<span class="cmp">no change against what you wear</span>';
-      return '<span class="cmp">' + c.map(x =>
-        '<span class="' + (x.good ? 'up' : 'down') + '">' + x.txt + ' ' + x.name +
-        '</span>').join(' \u00b7 ') + '</span>';
-    };
+    const lines = it => this.compareHtml(it);
     this.root.innerHTML =
       '<div class="card">' +
         '<h1>The Bag</h1>' +

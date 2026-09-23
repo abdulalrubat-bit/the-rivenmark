@@ -11,29 +11,12 @@ const { chromium } = require('playwright');
 // source. verify-core uses it to run the SAME file against index.html and
 // against the extracted core; it used to rewrite the URL with a string
 // replace, which silently stopped matching the moment this line changed.
-const PAGE = f => process.env.RIVENMARK_PAGE ||
-  ('file://' + require('path').join(__dirname, '..', '..', f));
-// The gate-house is behind the splash now: the stations live on a tab bar and
-// the bar does not exist until you have entered. Idempotent, so it is safe to
-// call before every station click however the test got there.
-async function enterHub(pg){
-  const onSplash = await pg.$eval('#splash', e=>e.classList.contains('on')).catch(()=>false);
-  if (!onSplash) return;
-  await pg.click('#toGatehouse');
-  await new Promise(r=>setTimeout(r,220));
-}
+const pages = require('./_pages.js');
 
-// The hero picker moved behind the Descend button when the menus were
-// redesigned; starting a run is two taps now.
+// Into a delve: see pages.descend.
 async function beginRun(p, hero, diff) {
-  await enterHub(p); await p.click('#toDelve');
-  await new Promise(r => setTimeout(r, 150));
-  if (hero) { await p.click('#heroPick .card[data-hero="' + hero + '"]');
-              await new Promise(r => setTimeout(r, 80)); }
-  if (diff) { await p.click('#diffPick .card[data-diff="' + diff + '"]');
-              await new Promise(r => setTimeout(r, 80)); }
-  await p.click('#beginRun');
-  await new Promise(r => setTimeout(r, 500));
+  await pages.descend(p, { hero, diff });
+  await new Promise(r => setTimeout(r, 300));
 }
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const pass=[],fail=[];
@@ -44,12 +27,13 @@ const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''
 const BRANDS_TEXT_OK = B => Object.keys(B).every(k =>
   B[k].text && B[k].text.length > 20 && !/^[+-]?\d/.test(B[k].text));
 
-(async()=>{
+(async () => {
+  await pages.serve();
   const b=await chromium.launch();
   const p=await (await b.newContext({viewport:{width:430,height:900}})).newPage();
   const errs=[]; p.on('pageerror',e=>errs.push(e.message));
   p.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
-  await p.goto(PAGE('index.html'));
+  await p.goto(pages.core());
   await beginRun(p);
 
   // ---- generation ---------------------------------------------------------
@@ -201,44 +185,54 @@ const BRANDS_TEXT_OK = B => Object.keys(B).every(k =>
   ck('a full bag leaves the item on the floor', bag.notDestroyed);
 
   // ---- the delve bag: a record, not a workbench ---------------------------
-  await p.evaluate(()=>{ resetRun('isaac'); state='play'; showScreen(null);
-                         player.bag=[rollItem(0.9,'blade'), rollItem(0.9,'mail')];
-                         syncBagBadge(); });
-  await p.click('#bagBtn'); await sleep(200);
-  ck('bag button opens the screen', await p.evaluate(()=>state)==='gear');
-  ck('the delve is paused', await p.evaluate(()=>{ const x=player.x;
-      for(let i=0;i<30;i++){} return player.x===x; }));
-  ck('slots render', (await p.$$('#gearSlots .slot')).length===8);
-  ck('bag grid renders', (await p.$$('#bagGrid .cellbtn')).length>0);
-  await p.click('#bagGrid .cellbtn'); await sleep(150);
-  ck('the delve bag cannot equip', (await p.$$('#gearDetail #gaEquip')).length===0);
-  await p.click('#gearClose'); await sleep(200);
-  ck('closing resumes the delve', await p.evaluate(()=>state)==='play');
+  // Asked of the game: the HUD's bag button and the bag screen that ships.
+  const g=await (await b.newContext({viewport:{width:430,height:900}})).newPage();
+  g.on('pageerror',e=>errs.push(e.message));
+  await g.goto(pages.game('nogate&nogov'));
+  await g.waitForFunction(()=>state==='play' && document.querySelector('#hud .hold .bag'),
+                          null, {timeout:30000});
+  await g.evaluate(()=>{ player.bag=[rollItem(0.9,'blade'), rollItem(0.9,'mail')]; });
+  await g.click('#hud .hold .bag'); await sleep(250);
+  ck('bag button opens the screen', await g.evaluate(()=>state)==='gear');
+  ck('the delve is paused', await g.evaluate(async ()=>{ const t=run.time;
+      await new Promise(r=>setTimeout(r,300)); return run.time===t; }));
+  const rows = await g.evaluate(()=>[...document.querySelectorAll('#screens .rows')]
+    .map(r=>r.querySelectorAll('.row').length));
+  ck('slots render', rows[1]===8, rows.join(' / '));
+  ck('bag grid renders', rows[0]===2, rows[0]+' carried');
+  ck('the delve bag cannot equip', (await g.$$('#screens [data-on]')).length===0);
+  await g.click('#bagBack'); await sleep(200);
+  ck('closing resumes the delve', await g.evaluate(()=>state)==='play');
+  await g.close();
 
-  // ---- the hub kit: where equipping actually happens ----------------------
-  await p.evaluate(()=>{
-    stash=blankStash();
-    stash.vault=[rollItem(0.9,'blade'), rollItem(0.9,'mail')];
-    saveStash(); state='menu'; refreshKitLine(); showScreen('splash');
-  });
-  await sleep(150);
-  await enterHub(p); await p.click('#toKit'); await sleep(250);
-  ck('the hub kit opens', await p.evaluate(()=>state)==='gear');
-  await p.click('#bagGrid .cellbtn'); await sleep(150);
-  ck('selecting shows a comparison',
-     /against/.test(await p.$eval('#gearDetail',e=>e.innerText)));
-  await p.click('#gaEquip'); await sleep(200);
-  const after = await p.evaluate(()=>({ worn:!!stash.gear.blade, vault:stash.vault.length }));
-  ck('equipping works in the hub', after.worn && after.vault===1,
+  // ---- the Forge: where equipping actually happens ------------------------
+  const h=await (await b.newContext({viewport:{width:430,height:900}})).newPage();
+  h.on('pageerror',e=>errs.push(e.message));
+  await h.goto(pages.game('norun'));
+  await h.waitForFunction(()=>typeof blankStash==='function', null, {timeout:30000});
+  await h.evaluate(()=>{ localStorage.clear(); stash=blankStash(); itemSeq=100;
+    stash.vault=[rollItem(0.9,'blade'), rollItem(0.9,'mail')]; saveStash(); });
+  await h.goto(pages.game());
+  await h.waitForSelector('#screens.up #descend', {timeout:30000});
+  await h.click('#screens [data-tab="gear"]'); await sleep(250);
+  ck('the Forge opens', /Forge/.test(await h.$eval('#screens h1',e=>e.textContent)));
+  // Every vault piece says what it would change, without having to pick it.
+  ck('each piece shows a comparison',
+     (await h.$$('#screens [data-on] .cmp')).length===2);
+  const bladeAt = await h.evaluate(()=>stash.vault.findIndex(it=>it.slot==='blade'));
+  await h.click('#screens [data-on="'+bladeAt+'"]'); await sleep(200);
+  const after = await h.evaluate(()=>({ worn:!!stash.gear.blade, vault:stash.vault.length }));
+  ck('equipping works in the Forge', after.worn && after.vault===1,
      'worn '+after.worn+', vault '+after.vault);
-  await p.click('#gearSlots .slot'); await sleep(150);
-  ck('a worn item can be selected',
-     /Take off/.test(await p.$eval('#gearDetail',e=>e.innerText)));
-  await p.click('#gaOff'); await sleep(200);
+  ck('a worn piece offers to come off',
+     /take off/.test(await h.$eval('#screens [data-off="blade"]',e=>e.innerText)));
+  await h.click('#screens [data-off="blade"]'); await sleep(200);
   ck('taking off returns it to the vault',
-     await p.evaluate(()=>!stash.gear.blade && stash.vault.length===2));
-  await p.click('#gearClose'); await sleep(200);
-  ck('closing returns to the gate-house', await p.evaluate(()=>state)==='menu');
+     await h.evaluate(()=>!stash.gear.blade && stash.vault.length===2));
+  await h.click('#screens [data-tab="splash"]'); await sleep(200);
+  ck('and the gate-house is a tap away',
+     /Gate-House/.test(await h.$eval('#screens h1',e=>e.textContent)));
+  await h.close();
 
   /* --- BRANDS: what a Riven piece DOES ------------------------------------
    * Every ordinary affix moves one number one way, so the best item is the one
@@ -400,5 +394,5 @@ const BRANDS_TEXT_OK = B => Object.keys(B).every(k =>
   ck('no console errors', errs.length===0, errs.slice(0,2).join(' | '));
   console.log('\nPASS '+pass.length+'\n  '+pass.join('\n  '));
   console.log('\nFAIL '+fail.length+(fail.length?'\n  '+fail.join('\n  '):''));
-  await b.close(); process.exit(fail.length?1:0);
+  await b.close(); pages.stop(); process.exit(fail.length?1:0);
 })();
