@@ -226,8 +226,15 @@ export class Delve extends Phaser.Scene {
         state = 'menu';
         resetRun('isaac', LEVELS[0].id, 'riven');
       } else {
+        /* ?room=combat: the combat room (see the core). Seeded, so it is the
+         * same room every time -- &seed=N for another, &hero=zayd for him. */
+        const q = new URLSearchParams(location.search);
+        const room = q.get('room') === 'combat';
+        if (room) seedRandom(+q.get('seed') || 1);
+        const hero = HEROES[q.get('hero')] ? q.get('hero') : 'isaac';
         state = 'play';
-        startRun('isaac', LEVELS[3].id, 'riven');
+        startRun(hero, LEVELS[room ? 0 : 3].id, 'riven');
+        if (room) buildCombatRoom();
         run.banner = 0;
       }
       console.log((this.gated ? 'resetRun ' : 'startRun ') +

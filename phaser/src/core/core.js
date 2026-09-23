@@ -4199,7 +4199,8 @@ function castAbility(id) {
   const block = abilityBlock(a);
   // A press that does nothing still has to answer, or it reads as a missed
   // tap and gets pressed again. 'no' is the game not running: nothing to say.
-  if (block) { if (block !== 'no') sfx('deny'); return false; }
+  if (block) { if (block !== 'no') { sfx('deny'); clog('ability', 'refused', { id, why: block }); } return false; }
+  clog('ability', 'cast', { id });
   if (a.cost) spendCharges(a.cost);
   if (a.costPct) { player.tension = Math.max(0, (player.tension || 0) - TENSION_MAX * a.costPct);
                    player.chargePop = 1; }
@@ -4540,6 +4541,7 @@ let hitStop = 0;
 // Freeze the simulation for a moment. Called at the point of impact, not at
 // the point of the swing: the pause has to land with the blow.
 function freeze(seconds) {
+  if (seconds > hitStop) clog('freeze', '', { s: +seconds.toFixed(3) });
   hitStop = Math.min(HITSTOP_MAX, Math.max(hitStop, seconds));
 }
 
@@ -4782,6 +4784,7 @@ function hurtPlayerBy(dmg, fx, fy, sized) {
   const taken = dmg * (sized ? 1 : delveBite()) *
                 (1 - (player.ward || 0)) * (1 - mit);
   breakChannel('hurt');
+  clog('hurt', '', { dmg: Math.round(taken), from: fx === undefined ? 'self' : Math.round(Math.atan2(fy - player.y, fx - player.x) * 57.3) });
   player.hp -= taken;
   player.invuln = player.iframe;
   player.hitFlash = 0.3;
@@ -5133,8 +5136,36 @@ const CLEAVE_SWEEP   = 2.1;
 const CLEAVE_REACH   = 1.6;
 const CLEAVE_STRIDE  = 0.45;  // what it costs to stand there gathering
 
+/* THE COMBAT LOG. What happened to every input, kept in memory and never
+ * written anywhere: a press, and whether it became a swing, was held too long
+ * to count as a tap, landed while the blade was still coming round, or turned
+ * into a gather because the thumb drifted to the edge. A player saying "it
+ * feels off" is describing this list without being able to see it; the
+ * diagnostics dump exports it, so a phone session can be read afterwards.
+ *
+ * Bounded (COMBAT_LOG_MAX entries, oldest dropped) and cheap -- one small
+ * object per event, and nothing per frame. `at` is the page's own monotonic
+ * clock in ms, because the delve's clock stops during a hit-stop and the
+ * point is partly to see what a hit-stop costs. */
+const COMBAT_LOG_MAX = 400;
+const combatLog = [];
+function clog(k, r, extra) {
+  const e = { at: Math.round(performance.now()), t: run ? +(+run.time || 0).toFixed(3) : 0, k, r: r || '' };
+  if (extra) for (const key in extra) e[key] = extra[key];
+  combatLog.push(e);
+  if (combatLog.length > COMBAT_LOG_MAX) combatLog.shift();
+  return e;
+}
+// Counts by kind and result: the log at a glance.
+function combatSummary() {
+  const out = {};
+  for (const e of combatLog) { const key = e.k + (e.r ? ':' + e.r : ''); out[key] = (out[key] || 0) + 1; }
+  return out;
+}
+
 // The three calls a host makes. Nothing here knows about pixels or pointers.
 function conduitPress() {
+  clog('press');
   player.conDown = true;
   player.conT = 0;
   player.conAim = false;
@@ -5145,17 +5176,23 @@ function conduitPress() {
 // host reports it; inside, it does not call this at all.
 function conduitAim(angle, mag) {
   if (!player.conDown) return;
+  const m = clamp(mag, 0, 1);
+  if (!player.conAim) clog('aim', 'start', { mag: +m.toFixed(2) });
+  else if (m >= CONDUIT_EDGE && (player.conMag || 0) < CONDUIT_EDGE)
+    clog('aim', 'edge', { held: +player.conT.toFixed(3) });
   player.conAim = true;
   player.conA = angle;
-  player.conMag = clamp(mag, 0, 1);
+  player.conMag = m;
 }
 
 function conduitRelease() {
   if (!player.conDown) return;
   player.conDown = false;
+  const held = +(player.conT || 0).toFixed(3);
   if ((player.cleave || 0) >= CLEAVE_MIN) {
     // A gathered blow, worth what it gathered.
     const f = player.cleave;
+    clog('release', 'heavy', { held, f: +f.toFixed(2) });
     swingAt(player.conA, { bite: 1 + (CLEAVE_BITE - 1) * f,
                            sweep: 1 + (CLEAVE_SWEEP - 1) * f,
                            reach: 1 + (CLEAVE_REACH - 1) * f,
@@ -5169,7 +5206,15 @@ function conduitRelease() {
     ring(player.x, player.y, HEROES[player.hero].magic, 12, 60 + 90 * f, 0.3);
     player.combo = 0; player.comboT = 0;
   } else if (!player.conAim && player.conT <= CONDUIT_TAP) {
-    tapSwing();
+    const ok = tapSwing();
+    clog('release', ok ? 'tap' : 'tap-refused', { held, why: ok ? undefined : player.tapWhy });
+  } else if ((player.cleave || 0) > 0) {
+    clog('release', 'heavy-too-short', { held, f: +player.cleave.toFixed(2) });
+  } else if (player.conAim) {
+    clog('release', 'aimed', { held });
+  } else {
+    // Held still past the tap window: nothing happens at all. The audit's C01.
+    clog('release', 'held-too-long', { held });
   }
   player.cleave = 0;
   player.conAim = false;
@@ -5182,7 +5227,8 @@ function conduitRelease() {
  * and hitting the moment again inside the window carries the chain on.
  */
 function tapSwing() {
-  if (player.fireTimer > 0) return false;
+  if (player.fireTimer > 0) { player.tapWhy = 'blade-busy ' + player.fireTimer.toFixed(3) + 's'; return false; }
+  player.tapWhy = null;
   const last = player.combo || 0;
   const n = (player.comboT || 0) > 0 ? Math.min(COMBO_LEN, last + 1) : 1;
   const finisher = n >= COMBO_LEN;
@@ -5233,6 +5279,7 @@ function updateConduit(dt) {
     player.conT += dt;
     // At the edge, and held: gathering. Nothing else happens while it does.
     if (player.conAim && player.conMag >= CONDUIT_EDGE && player.conT >= CONDUIT_HOLD) {
+      if (!(player.cleave > 0)) clog('gather', 'start', { held: +player.conT.toFixed(3) });
       player.cleave = clamp((player.conT - CONDUIT_HOLD) /
                             (CONDUIT_FULL - CONDUIT_HOLD), 0, 1);
       return;
@@ -5247,6 +5294,7 @@ function updateConduit(dt) {
   player.fireTimer = 0;
   if (player.conDown && player.conAim) {
     // Driven: down the line you are pointing, at the whole of the blade.
+    clog('swing', 'driven');
     swingAt(player.conA, { bite: 1 });
     clamour(CLAMOUR_SWING);
     player.fireTimer = player.fireDelay;
@@ -5372,6 +5420,7 @@ function updateEnemies(dt) {
     if (e.hp <= 0) continue;
     e.hitFlash = Math.max(0, e.hitFlash - dt);
     if (e.mended > 0) e.mended = Math.max(0, e.mended - dt);
+    if (e.dummy) { updateDummy(e, dt); continue; }     // the combat room's targets
 
     // Closing. A body doing this is not fighting, not moving and not being
     // steered by anything below -- it is a four-second window and nothing else.
@@ -8164,6 +8213,98 @@ function discardSelected() {
   if (!gearSel || gearSel.from !== 'bag') return;
   gearCtx.bag.splice(gearSel.index, 1);
   afterGearChange();
+}
+
+/* --- THE COMBAT ROOM -------------------------------------------------------
+ * A fixed place to feel the fight in, and to measure it: the same seed, the
+ * same hero, the same five stations every time, so a change to the controls
+ * can be tried against the one before it on the same phone in the same room.
+ * Opened with ?room=combat (and &hero=zayd, &seed=N) -- a developer door,
+ * like ?nogate; nothing in the game points at it.
+ *
+ *   still     a target that stands there and takes it
+ *   orbit     one walking a slow circle, for aiming at something that moves
+ *   guard     one whose shield comes up for two seconds in every four
+ *   ranged    a real cantor, awake: something that fights back from range
+ *   pack      a dormant mixed pack, for the whole fight at once
+ *
+ * The first three are DUMMIES: they skip the enemy AI entirely (updateDummy),
+ * never swing, and cannot die, so they measure the hero and nothing else.
+ * ------------------------------------------------------------------------ */
+const DUMMY_HP = 1e7;
+function seedRandom(seed) {
+  let a = seed | 0;
+  Math.random = function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// The nearest open ground to a point, so a station never lands in rock.
+function openNear(x, y, r) {
+  let best = null, bestD = Infinity;
+  for (let i = 0; i < openCells.length; i++) {
+    const o = openCells[i];
+    if (pointInWalls(o.x, o.y, r + 4)) continue;
+    const d = dist2(o.x, o.y, x, y);
+    if (d < bestD) { bestD = d; best = o; }
+  }
+  return best || { x, y };
+}
+
+function buildCombatRoom() {
+  for (const e of enemies) e.hp = 0;
+  enemies.length = 0;
+  loot.length = 0; drops.length = 0; slams.length = 0; hazards.length = 0;
+  run.bossCalled = true;               // no avatar: this room is for the hero
+  run.invadeAt = 0;
+  run.room = 'combat';
+  const at = (kind, deg, dist) => {
+    const a = deg / 57.2958;
+    const p = openNear(player.x + Math.cos(a) * dist, player.y + Math.sin(a) * dist, ENEMY_TYPES[kind].r);
+    const e = newBody(kind, p.x, p.y, 0);
+    enemies.push(e);
+    return e;
+  };
+  const dummy = (e, how) => { e.dummy = how; e.hp = e.maxHp = DUMMY_HP; e.dmg = 0;
+                              e.awake = false; return e; };
+  dummy(at('thrall', 0, 110), 'still');
+  const o = dummy(at('thrall', 90, 190), 'orbit');
+  o.orbit = { x: o.x, y: o.y, r: 70, a: 0 };
+  const g = dummy(at('breaker', 180, 150), 'guard');
+  g.guardT = 2;
+  const c = at('cantor', 270, 300);
+  c.awake = true;
+  const pk = openNear(player.x + 300, player.y + 300, 20);
+  for (const [kind, n] of [['thrall', 4], ['flayer', 1], ['husk', 1], ['breaker', 1]]) {
+    for (let i = 0; i < n; i++) {
+      const p = openNear(pk.x + rand(-60, 60), pk.y + rand(-60, 60), ENEMY_TYPES[kind].r);
+      const e = newBody(kind, p.x, p.y, 0);
+      e.awake = false;
+      enemies.push(e);
+    }
+  }
+  clog('room', 'combat', { hero: player.hero });
+  return enemies.length;
+}
+
+function updateDummy(e, dt) {
+  e.pace = 0;
+  if (e.dummy === 'orbit') {
+    const o = e.orbit;
+    o.a += dt * 0.9;
+    const nx = o.x + Math.cos(o.a) * o.r, ny = o.y + Math.sin(o.a) * o.r;
+    e.pace = Math.hypot(nx - e.x, ny - e.y);
+    e.gait = (e.gait || 0) + e.pace;
+    if (Math.abs(nx - e.x) > 0.01) e.face = nx < e.x ? -1 : 1;
+    e.x = nx; e.y = ny;
+  } else if (e.dummy === 'guard') {
+    e.guardT -= dt;
+    if (e.guardT <= 0) { e.braced = !e.braced; e.guardT = 2; }
+  }
+  if (e.hp < e.maxHp * 0.5) e.hp = e.maxHp;             // cannot die
 }
 
 /* --- pause -------------------------------------------------------------- */

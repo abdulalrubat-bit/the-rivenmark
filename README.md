@@ -45,7 +45,10 @@ Hollow-Thralls, then find a **ley-gate** and hold it open long enough to carry
 the haul out from under the Shroud of Dúath.
 
 - **Move** — drag anywhere (floating stick), or WASD / arrows
-- **Strike** — automatic, nearest thrall in reach
+- **Strike** — the Conduit, bottom right. Nothing swings on its own: tap it
+  to strike the nearest body in reach, drag it to strike down the line you
+  point, and drag to its rim and hold to gather a heavy blow
+- **Abilities** — the three buttons above the Conduit; **Swap** changes hero
 - **Boons** — slag doubles as XP; each rank offers three
 - **Pause** — HUD button, or `Esc` / `P`
 
