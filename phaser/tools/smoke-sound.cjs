@@ -94,6 +94,71 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
        place.left && place.left.pan < -0.5, JSON.stringify(place.left));
     ck('one far across the map is not played at all', place.far === null);
 
+    /* ---- every recipe makes a sound, and none clips ------------------------ */
+    // Rendered offline, one at a time and at full size, so this is the recipe
+    // itself and not the engine's caps or the limiter.
+    const rend = await p.evaluate(async () => {
+      const out = {};
+      for (const name of Object.keys(__sound.recipes)) {
+        if (name.startsWith('smoke-')) continue;
+        const sr = 44100, oc = new OfflineAudioContext(1, sr * 1.5, sr);
+        const n = oc.createBuffer(1, sr, sr), d = n.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+        const len = __sound.recipes[name].make(oc, oc.destination, 0, 1, n);
+        const buf = await oc.startRendering(), x = buf.getChannelData(0);
+        let peak = 0, last = 0;
+        for (let i = 0; i < x.length; i++) { const v = Math.abs(x[i]);
+          if (v > peak) peak = v; if (v > 0.003) last = i; }
+        out[name] = { peak: +peak.toFixed(3), len: +len.toFixed(3), ends: +(last / sr).toFixed(3) };
+      }
+      return out;
+    });
+    const names = Object.keys(rend);
+    ck('every recipe is heard', names.length >= 8 && names.every(n => rend[n].peak > 0.02),
+       names.map(n => n + ' ' + rend[n].peak).join(', '));
+    ck('and none clips on its own', names.every(n => rend[n].peak < 1),
+       names.filter(n => rend[n].peak >= 1).join(', '));
+    ck('each says truthfully how long it lasts (so its voice is freed on time)',
+       names.every(n => rend[n].ends <= rend[n].len + 0.08),
+       names.filter(n => rend[n].ends > rend[n].len + 0.08).map(n => n + ' ' + JSON.stringify(rend[n])).join(', '));
+
+    /* ---- the fight is heard ------------------------------------------------ */
+    // The events are the core's own: nothing here calls sfx() for the fight.
+    const heard = () => p.evaluate(() => __sound.log.map(l => l.name));
+    const since = async f => { const n0 = (await heard()).length;
+      await sleep(260); await p.evaluate(f); return (await heard()).slice(n0); };
+    const sw = await since(() => { swingAt(0); });
+    ck('a swing is heard, blade and magic', sw.includes('swing') && sw.includes('crescent'), sw.join());
+    await sleep(200);
+    const hit = await since(() => { const e = newBody('thrall', player.x + 60, player.y, 0);
+      e.awake = false; e.hp = e.maxHp = 1e6; enemies.push(e); window.__dummy = e;
+      damageEnemy(e, 10, player.x, player.y); });
+    ck('a blow landing is heard', hit.includes('hit') && !hit.includes('kill'), hit.join());
+    const blk = await since(() => { __dummy.braced = true; damageEnemy(__dummy, 10, player.x, player.y);
+      __dummy.braced = false; });
+    ck('a blow into a guard sounds different', blk.includes('block') && !blk.includes('hit'), blk.join());
+    const kill = await since(() => { __dummy.hp = 1; damageEnemy(__dummy, 50, player.x, player.y); });
+    ck('a killing blow is a kill, not also a hit', kill.includes('kill') && !kill.includes('hit'), kill.join());
+    const hurt = await since(() => { player.invuln = 0; hurtPlayerBy(20); player.invuln = 1e9; });
+    ck('taking a blow is heard', hurt.includes('hurt'), hurt.join());
+
+    /* ---- a hundred die at once ---------------------------------------------- */
+    await sleep(600);
+    const mass = await p.evaluate(() => {
+      const n0 = __sound.log.length, d0 = __sound.dropped, body = [];
+      for (let i = 0; i < 100; i++) { const e = newBody('thrall', player.x + 40 + (i % 10) * 6,
+        player.y + Math.floor(i / 10) * 6, 0); e.awake = false; enemies.push(e); body.push(e); }
+      const t0 = performance.now();
+      for (const e of body) damageEnemy(e, 1e6, player.x, player.y);
+      return { kills: __sound.log.slice(n0).filter(l => l.name === 'kill').length,
+               dropped: __sound.dropped - d0, ms: performance.now() - t0,
+               voices: __sound.stats().voices, failed: __sound.failed || 0 };
+    });
+    ck('a hundred kills in one frame are a few kill sounds, not a hundred',
+       mass.kills >= 1 && mass.kills <= 4 && mass.dropped >= 90, JSON.stringify(mass));
+    ck('and cost the frame next to nothing', mass.ms < 40, mass.ms.toFixed(1) + 'ms for 100 kills');
+    ck('no recipe has failed', mass.failed === 0);
+
     /* ---- the switch on the HUD --------------------------------------------- */
     const btn = '#hud .hold .snd';
     ck('the HUD has a sound switch, showing on',

@@ -21,6 +21,7 @@ import { Overlay } from './overlay.js';
 import { Atmosphere } from './atmosphere.js';
 import { screenOrigin, pinToScreen, cssPoint } from './screen.js';
 import { installSound } from './sound.js';
+import './sounds.js';
 
 // The core's palette is CSS hex strings; Phaser wants numbers.
 const hex = (css, fallback) => {

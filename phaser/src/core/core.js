@@ -3149,6 +3149,10 @@ function swingAt(base, o) {
     const a = base + (i === 0 ? 0 : (i % 2 ? 1 : -1) * step * Math.ceil(i / 2));
     releaseCrescent(a, fan ? 0 : i * 0.055, k);
   }
+  // One sound per swing, however many crescents it threw: the blade, and the
+  // magic leaving it. More crescents is a fuller sound, not more of them.
+  sfx('swing', undefined, undefined, k.heavy ? 1 : 0.5);
+  sfx('crescent', undefined, undefined, clamp((player.shots - 1) / 3, 0, 1));
   player.swing    = SWING_TIME * (k.heavy ? 1.7 : 1);
   player.recov    = 0;
   player.swingA   = base;
@@ -4753,6 +4757,7 @@ function hurtPlayerBy(dmg, fx, fy, sized) {
   burst(player.x + (ox - player.x) * 0.5, player.y + (oy - player.y) * 0.5,
         PAL.blood, 10, 180);
   floatDmg(player.x, player.y - player.r * 1.2, taken, 'taken');
+  sfx('hurt', undefined, undefined, clamp(taken / Math.max(1, player.maxHp) * 4, 0, 1));
   if (player.hp <= 0) { player.hp = 0; endRun(false); }
 }
 
@@ -4807,6 +4812,7 @@ function damageEnemy(e, dmg, fx, fy) {
   if (e.kind === 'deceiver' && escortAlive()) {
     burst(e.x, e.y, '#e8c060', 3, 120);
     floatWord(e.x, e.y - e.r * 0.9, 'TETHERED', 'tether');
+    sfx('tether', e.x, e.y);
     return;
   }
   // A braced anchor eats most of it. It cannot move or swing while it does,
@@ -4846,6 +4852,8 @@ function damageEnemy(e, dmg, fx, fy) {
   // a scratch, and the number should read like whichever it was.
   floatDmg(e.x, e.y - e.r * 0.9, dmg,
            soaked ? 'soaked' : dmg > e.maxHp * 0.34 ? 'heavy' : 'hit');
+  // The kill has its own sound below, so a killing blow is not also a hit.
+  if (e.hp > 0) sfx(soaked ? 'block' : 'hit', e.x, e.y, weight);
   // Every wound on an escort pushes the crystal. Killing them is how you get
   // to him, and it is also how the clock runs down -- which is the whole
   // shape of the fight in one line.
@@ -4917,6 +4925,7 @@ function damageEnemy(e, dmg, fx, fy) {
     // The beat. A big body is worth a longer one, and the ring gives the
     // break an edge that expands rather than a puff that fades.
     const big = e.r > 18;
+    sfx('kill', e.x, e.y, clamp((e.r - 8) / 18, 0, 1));
     freeze(KILL_FREEZE * (big ? 1.6 : 1));
     shake(KILL_SHAKE * (big ? 2 : 1));
     burst(e.x, e.y, e.color, big ? 18 : 10, 210);

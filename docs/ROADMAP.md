@@ -44,9 +44,11 @@ grow past it later.
 
 Synthesised with Web Audio, no files. One small engine, one switch.
 
-- [ ] The engine: a master volume, a limiter, voices that cannot pile up
-      when a hundred thralls die in one frame
-- [ ] Combat: the swing, the crescent, a hit, a kill, a hit taken
+- [x] The engine: a master volume, a limiter, voices that cannot pile up
+      when a hundred thralls die in one frame — plus a mute switch on the HUD
+      and the pause card (`smoke:sound`)
+- [x] Combat: the swing, the crescent, a hit, a kill, a hit taken — and a
+      blow into a guard, and one on the tethered Deceiver
 - [ ] The kit: each ability, charges/tension filling, a cooldown ready
 - [ ] The run: slag pickup, a coffer opening, the gate waking, stepping through,
       death, extraction

@@ -47,8 +47,8 @@ const PAN_SPAN = 520;       // this far to one side is hard left or right
  * its nodes, connects them to `out`, starts them at `t`, and returns how long
  * it lasts in seconds, so the engine knows when the voice is free again.
  * `mag` is 0..1 and optional: how big this instance is (a heavy hit, a big
- * kill). Recipes are registered with define(), and the combat, kit, run and
- * menu sounds each live beside the others in this file.
+ * kill). Recipes are registered with define(); the game's own are all in
+ * src/sounds.js.
  */
 const RECIPES = Object.create(null);
 export function define(name, recipe) {
@@ -237,7 +237,16 @@ class Engine {
     }
     g.connect(this.master);
     const t = now + 0.005;
-    const len = r.make(ctx, out, t, mag === undefined ? 0.5 : mag, this.noise) || 0.2;
+    // The core calls this from inside the fight -- damageEnemy, hurtPlayerBy --
+    // so a recipe that throws must cost a sound, never the frame.
+    let len;
+    try { len = r.make(ctx, out, t, mag === undefined ? 0.5 : mag, this.noise) || 0.2; }
+    catch (e) {
+      try { g.disconnect(); } catch (e2) {}
+      this.failed = (this.failed || 0) + 1;
+      console.warn('sound: ' + name + ' failed: ' + e.message);
+      return false;
+    }
     // Disconnect the voice's tail once it is done, so a long session does not
     // leave thousands of dead gain nodes hanging off the master.
     setTimeout(() => { try { g.disconnect(); } catch (e) {} }, (len + 0.3) * 1000);
@@ -269,6 +278,7 @@ export const sound = new Engine();
 // Recipes can be added from outside too -- the smoke suite defines its own to
 // measure the caps with something whose limits it chose.
 sound.define = define;
+sound.recipes = RECIPES;
 
 /* ---- the one sound the engine needs itself ---------------------------------
  * Turning sound ON has to make a sound, or the player cannot tell it worked. A
