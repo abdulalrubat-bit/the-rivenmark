@@ -11,16 +11,16 @@ const { chromium } = require('playwright');
 // source. verify-core uses it to run the SAME file against index.html and
 // against the extracted core; it used to rewrite the URL with a string
 // replace, which silently stopped matching the moment this line changed.
-const PAGE = f => process.env.RIVENMARK_PAGE ||
-  ('file://' + require('path').join(__dirname, '..', '..', f));
+const pages = require('./_pages.js');
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''));
-(async()=>{
+(async () => {
+  await pages.serve();
   const b=await chromium.launch();
   const p=await (await b.newContext({viewport:{width:430,height:900}})).newPage();
   const errs=[]; p.on('pageerror',e=>errs.push(e.message));
   p.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
-  await p.goto(PAGE('index.html')); await sleep(700);
+  await p.goto(pages.forge()); await sleep(700);
   await p.evaluate(()=>{
     window.requestAnimationFrame = () => 0;
     // A cut is not guaranteed to hold any one kind, so tests ask for the
@@ -183,11 +183,38 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
     hurtProp(pr, 9999);
     const before = props.filter(o=>o.gone).length;
     hurtProp(pr, 9999);                       // must not fire twice
-    return { gone: before, still: props.filter(o=>o.gone).length,
-             standing: props.filter(o=>STANDING[o.kind] && !o.gone).length };
+    return { gone: before, still: props.filter(o=>o.gone).length };
   });
   ck('a broken prop cannot be broken twice', after.gone===after.still);
-  ck('and drops out of the standing set', after.standing>0);
+
+  /* And it stops being DRAWN -- asked of the game. The scenery is painted
+   * once per delve, and a barrel used to go up and stay standing over its own
+   * blast. A pillar is broken in a running delve and its image watched. */
+  const gp = await (await b.newContext({viewport:{width:430,height:900}})).newPage();
+  gp.on('pageerror',e=>errs.push(e.message));
+  await gp.goto(pages.game('nogate&nogov'));
+  await gp.waitForFunction(()=>state==='play' && __game.scene.getScene('delve').breakables,
+                           null, {timeout:30000});
+  const drawn = await gp.evaluate(async ()=>{
+    const sc = __game.scene.getScene('delve');
+    const b = sc.breakables.find(x => x.pr.kind === 'pillar') || sc.breakables[0];
+    if (!b) return { none: true };
+    player.x = b.pr.x; player.y = b.pr.y + 120;     // so it is on screen
+    await new Promise(r=>setTimeout(r,400));
+    const before = b.img.visible;
+    hurtProp(b.pr, 1);                              // struck, not broken
+    await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+    const wobbled = b.img.x !== b.pr.x;
+    hurtProp(b.pr, 9999);
+    await new Promise(r=>setTimeout(r,300));
+    return { before, wobbled, after: b.img.visible,
+             shadow: b.sh ? b.sh.visible : false, kind: b.pr.kind };
+  });
+  ck('a struck prop shakes', !drawn.none && drawn.wobbled, drawn.kind);
+  ck('and a broken one is no longer drawn', !drawn.none && drawn.before && !drawn.after &&
+     !drawn.shadow, drawn.none ? 'no breakable scenery in this delve'
+       : 'drawn ' + drawn.before + ' -> ' + drawn.after);
+  await gp.close();
 
   // Standable ground is indexed before the chasms are cut. A hole takes floor
   // away, so the index has to be retaken -- otherwise everything that samples
@@ -247,36 +274,36 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   ck('walking into a block stops at its face', eject.tried>0 && eject.worst<=1,
      eject.worst+' units past the face, over '+eject.tried+' blocks');
 
-  // Sheet-backed scenery: the strip has to arrive, cover every kind that
-  // claims it, and leave a forged sprite standing in for the rest.
-  const art = await p.evaluate(async ()=>{
-    const img = new Image();
-    await new Promise(r => { img.onload = img.onerror = r; img.src = PROP_SHEET; });
-    const kinds = Object.keys(PROP_ART);
-    const rows = Math.max(...kinds.map(k => PROP_ART[k].row)) + 1;
+  /* Scenery. The canvas build drew four kinds (bones, coins, skulls, tombs)
+   * from an embedded sheet and forged the rest; its checks on that sheet went
+   * with it -- the Phaser build draws every prop from the atlas, cut by the
+   * forge. What still matters is asked of what ships: the forge draws every
+   * kind the delve scatters, and every prop in a delve resolves to a real
+   * atlas frame through the scene's own picker. */
+  const art = await p.evaluate(()=>{
     startRun('isaac', LEVELS[16].id, 'riven');
     const seen = {};
     for (const pr of props) seen[pr.kind] = (seen[pr.kind]||0) + 1;
-    return {
-      embedded: /^data:image\/png;base64,/.test(PROP_SHEET),
-      decoded: img.naturalWidth > 0, w: img.naturalWidth, h: img.naturalHeight,
-      fits: img.naturalWidth === PROP_CELL * PROP_VARIANTS &&
-            img.naturalHeight === PROP_CELL * rows,
-      kinds,
-      // every q a prop can carry must land on a real variant
-      qOk: props.every(pr => !PROP_ART[pr.kind] ||
-                            (pr.q % PROP_VARIANTS) < PROP_VARIANTS),
-      // and the forged fallback still exists for all of them
-      forged: kinds.every(k => SPR['p_' + k + '_0']),
-      tombs: seen.tomb || 0, bones: seen.bones || 0
-    };
+    const kinds = Object.keys(seen);
+    return { kinds, forged: kinds.filter(k => !SPR['p_' + k + '_0'] && !SPR['p_' + k]),
+             tombs: seen.tomb || 0 };
   });
-  ck('the scenery strip travels inside the page', art.embedded);
-  ck('and decodes to the cells the code asks for',
-     art.decoded && art.fits, art.w+'x'+art.h+' for '+art.kinds.join(', '));
-  ck('every variant a prop can pick exists', art.qOk);
-  ck('and a forged one still stands in until it lands', art.forged);
+  ck('the forge draws every kind of scenery a delve scatters', art.forged.length===0,
+     art.forged.length ? 'none for ' + art.forged.join(', ') : art.kinds.length + ' kinds');
   ck('tombs are actually scattered', art.tombs > 0, art.tombs+' in one cut');
+  const picked = await (async ()=>{
+    const gp = await (await b.newContext({viewport:{width:430,height:900}})).newPage();
+    gp.on('pageerror',e=>errs.push(e.message));
+    await gp.goto(pages.game('nogate&nogov'));
+    await gp.waitForFunction(()=>state==='play' && __game.scene.getScene('delve').propImgs,
+                             null, {timeout:30000});
+    const r = await gp.evaluate(()=>{ const sc=__game.scene.getScene('delve');
+      const miss = props.filter(pr => !sc.pickProp(pr.kind, pr.q)).map(pr => pr.kind);
+      return { n: props.length, miss: [...new Set(miss)] }; });
+    await gp.close(); return r;
+  })();
+  ck('every variant a prop can pick exists', picked.miss.length===0,
+     picked.miss.length ? 'no frame for ' + picked.miss.join(', ') : picked.n + ' props, all drawn');
 
   /* --- HOW MUCH OF THE MAP THE DELVE ACTUALLY USES -----------------------
    * Two kinds of dead space, both measured before they were changed and both
@@ -354,5 +381,5 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   ck('no console errors', errs.length===0, errs.slice(0,3).join(' | '));
   console.log('\nPASS '+pass.length+'\n  '+pass.join('\n  '));
   console.log('\nFAIL '+fail.length+(fail.length?'\n  '+fail.join('\n  '):''));
-  await b.close(); process.exit(fail.length?1:0);
+  await b.close(); pages.stop(); process.exit(fail.length?1:0);
 })();

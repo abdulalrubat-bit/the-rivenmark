@@ -107,7 +107,7 @@ const STANDING = { pillar: 26, barrel: 12, crate: 11, urn: 10, banner: 16,
           WALK_STEP, WALK_PACE, update, startRun, resetRun, loadStash,
           hardcore, loadHardcoreMode, ENEMY_TYPES, settleUnfinishedDelve,
           abandonDelve, stepDelve, pauseRun, resumeRun, openGear, closeGear,
-          cam, updateCamera */
+          cam, updateCamera, PROP_HP */
 
 /* A body drawn with another body's art, and how much bigger it is than the
  * thing it borrowed from. Derived from the two radii rather than typed in, so
@@ -395,6 +395,7 @@ export class Delve extends Phaser.Scene {
   clearWorldArt() {
     if (this.wallGfx) this.wallGfx.destroy();
     for (const im of this.propImgs || []) im.destroy();
+    this.breakables = [];
     for (const im of this.wallImgs || []) im.destroy();
     for (const c of this.chestImgs || []) { c.img.destroy(); c.sh.destroy(); }
     for (const im of this.lootImgs || []) im.destroy();
@@ -473,16 +474,20 @@ export class Delve extends Phaser.Scene {
     // four of each. Depth by y so a body passes in front of a barrel it is
     // below and behind one it is above.
     this.propImgs = [];
+    this.breakables = [];
     for (const p of props) {
       const key = this.pickProp(p.kind, p.q);
       if (!key) continue;
       // A barrel is something you walk behind, so it sorts against bodies by
       // y. Flat scenery -- rubble, stains, bones -- goes under all of it.
       const up = STANDING[p.kind];
-      if (up) this.propImgs.push(this.shadowAt(p.x, p.y, up, 2));
+      const sh = up ? this.shadowAt(p.x, p.y, up, 2) : null;
+      if (sh) this.propImgs.push(sh);
       const img = this.add.image(p.x, p.y, 'art', key)
         .setScale(this.artScale(key)).setDepth(up ? p.y : p.y - 1e4);
       this.propImgs.push(img);
+      // The ones a blow can break are watched; see syncBreakables.
+      if (PROP_HP[p.kind]) this.breakables.push({ pr: p, img, sh });
     }
 
     // The coffers. Two states in the atlas rather than the canvas build's four
@@ -605,10 +610,34 @@ export class Delve extends Phaser.Scene {
     for (const list of [this.wallImgs, this.propImgs]) {
       if (!list) continue;
       for (const im of list) {
-        const on = im.x > x0 - im.displayWidth && im.x < x1 &&
+        const on = !im.broken &&
+                   im.x > x0 - im.displayWidth && im.x < x1 &&
                    im.y > y0 - im.displayHeight && im.y < y1;
         if (im.visible !== on) im.setVisible(on);
       }
+    }
+  }
+
+  /* SCENERY THAT BREAKS.
+   *
+   * Barrels and pillars take blows: the core runs them down (hurtProp), marks
+   * one gone when it breaks, and queues its blast. The statics are painted
+   * once per delve, so nothing here noticed -- a barrel went up and stayed
+   * standing over its own explosion. A struck one also wobbles, as the canvas
+   * build drew it, for as long as the core's shake on it lasts. Only the
+   * breakable few are looked at; the rest of the scenery never changes.
+   */
+  syncBreakables() {
+    for (const b of this.breakables || []) {
+      if (b.pr.gone) {
+        if (!b.img.broken) {
+          b.img.broken = true; b.img.setVisible(false);
+          if (b.sh) { b.sh.broken = true; b.sh.setVisible(false); }
+        }
+        continue;
+      }
+      const x = b.pr.x + (b.pr.shake > 0 ? Math.sin(b.pr.shake * 90) * 2.4 : 0);
+      if (b.img.x !== x) b.img.x = x;
     }
   }
 
@@ -1121,6 +1150,7 @@ export class Delve extends Phaser.Scene {
                                 player.y + LIGHT.y * LIGHT.body + 13 * 0.42);
 
     this.placeCamera(dt);
+    this.syncBreakables();
     this.syncChests(time);
     this.syncLoot(time);
     this.cullDressing();
