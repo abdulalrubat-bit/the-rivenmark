@@ -773,7 +773,34 @@ export class Hud {
     }
 
     this.syncBoss();
+    this.refitBoss();
     this.syncToast();
+  }
+
+  /* The title is fitted, not cut. The Deceiver's epithets are rules -- each
+   * names something he does that the player has to know -- and an ellipsis
+   * took the last of them off the end. Shrunk a pixel at a time from 13 to 10,
+   * as the canvas build fitted it, and only past that does the ellipsis get a
+   * say. Measured once per title, which changes once per boss. */
+  /* Re-fitted whenever anything sharing the line changes width: the title,
+   * the count's digits, the HELD tag and its pips. Fitting the title alone,
+   * before the rest of the line was filled in, fitted it to room it did not
+   * have. */
+  refitBoss() {
+    if (this.boss.hidden) return;
+    const sig = this.bossName.textContent + '|' + this.bossCount.textContent.length +
+                '|' + this.bossHeld.hidden + '|' + this.heldPips;
+    if (sig === this.bossFitSig) return;
+    this.bossFitSig = sig;
+    this.fitBossName();
+  }
+
+  fitBossName() {
+    const n = this.bossName;
+    for (let px = 13; px >= 10; px--) {
+      n.style.fontSize = px + 'px';
+      if (n.scrollWidth <= n.clientWidth + 1) return;
+    }
   }
 
   /* The boss bar. Whoever owns the frame -- an invader first, because he is

@@ -11,8 +11,7 @@ const { chromium } = require('playwright');
 // source. verify-core uses it to run the SAME file against index.html and
 // against the extracted core; it used to rewrite the URL with a string
 // replace, which silently stopped matching the moment this line changed.
-const PAGE = f => process.env.RIVENMARK_PAGE ||
-  ('file://' + require('path').join(__dirname, '..', '..', f));
+const pages = require('./_pages.js');
 const OUT = '/tmp/claude-0/-home-user-abdulalrubat-bit-github-io/4bff2945-7328-5fd1-8354-f2ea6e41425c/scratchpad/';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const pass=[], fail=[];
@@ -22,21 +21,18 @@ const pass=[], fail=[];
 const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''));
 
 (async () => {
+  await pages.serve();
   const b = await chromium.launch();
   const p = await (await b.newContext({viewport:{width:430,height:900},deviceScaleFactor:2})).newPage();
   const errs=[]; p.on('pageerror',e=>errs.push(e.message));
   p.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
-  await p.goto(PAGE('debug.html'));
+  await p.goto(pages.core());
   await sleep(600);
   // Fixed seed: the geometry fixture needs a specific clear lane, and a
-  // rerun should reproduce whatever it found.
-  await p.evaluate(() => {
-    document.querySelector('#dbgToggle').click();
-    document.querySelector('#dbgSeed').value = '20260824';
-  });
-  await p.locator('#dbgSeedGo').scrollIntoViewIfNeeded();
-  await p.click('#dbgSeedGo');
-  await sleep(600);
+  // rerun should reproduce whatever it found. (It was typed into the old
+  // debug overlay's seed box; pages.seeded is the same generator.)
+  await pages.seeded(p, 20260824);
+  await sleep(300);
 
   // Helper installed in-page: clear the field, plant enemies, swing once.
   await p.evaluate(() => {
@@ -352,6 +348,6 @@ const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''
   ck('no console errors', errs.length === 0, errs.join(' | '));
   console.log('\nPASS ' + pass.length + '\n  ' + pass.join('\n  '));
   console.log('\nFAIL ' + fail.length + (fail.length ? '\n  ' + fail.join('\n  ') : ''));
-  await b.close();
+  await b.close(); pages.stop();
   process.exit(fail.length?1:0);
 })();

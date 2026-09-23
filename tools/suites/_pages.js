@@ -64,8 +64,27 @@ async function descend(p, o = {}) {
   }, o);
 }
 
+/* A delve cut from a fixed seed, the way the old debug overlay's seed box
+ * did it: Math.random becomes mulberry32(seed) -- the same generator, so a
+ * seed a suite chose for its map still cuts that map -- and the world is
+ * rebuilt for the hero already in play. */
+async function seeded(p, seed) {
+  await p.evaluate(seed => {
+    let a = seed;
+    Math.random = function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    resetRun((run && run.hero) || 'isaac');
+    state = 'play';
+  }, seed);
+}
+
 module.exports = {
   descend,
+  seeded,
   serve,
   core: () => process.env.RIVENMARK_PAGE || base + 'core-test.html',
   game: (q = '') => base + 'index.html' + (q ? '?' + q.replace(/^\?/, '') : ''),
