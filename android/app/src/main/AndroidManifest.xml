@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- The settings screen's Vibration: a blow taken, the gate, a death.
+         navigator.vibrate() in the WebView does nothing without it. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <application
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"

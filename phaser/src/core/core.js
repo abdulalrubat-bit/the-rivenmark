@@ -4796,7 +4796,12 @@ function moveVector() {
 const view = { w: 0, h: 0, dpr: 1, safeT: 0, safeR: 0 };
 const cam  = { x: 0, y: 0, shake: 0 };
 
-function shake(amount) { cam.shake = Math.min(16, cam.shake + amount); }
+// How much the camera may shake: the player's setting (full, reduced, off),
+// for anyone the motion makes ill. The rules still ASK for the shake; only
+// how far it moves is theirs.
+let motionScale = 1;
+function setMotion(m) { motionScale = clamp(+m || 0, 0, 1); return motionScale; }
+function shake(amount) { cam.shake = Math.min(16, cam.shake + amount * motionScale); }
 
 function updateCamera(dt) {
   const tx = clamp(player.x - view.w / 2, 0, Math.max(0, WORLD.w - view.w));

@@ -23,6 +23,7 @@ import { screenOrigin, pinToScreen, cssPoint } from './screen.js';
 import { installSound } from './sound.js';
 import './sounds.js';
 import { Score } from './music.js';
+import { settings, applyAll } from './settings.js';
 
 // The core's palette is CSS hex strings; Phaser wants numbers.
 const hex = (css, fallback) => {
@@ -209,6 +210,7 @@ export class Delve extends Phaser.Scene {
       setControls(new URLSearchParams(location.search).get('controls') ||
                   (() => { try { return localStorage.getItem('rivenmark.controls.v1'); } catch (e) { return null; } })() ||
                   'new');
+      applyAll();
       // A Hardcore delve the app was closed in the middle of is a death.
       settleUnfinishedDelve();
       const t0 = performance.now();
@@ -920,6 +922,7 @@ export class Delve extends Phaser.Scene {
    * flashed. Guarded like the scale and rotation, so a body neither struck nor
    * tinted costs nothing. */
   flashOrTint(sp, flash, tint) {
+    if (!settings.flash) flash = false;      // the player turned flashes off
     const mode = flash ? Phaser.TintModes.ADD : Phaser.TintModes.MULTIPLY;
     if (sp.tintMode !== mode) sp.setTintMode(mode);
     const want = flash ? 0x9a9a9a : tint;
@@ -1089,6 +1092,9 @@ export class Delve extends Phaser.Scene {
     // so the governor sheds it halfway through the measurement and the picture
     // under test stops existing.
     if (/nogov/.test(location.search)) return;
+    // The player can pin it (settings): full keeps every effect whatever the
+    // frame costs, reduced sheds them from the start. Auto is the governor.
+    if (settings.fx !== 'auto') { lowFx = settings.fx === 'reduced'; return; }
     const call = this.gov.decide(lowFx, FX_DROP, FX_RAISE);
     if (call === 'drop') lowFx = true;
     else if (call === 'raise') lowFx = false;

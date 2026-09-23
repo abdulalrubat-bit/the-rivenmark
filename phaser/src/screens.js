@@ -23,9 +23,15 @@
           BAG_SORTS, bagSort, bagFilter */
 
 // A sound, if the engine is there to make one (it is not on the test pages).
+import { settings, setSetting, setControlsSaved, SHAKES, QUALITIES } from './settings.js';
+
 const snd = (name, mag) => { if (typeof window.sfx === 'function') window.sfx(name, undefined, undefined, mag); };
 
 const CSS = `
+/* Settings: a row that holds a slider instead of being a button. */
+#screens .row.slide{display:flex;align-items:center;gap:10px}
+#screens .row.slide input[type=range]{flex:1;min-width:0;accent-color:#c9a45a}
+
 /* The safe areas, same as the HUD -- see the note at the top of hud.js. The
    scrim wants the whole glass, so the padding is on the scroller and the
    cards live inside it: a pinned Descend at bottom:0 was sitting in the home
@@ -219,6 +225,8 @@ export class Screens {
       else this.renderForge();
     }
     else if (name === 'vendor') this.renderVendor();
+    else if (name === 'settings') this.renderSettings(false);
+    else if (name === 'settings-pause') this.renderSettings(true);
     else if (name === 'hall') this.renderHall();
     else this.renderGatehouse();
   }
@@ -247,7 +255,9 @@ export class Screens {
         '<button class="alt" type="button">' + leave + '</button>' +
         '<button class="alt snd" type="button"></button>' +
         '<button class="alt ctl" type="button"></button>' +
+        '<button class="alt" type="button" id="toSettings">Settings</button>' +
       '</div>';
+    this.root.querySelector('#toSettings').addEventListener('click', () => this.show('settings-pause'));
     // Which controls. The new ones are the game; the classic Conduit is kept
     // one tap away so the two can be compared on the same phone. Saved.
     const ctl = this.root.querySelector('.ctl');
@@ -278,6 +288,67 @@ export class Screens {
       if (hc && !armed) return this.renderPaused(true);
       this.onAbandon();
     });
+  }
+
+  /* SETTINGS. Reached from the gate-house (a tab) and from the pause card
+   * (and back to it). Every row says what it is set to now, and a tap moves it
+   * on; the two volumes are sliders because a volume is not a list. */
+  renderSettings(fromPause) {
+    const eng = window.__sound;
+    const pct = v => Math.round((v == null ? 1 : v) * 100);
+    const row = (id, label, value, note) =>
+      '<button class="row" type="button" data-set="' + id + '"><span>' + label +
+      (note ? '<small>' + note + '</small>' : '') + '</span><span class="act">' + value + '</span></button>';
+    const slider = (id, label, v) =>
+      '<label class="row slide"><span>' + label + '</span>' +
+      '<input type="range" min="0" max="100" step="5" data-vol="' + id + '" value="' + pct(v) + '">' +
+      '<span class="act" data-volv="' + id + '">' + pct(v) + '%</span></label>';
+    this.root.innerHTML =
+      '<div class="card">' +
+        '<h1>Settings</h1>' + (fromPause ? '' : this.tabs('settings')) +
+        '<div class="rows">' +
+          (eng ? row('mute', 'Sound', eng.muted ? 'off' : 'on') +
+                 slider('fx', 'Effects volume', eng.vol.fx) +
+                 slider('music', 'Music and ambience', eng.vol.music) : '') +
+          row('vibrate', 'Vibration', settings.vibrate ? 'on' : 'off',
+              'A blow taken, the gate, a boss falling, death') +
+          row('shake', 'Screen shake', settings.shake) +
+          row('flash', 'Hit flashes', settings.flash ? 'on' : 'off',
+              'The white flash on a struck body and the red at the edges when you are hurt') +
+          row('fx', 'Effects quality', settings.fx,
+              settings.fx === 'auto' ? 'Sheds effects if the frame rate drops' : '') +
+          row('controls', 'Controls', controlScheme === 'classic' ? 'classic' : 'new',
+              controlScheme === 'classic' ? 'Tap to strike, drag to aim, hold at the rim to gather'
+                                          : 'Hold to strike, drag to aim, the heavy button to gather') +
+          (typeof window.__replayTutorial === 'function'
+            ? row('tutorial', 'Teach the controls again', 'next delve') : '') +
+        '</div>' +
+        (fromPause ? '<button class="go" type="button" id="setBack">Back</button>' : '') +
+      '</div>';
+    const again = () => this.renderSettings(fromPause);
+    if (!fromPause) this.wireTabs();
+    const back = this.root.querySelector('#setBack');
+    if (back) back.addEventListener('click', () => this.show('paused'));
+    this.root.querySelectorAll('[data-set]').forEach(b => b.addEventListener('click', () => {
+      const k = b.dataset.set;
+      if (k === 'mute' && eng) { eng.toggle(); setTimeout(again, 50); return; }
+      if (k === 'vibrate') setSetting('vibrate', !settings.vibrate);
+      if (k === 'flash') setSetting('flash', !settings.flash);
+      if (k === 'shake') {
+        const i = SHAKES.findIndex(x => x[0] === settings.shake);
+        setSetting('shake', SHAKES[(i + 1) % SHAKES.length][0]);
+      }
+      if (k === 'fx') setSetting('fx', QUALITIES[(QUALITIES.indexOf(settings.fx) + 1) % QUALITIES.length]);
+      if (k === 'controls') setControlsSaved(controlScheme === 'classic' ? 'new' : 'classic');
+      if (k === 'tutorial') window.__replayTutorial();
+      again();
+    }));
+    this.root.querySelectorAll('[data-vol]').forEach(inp => inp.addEventListener('input', () => {
+      const v = (+inp.value) / 100;
+      if (eng) eng.setVolume(inp.dataset.vol, v);
+      const lab = this.root.querySelector('[data-volv="' + inp.dataset.vol + '"]');
+      if (lab) lab.textContent = Math.round(v * 100) + '%';
+    }));
   }
 
   /* THE DAILY.
@@ -592,7 +663,7 @@ export class Screens {
       '<button type="button" data-tab="' + id + '" class="' + (on === id ? 'on' : '') +
       '">' + label + '</button>';
     return '<div class="tabs">' + t('splash', 'Descend') + t('gear', 'Forge') +
-           t('vendor', 'Vendor') + t('hall', 'Hall') + '</div>';
+           t('vendor', 'Vendor') + t('hall', 'Hall') + t('settings', '\u2699') + '</div>';
   }
 
   // A line of coin, shown wherever coin is spent.

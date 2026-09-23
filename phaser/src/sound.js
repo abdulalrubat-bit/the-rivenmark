@@ -39,6 +39,8 @@
  * battery, a silent running one does.
  */
 
+import { pulse } from './settings.js';
+
 const MUTE_KEY = 'rivenmark.sound.v1';
 const VOICE_CAP = 24;       // everything sounding at once, across all recipes
 const MASTER = 0.8;
@@ -337,7 +339,9 @@ export function installSound() {
   installed = true;
   // The core's hook. It was a no-op (public/host-stubs.js) until now, and it
   // still is on the test page, so the rules suites stay silent.
-  window.sfx = (name, x, y, mag) => sound.play(name, x, y, mag);
+  // ...and the same moments drive the vibration, which is its own switch
+  // (settings.js) and does not care whether the sound is muted.
+  window.sfx = (name, x, y, mag) => { pulse(name, mag); return sound.play(name, x, y, mag); };
   window.__sound = sound;
   const first = () => sound.unlock();
   for (const ev of ['pointerdown', 'touchend', 'keydown'])

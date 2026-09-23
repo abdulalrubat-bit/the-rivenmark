@@ -244,7 +244,8 @@ export class Atmosphere {
   /* Up to full on the blow and gone in a fifth of a second: the core sets
    * player.hitFlash to 0.3 and runs it down in real time. */
   hurtPass() {
-    const f = (typeof player !== 'undefined' && player) ? player.hitFlash || 0 : 0;
+    let f = (typeof player !== 'undefined' && player) ? player.hitFlash || 0 : 0;
+    if (window.__settings && !window.__settings.flash) f = 0;   // flashes off
     if (f <= 0) { if (this.hurt.visible) this.hurt.setVisible(false); return; }
     this.hurt.setVisible(true).setAlpha(Math.min(1, f / 0.2));
   }
