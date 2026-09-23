@@ -141,22 +141,31 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     // measured a box with no lamp in it, and reported a torch that lit
     // nothing. It failed on about half of all seeds: exactly the ones where
     // the clamp bit.
-    c.stopFollow();
+    //
+    // The camera is the core's (delve.js placeCamera): it eases onto the hero,
+    // and the scene centres Phaser's on it every frame. So the hero is stood at
+    // the lamp and the camera is let settle, the way it gets anywhere in play.
+    // Screen position off worldView, which is in CSS pixels like the shots.
     const frame = () => new Promise(r => requestAnimationFrame(r));
+    const settle = async () => { for (let i = 0; i < 40; i++) await frame(); };
     let L = null, at = null;
     for (const cand of lamps) {
-      c.setScroll(cand.x - c.width / 2, cand.y - c.height / 2);
-      await frame();
-      const sx = cand.x - c.scrollX, sy = cand.y - c.scrollY;
-      if (sx > 90 && sx < c.width - 90 && sy > 150 && sy < c.height - 200) {
+      player.x = cand.x; player.y = cand.y; cam.shake = 0;
+      await settle();
+      const v = c.worldView;
+      const sx = cand.x - v.x, sy = cand.y - v.y;
+      if (sx > 90 && sx < v.width - 90 && sy > 150 && sy < v.height - 200) {
         L = cand; at = [Math.round(sx), Math.round(sy)];
         break;
       }
     }
     if (!L) return { none: true };
+    // The hero is standing in the box now, and he breathes: out of the
+    // picture for the light measurements, which are about the lamps.
+    sc.hero.setVisible(false); sc.heroShadow.setVisible(false);
     for (let i = 0; i < 8; i++) await frame();
     // And check the camera did not move under us between choosing and settling.
-    const finalAt = [Math.round(L.x - c.scrollX), Math.round(L.y - c.scrollY)];
+    const finalAt = [Math.round(L.x - c.worldView.x), Math.round(L.y - c.worldView.y)];
     if (Math.abs(finalAt[0] - at[0]) > 2 || Math.abs(finalAt[1] - at[1]) > 2) {
       return { none: true, moved: [at, finalAt] };
     }

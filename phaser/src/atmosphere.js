@@ -94,6 +94,10 @@ export class Atmosphere {
       .setOrigin(0, 0).setScrollFactor(0).setDepth(8.74e5);
     this.gloom = scene.add.image(0, 0, 'gloomTex')
       .setOrigin(0, 0).setScrollFactor(0).setDepth(8.75e5).setVisible(false);
+    // Hurt: over everything else in the air, because it is the one layer here
+    // that is information rather than mood.
+    this.hurt = scene.add.image(0, 0, 'hurtTex')
+      .setOrigin(0, 0).setScrollFactor(0).setDepth(8.76e5).setVisible(false);
 
     const fit = () => {
       const w = scene.scale.displaySize.width, h = scene.scale.displaySize.height;
@@ -103,9 +107,11 @@ export class Atmosphere {
         this.bakeScreen(w, h);
         this.vig.setTexture('vignette');
         this.gloom.setTexture('gloomTex');
+        this.hurt.setTexture('hurtTex');
       }
       this.vig.setDisplaySize(w, h);
       this.gloom.setDisplaySize(w, h);
+      this.hurt.setDisplaySize(w, h);
     };
     fit();
     scene.scale.on('resize', fit);
@@ -187,7 +193,7 @@ export class Atmosphere {
    */
   bakeScreen(w, h) {
     const T = this.s.textures;
-    for (const k of ['vignette', 'gloomTex']) if (T.exists(k)) T.remove(k);
+    for (const k of ['vignette', 'gloomTex', 'hurtTex']) if (T.exists(k)) T.remove(k);
 
     const vc = T.createCanvas('vignette', w, h);
     const vg = vc.getContext();
@@ -215,9 +221,36 @@ export class Atmosphere {
     grd.addColorStop(1, 'rgba(2,1,0,.96)');
     gg.fillStyle = grd; gg.fillRect(0, 0, w, h);
     gc.refresh();
+
+    // Taking a blow: the edges of the glass go red, the canvas build's #flash.
+    const hc = T.createCanvas('hurtTex', w, h);
+    const hg = hc.getContext();
+    // An ELLIPSE fitted to the glass, as the CSS it replaces was (`ellipse at
+    // center`, out to the farthest corner): a circle on a tall screen leaves
+    // the side edges -- the nearest ones to the thumbs -- clear.
+    hg.save();
+    hg.translate(w / 2, h / 2);
+    hg.scale(1, h / w);
+    const far = (w / 2) * Math.SQRT2;
+    grd = hg.createRadialGradient(0, 0, 0, 0, 0, far);
+    grd.addColorStop(0, 'rgba(150,20,12,0)');
+    grd.addColorStop(0.4, 'rgba(150,20,12,0)');
+    grd.addColorStop(1, 'rgba(150,20,12,.6)');
+    hg.fillStyle = grd; hg.fillRect(-w / 2, -w / 2, w, w);
+    hg.restore();
+    hc.refresh();
+  }
+
+  /* Up to full on the blow and gone in a fifth of a second: the core sets
+   * player.hitFlash to 0.3 and runs it down in real time. */
+  hurtPass() {
+    const f = (typeof player !== 'undefined' && player) ? player.hitFlash || 0 : 0;
+    if (f <= 0) { if (this.hurt.visible) this.hurt.setVisible(false); return; }
+    this.hurt.setVisible(true).setAlpha(Math.min(1, f / 0.2));
   }
 
   hideAll() {
+    this.hurt.setVisible(false);
     this.fog.setVisible(false);
     this.moteGfx.clear().setVisible(false);
     this.vig.setVisible(false);
@@ -232,8 +265,11 @@ export class Atmosphere {
   draw(t, o) {
     if (!this.on) return;
     o = o || { x: 0, y: 0 };
-    for (const im of [this.fog, this.moteGfx, this.flash, this.vig, this.gloom])
+    for (const im of [this.fog, this.moteGfx, this.flash, this.vig, this.gloom, this.hurt])
       pinToScreen(im, o);
+    // Before the mood is shed, not after it: a blow landing is not decoration,
+    // and a phone that cannot afford the fog still has to be told it was hit.
+    this.hurtPass();
     if (this.want.lights) this.lightPass(t);
     // Everything below this line is mood, and mood is the first thing to go
     // when the frame is under pressure. lowFx is the core's own answer to

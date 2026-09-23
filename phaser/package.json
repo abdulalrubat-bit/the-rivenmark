@@ -27,6 +27,7 @@
     "smoke:pwa": "node tools/smoke-pwa.cjs",
     "smoke:dpr": "node tools/smoke-dpr.cjs",
     "smoke:kit": "node tools/smoke-kit.cjs",
+    "smoke:feel": "node tools/smoke-feel.cjs",
     "smoke:prof": "node tools/smoke-prof.cjs",
     "smoke:art": "node tools/smoke-art.cjs",
     "smoke:mass": "node tools/smoke-mass.cjs",

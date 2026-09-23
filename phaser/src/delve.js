@@ -106,7 +106,8 @@ const STANDING = { pillar: 26, barrel: 12, crate: 11, urn: 10, banner: 16,
           lowFx,
           WALK_STEP, WALK_PACE, update, startRun, resetRun, loadStash,
           hardcore, loadHardcoreMode, ENEMY_TYPES, settleUnfinishedDelve,
-          abandonDelve, stepDelve, pauseRun, resumeRun, openGear, closeGear */
+          abandonDelve, stepDelve, pauseRun, resumeRun, openGear, closeGear,
+          cam, updateCamera */
 
 /* A body drawn with another body's art, and how much bigger it is than the
  * thing it borrowed from. Derived from the two radii rather than typed in, so
@@ -279,7 +280,7 @@ export class Delve extends Phaser.Scene {
       .setDisplaySize(26, 14).setDepth(-400);
     this.lootImgs = [];
 
-    if (this.stepping) this.cameras.main.startFollow(this.hero, true, 0.18, 0.18);
+    // The camera is the core's (cam, stepped by updateCamera) -- see placeCamera.
 
     this.fx = new Effects(this);
     this.overlay = new Overlay(this);
@@ -385,7 +386,6 @@ export class Delve extends Phaser.Scene {
     this.paintStatics();
     this.hero.setPosition(player.x, player.y);
     this.culledAt = null;
-    this.cameras.main.startFollow(this.hero, true, 0.18, 0.18);
   }
 
   /* Everything drawn from a delve, unmade. Its own method because two things
@@ -856,6 +856,38 @@ export class Delve extends Phaser.Scene {
     return base + pose + '-' + (((p.gait / (run ? GAIT_STEP : WALK_STEP)) | 0) % n);
   }
 
+  /* A struck body flashes by ADDING light, the way the canvas build's hit
+   * flash did. It used to be setTint(0xffffff) -- and Phaser tints MULTIPLY by
+   * default, so white is no change at all: no struck body ever visibly
+   * flashed. Guarded like the scale and rotation, so a body neither struck nor
+   * tinted costs nothing. */
+  flashOrTint(sp, flash, tint) {
+    const mode = flash ? Phaser.TintModes.ADD : Phaser.TintModes.MULTIPLY;
+    if (sp.tintMode !== mode) sp.setTintMode(mode);
+    const want = flash ? 0x9a9a9a : tint;
+    if (sp.tintTopLeft !== want) sp.setTint(want);
+  }
+
+  /* THE CAMERA IS THE CORE'S, AND SO IS THE SHAKE.
+   *
+   * The core has always run a camera -- cam.x/cam.y, eased onto the hero by
+   * updateCamera inside update() -- and a shake, cam.shake, that every hit,
+   * ambush and heavy landing adds to and that decays in the same place. The
+   * port ignored both and gave Phaser a follow of its own, so the shipped game
+   * never shook at all: a blow that took half your life landed like a
+   * scratch. The camera now stands where the core's does, jittered by up to
+   * half the shake either way exactly as the canvas build drew it. While the
+   * delve is held or the bag is open the core is not stepped, so the camera is
+   * settled here the way the canvas build's frame loop did.
+   */
+  placeCamera(dt) {
+    if (state === 'pause' || state === 'gear') updateCamera(dt);
+    const sh = cam.shake || 0;
+    const jx = sh ? (Math.random() - 0.5) * sh : 0;
+    const jy = sh ? (Math.random() - 0.5) * sh : 0;
+    this.cameras.main.centerOn(cam.x + view.w / 2 + jx, cam.y + view.h / 2 + jy);
+  }
+
   /* The stick.
    *
    * The core already owns the whole state machine -- stickStart, stickMove,
@@ -1072,9 +1104,8 @@ export class Delve extends Phaser.Scene {
       // Struck bodies flash, calcifying ones sit under a shell of light, and a
       // body wearing borrowed art carries its own colour so it is not mistaken
       // for three of the thing it is drawn as.
-      s.setTint(e.hitFlash > 0 ? 0xffffff
-                : e.calcify > 0 ? 0x9fd8e8
-                : (LOOK_TINT[e.kind] || 0xffffff));
+      this.flashOrTint(s, e.hitFlash > 0, e.calcify > 0 ? 0x9fd8e8
+                                          : (LOOK_TINT[e.kind] || 0xffffff));
     }
 
     if (!this.stepping) return;
@@ -1082,12 +1113,14 @@ export class Delve extends Phaser.Scene {
     this.wearFrame(this.hero, hk);
     this.hero.setPosition(player.x, player.y).setFlipX(player.face < 0)
         .setDepth(player.y);
+    this.flashOrTint(this.hero, player.hitFlash > 0, 0xffffff);
     const hx = this.hero.scaleY *
         (player.pace < GAIT_STILL ? breathScale(player) : 1);
     if (this.hero.scaleX !== hx) this.hero.scaleX = hx;
     this.heroShadow.setPosition(player.x + LIGHT.x * LIGHT.body,
                                 player.y + LIGHT.y * LIGHT.body + 13 * 0.42);
 
+    this.placeCamera(dt);
     this.syncChests(time);
     this.syncLoot(time);
     this.cullDressing();
