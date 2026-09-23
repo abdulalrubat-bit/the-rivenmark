@@ -8,7 +8,7 @@
  * run under Termux. The game itself does; its tests do not, and that is the
  * one seam in this project between what the phone can do and what it cannot.
  */
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DIR = path.join(here, 'suites');
 
-const all = fs.readdirSync(DIR).filter(f => f.endsWith('.js'))
+const all = fs.readdirSync(DIR).filter(f => f.endsWith('.js') && !f.startsWith('_'))
               .map(f => f.replace(/\.js$/, '')).sort();
 const want = process.argv.slice(2).filter(a => !a.startsWith('-'));
 const run = want.length ? want : all;
@@ -55,6 +55,35 @@ try {
 const SUITE_ENV = { ...process.env,
   NODE_PATH: [path.join(here, '..', 'phaser', 'node_modules'), process.env.NODE_PATH]
     .filter(Boolean).join(path.delimiter) };
+
+/* WHAT THE SUITES RUN AGAINST: THE GAME'S OWN CORE.
+ *
+ * Every suite opens its page through PAGE(), which takes RIVENMARK_PAGE when
+ * it is set. Pointed here at phaser/public/core-test.html -- the rules with no
+ * renderer, served the way the game is -- so the ~1100 checks are about the
+ * core that ships, built fresh first so they cannot test a stale copy.
+ *
+ * --canvas runs them against the old single-file build instead, for as long
+ * as it exists, to compare the two while suites are being moved over. */
+const CANVAS = process.argv.includes('--canvas');
+const PHASER = path.join(here, '..', 'phaser');
+const PORT = process.env.SUITE_PORT || '8163';
+let server = null;
+if (!CANVAS) {
+  try {
+    execFileSync(process.execPath, [path.join(PHASER, 'tools', 'build.js')], { stdio: 'ignore' });
+  } catch (e) {
+    console.error('the Phaser build failed, so there is no core to test -- run\n' +
+                  '  (cd phaser && npm run build)\nto see why.');
+    process.exit(1);
+  }
+  server = spawn(process.execPath, [path.join(PHASER, 'tools', 'serve.js')],
+                 { env: { ...process.env, PORT }, stdio: 'ignore' });
+  process.on('exit', () => server.kill());
+  await new Promise(r => setTimeout(r, 700));
+  SUITE_ENV.RIVENMARK_BASE = 'http://localhost:' + PORT + '/';
+  SUITE_ENV.RIVENMARK_PAGE = SUITE_ENV.RIVENMARK_BASE + 'core-test.html';
+}
 
 let bad = 0, totalPass = 0, totalFail = 0;
 for (const s of run) {

@@ -13,8 +13,9 @@
  * change the shape of anything.
  */
 const { chromium } = require('playwright');
-const PAGE = f => process.env.RIVENMARK_PAGE ||
-  ('file://' + require('path').join(__dirname, '..', '..', f));
+// The forge page: it paints the sprites being looked at, and it loads the core,
+// which has deathPose.
+const pages = require('./_pages.js');
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''));
 (async()=>{
@@ -22,7 +23,7 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   const p=await (await b.newContext({viewport:{width:430,height:900}})).newPage();
   const errs=[]; p.on('pageerror',e=>errs.push(e.message));
   p.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
-  await p.goto(PAGE('index.html')); await sleep(800);
+  await p.goto(pages.forge()); await sleep(800);
 
   const R = await p.evaluate(() => {
     const lum = (r,g,b) => 0.2126*r + 0.7152*g + 0.0722*b;
@@ -103,8 +104,8 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
 
   /* And a killed body falls over rather than being deleted.
    *
-   * The two builds share deathPose, so this is the canvas side of the same
-   * check the Phaser suite makes: the fall is a rigid rotation pivoted onto
+   * deathPose is the core's, and the Phaser scene draws the fall from it; this
+   * is the arithmetic, smoke:delve is the drawing. The fall is a rigid rotation pivoted onto
    * the feet, and the compensation that puts the pivot there is the part
    * worth asserting -- a body turned about the middle of its sprite swings its
    * legs out from under it and looks thrown rather than felled.
