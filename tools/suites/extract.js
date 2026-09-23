@@ -11,16 +11,16 @@ const { chromium } = require('playwright');
 // source. verify-core uses it to run the SAME file against index.html and
 // against the extracted core; it used to rewrite the URL with a string
 // replace, which silently stopped matching the moment this line changed.
-const PAGE = f => process.env.RIVENMARK_PAGE ||
-  ('file://' + require('path').join(__dirname, '..', '..', f));
+const pages = require('./_pages.js');
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''));
-(async()=>{
+(async () => {
+  await pages.serve();
   const b=await chromium.launch();
   const p=await (await b.newContext({viewport:{width:430,height:900}})).newPage();
   const errs=[]; p.on('pageerror',e=>errs.push(e.message));
   p.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
-  await p.goto(PAGE('index.html')); await sleep(700);
+  await p.goto(pages.core()); await sleep(700);
 
   // A run standing in an open gate, quota met and boss down.
   const openGate = () => p.evaluate(()=>{
@@ -39,12 +39,25 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   ck('the run keeps going once the gate is open',
      await p.evaluate(()=>state)==='play');
 
-  await sleep(120);
+  /* The step-through control is the game's (delve.js raises #gateBtn), so it
+   * is asked of the game, with its own loop running: a delve with the quota
+   * met and the avatar down, the hero walked into the gate and then out. */
+  const gp = await (await b.newContext({viewport:{width:430,height:900}})).newPage();
+  gp.on('pageerror',e=>errs.push(e.message));
+  await gp.goto(pages.game('nogate&nogov'));
+  await gp.waitForFunction(()=>state==='play' && !!document.getElementById('gateBtn'),
+                           null, {timeout:30000});
+  await gp.evaluate(()=>{ run.tech=LEVEL.quota; run.bossCalled=true; run.bossDown=true;
+                          player.x=portal.x; player.y=portal.y; });
+  await gp.waitForFunction(()=>run.gateOpen, null, {timeout:20000}).catch(()=>{});
+  await sleep(300);
   ck('a step-through control appears in the open gate',
-     await p.evaluate(()=>!el.gateBtn.hidden));
+     await gp.evaluate(()=>!document.getElementById('gateBtn').hidden));
+  await gp.evaluate(()=>{ player.x=portal.x+900; });
+  await sleep(300);
   ck('and hides when you walk out of it',
-     await p.evaluate(()=>{ player.x=portal.x+900; updatePortal(1/60); syncHud();
-                            return el.gateBtn.hidden; }));
+     await gp.evaluate(()=>document.getElementById('gateBtn').hidden));
+  await gp.close();
 
   // ---- holding it runs in surges -----------------------------------------
   const hold = await p.evaluate(()=>{
@@ -109,7 +122,7 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
     let i=0;
     while(state==='play' && i<60*HOLD_WAVE*(HOLD_MAX+3)){ updatePortal(1/60); i++; }
     return { over: state==='over', ticks: run.holdTicks, secs: Math.round(i/60),
-             max: HOLD_MAX, banked: stash.coins>0, title: el.overTitle.textContent };
+             max: HOLD_MAX, banked: stash.coins>0, title: el.overTitle.innerHTML };
   });
   ck('the gate shuts after its last surge', cap.over && cap.ticks===cap.max,
      cap.ticks+' surges in '+cap.secs+'s');
@@ -194,7 +207,10 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   ck('reclaiming raises an ambush of champions', back.ambush>=3,
      back.ambush+' champions in the ring');
   ck('the ambush stands on ground, not in rock', back.reachable);
-  ck('and it forces the ley-gate open', back.forced && await p.evaluate(()=>portal.active));
+  // The gate's state is settled by updatePortal, which the running game calls
+  // every frame; here nothing steps the core but this suite.
+  ck('and it forces the ley-gate open',
+     back.forced && await p.evaluate(()=>{ updatePortal(1/60); return portal.active; }));
   ck('the corpse is claimed once taken', back.taken);
   // Not spent yet: the finds are only in the bag, and the bag is not saved.
   ck('but it stays owed until the run is settled', !back.cleared);
@@ -253,5 +269,5 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   ck('no console errors', errs.length===0, errs.slice(0,3).join(' | '));
   console.log('\nPASS '+pass.length+'\n  '+pass.join('\n  '));
   console.log('\nFAIL '+fail.length+(fail.length?'\n  '+fail.join('\n  '):''));
-  await b.close(); process.exit(fail.length?1:0);
+  await b.close(); pages.stop(); process.exit(fail.length?1:0);
 })();
