@@ -16,8 +16,9 @@ import { bossShown, bossBarDrop, minimapBox } from './overlay.js';
           ABILITY_BY_ID, CHARGE_MAX, TENSION_MAX, COMBO_LEN, CONDUIT_EDGE */
 
 /* Four roles, four colours, and the mapping lives beside the buttons because
- * it is a rendering decision -- the role itself is data on the ability, so the
- * canvas build reads the same word and is free to draw it differently. */
+ * it is a rendering decision -- the role itself is data on the ability, so
+ * anything else that draws it reads the same word and is free to draw it
+ * differently. */
 const ROLE_HUE = {
   strike: '#d9a441',   // sun-gold: it hurts something
   ward:   '#8fb9d6',   // arcane:   it keeps you standing

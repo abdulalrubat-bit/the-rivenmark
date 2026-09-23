@@ -7,25 +7,25 @@
  * than you can cut it down.
  *
  * WHAT THIS SUITE IS FOR. Every claim in that paragraph is a number somewhere
- * in index.html, and each one has a way of quietly stopping being true: the
+ * in the core, and each one has a way of quietly stopping being true: the
  * ring can end up a disc, the totems can plant out of range and mend nothing,
  * the anchor can come loose the next time knockback is retuned. So each is
  * measured, and each measurement that could pass on an empty room carries its
  * own control -- a fixture that finds nothing has to FAIL, not report zero.
  */
 const { chromium } = require('playwright');
-const PAGE = f => process.env.RIVENMARK_PAGE ||
-  ('file://' + require('path').join(__dirname, '..', '..', f));
+const pages = require('./_pages.js');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const pass = [], fail = [];
 const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note ? '  [' + note + ']' : ''));
 
 (async () => {
+  await pages.serve();
   const b = await chromium.launch();
   const p = await (await b.newContext({ viewport: { width: 390, height: 844 } })).newPage();
   const errs = []; p.on('pageerror', e => errs.push(e.message));
   p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
-  await p.goto(PAGE('index.html')); await sleep(900);
+  await p.goto(pages.core()); await sleep(900);
 
   const R = await p.evaluate(() => {
     const o = {};
@@ -355,7 +355,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   /* ---------------------------------------------------------------------- */
   ck('the fixture brought one up at all', R.spawned === true,
      R.spawned ? '' : 'NOTHING BELOW PROVES ANYTHING');
-  if (!R.spawned) { console.log('\nFAIL 1\n  x no Crucible-Mass spawned'); await b.close(); process.exit(1); }
+  if (!R.spawned) { console.log('\nFAIL 1\n  x no Crucible-Mass spawned'); await b.close(); pages.stop(); process.exit(1); }
 
   ck('it holds a real share of the ladder',
      R.rungs > 8 && R.rungs < R.total * 0.5,
@@ -589,5 +589,5 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   ck('no console errors', errs.length === 0, errs.slice(0, 3).join(' | '));
   console.log('\nPASS ' + pass.length + '\n  ' + pass.join('\n  '));
   console.log('\nFAIL ' + fail.length + (fail.length ? '\n  ' + fail.join('\n  ') : ''));
-  await b.close(); process.exit(fail.length ? 1 : 0);
+  await b.close(); pages.stop(); process.exit(fail.length ? 1 : 0);
 })();

@@ -168,11 +168,10 @@ export class FxGovernor {
 
 /* The layer profiler: where does a frame actually go?
  *
- * The canvas build has one of these too (tools/debug-overlay.js) and this is
- * deliberately the same method, the same statistics and the same report shape,
- * so a profile taken from each build on the SAME phone can be read side by
- * side. That comparison is the only thing that can say whether moving engines
- * bought anything.
+ * The canvas build had one of these too, and this was deliberately the same
+ * method, the same statistics and the same report shape, so a profile taken
+ * from each build on the SAME phone could be read side by side -- which is how
+ * the move to Phaser was shown to have bought something.
  *
  * Ablation, for the reason set out on FxGovernor: no clock in this process can
  * see rasterising. Under WebGL the driver takes the draw calls and returns, and

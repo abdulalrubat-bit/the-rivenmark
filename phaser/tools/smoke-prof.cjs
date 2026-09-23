@@ -87,7 +87,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
    * inside one phase is indistinguishable from that layer being expensive --
    * a profile is thirty samples per layer, so a single 500ms frame moves a
    * median that far. Sixty samples per phase halves the exposure, and the
-   * second run is the same precaution verify-core takes for the same reason:
+   * second run is the same precaution verify-core took for the same reason:
    * one sample cannot tell a flake from a finding.
    */
   const runProfile = async () => {

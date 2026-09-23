@@ -1,16 +1,6 @@
-/* Moved out of a scratch directory and into the repo.
- *
- * These suites were the entire safety net for a 14,000-line single file, and
- * they lived only in /tmp -- one container restart from gone, and certain to
- * go when the session that made them ended. The page they drive is found
- * relative to this file now instead of by an absolute path, so they run from
- * any clone, on a desktop or under Termux.
- */
+/* Run through tools/run-suites.js, or alone with node. Which page it drives --
+ * the core, the game or the forge -- is in ./_pages.js. */
 const { chromium } = require('playwright');
-// RIVENMARK_PAGE points the suite at a different page without touching its
-// source. verify-core uses it to run the SAME file against index.html and
-// against the extracted core; it used to rewrite the URL with a string
-// replace, which silently stopped matching the moment this line changed.
 const pages = require('./_pages.js');
 const OUT = '/tmp/claude-0/-home-user-abdulalrubat-bit-github-io/4bff2945-7328-5fd1-8354-f2ea6e41425c/scratchpad/';
 const sleep = ms => new Promise(r => setTimeout(r, ms));

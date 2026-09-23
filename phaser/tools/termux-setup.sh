@@ -52,6 +52,6 @@ booting to a black screen rather than like an error.
 Two things that do NOT work on the device, by design:
   - tools/export-art.js needs Chromium to re-forge the sprites. art/ is
     committed so you never need it on the phone; run it on a desktop after
-    changing a forge function in ../index.html.
+    changing a forge function in ../tools/forge/forge.js.
   - The Playwright suites are desktop-only for the same reason.
 DONE

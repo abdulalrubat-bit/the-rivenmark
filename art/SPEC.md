@@ -41,7 +41,7 @@ The two Vanguards. `-rest`, an 8-frame `-run-N` and an 8-frame `-walk-N` each.
 | `heroes/zayd-walk-N` | 8 | 144x144 | 72×72 |
 | `heroes/zayd-weapon` | 1 | 130x130 | 65×65 |
 
-### `bestiary/` — 83 frames
+### `bestiary/` — 84 frames
 
 Everything that fights you. `-rest` plus an 8-frame `-run-N` per kind.
 
@@ -51,6 +51,7 @@ Everything that fights you. `-rest` plus an 8-frame `-run-N` per kind.
 | `bestiary/breaker-run-N` | 8 | 155x155 | 78×78 |
 | `bestiary/cantor-rest` | 1 | 88x88 | 44×44 |
 | `bestiary/cantor-run-N` | 8 | 88x88 | 44×44 |
+| `bestiary/crucible-rest` | 1 | 303x303 | 152×152 |
 | `bestiary/deceiver-rest` | 1 | 192x192 | 96×96 |
 | `bestiary/eclipse-rest` | 1 | 75x75 | 38×38 |
 | `bestiary/eclipse-run-N` | 8 | 75x75 | 38×38 |
@@ -166,6 +167,7 @@ size in world units, which the silhouette should roughly fill.
 | `flayer` | 15 | 46 | 9 | stalk | `#c48a3a` | delve 30 |
 | `shaman` | 16 | 74 | 0 | chant | `#ff7a2c` | delve 88 |
 | `lieutenant` | 21 | 300 | 26 | press | `#c2352a` | delve — |
+| `crucible` | 45 | 820 | 30 | press | `#ff5a24` | delve — |
 
 ## Animation
 
@@ -179,4 +181,4 @@ per kind, for looking at rather than loading.
 
 ---
 
-244 frames total, from index.html.
+245 frames total, from tools/forge/forge.js.

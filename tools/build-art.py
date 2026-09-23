@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Cuts the pixel-art sheets in assets/ into the two strips index.html carries,
-grades them into the delve's palette, and patches index.html in place.
+"""Cuts the pixel-art sheets in assets/ into strips, grades them into the
+delve's palette, and embeds the coffer and scenery strips where they are read:
+the core (CHEST_SHEET) and the sprite forge (PROP_SHEET).
 
-The game ships as one self-contained index.html with no external files, so the
-art lives inside it as base64 data URIs rather than beside it. The sheets stay
-in assets/ so this is reproducible; only the strips are embedded.
+The strips live inside those files as base64 data URIs rather than beside them,
+so neither page has anything to fetch. The sheets stay in assets/ so this is
+reproducible; only the strips are embedded. After running it, run
+tools/export-art.js so art/ -- and so the atlas -- picks the change up.
 
     python3 tools/build-art.py
 
@@ -247,18 +249,20 @@ def main():
     print('prop strip   %dx%d, %s' % (scenery.size[0], scenery.size[1],
                                       ', '.join(PROP_ORDER)))
 
-    p = os.path.join(ROOT, 'index.html')
-    src = open(p, encoding='utf-8').read()
-    src = patch(src, r'(--icons:url\()(data:image/png;base64,[A-Za-z0-9+/=]+)(\))',
-                iu, 'icons')
-    src = patch(src, r"(const CHEST_SHEET = ')([^']*)(')", cu, 'chests')
-    # the strip width has to match the cell count or every icon is the wrong one
-    src = patch(src, r"(const PROP_SHEET = ')([^']*)(')", pu, 'props')
-    for key in ('plate', 'swords', 'rune', 'ring'):
-        src = patch(src, r'(--' + key + r':url\()([^)]*)(\))', uri(plates[key]), key)
-    src = patch(src, r'(calc\(var\(--sz,32px\) \* )(\d+)(\))', str(len(keys)), 'cell count')
-    open(p, 'w', encoding='utf-8').write(src)
-    print('index.html patched')
+    # Where each strip is read from now. The canvas build carried all of them
+    # in one file; the chest sheet is the core's (the forge reads it for the
+    # coffers) and the scenery sheet is the forge's own. The icon strip and
+    # the UI plates dressed that build's CSS menus, which are gone -- they are
+    # still cut above, for when the Phaser menus take item icons (see
+    # docs/ROADMAP.md), but nothing reads them yet.
+    for rel, pattern, value, what in (
+        ('phaser/src/core/core.js', r"(const CHEST_SHEET = ')([^']*)(')", cu, 'chests'),
+        ('tools/forge/forge.js',    r"(const PROP_SHEET = ')([^']*)(')",  pu, 'props')):
+        p = os.path.join(ROOT, rel)
+        src = open(p, encoding='utf-8').read()
+        src = patch(src, pattern, value, what)
+        open(p, 'w', encoding='utf-8').write(src)
+        print(rel + ' patched (' + what + ')')
 
 
 if __name__ == '__main__':

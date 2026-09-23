@@ -13,7 +13,7 @@
  * This file also owns minimapBox(), and the core calls it: the False Dawn
  * crystal is placed UNDER the map by reading the same box, and in the canvas
  * build the two drifted apart once and the crystal was drawn straight through
- * the map. One answer, one caller-visible function, both builds.
+ * the map. One answer, one caller-visible function.
  */
 
 /* global walls, enemies, player, run, view, portal, chests, WORLD, TAU, PAL,

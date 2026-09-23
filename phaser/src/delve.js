@@ -1,4 +1,4 @@
-/* The delve, drawn by Phaser off the extracted core's state.
+/* The delve, drawn by Phaser off the core's state.
  *
  * The core owns everything that decides what happens: the world, the bodies,
  * the fight. It is stepped once a frame and then read. Nothing here writes to

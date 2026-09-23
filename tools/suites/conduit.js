@@ -6,8 +6,8 @@
  * not weak. Nobody threw it.
  *
  * One control with three states, told apart by how it is touched, and all of
- * it in the core so both builds drive the same machine and this suite drives
- * it with no pointer at all.
+ * it in the core so the HUD drives the same machine this suite drives
+ * with no pointer at all.
  *
  * Every claim below is a number a future change can quietly break -- the bite
  * a tap is worth, the window a chain lives in, the aim overriding the target,
@@ -15,18 +15,18 @@
  * and the ones that could pass on an empty room carry their own control.
  */
 const { chromium } = require('playwright');
-const PAGE = f => process.env.RIVENMARK_PAGE ||
-  ('file://' + require('path').join(__dirname, '..', '..', f));
+const pages = require('./_pages.js');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const pass = [], fail = [];
 const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note ? '  [' + note + ']' : ''));
 
 (async () => {
+  await pages.serve();
   const b = await chromium.launch();
   const p = await (await b.newContext({ viewport: { width: 390, height: 844 } })).newPage();
   const errs = []; p.on('pageerror', e => errs.push(e.message));
   p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
-  await p.goto(PAGE('index.html')); await sleep(900);
+  await p.goto(pages.core()); await sleep(900);
 
   const R = await p.evaluate(() => {
     const o = {};
@@ -225,5 +225,5 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   ck('no console errors', errs.length === 0, errs.slice(0, 3).join(' | '));
   console.log('\nPASS ' + pass.length + '\n  ' + pass.join('\n  '));
   console.log('\nFAIL ' + fail.length + (fail.length ? '\n  ' + fail.join('\n  ') : ''));
-  await b.close(); process.exit(fail.length ? 1 : 0);
+  await b.close(); pages.stop(); process.exit(fail.length ? 1 : 0);
 })();

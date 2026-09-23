@@ -542,8 +542,8 @@ export class Effects {
    * Ranked rather than uniform, which is the whole point of the hierarchy in
    * FLOAT_STYLE: a scratch is small and dim, a heavy landing is large and
    * bright and rimmed in its own colour, a soaked one shrinks and greys. Read
-   * straight off the core's style table so the two builds cannot disagree
-   * about what a hit looks like.
+   * straight off the core's style table so nothing that draws a number can
+   * disagree about what a hit looks like.
    *
    * Pooled Text objects. There are never many -- the core caps and merges them
    * -- and a Text that is reused costs nothing to keep around.
