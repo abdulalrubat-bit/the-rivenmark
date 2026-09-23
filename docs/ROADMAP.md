@@ -97,9 +97,9 @@ Synthesised with Web Audio, no files. One small engine, one switch.
       `tools/forge/`)
 - [ ] Rung 52 as a milestone: a proper moment when you reach the bottom,
       without closing the ladder
-- [ ] **Before any rung past 52:** difficulty is `d = i / (LEVEL_COUNT - 1)`,
-      so adding a rung silently makes every existing rung easier. Pin the
-      curve to the rung number first.
+- [x] **Before any rung past 52:** difficulty was `d = i / (LEVEL_COUNT - 1)`,
+      so adding a rung silently made every existing rung easier. Pinned to the
+      rung (`CURVE_DEEP`); a 70-rung ladder leaves all 52 unchanged (`ladder`)
 
 ## Phase 5 — Balance
 

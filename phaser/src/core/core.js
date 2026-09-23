@@ -742,6 +742,19 @@ const REGIONS = [
    level you carry is measured against `power` here, and the delve tells you
    plainly whether you are under it. */
 const LEVEL_COUNT = 52;
+/* THE CURVE IS PINNED TO THE RUNG, not to how many rungs there are.
+ *
+ * Difficulty used to be `i / (LEVEL_COUNT - 1)` -- 0 at the mouth, 1 at the
+ * deepest rung there happened to be. So adding a fifty-third rung would have
+ * quietly made every existing rung easier: rung 30 would slide from 0.59 to
+ * 0.58, and every quota, power, health and bite built on it with it. The
+ * ladder is meant to grow past 52, so the curve is drawn once, to reach 1 at
+ * rung CURVE_DEEP, and rungs past it simply keep climbing past 1.
+ *
+ * Changing CURVE_DEEP re-tunes the whole ladder and should be a decision,
+ * not a side effect -- which is the point. */
+const CURVE_DEEP = 51;
+const rungDepth = i => i / CURVE_DEEP;
 const DELVE_NAMES = [
   'The Test Delve', 'Ashfall Shallows', 'The Weeping Stair', 'Tor-Varden Undercroft',
   'The Rending Cut', 'Kael-Dorm Approach', 'The Iron Teeth', 'Ghor Slagworks',
@@ -898,15 +911,23 @@ const RAMP = [
 // The roster once the ramp has finished teaching: everything.
 const FULL_HORDE = RAMP[RAMP.length - 1].horde.slice();
 
-function buildLevels() {
+// II, III, IV... for the second and later passes through the names, however
+// long the ladder grows.
+function roman(n) {
+  const R = [[10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']];
+  let s = '';
+  for (const [v, c] of R) while (n >= v) { s += c; n -= v; }
+  return s;
+}
+function buildLevels(count = LEVEL_COUNT) {
   const out = [];
   const regions = ['slag', 'vaelk', 'kraggen', 'weald', 'firth'];
-  for (let i = 0; i < LEVEL_COUNT; i++) {
-    const d = i / (LEVEL_COUNT - 1);                 // 0 at the mouth, 1 at the deep
+  for (let i = 0; i < count; i++) {
+    const d = rungDepth(i);                          // 0 at the mouth, 1 at rung 51
     const name = i < DELVE_NAMES.length
       ? DELVE_NAMES[i]
       : DELVE_NAMES[i % DELVE_NAMES.length] + ' \u00b7 ' +
-        ['II', 'III', 'IV'][Math.floor(i / DELVE_NAMES.length) - 1];
+        roman(Math.floor(i / DELVE_NAMES.length) + 1);
     // Region pool widens as you go down: the first delves are one place, the
     // deepest could be cut from anywhere in the realm.
     const pool = i === 0 ? regions.slice()
