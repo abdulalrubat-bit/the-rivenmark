@@ -11,17 +11,7 @@ const { chromium } = require('playwright');
 // source. verify-core uses it to run the SAME file against index.html and
 // against the extracted core; it used to rewrite the URL with a string
 // replace, which silently stopped matching the moment this line changed.
-const PAGE = f => process.env.RIVENMARK_PAGE ||
-  ('file://' + require('path').join(__dirname, '..', '..', f));
-// The gate-house is behind the splash now: the stations live on a tab bar and
-// the bar does not exist until you have entered. Idempotent, so it is safe to
-// call before every station click however the test got there.
-async function enterHub(pg){
-  const onSplash = await pg.$eval('#splash', e=>e.classList.contains('on')).catch(()=>false);
-  if (!onSplash) return;
-  await pg.click('#toGatehouse');
-  await new Promise(r=>setTimeout(r,220));
-}
+const pages = require('./_pages.js');
 
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const pass=[],fail=[];
@@ -29,12 +19,13 @@ const pass=[],fail=[];
  * summarises a sweep, so without it a red suite reports its count and none
  * of its reasons — which means re-running it alone to find out why. */
 const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''));
-(async()=>{
+(async () => {
+  await pages.serve();
   const b=await chromium.launch();
   const p=await (await b.newContext({viewport:{width:430,height:900}})).newPage();
   const errs=[]; p.on('pageerror',e=>errs.push(e.message));
   p.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
-  await p.goto(PAGE('index.html')); await sleep(600);
+  await p.goto(pages.core()); await sleep(600);
 
   // ---- synergy ------------------------------------------------------------
   const syn = await p.evaluate(()=>{
@@ -100,16 +91,20 @@ const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''
      'reach '+Math.round(vac.reach)+' units');
 
   // ---- the bag is read-only mid-delve ------------------------------------
-  await p.evaluate(()=>{ stash=blankStash(); saveStash();
-    resetRun('isaac'); state='play'; showScreen(null);
-    player.bag=[rollItem(0.9,'blade')]; syncBagBadge(); });
-  await p.click('#bagBtn'); await sleep(250);
-  await p.click('#bagGrid .cellbtn'); await sleep(150);
+  // Asked of the game: the HUD's bag button opens the bag that ships.
+  const g=await (await b.newContext({viewport:{width:430,height:900}})).newPage();
+  g.on('pageerror',e=>errs.push(e.message));
+  await g.goto(pages.game('nogate&nogov'));
+  await g.waitForFunction(()=>state==='play' && document.querySelector('#hud .hold .bag'),
+                          null, {timeout:30000});
+  await g.evaluate(()=>{ player.bag=[rollItem(0.9,'blade')]; });
+  await g.click('#hud .hold .bag'); await sleep(250);
   ck('the delve bag offers no equip button',
-     (await p.$$('#gearDetail #gaEquip')).length===0);
+     (await g.$$('#screens [data-on],#screens [data-drop]')).length===0);
   ck('and says where sorting happens',
-     /gate-house/i.test(await p.$eval('#gearDetail',e=>e.innerText)));
-  await p.click('#gearClose'); await sleep(200);
+     /gate-house/i.test(await g.$eval('#screens .card',e=>e.innerText)));
+  await g.click('#bagBack'); await sleep(200);
+  await g.close();
 
   // ---- loadouts -----------------------------------------------------------
   const lo = await p.evaluate(()=>{
@@ -150,25 +145,29 @@ const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''
   ck('swapping never loses what was worn', lo.noLoss);
   ck('presets are capped', lo.cap===4, lo.cap+' kept');
 
-  // ---- the strip in the hub ----------------------------------------------
-  await p.evaluate(()=>{ stash=blankStash();
-    for(const sl of SLOTS) stash.gear[sl.id]=rollItem(0.7, sl.id);
-    saveStash(); state='menu'; refreshKitLine(); showScreen('splash'); });
-  await sleep(150);
-  await enterHub(p); await p.click('#toKit'); await sleep(250);
-  ck('the hub offers to save a preset',
-     (await p.$$('#loadouts [data-save]')).length===1);
-  await p.click('#loadouts [data-save]'); await sleep(200);
-  ck('saving adds a preset button', (await p.$$('#loadouts [data-load]')).length===1);
-  await p.click('#loadouts [data-load]'); await sleep(200);
-  ck('applying reports what it did',
-     /equipped/.test(await p.$eval('#lnote',e=>e.innerText)),
-     await p.$eval('#lnote',e=>e.innerText));
-  await p.reload(); await sleep(600);
-  ck('presets persist', await p.evaluate(()=>stash.loadouts.length)===1);
+  // ---- presets in the Forge ----------------------------------------------
+  const h=await (await b.newContext({viewport:{width:430,height:900}})).newPage();
+  h.on('pageerror',e=>errs.push(e.message));
+  await h.goto(pages.game('norun'));
+  await h.waitForFunction(()=>typeof blankStash==='function', null, {timeout:30000});
+  await h.evaluate(()=>{ localStorage.clear(); stash=blankStash();
+    for(const sl of SLOTS) stash.gear[sl.id]=rollItem(0.7, sl.id); itemSeq=100; saveStash(); });
+  await h.goto(pages.game());
+  await h.waitForSelector('#screens.up #descend', {timeout:30000});
+  await h.click('#screens [data-tab="gear"]'); await sleep(250);
+  ck('the Forge offers to save a preset', (await h.$$('#saveKit')).length===1);
+  await h.click('#saveKit'); await sleep(200);
+  ck('saving adds a preset', (await h.$$('#screens [data-load]')).length===1);
+  await h.click('#screens [data-load]'); await sleep(200);
+  const said = await h.$eval('#screens .card',e=>e.innerText);
+  ck('applying reports what it did', /equipped/.test(said), (said.match(/[^\n]*equipped[^\n]*/)||[''])[0]);
+  await h.reload(); await sleep(600);
+  await h.waitForFunction(()=>typeof stash!=='undefined', null, {timeout:30000});
+  ck('presets persist', await h.evaluate(()=>stash.loadouts.length)===1);
+  await h.close();
 
   ck('no console errors', errs.length===0, errs.slice(0,3).join(' | '));
   console.log('\nPASS '+pass.length+'\n  '+pass.join('\n  '));
   console.log('\nFAIL '+fail.length+(fail.length?'\n  '+fail.join('\n  '):''));
-  await b.close(); process.exit(fail.length?1:0);
+  await b.close(); pages.stop(); process.exit(fail.length?1:0);
 })();

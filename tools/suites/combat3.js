@@ -11,74 +11,60 @@ const { chromium } = require('playwright');
 // source. verify-core uses it to run the SAME file against index.html and
 // against the extracted core; it used to rewrite the URL with a string
 // replace, which silently stopped matching the moment this line changed.
-const PAGE = f => process.env.RIVENMARK_PAGE ||
-  ('file://' + require('path').join(__dirname, '..', '..', f));
+const pages = require('./_pages.js');
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''));
-(async()=>{
+(async () => {
+  await pages.serve();
   const b=await chromium.launch();
   const errs=[];
 
-  // ---- the gear screen must be reachable at every phone size --------------
-  // Flex children default to shrinkable, so a screen taller than the viewport
-  // squeezed each row under its own content: the item card kept its 96px floor
-  // while 200px of text carried on past the border and put Equip underneath
-  // the Back button, outside the flow where scrolling could not reach it.
+  // ---- the Forge must be usable at every phone size -----------------------
+  // Measured on the canvas build's gear screen until it went: a card that did
+  // not hold its content put Equip under the Back button, out of reach. The
+  // same promise asked of the Forge that ships -- with a long, four-affix
+  // piece and a vault too long for one screen, every row fits the card, and
+  // scrolled to the bottom the last piece is on screen and nothing covers it.
   for (const [w,h] of [[430,932],[412,846],[390,780],[360,720],[320,568]]) {
-    const p=await (await b.newContext({viewport:{width:w,height:h}})).newPage();
-    p.on('pageerror',e=>errs.push(e.message));
-    await p.goto(PAGE('index.html')); await sleep(600);
-    const r=await p.evaluate(()=>{
-      stash=blankStash();
+    const g=await (await b.newContext({viewport:{width:w,height:h}})).newPage();
+    g.on('pageerror',e=>errs.push(e.message));
+    await g.goto(pages.game('norun'));
+    await g.waitForFunction(()=>typeof blankStash==='function', null, {timeout:30000});
+    await g.evaluate(()=>{ localStorage.clear(); stash=blankStash();
       stash.vault=[{uid:1,slot:'ring1',base:'Signet',rarity:'hallowed',
         affixes:[{id:'zaydReach',v:0.10},{id:'isaacWard',v:0.0395273706},
                  {id:'cadence',v:-0.04},{id:'damageP',v:0.16}],
         name:'Glaive-Cut Signet'}];
       for(let i=0;i<12;i++) stash.vault.push(rollItem(0.95,['ring1','offhand','mail','boots'][i%4]));
-      saveStash(); openGear('stash');
-      document.querySelectorAll('#bagGrid .cellbtn')[0].click();
-      const g=document.getElementById('gear');
-      const det=document.getElementById('gearDetail');
-      const acts=det.querySelector('.gear-acts');
-      const equip=acts?acts.querySelector('button'):null;
-      const close=document.getElementById('gearClose');
-      const dr=det.getBoundingClientRect();
-      const ar=acts?acts.getBoundingClientRect():null;
-      const cr=close.getBoundingClientRect();
-      // scroll all the way down, the way a player would, then ask whether the
-      // Equip button is actually on screen and actually on top
-      g.scrollTop = g.scrollHeight;
-      const ar2 = acts?acts.getBoundingClientRect():null;
-      let onTop=false;
-      if (ar2) {
-        const hit=document.elementFromPoint((ar2.left+ar2.right)/2, (ar2.top+ar2.bottom)/2);
-        onTop = !!(hit && equip && (hit===equip || equip.contains(hit) || hit.contains(equip)));
-      }
-      return { spills: det.scrollHeight > Math.round(dr.height)+1,
-               actsInsideCard: ar ? ar.bottom <= dr.bottom+1 : false,
-               // Not "above it" -- "not on top of it". The close control was a
-               // full-width slab under the card and is a corner boss at the
-               // top of the screen now, so an ordering test only ever
-               // measured where it happened to be that month.
-               clearsClose: ar ? (ar.right <= cr.left || ar.left >= cr.right ||
-                                  ar.bottom <= cr.top || ar.top >= cr.bottom) : false,
-               canScroll: g.scrollHeight > g.clientHeight - 1,
-               equipVisible: ar2 ? (ar2.top >= 0 && ar2.bottom <= innerHeight) : false,
-               equipOnTop: onTop };
+      itemSeq=100; saveStash(); });
+    await g.goto(pages.game());
+    await g.waitForSelector('#screens.up #descend', {timeout:30000});
+    await g.click('#screens [data-tab="gear"]'); await sleep(250);
+    const r=await g.evaluate(()=>{
+      const card=document.querySelector('#screens .card').getBoundingClientRect();
+      const rows=[...document.querySelectorAll('#screens [data-on]')];
+      const spills=rows.filter(b=>b.scrollWidth>b.clientWidth+1||
+                                   b.getBoundingClientRect().right>card.right+1).length;
+      const last=rows[rows.length-1];
+      last.scrollIntoView({block:'end'});
+      const lr=last.getBoundingClientRect();
+      const hit=document.elementFromPoint((lr.left+lr.right)/2,(lr.top+lr.bottom)/2);
+      return { n:rows.length, spills, fits: card.width<=innerWidth,
+               onScreen: lr.top>=0 && lr.bottom<=innerHeight+1,
+               onTop: !!hit && (hit===last || last.contains(hit)) };
     });
     const tag=w+'x'+h;
-    ck(tag+': the item card holds its own content', !r.spills);
-    ck(tag+': Equip stays inside the card', r.actsInsideCard);
-    ck(tag+': and does not collide with the close control', r.clearsClose);
-    ck(tag+': scrolled to the bottom, Equip is on screen', r.equipVisible);
-    ck(tag+': and nothing is covering it', r.equipOnTop);
-    await p.close();
+    ck(tag+': the Forge card fits the screen', r.fits);
+    ck(tag+': every piece fits its row', r.n===13 && r.spills===0, r.spills+' of '+r.n+' spill');
+    ck(tag+': scrolled to the bottom, the last piece is on screen', r.onScreen);
+    ck(tag+': and nothing is covering it', r.onTop);
+    await g.close();
   }
 
   const p=await (await b.newContext({viewport:{width:390,height:780},deviceScaleFactor:2})).newPage();
   p.on('pageerror',e=>errs.push(e.message));
   p.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
-  await p.goto(PAGE('index.html')); await sleep(700);
+  await p.goto(pages.core()); await sleep(700);
 
   // ---- affixes read as numbers a person would write ----------------------
   const af = await p.evaluate(()=>{
@@ -167,25 +153,35 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   ck('an ordinary one does not', soak.light);
 
   // ---- the boss frame ----------------------------------------------------
-  const bar = await p.evaluate(()=>{
-    stash=blankStash(); saveStash(); startRun('isaac', LEVELS[22].id, 'riven');
-    window.requestAnimationFrame=()=>0; run.banner=0;
-    const noBoss = bossBarDrop()===0;
+  // The canvas build drew the frame and fitted the title with the canvas's
+  // own text measure; the Phaser HUD's frame is DOM (#hud .boss) and the map
+  // is the overlay's. Asked of those.
+  const gb=await (await b.newContext({viewport:{width:390,height:780}})).newPage();
+  gb.on('pageerror',e=>errs.push(e.message));
+  await gb.goto(pages.game('nogate&nogov'));
+  await gb.waitForFunction(()=>state==='play' && document.querySelector('#hud .boss'),
+                           null, {timeout:30000});
+  const bar = await gb.evaluate(async ()=>{
+    const sc=__game.scene.getScene('delve');
+    sc.newRun('isaac', LEVELS[22].id, 'riven'); run.banner=0;
+    player.hp=player.maxHp=1e9;
+    const frame=()=>new Promise(r=>setTimeout(r,250));
+    await frame();
+    const boss=document.querySelector('#hud .boss');
+    const noBoss = boss.hidden;
     spawnBoss();
-    const bs=run.boss; bs.hp=bs.maxHp*0.55;
-    bs.x=player.x+80; bs.y=player.y;
-    const drops = bossBarDrop()>0;
-    // where the frame actually lands
-    const pad=12, x0=pad, w=view.w-x0-pad-view.safeR, y0=HUD_H+view.safeT+8;
-    const finite = [x0,w,y0].every(v=>isFinite(v)) && w>120;
-    const clearsHud = y0 >= HUD_H + view.safeT;
-    // the name is fitted, not clipped by the canvas edge
-    const t = bs.title || '';
-    const shown = fitText(t, w-90, 14, 'Georgia, serif', 10);
-    const fits = ctx.measureText(shown).width <= w-90;
-    const held = escortAlive();
-    return {noBoss, drops, finite, clearsHud, fits, shown, title:t, held,
-            w:Math.round(w), y0:Math.round(y0), hud:HUD_H+view.safeT};
+    const bs=run.boss; bs.hp=bs.maxHp*0.55; bs.x=player.x+80; bs.y=player.y;
+    await frame();
+    const br=boss.getBoundingClientRect();
+    const top=document.querySelector('#hud .top').getBoundingClientRect();
+    const name=boss.querySelector('.name');
+    const m=minimapBox();
+    return { noBoss, drops: !boss.hidden, w:Math.round(br.width),
+             finite: [br.left,br.width,br.top].every(isFinite) && br.width>120,
+             clearsHud: br.top >= top.bottom - 1, y0:Math.round(br.top), hud:Math.round(top.bottom),
+             fits: name.scrollWidth <= name.clientWidth + 1, shown: name.textContent,
+             held: escortAlive() && !boss.querySelector('.held').hidden,
+             mapTop: Math.round(m.y - m.over), barBottom: Math.round(br.bottom) };
   });
   ck('no boss, no frame and no gap', bar.noBoss);
   ck('a boss raises the frame', bar.drops);
@@ -193,15 +189,10 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   ck('it clears the HUD panel', bar.clearsHud, 'y '+bar.y0+' vs hud '+bar.hud);
   ck('a long title is fitted to the frame', bar.fits, bar.shown);
   ck('the escort is standing, so the bar reads held', bar.held);
-
   // The minimap must step out of the frame's way rather than sit under it.
-  const mm = await p.evaluate(()=>{
-    const S=Math.round(Math.min(132,Math.max(96,view.w*0.30)));
-    const y=HUD_H+14+view.safeT+bossBarDrop();
-    const barBottom=HUD_H+view.safeT+8+BOSS_BAR_H;
-    return {mapTop:y, barBottom, clear:y>=barBottom};
-  });
-  ck('and the minimap sits below it', mm.clear, 'map '+mm.mapTop+' vs bar '+mm.barBottom);
+  ck('and the minimap sits below it', bar.mapTop >= bar.barBottom,
+     'map '+bar.mapTop+' vs bar '+bar.barBottom);
+  await gb.close();
 
   // ---- strikes -----------------------------------------------------------
   const st = await p.evaluate(()=>{
@@ -250,8 +241,12 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   ck('the form changes nothing about the hit', st.sameHit,
      'damage, sweep, bow and band identical across all three');
 
-  // The weapon is its own sprite, and it knows how far its edge is.
-  const wp = await p.evaluate(()=>{
+  // The weapon is its own sprite, and it knows how far its edge is -- asked
+  // of the forge, which paints it.
+  const fp=await (await b.newContext({viewport:{width:390,height:780}})).newPage();
+  fp.on('pageerror',e=>errs.push(e.message));
+  await fp.goto(pages.forge()); await sleep(600);
+  const wp = await fp.evaluate(()=>{
     const out={};
     for(const h in HEROES){
       const s=SPR['w_'+h];
@@ -259,6 +254,7 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
     }
     return out;
   });
+  await fp.close();
   for(const h in wp) ck(h+' carries a forged weapon with a reach', wp[h]);
 
   // Swinging then recovering leaves the blade back at the guard.
@@ -276,5 +272,5 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   ck('no console errors', errs.length===0, errs.slice(0,3).join(' | '));
   console.log('\nPASS '+pass.length+'\n  '+pass.join('\n  '));
   console.log('\nFAIL '+fail.length+(fail.length?'\n  '+fail.join('\n  '):''));
-  await b.close(); process.exit(fail.length?1:0);
+  await b.close(); pages.stop(); process.exit(fail.length?1:0);
 })();

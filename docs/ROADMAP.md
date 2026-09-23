@@ -42,6 +42,15 @@ Synthesised with Web Audio, no files. One small engine, one switch.
 - [ ] Menus: taps, buying, forging
 - [ ] Ambience, then music — last, once the effects are right
 
+## Polish, found on the way
+
+- [ ] Item icons in the Forge and the bag (the canvas build had a pixel-icon
+      strip per base; the Phaser menus name pieces with glyphs only)
+- [ ] The display face (Cinzel, fonts/) is not used by the Phaser menus,
+      which fall back to Georgia
+- [ ] The gate arrow can sit over the minimap's corner
+- [ ] Gloom "closes in from the edges" has no Phaser check yet (newkinds.js)
+
 ## Phase 3 — Settings and learning to play
 
 - [ ] A settings screen: sound, music, vibration, effects quality

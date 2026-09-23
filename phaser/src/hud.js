@@ -12,7 +12,7 @@
 
 import { bossShown, bossBarDrop, minimapBox } from './overlay.js';
 
-/* global player, run, state, enemies, view, LEVEL, REGION, HUD_H, ABILITIES,
+/* global bagCap, player, run, state, enemies, view, LEVEL, REGION, HUD_H, ABILITIES,
           ABILITY_BY_ID, CHARGE_MAX, TENSION_MAX, COMBO_LEN, CONDUIT_EDGE */
 
 /* Four roles, four colours, and the mapping lives beside the buttons because
@@ -89,7 +89,7 @@ const CSS = `
    the bottom two are thumbs, and this is a button you must never press by
    accident in a fight -- so it goes in the one corner a hand does not visit.
    Understated on purpose. It is not a control you use, it is one you find. */
-#hud .hold{position:absolute;left:10px;top:40px;pointer-events:auto}
+#hud .hold{position:absolute;left:10px;top:40px;pointer-events:auto;display:flex;gap:8px}
 /* Deliberately NOT the kit's plate. This is a control you find, not one you
    use, and giving it the same bronze would put a sixth big gold disc on the
    screen competing with the five that matter. */
@@ -98,6 +98,15 @@ const CSS = `
      box-shadow:none}
 #hud .hold button:before{display:none}
 #hud .hold button:active{background:#2a2419;color:#e8dcc0}
+/* The bag, beside the pause and built the same way: a thing you look at
+   between fights, not a control you reach for in one. The count is the only
+   part that asks for attention, and only when the bag is full. */
+#hud .hold .bag{position:relative;font-size:14px}
+#hud .hold .bag i{position:absolute;right:-4px;bottom:-4px;min-width:15px;height:15px;
+     border-radius:8px;background:#1a1712;border:1px solid #4a3f30;color:#cebe9e;
+     font:9px/13px ui-monospace,monospace;font-style:normal;text-align:center;padding:0 2px;
+     box-sizing:border-box}
+#hud .hold .bag.full i{border-color:#e8c060;color:#e8c060}
 /* The kit sits bottom-right in two rows of three. Its own bottom edge, the
    swap beside it rather than above it, and the resource meter over it are all
    placed so nothing lands on anything else -- measured in the play test, not
@@ -105,6 +114,13 @@ const CSS = `
    kit and the diagnostics button on top of both. */
 #hud .kit{position:absolute;right:10px;bottom:124px;display:grid;gap:8px;
      grid-template-columns:repeat(3,56px);pointer-events:auto}
+/* A 360px phone is the narrowest common screen, and at 56px the kit's left key
+   crossed into the stick's half by fourteen pixels. 52 is still well over a
+   thumb, and the row clears the middle line. */
+@media (max-width:374px){
+  #hud .kit{grid-template-columns:repeat(3,52px);gap:6px}
+  #hud .kit button,#hud .swap button{width:52px;height:52px}
+}
 
 /* THE CONDUIT: where the attack lives.
  *
@@ -270,7 +286,12 @@ const CSS = `
 #hud button.ready:before{box-shadow:inset 0 1px 0 rgba(214,178,110,.4),
      0 0 0 1px rgba(0,0,0,.85)}
 #hud button:active:before{background:linear-gradient(rgba(64,74,90,.9),rgba(26,32,44,.96)),#2a2419}
-#hud .swap{position:absolute;right:204px;bottom:16px;pointer-events:auto}
+/* Above the kit, on the right edge -- not beside the Conduit, where it used to
+   be. There it sat in the left half of the glass, which belongs to the stick:
+   a left thumb coming down anywhere there starts the stick, and one that came
+   down on the swap called the other hero in mid-fight instead of moving.
+   Measured by kit.js, which holds every key to the right half. */
+#hud .swap{position:absolute;right:10px;bottom:190px;pointer-events:auto}
 /* The other hero is not an ability, so it does not take an ability's colour.
    Bone, which is what the rest of the frame is written in. */
 #hud .swap button{--role:#cebe9e}
@@ -400,7 +421,9 @@ export class Hud {
       '<div class="swap"><button type="button" title="swap">' +
         '<span class="mark">\u21c4</span><span class="tag">SWAP</span>' +
         '<span class="cd"></span></button></div>' +
-      '<div class="hold"><button type="button" title="hold" aria-label="hold">❙❙</button></div>' +
+      '<div class="hold"><button type="button" title="hold" aria-label="hold">❙❙</button>' +
+        '<button type="button" class="bag" title="bag" aria-label="bag">\u25a3<i>0</i></button>' +
+      '</div>' +
       '<div class="kit"></div>' +
       '<div class="conduit"><span class="ring"></span><span class="chg"></span>' +
         '<span class="knob"></span><span class="glyph">\u2726</span>' +
@@ -445,6 +468,11 @@ export class Hud {
     // free, and a pointerdown here would fire on a thumb that only brushed it.
     this.holdBtn = root.querySelector('.hold button');
     this.holdBtn.addEventListener('click', () => g.pauseRun());
+    // The core's own door: it stops the delve and raises the bag screen.
+    this.bagBtn = root.querySelector('.hold .bag');
+    this.bagCount = root.querySelector('.hold .bag i');
+    this.bagSig = '';
+    this.bagBtn.addEventListener('click', () => g.openGear('run'));
 
     this.hero = null;      // which kit is currently built
     this.sig = '';         // last rendered button state, to skip DOM churn
@@ -593,6 +621,13 @@ export class Hud {
     if (!inDelve) return;
     if (this.hero !== p.hero) this.buildKit(p.hero);
 
+    const cap = bagCap(), n = p.bag.length, bs = n + '/' + cap;
+    if (this.bagSig !== bs) {
+      this.bagSig = bs;
+      this.bagCount.textContent = n;
+      this.bagBtn.classList.toggle('full', n >= cap);
+    }
+
     this.syncConduit();
     /* Rounded before it is compared, so this writes to the DOM about twenty
      * times over a full meter rather than on every frame of a decay. The life
@@ -738,7 +773,34 @@ export class Hud {
     }
 
     this.syncBoss();
+    this.refitBoss();
     this.syncToast();
+  }
+
+  /* The title is fitted, not cut. The Deceiver's epithets are rules -- each
+   * names something he does that the player has to know -- and an ellipsis
+   * took the last of them off the end. Shrunk a pixel at a time from 13 to 10,
+   * as the canvas build fitted it, and only past that does the ellipsis get a
+   * say. Measured once per title, which changes once per boss. */
+  /* Re-fitted whenever anything sharing the line changes width: the title,
+   * the count's digits, the HELD tag and its pips. Fitting the title alone,
+   * before the rest of the line was filled in, fitted it to room it did not
+   * have. */
+  refitBoss() {
+    if (this.boss.hidden) return;
+    const sig = this.bossName.textContent + '|' + this.bossCount.textContent.length +
+                '|' + this.bossHeld.hidden + '|' + this.heldPips;
+    if (sig === this.bossFitSig) return;
+    this.bossFitSig = sig;
+    this.fitBossName();
+  }
+
+  fitBossName() {
+    const n = this.bossName;
+    for (let px = 13; px >= 10; px--) {
+      n.style.fontSize = px + 'px';
+      if (n.scrollWidth <= n.clientWidth + 1) return;
+    }
   }
 
   /* The boss bar. Whoever owns the frame -- an invader first, because he is

@@ -10,14 +10,17 @@
  * it survives the renderer.
  */
 
-/* global hcFellAway, player, run, stash, state, LEVELS, LEVEL, LEVEL_BY_ID, HEROES,
+/* global hcFellAway, DIFFICULTIES, player, run, stash, state, LEVELS, LEVEL, LEVEL_BY_ID, HEROES,
           startRun, endRun, stepThrough, blankStash, el, stashPower, resumeRun,
           REGION_BY_ID, REGION_RELIC, hardcore, setHardcore, honoured, delveStanding,
           recommendedLevel,
           todaysBounty, bountyDone,
           SLOTS, SLOT_BY_ID, RARITY, itemPower, affixText, saveStash,
           VENDOR, vendorCost, canAfford, vendorBuy, HALL, hallTier,
-          HALL_MAX, hallBuy, vaultCap */
+          HALL_MAX, hallBuy, vaultCap, loadoutCap, saveLoadout, applyLoadout,
+          deleteLoadout, discardFromVault, gearCtx, closeGear, compareLines,
+          bagCap, player, LOADOUT_MAX, stashCtx, sortBag, bagShown, isUpgrade,
+          BAG_SORTS, bagSort, bagFilter */
 
 const CSS = `
 /* The safe areas, same as the HUD -- see the note at the top of hud.js. The
@@ -42,7 +45,11 @@ const CSS = `
  * the face is clipped to the padding box and the band to the border box, so
  * the border IS the band and the radius follows both.
  */
-#screens .card{width:min(340px,92vw);border:3px solid transparent;border-radius:10px;
+/* The width is the CONTENT's: 16px of padding and a 3px border sit outside it,
+   38px in all. Written as 92vw, a 360px Android -- one of the commonest phones
+   there is -- got a 369px card and a page that scrolled sideways. The cap
+   leaves 6px either side at every size, and 390px and up are unchanged. */
+#screens .card{width:min(340px,calc(100vw - 50px));border:3px solid transparent;border-radius:10px;
   /* The face must be OPAQUE. Half-transparent, the band underneath shows
      straight through it -- the band is painted over the whole border box, and
      the face only clips WHERE it lands, not what is beneath -- so the top of
@@ -79,6 +86,27 @@ const CSS = `
   background-origin:border-box;background-clip:padding-box,border-box;
   box-shadow:inset 0 1px 0 rgba(214,178,110,.22)}
 #screens .row small{color:#8c8168;display:block}
+#screens .row .teach{display:block;color:#c9a86a;font-style:italic;font-size:11px;
+  margin-top:3px;line-height:1.35}
+/* A row with a second, smaller control beside it: discard on a vault piece,
+   let go on a preset. Kept apart from the row so the big target does the
+   common thing and the rare, permanent one needs its own deliberate tap. */
+#screens .pair{display:flex;gap:6px}
+#screens .pair>.row{flex:1;min-width:0}
+#screens .drop{flex:none;min-width:44px;min-height:44px;border-radius:6px;padding:0 6px;
+  background:#191510;border:1px solid #4a3f30;color:#8c8168;font:inherit}
+#screens .drop.armed{border-color:#c0392b;color:#ffb4a0;background:#2a1612}
+/* The vault's order and filter. Chips rather than a menu: one tap each, and
+   the one in force is the lit one. */
+#screens .chips{display:flex;flex-wrap:wrap;gap:5px;margin:0 0 8px}
+#screens .chip{min-height:40px;min-width:40px;padding:0 10px;border-radius:20px;
+  background:#191510;border:1px solid #4a3f30;color:#a89878;font:inherit;font-size:12px}
+#screens .chip.on{border-color:#d6b26e;color:#f0e2c2;background:#2a2015}
+#screens .upmark{color:#8fd08a;margin-left:4px}
+/* What a carried piece would change against what is worn, per stat. */
+#screens .cmp{display:block;margin-top:3px;font-size:11px}
+#screens .cmp .up{color:#8fd08a}
+#screens .cmp .down{color:#e08a7a}
 /* THE ONE BUTTON THAT DOES THE THING, ALWAYS WITHIN REACH.
  *
  * Measured on a 390x844 phone: the gate-house card is 1317px tall -- four
@@ -145,7 +173,7 @@ const CSS = `
 `;
 
 export class Screens {
-  /* onDescend(hero, levelId) starts a delve; onAbandon() throws the current
+  /* onDescend(hero, levelId, diffId) starts a delve; onAbandon() throws the current
    * one away and comes back up. Both belong to the scene rather than here:
    * beginning or ending a delve means destroying and rebuilding every sprite
    * in it, and a menu has no business knowing that. */
@@ -159,7 +187,9 @@ export class Screens {
     this.root = document.createElement('div');
     this.root.id = 'screens';
     document.body.appendChild(this.root);
-    this.pick = { hero: 'isaac', level: null };
+    // Difficulty is chosen per visit, as the canvas build did, and starts at
+    // Riven -- the game as it is meant to be played -- every session.
+    this.pick = { hero: 'isaac', level: null, diff: 'riven' };
     this.name = null;
   }
 
@@ -169,7 +199,13 @@ export class Screens {
     this.root.classList.add('up');
     if (name === 'paused') this.renderPaused();
     else if (name === 'over') this.renderOver();
-    else if (name === 'gear') this.renderForge();
+    // 'gear' is two screens. Mid-delve the core opens it on the bag you are
+    // carrying (openGear('run'), which also stops the delve); from the
+    // gate-house it is the Forge, on the vault.
+    else if (name === 'gear') {
+      if (state === 'gear' && gearCtx && gearCtx.live) this.renderBag();
+      else this.renderForge();
+    }
     else if (name === 'vendor') this.renderVendor();
     else if (name === 'hall') this.renderHall();
     else this.renderGatehouse();
@@ -266,6 +302,23 @@ export class Screens {
    * Only shown where there is a choice. On the first rungs the pool is one
    * region and a picker with one option in it is furniture.
    */
+  /* HOW HARD. Three difficulties were built into the rules -- a delve to learn
+   * on, the game as it is, and one where the Regalia surfaces -- and until now
+   * only the canvas build could choose between them: this build always played
+   * Riven. The multipliers are shown because they are the real trade, and the
+   * note says what they mean in a sentence. */
+  difficulty() {
+    return '<p class="sub">How hard the delve comes at you.</p>' +
+      '<div class="rows" id="diffRows">' +
+      DIFFICULTIES.map(D =>
+        '<button class="row' + (this.pick.diff === D.id ? ' on' : '') +
+        '" data-diff="' + D.id + '" type="button"><span>' + D.name +
+        '<small>' + D.note + '</small></span>' +
+        '<small class="verdict">threat \u00d7' + D.threat.toFixed(2) +
+        ' \u00b7 loot \u00d7' + D.lootRate.toFixed(2) + '</small></button>').join('') +
+      '</div>';
+  }
+
   ground() {
     const L = LEVEL_BY_ID[this.pick.level];
     if (!L || !L.regions || L.regions.length < 2) {
@@ -335,10 +388,12 @@ export class Screens {
     // clear it -- so it is the only place that answers "again" correctly.
     const hero = (run && run.hero) || this.pick.hero;
     const lvl = (run && run.level_id) || this.pick.level;
+    const diff = (run && run.diff_id) || this.pick.diff;
     this.root.querySelector('.go').addEventListener('click', () => {
       this.pick.hero = hero;
       if (lvl) this.pick.level = lvl;
-      this.onDescend(hero, lvl);
+      this.pick.diff = diff;
+      this.onDescend(hero, lvl, diff);
     });
     /* THROUGH THE SAME DOOR AS ABANDONING, NOT STRAIGHT TO THE CARD.
      *
@@ -359,6 +414,13 @@ export class Screens {
   /* Which delve, and who goes down. The ladder is long, so this shows the
    * rungs around the one you can actually handle rather than all fifty-two. */
   renderGatehouse() {
+    // The hero last taken down, not Isaac for everybody: the stash remembers
+    // who that was, and the canvas gate-house opened on them. Once only -- a
+    // pick made here stands until the next session.
+    if (!this.heroFromStash) {
+      this.heroFromStash = true;
+      if (stash && HEROES[stash.hero]) this.pick.hero = stash.hero;
+    }
     // stashPower(), not powerLevel(). powerLevel takes (gear, level) and
     // called bare returns NaN -- which then compares false against every rung
     // and quietly labelled the whole ladder "an even match".
@@ -421,10 +483,17 @@ export class Screens {
             ((v) =>
             '<button class="row' + (this.pick.level === l.id ? ' on' : '') +
             '" data-level="' + l.id + '" type="button"><span>' + l.name +
-            '<small>power ' + l.power + ' · ' + l.quota + ' slag</small></span>' +
+            '<small>power ' + l.power + ' · ' + l.quota + ' slag</small>' +
+            // The teaching ramp: each of the first rungs adds one kind and
+            // says what it is. The canvas ladder carried the line; this one
+            // had dropped it, so the lesson was only ever the banner on the
+            // way in -- after the choice it was meant to inform.
+            (l.lesson ? '<span class="teach">' + l.lesson + '</span>' : '') +
+            '</span>' +
             '<small class="verdict" style="color:' + v.colour + '">' + v.text +
             '</small></button>')(delveStanding(l, power))).join('') +
         '</div>' +
+        this.difficulty() +
         this.daily() +
         this.ground() +
         this.oneLife() +
@@ -435,6 +504,8 @@ export class Screens {
       b.addEventListener('click', () => { this.pick.hero = b.dataset.hero; this.renderGatehouse(); }));
     this.root.querySelectorAll('[data-level]').forEach(b =>
       b.addEventListener('click', () => { this.pick.level = b.dataset.level; this.renderGatehouse(); }));
+    this.root.querySelectorAll('[data-diff]').forEach(b =>
+      b.addEventListener('click', () => { this.pick.diff = b.dataset.diff; this.renderGatehouse(); }));
     const bt = this.root.querySelector('#bountyRow');
     if (bt) bt.addEventListener('click', () => {
       const b = todaysBounty();
@@ -467,7 +538,7 @@ export class Screens {
     this.wireTabs();
     this.root.querySelector('#descend').addEventListener('click', () => {
       this.root.classList.remove('up');
-      this.onDescend(this.pick.hero, this.pick.level);
+      this.onDescend(this.pick.hero, this.pick.level, this.pick.diff);
     });
   }
 
@@ -604,52 +675,214 @@ export class Screens {
    * across, and re-implementing that model here would be inventing a second
    * way for the same two arrays to change.
    */
-  renderForge() {
-    const card = (it, worn) => {
-      const r = RARITY.find(x => x.id === it.rarity) || RARITY[0];
-      const aff = it.affixes.map(a => affixText(a, stash.hero)).filter(Boolean).join(' · ');
-      return '<span class="item"><span><b style="color:' + r.colour + '">' + it.name +
-             '</b><span class="aff">' + (aff || '&mdash;') + '</span></span>' +
-             // The number is the piece's power; the word is what tapping does.
-             // "41 · off" read as a state rather than an action.
-             '<span class="pw">' + Math.round(itemPower(it)) +
-             '<span class="act">' + (worn ? 'take off' : 'wear') + '</span>' +
-             '</span></span>';
-    };
+  /* One piece, as a row's contents: its name in its rarity's colour, what it
+   * does, its power, and the word for what tapping does. */
+  itemCard(it, act, extra) {
+    const r = RARITY.find(x => x.id === it.rarity) || RARITY[0];
+    const aff = it.affixes.map(a => affixText(a, stash.hero)).filter(Boolean).join(' · ');
+    return '<span class="item"><span><b style="color:' + r.colour + '">' + it.name +
+           '</b><span class="aff">' + (aff || '&mdash;') + '</span>' + (extra || '') +
+           '</span>' +
+           // The number is the piece's power; the word is what tapping does.
+           // "41 · off" read as a state rather than an action.
+           '<span class="pw">' + Math.round(itemPower(it)) +
+           (act ? '<span class="act">' + act + '</span>' : '') +
+           '</span></span>';
+  }
 
+  renderForge() {
+    const cap = typeof vaultCap === 'function' ? vaultCap() : stash.vault.length;
+    // What each vault piece would change is read against the stash's kit, so
+    // the core's gear context is pointed there. The canvas build showed this
+    // when a piece was selected; here every row carries it, as the bag does.
+    gearCtx = stashCtx();
+    // In the order and under the filter chosen -- the core's own, bagSort and
+    // bagFilter, which the canvas bag used. Sorting reorders the vault itself,
+    // so every index below is a real position in it.
+    sortBag(gearCtx);
+    const shown = bagShown(gearCtx);
     this.root.innerHTML =
       '<div class="card">' +
         '<h1>The Forge</h1>' +
         this.tabs('gear') +
         '<div class="purse"><span>Power</span><b>' + stashPower() + '</b></div>' +
+        (this.note ? '<p class="sub">' + this.note + '</p>' : '') +
         '<p class="sub">Worn</p>' +
         '<div class="rows">' +
           SLOTS.map(sl => {
             const it = stash.gear[sl.id];
             return '<button class="row" type="button" data-off="' + sl.id + '"' +
               (it ? '' : ' disabled') + '>' +
-              (it ? card(it, true)
+              (it ? this.itemCard(it, 'take off')
                   : '<span class="item"><span>' + sl.mark + ' ' + sl.name +
                     '<span class="aff empty">nothing worn</span></span></span>') +
               '</button>';
           }).join('') +
         '</div>' +
-        '<p class="sub">The vault &mdash; ' + stash.vault.length + '</p>' +
-        '<div class="rows">' +
-          (stash.vault.length
-            ? stash.vault.map((it, i) =>
-                '<button class="row" type="button" data-on="' + i + '">' +
-                card(it, false) + '</button>').join('')
-            : '<div class="row"><span class="empty">Nothing here yet. ' +
-              'Champions and the avatar carry the Regalia.</span></div>') +
+        this.presets() +
+        '<p class="sub">The vault &mdash; ' + stash.vault.length + ' of ' + cap + '</p>' +
+        this.vaultBar() +
+        '<div class="rows" id="vaultRows">' +
+          (shown.length
+            ? shown.map(({ it, i }) =>
+                '<div class="pair"><button class="row' + (isUpgrade(it, stash.gear) ? ' up' : '') +
+                '" type="button" data-on="' + i + '" data-uid="' + it.uid + '">' +
+                this.itemCard(it, isUpgrade(it, stash.gear)
+                  ? 'wear<span class="upmark">\u25b2</span>' : 'wear',
+                  this.compareHtml(it)) + '</button>' +
+                '<button class="drop' + (this.dropArmed === i ? ' armed' : '') +
+                '" type="button" data-drop="' + i + '" aria-label="discard">' +
+                (this.dropArmed === i ? 'discard?' : '\u2715') + '</button></div>').join('')
+            : '<div class="row"><span class="empty">' + (stash.vault.length
+                ? 'Nothing in the vault matches that.'
+                : 'Nothing here yet. Champions and the avatar carry the Regalia.') +
+              '</span></div>') +
         '</div>' +
       '</div>';
 
+    // Any tap other than the second one on the same piece stands the discard
+    // down again, so an armed button never lingers to be hit by accident.
+    const done = () => { this.dropArmed = null; this.renderForge(); };
     this.wireTabs();
     this.root.querySelectorAll('[data-on]').forEach(b =>
-      b.addEventListener('click', () => { this.equip(+b.dataset.on); this.renderForge(); }));
+      b.addEventListener('click', () => { this.note = null; this.equip(+b.dataset.on); done(); }));
     this.root.querySelectorAll('[data-off]').forEach(b =>
-      b.addEventListener('click', () => { this.unequip(b.dataset.off); this.renderForge(); }));
+      b.addEventListener('click', () => { this.note = null; this.unequip(b.dataset.off); done(); }));
+    this.root.querySelectorAll('[data-drop]').forEach(b =>
+      b.addEventListener('click', () => {
+        const i = +b.dataset.drop;
+        if (this.dropArmed !== i) { this.dropArmed = i; this.renderForge(); return; }
+        const it = discardFromVault(i);
+        this.note = it ? it.name + ' is gone.' : null;
+        done();
+      }));
+    this.root.querySelectorAll('[data-load]').forEach(b =>
+      b.addEventListener('click', () => {
+        const L = stash.loadouts[+b.dataset.load];
+        const r = applyLoadout(L);
+        this.note = L.name + ': ' + r.set + ' equipped' +
+          (r.missing ? ', ' + r.missing + ' no longer in the vault' : '') + '.';
+        done();
+      }));
+    this.root.querySelectorAll('[data-unload]').forEach(b =>
+      b.addEventListener('click', () => {
+        const i = +b.dataset.unload;
+        if (this.unloadArmed !== i) { this.unloadArmed = i; this.renderForge(); return; }
+        const name = (stash.loadouts[i] || {}).name;
+        deleteLoadout(i);
+        this.unloadArmed = null;
+        this.note = name ? name + ' is let go. Nothing in it was touched.' : null;
+        done();
+      }));
+    this.root.querySelectorAll('[data-sort]').forEach(b =>
+      b.addEventListener('click', () => {
+        const at = BAG_SORTS.findIndex(x => x.id === bagSort);
+        bagSort = BAG_SORTS[(at + 1) % BAG_SORTS.length].id;
+        done();
+      }));
+    this.root.querySelectorAll('[data-filter]').forEach(b =>
+      b.addEventListener('click', () => {
+        const f = b.dataset.filter;
+        bagFilter = bagFilter === f && f !== 'all' ? 'all' : f;
+        done();
+      }));
+    const sv = this.root.querySelector('#saveKit');
+    if (sv) sv.addEventListener('click', () => {
+      const L = saveLoadout();
+      this.note = L.name + ' saved \u2014 the kit you are wearing, as it is now.';
+      done();
+    });
+  }
+
+  /* THE VAULT'S ORDER AND FILTER. It holds sixty pieces, and up to a hundred
+   * and twenty with the Hall's Vault built out; a list that long in the order
+   * things were found is a list nobody can use. One chip cycles the order
+   * (power, slot, rarity, newest), and the rest filter: everything, only what
+   * beats what is worn, or one slot -- a slot chip tapped again clears it. The
+   * two rings are one chip, as they are one kind of thing. */
+  vaultBar() {
+    const order = (BAG_SORTS.find(x => x.id === bagSort) || BAG_SORTS[0]).name;
+    const chip = (f, label) => '<button class="chip' + (bagFilter === f ? ' on' : '') +
+      '" type="button" data-filter="' + f + '">' + label + '</button>';
+    const seen = new Set();
+    const slots = SLOTS.filter(sl => {
+      const k = sl.id === 'ring2' ? 'ring1' : sl.id;
+      if (seen.has(k)) return false; seen.add(k); return true;
+    });
+    return '<div class="chips" id="vaultBar">' +
+      '<button class="chip on" type="button" data-sort="1">Order: ' + order + '</button>' +
+      chip('all', 'All') + chip('up', '\u25b2 Upgrades') +
+      slots.map(sl => chip(sl.id, sl.mark + ' ' + (sl.id === 'ring1' ? 'Rings' : sl.name)))
+        .join('') +
+      '</div>';
+  }
+
+  /* KIT PRESETS. A preset is a list of item ids, so wearing one takes each
+   * piece out of the vault if it is still there and says how many were not.
+   * Saved only while there is room -- the Hall's Vault is what buys more --
+   * and let go of with two taps, the same as a discard. */
+  presets() {
+    const cap = typeof loadoutCap === 'function' ? loadoutCap() : 0;
+    const Ls = stash.loadouts || [];
+    return '<p class="sub">Kit presets &mdash; ' + Ls.length + ' of ' + cap + '</p>' +
+      (Ls.length ? '<div class="rows">' + Ls.map((L, i) => {
+        const worn = SLOTS.filter(sl => L.slots[sl.id] != null).length;
+        return '<div class="pair"><button class="row" type="button" data-load="' + i + '">' +
+          '<span>' + L.name + '<small>' + worn + ' of ' + SLOTS.length + ' pieces \u00b7 ' +
+          ((HEROES[L.hero] || {}).name || '') + '</small></span>' +
+          '<span class="act">wear</span></button>' +
+          '<button class="drop' + (this.unloadArmed === i ? ' armed' : '') +
+          '" type="button" data-unload="' + i + '" aria-label="let go">' +
+          (this.unloadArmed === i ? 'let go?' : '\u2715') + '</button></div>';
+      }).join('') + '</div>' : '') +
+      (Ls.length < cap
+        ? '<button class="alt" type="button" id="saveKit">Save what you are wearing</button>'
+        : '<p class="sub">Every preset slot is taken. Let one go to save another' +
+          (cap < LOADOUT_MAX + HALL_MAX ? ', or build out the Vault in the Hall.' : '.') + '</p>');
+  }
+
+  /* THE BAG, mid-delve. Read-only, as it always was: what you have picked up
+   * and what each piece would change against what you are wearing. Swapping
+   * is for the gate-house -- a menu you can change your kit in is a pause
+   * button that also heals the fight. The delve is stopped while it is open
+   * (the core's openGear), and Back is the core's closeGear. */
+  /* What a piece would change against what is worn in its slot, per stat --
+   * the core's compareLines, which reads gearCtx for "what is worn". */
+  compareHtml(it) {
+    const c = typeof compareLines === 'function' ? compareLines(it) : [];
+    if (!c.length) return '<span class="cmp">no change against what you wear</span>';
+    return '<span class="cmp">' + c.map(x =>
+      '<span class="' + (x.good ? 'up' : 'down') + '">' + x.txt + ' ' + x.name +
+      '</span>').join(' \u00b7 ') + '</span>';
+  }
+
+  renderBag() {
+    const C = gearCtx;
+    const lines = it => this.compareHtml(it);
+    this.root.innerHTML =
+      '<div class="card">' +
+        '<h1>The Bag</h1>' +
+        '<p class="sub">Carried so far &mdash; ' + C.bag.length + ' of ' + C.cap +
+          '. It banks only if you walk out with it; sort it at the gate-house.</p>' +
+        '<div class="rows">' +
+          (C.bag.length
+            ? C.bag.map(it => '<div class="row">' + this.itemCard(it, null, lines(it)) +
+                              '</div>').join('')
+            : '<div class="row"><span class="empty">Nothing yet. Champions carry the ' +
+              'best of it.</span></div>') +
+        '</div>' +
+        '<p class="sub">Worn</p>' +
+        '<div class="rows">' +
+          SLOTS.map(sl => {
+            const it = C.gear[sl.id];
+            return '<div class="row">' + (it ? this.itemCard(it, null)
+              : '<span class="item"><span>' + sl.mark + ' ' + sl.name +
+                '<span class="aff empty">nothing worn</span></span></span>') + '</div>';
+          }).join('') +
+        '</div>' +
+        '<button class="go pinned" type="button" id="bagBack">Back to the delve</button>' +
+      '</div>';
+    this.root.querySelector('#bagBack').addEventListener('click', () => closeGear());
   }
 
   equip(index) {

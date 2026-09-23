@@ -242,11 +242,17 @@ const cardState = () => {
   const want = gate.rungs[2];
   await tap('#screens [data-level="' + want + '"]');
   await sleep(200);
+  // And a difficulty that is not the default either, for the same reason: this
+  // build played Riven whatever was asked for until it had a picker at all.
+  const diffs = await p.evaluate(() =>
+    [...document.querySelectorAll('#screens [data-diff]')].map(b => b.dataset.diff));
+  await tap('#screens [data-diff="sundered"]');
+  await sleep(200);
   await tap('#descend');
   await sleep(1400);
   const delve = await p.evaluate(() => {
     const sc = window.__game.scene.getScene('delve');
-    return { state, level: LEVEL.id, screensUp: document.getElementById('screens').classList.contains('up'),
+    return { state, level: LEVEL.id, diff: DIFF.id, screensUp: document.getElementById('screens').classList.contains('up'),
              bodies: sc.pool.length, walls: walls.length, hp: Math.round(player.hp),
              hud: !!document.querySelector('#hud .conduit'),
              hudUp: (h => !!h && h.getBoundingClientRect().height > 0)(document.getElementById('hud')),
@@ -256,6 +262,10 @@ const cardState = () => {
      delve.state === 'play' && delve.level === want && want !== gate.rungs[0],
      'asked for ' + want + ', got ' + delve.level +
      ' (default was ' + gate.rungs[0] + ')');
+  ck('the gate-house offers every difficulty', diffs.join(' ') === 'harrowed riven sundered',
+     diffs.join(' '));
+  ck('and the delve is the one chosen, not Riven by default', delve.diff === 'sundered',
+     'playing ' + delve.diff);
   ck('and the gate-house is out of the way', delve.screensUp === false);
   ck('and there is a delve under it',
      delve.walls > 10 && delve.bodies > 20 && delve.hp > 0,

@@ -11,17 +11,7 @@ const { chromium } = require('playwright');
 // source. verify-core uses it to run the SAME file against index.html and
 // against the extracted core; it used to rewrite the URL with a string
 // replace, which silently stopped matching the moment this line changed.
-const PAGE = f => process.env.RIVENMARK_PAGE ||
-  ('file://' + require('path').join(__dirname, '..', '..', f));
-// The gate-house is behind the splash now: the stations live on a tab bar and
-// the bar does not exist until you have entered. Idempotent, so it is safe to
-// call before every station click however the test got there.
-async function enterHub(pg){
-  const onSplash = await pg.$eval('#splash', e=>e.classList.contains('on')).catch(()=>false);
-  if (!onSplash) return;
-  await pg.click('#toGatehouse');
-  await new Promise(r=>setTimeout(r,220));
-}
+const pages = require('./_pages.js');
 
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const pass=[],fail=[];
@@ -29,12 +19,13 @@ const pass=[],fail=[];
  * summarises a sweep, so without it a red suite reports its count and none
  * of its reasons — which means re-running it alone to find out why. */
 const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''));
-(async()=>{
+(async () => {
+  await pages.serve();
   const b=await chromium.launch();
   const p=await (await b.newContext({viewport:{width:430,height:900}})).newPage();
   const errs=[]; p.on('pageerror',e=>errs.push(e.message));
   p.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
-  await p.goto(PAGE('index.html')); await sleep(600);
+  await p.goto(pages.core()); await sleep(600);
 
   // ---- the ladder ---------------------------------------------------------
   const lad = await p.evaluate(()=>({
@@ -102,29 +93,40 @@ const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''
      'L1 kitted '+pw.lowLevelKitted+' vs L30 kitted '+pw.kitted);
 
   // ---- the ladder UI ------------------------------------------------------
-  // The stat probes above ended runs, which leaves the game on the death
-  // screen; the gate-house has to be showing before its buttons can be used.
-  await p.evaluate(()=>{ stash = blankStash(); saveStash();
-                         state='menu'; refreshKitLine(); showScreen('splash'); });
-  await sleep(150);
-  await enterHub(p); await p.click('#toDelve'); await sleep(300);
-  ck('every rung renders', (await p.$$('#levelPick .card')).length>=50);
-  ck('a rung is preselected', (await p.$$('#levelPick .card.sel')).length===1);
-  ck('standing is shown', (await p.$$('#levelPick .standing')).length>=50);
-  const opened = await p.evaluate(()=>document.querySelector('#levelPick .card.sel').dataset.level);
-  ck('opens on the deepest delve you match', opened==='test',
-     'at power '+await p.evaluate(()=>stashPower())+' it opened on '+opened);
+  /* Asked of the gate-house that ships. It shows a window of eight rungs
+   * around the one it opens on rather than all fifty-two (see renderGatehouse),
+   * so "every rung renders" is "a full window renders" here. Each case is a
+   * fresh load, because the rung it opens on is chosen when the gate-house is
+   * first raised -- which is when a returning player's power is read. */
+  const gate = async stashFor => {
+    const g = await (await b.newContext({viewport:{width:390,height:844}})).newPage();
+    g.on('pageerror',e=>errs.push(e.message));
+    await g.goto(pages.game('norun'));
+    await g.waitForFunction(()=>typeof blankStash==='function', null, {timeout:30000});
+    await g.evaluate(stashFor);
+    await g.goto(pages.game());
+    await g.waitForSelector('#screens.up #descend', {timeout:30000});
+    const r = await g.evaluate(()=>({
+      rows: document.querySelectorAll('#screens [data-level]').length,
+      on: [...document.querySelectorAll('#screens [data-level].on')].map(b=>b.dataset.level),
+      verdicts: document.querySelectorAll('#screens [data-level] .verdict').length,
+      pw: stashPower() }));
+    await g.close();
+    return r;
+  };
+  const fresh = await gate(()=>{ localStorage.clear(); stash=blankStash(); saveStash(); });
+  ck('a full window of rungs renders', fresh.rows>=8, fresh.rows+' rungs');
+  ck('a rung is preselected', fresh.on.length===1);
+  ck('standing is shown', fresh.verdicts===fresh.rows, fresh.verdicts+' of '+fresh.rows);
+  ck('opens on the deepest delve you match', fresh.on[0]==='test',
+     'at power '+fresh.pw+' it opened on '+fresh.on[0]);
 
   // with real power, it should open deeper
-  await p.evaluate(()=>{ stash.xp = xpForLevel(40); stash.level = 40;
+  const deep = await gate(()=>{ localStorage.clear(); stash=blankStash();
+    stash.xp = xpForLevel(40); stash.level = 40;
     for (const sl of SLOTS) stash.gear[sl.id] = rollSetPiece(sl.id); saveStash(); });
-  await p.click('#delveBack'); await sleep(150);
-  await enterHub(p); await p.click('#toDelve'); await sleep(300);
-  const deep = await p.evaluate(()=>({
-    sel: document.querySelector('#levelPick .card.sel').dataset.level,
-    pw: stashPower() }));
-  ck('a strong hero opens deeper down the ladder', deep.sel!=='test',
-     'power '+deep.pw+' opened on '+deep.sel);
+  ck('a strong hero opens deeper down the ladder', deep.on[0]!=='test',
+     'power '+deep.pw+' opened on '+deep.on[0]);
 
   /* ---- the front door speaks the hero's own units --------------------------
    *
@@ -216,5 +218,5 @@ const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''
   ck('no console errors', errs.length===0, errs.slice(0,3).join(' | '));
   console.log('\nPASS '+pass.length+'\n  '+pass.join('\n  '));
   console.log('\nFAIL '+fail.length+(fail.length?'\n  '+fail.join('\n  '):''));
-  await b.close(); process.exit(fail.length?1:0);
+  await b.close(); pages.stop(); process.exit(fail.length?1:0);
 })();

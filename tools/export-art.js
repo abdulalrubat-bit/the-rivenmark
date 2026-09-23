@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* Exports every forged sprite in index.html to art/ as PNGs.
+/* Exports every forged sprite to art/ as PNGs, from the forge in tools/forge/.
 
    Everything the game draws for a body, a hero, a coffer or a prop is drawn in
    code at load time -- there are no image files behind any of it. That is good
@@ -7,9 +7,9 @@
    it to someone, or use a frame somewhere else. This walks the finished sprite
    atlas and writes it out.
 
-   art/ is generated, never hand-edited: the sprites are in index.html and this
-   is the only thing that should ever put a file in that folder. Same rule as
-   debug.html.
+   art/ is generated, never hand-edited: the sprites are painted in
+   tools/forge/forge.js and this is the only thing that should ever put a file
+   in that folder. Hand-drawn replacements go in art-custom/ instead.
 
    NOTE ON PROVENANCE. This exports SPR only, which is entirely code-drawn.
    The sheet-backed art -- the gear icons, the coffer frames, the scenery cut
@@ -26,7 +26,12 @@ const fs = require('fs'), path = require('path');
 const { chromium } = require('playwright');
 
 const root = path.join(__dirname, '..');
-const out  = path.join(root, 'art');
+// Where the sprites are drawn. ART_PAGE overrides it, so two forges can be
+// exported side by side and compared.
+const FORGE_PAGE = process.env.ART_PAGE ||
+  'file://' + path.join(root, 'tools', 'forge', 'forge.html');
+// ART_OUT writes somewhere other than art/, for the same comparison.
+const out  = process.env.ART_OUT || path.join(root, 'art');
 
 // SPR key -> where it lands and what it is called. Anything unmatched is
 // reported rather than silently dropped: a sprite that stops being exported
@@ -66,7 +71,24 @@ function place(key, roster) {
   })).newPage();
   const errs = [];
   page.on('pageerror', e => errs.push(e.message));
-  await page.goto('file://' + path.join(root, 'index.html'));
+  /* SEEDED, SO THE SAME CODE WRITES THE SAME FILES. The stone, the rubble and
+   * the pillars are textured with Math.random, so two exports of unchanged
+   * code used to differ byte for byte: every export churned twenty-eight
+   * binaries through git, and nothing could prove a change to the forge had
+   * changed nothing. Math.random is a fixed sequence here, so art/ moves only
+   * when the paint does. ART_SEED picks a different sequence. */
+  {
+    await page.addInitScript(seed => {
+      let a = seed >>> 0;
+      Math.random = () => {                       // mulberry32
+        a |= 0; a = a + 0x6D2B79F5 | 0;
+        let t = Math.imul(a ^ a >>> 15, 1 | a);
+        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      };
+    }, +(process.env.ART_SEED || 1));
+  }
+  await page.goto(FORGE_PAGE);
   await new Promise(r => setTimeout(r, 1200));
 
   const art = await page.evaluate(() => {
@@ -124,7 +146,7 @@ function place(key, roster) {
 
     // What the atlas is, as data rather than as a claim.
     const manifest = {
-      generated_from: 'index.html',
+      generated_from: 'tools/forge/forge.js',
       supersample: SS,
       gait_poses: GAIT_N,
       heroes: Object.keys(HEROES),
@@ -187,7 +209,7 @@ function place(key, roster) {
 
   const bytes = d => fs.readdirSync(path.join(out, d))
     .reduce((n, f) => n + fs.statSync(path.join(out, d, f)).size, 0);
-  console.log('art/ written from index.html at ' + art.manifest.supersample + 'x');
+  console.log('art/ written from tools/forge at ' + art.manifest.supersample + 'x');
   for (const d of Object.keys(tally).sort())
     console.log('  ' + d.padEnd(9) + String(tally[d]).padStart(4) + ' files  ' +
                 (bytes(d) / 1024).toFixed(0) + 'kB');

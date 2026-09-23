@@ -11,19 +11,24 @@ const { chromium } = require('playwright');
 // source. verify-core uses it to run the SAME file against index.html and
 // against the extracted core; it used to rewrite the URL with a string
 // replace, which silently stopped matching the moment this line changed.
-const PAGE = f => process.env.RIVENMARK_PAGE ||
-  ('file://' + require('path').join(__dirname, '..', '..', f));
+const pages = require('./_pages.js');
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''));
 (async()=>{
+  await pages.serve();
   const b=await chromium.launch();
-  const p=await (await b.newContext({viewport:{width:430,height:900}})).newPage();
-  const errs=[]; p.on('pageerror',e=>errs.push(e.message));
-  p.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
-  await p.goto(PAGE('index.html')); await sleep(800);
+  const errs=[];
+  const open = async url => {
+    const p=await (await b.newContext({viewport:{width:430,height:900}})).newPage();
+    p.on('pageerror',e=>errs.push(e.message));
+    p.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
+    await p.goto(url); await sleep(800);
+    return p;
+  };
 
-  // Every pose named by the frame pickers must actually exist in the atlas.
-  const atlas = await p.evaluate(()=>{
+  /* ---- THE FORGE: every pose exists, and they are all different --------- */
+  const f = await open(pages.forge());
+  const atlas = await f.evaluate(()=>{
     const miss=[];
     for (const hid in HEROES){
       if(!SPR['h_'+hid]) miss.push('h_'+hid);
@@ -57,7 +62,7 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
 
   // Poses must be distinct. Six samples of a sine repeat in pairs, which is
   // how the first cycle came out as four poses shown twice.
-  const distinct = await p.evaluate(()=>{
+  const distinct = await f.evaluate(()=>{
     const sig=s=>{const c=newCanvas(s.width,s.height);const g=c.getContext('2d');
       g.drawImage(s,0,0);const d=g.getImageData(0,0,s.width,s.height).data;
       let h=0; for(let i=3;i<d.length;i+=4) h=(h*31+d[i])|0; return h;};
@@ -72,14 +77,21 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   for (const k in distinct)
     ck(k+': all '+atlas.n+' poses differ', distinct[k]===atlas.n, distinct[k]+' distinct');
 
+  /* ---- THE GAME: which of those poses a body actually wears --------------
+   * Asked of the Phaser scene's own heroFrame and bodyFrame, which pick atlas
+   * frames off the gait the core computes -- the pickers that ship. The game
+   * loop is put to sleep so nothing steps the core but this suite. */
+  const p = await open(pages.game('nogate&nogov'));
+  await p.waitForFunction(()=>window.__game && __game.scene.getScene('delve') &&
+                          __game.scene.getScene('delve').hud, null, {timeout:30000});
+  await p.evaluate(()=>{ __game.loop.sleep(); window.__sc = __game.scene.getScene('delve'); });
+
   // Walking must actually play, and it must play off ground covered.
   const walk = await p.evaluate(()=>{
     stash=blankStash(); saveStash(); startRun('isaac', LEVELS[6].id, 'riven');
-    window.requestAnimationFrame=()=>0;
     let open=null;
     for(const c of openCells){ if(!pointInWalls(c.x,c.y,60)){open=c;break;} }
     player.x=open.x; player.y=open.y; player.gait=0; player.pace=0;
-    const rev=new Map(); for(const k in SPR) if(!rev.has(SPR[k])) rev.set(SPR[k],k);
     const seen=new Set();
     // full push: a run. He accelerates from a stand, so the first strides are
     // legitimately a walk -- only what he settles into is asserted on.
@@ -91,10 +103,10 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
       const bx=player.x, by=player.y;
       updatePlayer(1/60);
       if (Math.hypot(player.x-bx, player.y-by) < 0.4) { stick.dx = -stick.dx; }
-      if (i>60) seen.add(rev.get(heroFrame(player)));
+      if (i>60) seen.add(__sc.heroFrame(player, 0));
     }
-    const ranFrames=[...seen].filter(k=>k.indexOf('h_isaacr')===0).length;
-    const walkedFrames=[...seen].filter(k=>k.indexOf('h_isaacw')===0).length;
+    const ranFrames=[...seen].filter(k=>/^heroes\/isaac-run-\d+$/.test(k)).length;
+    const walkedFrames=[...seen].filter(k=>/^heroes\/isaac-walk-\d+$/.test(k)).length;
     return {ranFrames, walkedFrames, pace:+player.pace.toFixed(2)};
   });
   ck('a full push plays the run cycle', walk.ranFrames===atlas.n,
@@ -107,15 +119,14 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
     for(const c of openCells){ if(!pointInWalls(c.x,c.y,60)){open=c;break;} }
     player.x=open.x; player.y=open.y; player.gait=0; player.pace=0;
     stick.active=true; stick.dx=1; stick.dy=0; stick.mag=0.35;
-    const rev=new Map(); for(const k in SPR) if(!rev.has(SPR[k])) rev.set(SPR[k],k);
     const seen=new Set();
     for(let i=0;i<500;i++){
       const bx=player.x, by=player.y;
       updatePlayer(1/60);
       if (Math.hypot(player.x-bx, player.y-by) < 0.2) { stick.dx = -stick.dx; }
-      if (i>60) seen.add(rev.get(heroFrame(player))); }
-    return {w:[...seen].filter(k=>k.indexOf('h_isaacw')===0).length,
-            r:[...seen].filter(k=>k.indexOf('h_isaacr')===0).length,
+      if (i>60) seen.add(__sc.heroFrame(player, 0)); }
+    return {w:[...seen].filter(k=>/^heroes\/isaac-walk-\d+$/.test(k)).length,
+            r:[...seen].filter(k=>/^heroes\/isaac-run-\d+$/.test(k)).length,
             pace:+player.pace.toFixed(2)};
   });
   ck('easing the stick over plays the walk cycle', amble.w===atlas.n,
@@ -126,12 +137,13 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   const still = await p.evaluate(()=>{
     stick.active=false; stick.mag=0;
     for(let i=0;i<90;i++) updatePlayer(1/60);
-    const standing = heroFrame(player)===SPR['h_'+player.hero];
+    const pose = __sc.heroFrame(player, 0);
+    const standing = /^heroes\/isaac-(rest|idle-\d+)$/.test(pose);
     // now shove him into a wall at full push and hold there
     let w=null;
     for(let i=4;i<walls.length;i++){ const q=walls[i];
       if(q.w>=120&&q.h>=120&&q.x>60&&!pointInWalls(q.x-player.r-2,q.y+q.h/2,player.r)){w=q;break;} }
-    if(!w) return {standing, jammed:null};
+    if(!w) return {standing, pose, jammed:null};
     player.x=w.x-player.r-1; player.y=w.y+w.h/2;
     player.gait=0; player.pace=0;
     stick.active=true; stick.dx=1; stick.dy=0; stick.mag=1;
@@ -139,9 +151,9 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
     const g0=player.gait;
     for(let i=0;i<120;i++) updatePlayer(1/60);
     stick.active=false; stick.mag=0;
-    return {standing, jammed:+(player.gait-g0).toFixed(1)};
+    return {standing, pose, jammed:+(player.gait-g0).toFixed(1)};
   });
-  ck('standing still wears the standing pose', still.standing);
+  ck('standing still wears the standing pose', still.standing, still.pose);
   ck('and a body held against rock does not stride on the spot',
      still.jammed !== null && still.jammed < 4, still.jammed+' units of stride');
 
@@ -162,7 +174,8 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
     player.x=far.x; player.y=far.y;
     for(let i=0;i<60;i++) updateEnemies(1/60);
     const stillAsleep = !e.awake;
-    const dormant = stillAsleep && bodyFrame(e)===SPR.thrall;
+    const dpose = __sc.bodyFrame(e, 0);
+    const dormant = stillAsleep && /^bestiary\/thrall-(rest|idle-\d+)$/.test(dpose);
     // Keep it chasing: whenever it closes, the player is moved to another
     // cell that has actually been checked for clearance. Shoving the player a
     // fixed distance sideways parks them in rock, the body jams on the wall,
@@ -176,7 +189,6 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
       return null;
     };
     e.awake=true;
-    const rev=new Map(); for(const k in SPR) if(!rev.has(SPR[k])) rev.set(SPR[k],k);
     const seen=new Set();
     const want=GAIT_STEP*GAIT_N*2.5;
     const g0=e.gait;
@@ -187,30 +199,24 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
         player.x=q.x; player.y=q.y; moves++;
       }
       updateEnemies(1/60);
-      seen.add(rev.get(bodyFrame(e)));
+      seen.add(__sc.bodyFrame(e, 0));
     }
-    return {dormant, stillAsleep, farBy:Math.round(fd), travelled:Math.round(e.gait-g0), want:Math.round(want), moves,
-            frames:[...seen].filter(k=>k&&k.indexOf('thrallr')===0).length};
+    return {dormant, dpose, stillAsleep, farBy:Math.round(fd), travelled:Math.round(e.gait-g0),
+            want:Math.round(want), moves,
+            frames:[...seen].filter(k=>/^bestiary\/thrall-run-\d+$/.test(k)).length};
   });
   ck('a dormant body wears the standing pose', foe.dormant,
-     foe.stillAsleep ? foe.farBy+' units away' : 'FIXTURE: it woke up');
+     foe.stillAsleep ? foe.farBy+' units away, wearing '+foe.dpose : 'FIXTURE: it woke up');
   ck('a woken one runs through its cycle', foe.frames===atlas.n,
      foe.frames+' of '+atlas.n+' poses over '+foe.travelled+' units');
 
-  // The hit flash is an additive pass now, not a second sprite.
-  const flash = await p.evaluate(()=>{
-    const before=errs=>0;
-    enemies.length=0;
-    const e=newBody('breaker',player.x+70,player.y,0); e.awake=true; e.hitFlash=0.2;
-    enemies.push(e);
-    player.hitFlash=0.2;
-    draw(2);
-    return ctx.globalCompositeOperation==='source-over' && ctx.globalAlpha===1;
-  });
-  ck('drawing a struck body leaves the context clean', flash);
+  /* Retired with the canvas build: "drawing a struck body leaves the context
+   * clean" was about the canvas 2D renderer's composite state after its hit
+   * flash. Phaser tints a struck sprite instead (delve.js), and there is no
+   * shared context left to leave dirty. */
 
   ck('no console errors', errs.length===0, errs.slice(0,3).join(' | '));
   console.log('\nPASS '+pass.length+'\n  '+pass.join('\n  '));
   console.log('\nFAIL '+fail.length+(fail.length?'\n  '+fail.join('\n  '):''));
-  await b.close(); process.exit(fail.length?1:0);
+  await b.close(); pages.stop(); process.exit(fail.length?1:0);
 })();

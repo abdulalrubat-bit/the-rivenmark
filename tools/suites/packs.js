@@ -11,29 +11,12 @@ const { chromium } = require('playwright');
 // source. verify-core uses it to run the SAME file against index.html and
 // against the extracted core; it used to rewrite the URL with a string
 // replace, which silently stopped matching the moment this line changed.
-const PAGE = f => process.env.RIVENMARK_PAGE ||
-  ('file://' + require('path').join(__dirname, '..', '..', f));
-// The gate-house is behind the splash now: the stations live on a tab bar and
-// the bar does not exist until you have entered. Idempotent, so it is safe to
-// call before every station click however the test got there.
-async function enterHub(pg){
-  const onSplash = await pg.$eval('#splash', e=>e.classList.contains('on')).catch(()=>false);
-  if (!onSplash) return;
-  await pg.click('#toGatehouse');
-  await new Promise(r=>setTimeout(r,220));
-}
+const pages = require('./_pages.js');
 
-// The hero picker moved behind the Descend button when the menus were
-// redesigned; starting a run is two taps now.
+// Into a delve: see pages.descend.
 async function beginRun(p, hero, diff) {
-  await enterHub(p); await p.click('#toDelve');
-  await new Promise(r => setTimeout(r, 150));
-  if (hero) { await p.click('#heroPick .card[data-hero="' + hero + '"]');
-              await new Promise(r => setTimeout(r, 80)); }
-  if (diff) { await p.click('#diffPick .card[data-diff="' + diff + '"]');
-              await new Promise(r => setTimeout(r, 80)); }
-  await p.click('#beginRun');
-  await new Promise(r => setTimeout(r, 500));
+  await pages.descend(p, { hero, diff });
+  await new Promise(r => setTimeout(r, 300));
 }
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const pass=[],fail=[];
@@ -41,12 +24,13 @@ const pass=[],fail=[];
  * summarises a sweep, so without it a red suite reports its count and none
  * of its reasons — which means re-running it alone to find out why. */
 const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''));
-(async()=>{
+(async () => {
+  await pages.serve();
   const b=await chromium.launch();
   const p=await (await b.newContext({viewport:{width:430,height:900}})).newPage();
   const errs=[]; p.on('pageerror',e=>errs.push(e.message));
   p.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
-  await p.goto(PAGE('index.html'));
+  await p.goto(pages.core());
   await beginRun(p);
 
   // --- population across many generated delves ------------------------------
@@ -311,5 +295,5 @@ const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''
   ck('no console errors', errs.length===0, errs.slice(0,2).join(' | '));
   console.log('\nPASS '+pass.length+'\n  '+pass.join('\n  '));
   console.log('\nFAIL '+fail.length+(fail.length?'\n  '+fail.join('\n  '):''));
-  await b.close(); process.exit(fail.length?1:0);
+  await b.close(); pages.stop(); process.exit(fail.length?1:0);
 })();

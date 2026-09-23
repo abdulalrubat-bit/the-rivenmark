@@ -14,17 +14,17 @@ const { chromium } = require('playwright');
 // source. verify-core uses it to run the SAME file against index.html and
 // against the extracted core; it used to rewrite the URL with a string
 // replace, which silently stopped matching the moment this line changed.
-const PAGE = f => process.env.RIVENMARK_PAGE ||
-  ('file://' + require('path').join(__dirname, '..', '..', f));
+const pages = require('./_pages.js');
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''));
 
-(async()=>{
+(async () => {
+  await pages.serve();
   const b=await chromium.launch();
   const p=await (await b.newContext({viewport:{width:390,height:844}})).newPage();
   const errs=[]; p.on('pageerror',e=>errs.push(e.message));
   p.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
-  await p.goto(PAGE('index.html')); await sleep(900);
+  await p.goto(pages.core()); await sleep(900);
 
   const R = await p.evaluate(()=>{
     const o={};
@@ -95,7 +95,6 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
     o.isaacKept=Math.abs(player.hp-isaacHp)<0.01;
     player.gcd=0; player.swapCd=0; swapHero();
     o.zaydKept=Math.abs(player.hp-zaydHp)<0.01;
-    o.skin=document.body.classList.contains('as-zayd');
     o.kitSize={isaac:ABILITIES.isaac.length, zayd:ABILITIES.zayd.length};
 
     // the forged-for affix follows whoever is holding the kit
@@ -151,7 +150,29 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   ck('the one who has not been down arrives whole', R.swapFresh);
   ck('each of them keeps his own wounds', R.isaacKept && R.zaydKept,
      'swapping is not a heal');
-  ck('the interface changes hands with them', R.skin);
+  /* The interface is the game's HUD, so this is asked of the game: after a
+   * swap, the kit under the thumb is the new hero's, button for button. (The
+   * canvas build said it with a class on <body>; the Phaser HUD rebuilds its
+   * kit from ABILITIES instead.) */
+  const gp = await (await b.newContext({viewport:{width:430,height:900}})).newPage();
+  gp.on('pageerror',e=>errs.push(e.message));
+  await gp.goto(pages.game('nogate&nogov'));
+  await gp.waitForFunction(()=>state==='play' && document.querySelectorAll('#hud .kit button').length>0,
+                           null, {timeout:30000});
+  const kit = () => gp.evaluate(()=>({ hero: player.hero,
+    ids: [...document.querySelectorAll('#hud .kit button')].map(b=>b.dataset.id) }));
+  const k0 = await kit();
+  await gp.evaluate(()=>{ player.swapCd=0; player.gcd=0; swapHero(); });
+  await sleep(400);
+  const k1 = await kit();
+  const mine = h => ABILITY_IDS[h];
+  const ABILITY_IDS = await gp.evaluate(()=>Object.fromEntries(
+    Object.entries(ABILITIES).map(([h,l])=>[h, l.map(a=>a.id)])));
+  ck('the interface changes hands with them',
+     k0.hero!==k1.hero && k0.ids.every(id=>mine(k0.hero).includes(id)) &&
+     k1.ids.length>0 && k1.ids.every(id=>mine(k1.hero).includes(id)),
+     k0.hero+' ['+k0.ids.join(',')+'] -> '+k1.hero+' ['+k1.ids.join(',')+']');
+  await gp.close();
   // Three each since the bar was cut; see the note over ABILITIES.
   ck('and so does the kit', R.kitSize.isaac===3 && R.kitSize.zayd===3,
      JSON.stringify(R.kitSize));
@@ -162,5 +183,5 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   ck('no console errors', errs.length===0, errs.slice(0,3).join(' | '));
   console.log('\nPASS '+pass.length+'\n  '+pass.join('\n  '));
   console.log('\nFAIL '+fail.length+(fail.length?'\n  '+fail.join('\n  '):''));
-  await b.close(); process.exit(fail.length?1:0);
+  await b.close(); pages.stop(); process.exit(fail.length?1:0);
 })();

@@ -11,17 +11,7 @@ const { chromium } = require('playwright');
 // source. verify-core uses it to run the SAME file against index.html and
 // against the extracted core; it used to rewrite the URL with a string
 // replace, which silently stopped matching the moment this line changed.
-const PAGE = f => process.env.RIVENMARK_PAGE ||
-  ('file://' + require('path').join(__dirname, '..', '..', f));
-// The gate-house is behind the splash now: the stations live on a tab bar and
-// the bar does not exist until you have entered. Idempotent, so it is safe to
-// call before every station click however the test got there.
-async function enterHub(pg){
-  const onSplash = await pg.$eval('#splash', e=>e.classList.contains('on')).catch(()=>false);
-  if (!onSplash) return;
-  await pg.click('#toGatehouse');
-  await new Promise(r=>setTimeout(r,220));
-}
+const pages = require('./_pages.js');
 
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const pass=[],fail=[];
@@ -29,12 +19,13 @@ const pass=[],fail=[];
  * summarises a sweep, so without it a red suite reports its count and none
  * of its reasons — which means re-running it alone to find out why. */
 const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''));
-(async()=>{
+(async () => {
+  await pages.serve();
   const b=await chromium.launch();
   const p=await (await b.newContext({viewport:{width:430,height:900}})).newPage();
   const errs=[]; p.on('pageerror',e=>errs.push(e.message));
   p.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
-  await p.goto(PAGE('index.html')); await sleep(600);
+  await p.goto(pages.core()); await sleep(600);
 
   // ---- coin drops ---------------------------------------------------------
   const coin = await p.evaluate(()=>{
@@ -118,29 +109,36 @@ const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''
   ck('you cannot buy what you cannot afford', buy.refused);
 
   // ---- the screen ---------------------------------------------------------
-  await p.evaluate(()=>{ stash=blankStash(); stash.coins=5000; saveStash();
-    state='menu'; refreshKitLine(); refreshVendorLine(); showScreen('splash'); });
-  await sleep(150);
-  await enterHub(p); await p.click('#toVendor'); await sleep(250);
+  // The Vendor that ships: a tab in the Phaser gate-house.
+  const g=await (await b.newContext({viewport:{width:430,height:900}})).newPage();
+  g.on('pageerror',e=>errs.push(e.message));
+  await g.goto(pages.game('norun'));
+  await g.waitForFunction(()=>typeof blankStash==='function', null, {timeout:30000});
+  await g.evaluate(()=>{ localStorage.clear(); stash=blankStash(); stash.coins=5000; saveStash(); });
+  await g.goto(pages.game());
+  await g.waitForSelector('#screens.up #descend', {timeout:30000});
+  await g.click('#screens [data-tab="vendor"]'); await sleep(250);
   ck('the vendor opens from the gate-house',
-     await p.$eval('#vendor',e=>e.classList.contains('on')));
-  ck('the purse is shown', /5000/.test(await p.$eval('#purseLine',e=>e.innerText)));
-  ck('offers render', (await p.$$('#vendorList .card')).length===3);
-  await p.click('#vendorList .card'); await sleep(150);
+     /Vendor/.test(await g.$eval('#screens h1',e=>e.textContent)));
+  ck('the purse is shown', /5000/.test(await g.$eval('#screens .purse',e=>e.innerText)));
+  ck('offers render', (await g.$$('#screens [data-buy]')).length===3);
+  await g.click('#screens [data-buy="commission"]'); await sleep(150);
   ck('selecting an offer shows slots',
-     (await p.$$('#vendorDetail [data-slot]')).length>0);
-  const v0 = await p.evaluate(()=>stash.vault.length);
-  await p.click('#vendorDetail [data-slot]'); await sleep(200);
+     (await g.$$('#screens [data-slot]')).length>0);
+  const v0 = await g.evaluate(()=>stash.vault.length);
+  await g.click('#screens [data-slot]'); await sleep(200);
   ck('buying through the screen works',
-     await p.evaluate(()=>stash.vault.length)===v0+1);
-  await p.click('#vendorBack'); await sleep(200);
-  ck('back returns to the gate-house',
-     await p.$eval('#splash',e=>e.classList.contains('on')));
-  await p.reload(); await sleep(600);
-  ck('the purchase persisted', await p.evaluate(()=>stash.vault.length)>0);
+     await g.evaluate(()=>stash.vault.length)===v0+1);
+  await g.click('#screens [data-tab="splash"]'); await sleep(200);
+  ck('and the gate-house is a tap away',
+     /Gate-House/.test(await g.$eval('#screens h1',e=>e.textContent)));
+  await g.reload(); await sleep(600);
+  await g.waitForFunction(()=>typeof stash!=='undefined', null, {timeout:30000});
+  ck('the purchase persisted', await g.evaluate(()=>stash.vault.length)>0);
+  await g.close();
 
   ck('no console errors', errs.length===0, errs.slice(0,3).join(' | '));
   console.log('\nPASS '+pass.length+'\n  '+pass.join('\n  '));
   console.log('\nFAIL '+fail.length+(fail.length?'\n  '+fail.join('\n  '):''));
-  await b.close(); process.exit(fail.length?1:0);
+  await b.close(); pages.stop(); process.exit(fail.length?1:0);
 })();

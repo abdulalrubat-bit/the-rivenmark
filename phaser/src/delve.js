@@ -106,7 +106,8 @@ const STANDING = { pillar: 26, barrel: 12, crate: 11, urn: 10, banner: 16,
           lowFx,
           WALK_STEP, WALK_PACE, update, startRun, resetRun, loadStash,
           hardcore, loadHardcoreMode, ENEMY_TYPES, settleUnfinishedDelve,
-          abandonDelve */
+          abandonDelve, stepDelve, pauseRun, resumeRun, openGear, closeGear,
+          cam, updateCamera, PROP_HP */
 
 /* A body drawn with another body's art, and how much bigger it is than the
  * thing it borrowed from. Derived from the two radii rather than typed in, so
@@ -248,7 +249,9 @@ export class Delve extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, WORLD.w, WORLD.h);
 
     // ?nostatics skips the one-off bake, for isolating where a frame goes.
-    if (!/nostatics/.test(location.search)) {
+    // And ?norun has no world to bake: walls and the cell grid are empty, and
+    // the dressing pass read the grid and threw.
+    if (this.stepping && !/nostatics/.test(location.search)) {
       const t0 = performance.now();
       this.paintStatics();
       // Kept, not just logged. The only rough edge left on a real phone is a
@@ -277,7 +280,7 @@ export class Delve extends Phaser.Scene {
       .setDisplaySize(26, 14).setDepth(-400);
     this.lootImgs = [];
 
-    if (this.stepping) this.cameras.main.startFollow(this.hero, true, 0.18, 0.18);
+    // The camera is the core's (cam, stepped by updateCamera) -- see placeCamera.
 
     this.fx = new Effects(this);
     this.overlay = new Overlay(this);
@@ -285,7 +288,7 @@ export class Delve extends Phaser.Scene {
     // The loop around a delve. showScreen is the core's own way of saying
     // "the run is over" or "you are back at the gate-house", so it is routed
     // here rather than second-guessed.
-    this.screens = new Screens((hero, level) => this.newRun(hero, level),
+    this.screens = new Screens((hero, level, diff) => this.newRun(hero, level, diff),
                                () => this.abandonRun());
     window.showScreen = name => this.screens.show(name);
     this.wireInput();
@@ -375,15 +378,14 @@ export class Delve extends Phaser.Scene {
    * from the old one has to go: the wall graphic, the scenery, and the body
    * sprites, which are pooled and would otherwise show the last delve's dead.
    */
-  newRun(hero, levelId) {
+  newRun(hero, levelId, diffId) {
     this.clearWorldArt();
     state = 'play';
-    startRun(hero, levelId, 'riven');
+    startRun(hero, levelId, diffId || 'riven');
     run.banner = 0;
     this.paintStatics();
     this.hero.setPosition(player.x, player.y);
     this.culledAt = null;
-    this.cameras.main.startFollow(this.hero, true, 0.18, 0.18);
   }
 
   /* Everything drawn from a delve, unmade. Its own method because two things
@@ -393,6 +395,7 @@ export class Delve extends Phaser.Scene {
   clearWorldArt() {
     if (this.wallGfx) this.wallGfx.destroy();
     for (const im of this.propImgs || []) im.destroy();
+    this.breakables = [];
     for (const im of this.wallImgs || []) im.destroy();
     for (const c of this.chestImgs || []) { c.img.destroy(); c.sh.destroy(); }
     for (const im of this.lootImgs || []) im.destroy();
@@ -471,16 +474,20 @@ export class Delve extends Phaser.Scene {
     // four of each. Depth by y so a body passes in front of a barrel it is
     // below and behind one it is above.
     this.propImgs = [];
+    this.breakables = [];
     for (const p of props) {
       const key = this.pickProp(p.kind, p.q);
       if (!key) continue;
       // A barrel is something you walk behind, so it sorts against bodies by
       // y. Flat scenery -- rubble, stains, bones -- goes under all of it.
       const up = STANDING[p.kind];
-      if (up) this.propImgs.push(this.shadowAt(p.x, p.y, up, 2));
+      const sh = up ? this.shadowAt(p.x, p.y, up, 2) : null;
+      if (sh) this.propImgs.push(sh);
       const img = this.add.image(p.x, p.y, 'art', key)
         .setScale(this.artScale(key)).setDepth(up ? p.y : p.y - 1e4);
       this.propImgs.push(img);
+      // The ones a blow can break are watched; see syncBreakables.
+      if (PROP_HP[p.kind]) this.breakables.push({ pr: p, img, sh });
     }
 
     // The coffers. Two states in the atlas rather than the canvas build's four
@@ -603,10 +610,34 @@ export class Delve extends Phaser.Scene {
     for (const list of [this.wallImgs, this.propImgs]) {
       if (!list) continue;
       for (const im of list) {
-        const on = im.x > x0 - im.displayWidth && im.x < x1 &&
+        const on = !im.broken &&
+                   im.x > x0 - im.displayWidth && im.x < x1 &&
                    im.y > y0 - im.displayHeight && im.y < y1;
         if (im.visible !== on) im.setVisible(on);
       }
+    }
+  }
+
+  /* SCENERY THAT BREAKS.
+   *
+   * Barrels and pillars take blows: the core runs them down (hurtProp), marks
+   * one gone when it breaks, and queues its blast. The statics are painted
+   * once per delve, so nothing here noticed -- a barrel went up and stayed
+   * standing over its own explosion. A struck one also wobbles, as the canvas
+   * build drew it, for as long as the core's shake on it lasts. Only the
+   * breakable few are looked at; the rest of the scenery never changes.
+   */
+  syncBreakables() {
+    for (const b of this.breakables || []) {
+      if (b.pr.gone) {
+        if (!b.img.broken) {
+          b.img.broken = true; b.img.setVisible(false);
+          if (b.sh) { b.sh.broken = true; b.sh.setVisible(false); }
+        }
+        continue;
+      }
+      const x = b.pr.x + (b.pr.shake > 0 ? Math.sin(b.pr.shake * 90) * 2.4 : 0);
+      if (b.img.x !== x) b.img.x = x;
     }
   }
 
@@ -854,6 +885,38 @@ export class Delve extends Phaser.Scene {
     return base + pose + '-' + (((p.gait / (run ? GAIT_STEP : WALK_STEP)) | 0) % n);
   }
 
+  /* A struck body flashes by ADDING light, the way the canvas build's hit
+   * flash did. It used to be setTint(0xffffff) -- and Phaser tints MULTIPLY by
+   * default, so white is no change at all: no struck body ever visibly
+   * flashed. Guarded like the scale and rotation, so a body neither struck nor
+   * tinted costs nothing. */
+  flashOrTint(sp, flash, tint) {
+    const mode = flash ? Phaser.TintModes.ADD : Phaser.TintModes.MULTIPLY;
+    if (sp.tintMode !== mode) sp.setTintMode(mode);
+    const want = flash ? 0x9a9a9a : tint;
+    if (sp.tintTopLeft !== want) sp.setTint(want);
+  }
+
+  /* THE CAMERA IS THE CORE'S, AND SO IS THE SHAKE.
+   *
+   * The core has always run a camera -- cam.x/cam.y, eased onto the hero by
+   * updateCamera inside update() -- and a shake, cam.shake, that every hit,
+   * ambush and heavy landing adds to and that decays in the same place. The
+   * port ignored both and gave Phaser a follow of its own, so the shipped game
+   * never shook at all: a blow that took half your life landed like a
+   * scratch. The camera now stands where the core's does, jittered by up to
+   * half the shake either way exactly as the canvas build drew it. While the
+   * delve is held or the bag is open the core is not stepped, so the camera is
+   * settled here the way the canvas build's frame loop did.
+   */
+  placeCamera(dt) {
+    if (state === 'pause' || state === 'gear') updateCamera(dt);
+    const sh = cam.shake || 0;
+    const jx = sh ? (Math.random() - 0.5) * sh : 0;
+    const jy = sh ? (Math.random() - 0.5) * sh : 0;
+    this.cameras.main.centerOn(cam.x + view.w / 2 + jx, cam.y + view.h / 2 + jy);
+  }
+
   /* The stick.
    *
    * The core already owns the whole state machine -- stickStart, stickMove,
@@ -886,10 +949,32 @@ export class Delve extends Phaser.Scene {
     this.input.on('gameout', () => stickEnd());
 
     // Desktop: the same keys the canvas build takes, into the same Set.
-    this.input.keyboard?.on('keydown', e => keys.add(e.key.toLowerCase()));
+    // The commands as well as the movement: Escape or P holds and releases
+    // the delve, I or B opens the bag and closes it again. The canvas build
+    // had both; the port kept only the movement keys.
+    this.input.keyboard?.on('keydown', e => {
+      const k = e.key.toLowerCase();
+      if (k === 'escape' || k === 'p') {
+        if (state === 'gear') closeGear();
+        else if (state === 'play') pauseRun();
+        else if (state === 'pause') resumeRun();
+        return;
+      }
+      if (k === 'i' || k === 'b') {
+        if (state === 'gear') closeGear();
+        else if (state === 'play') openGear('run');
+        return;
+      }
+      keys.add(k);
+    });
     this.input.keyboard?.on('keyup',   e => keys.delete(e.key.toLowerCase()));
     // A window that loses focus mid-delve must not leave a key held down.
     window.addEventListener('blur', () => { keys.clear(); stickEnd(); });
+    // Put down in the middle of a fight -- another app, the lock button, a
+    // call -- and the delve is held, not left running for the moment it comes
+    // back. The APK's activity does this through onPause; this is the same for
+    // the web build and the installed PWA, which had nothing.
+    document.addEventListener('visibilitychange', () => { if (document.hidden) pauseRun(); });
   }
 
   /* The stick, drawn where the thumb put it. Two rings: where the finger went
@@ -973,7 +1058,8 @@ export class Delve extends Phaser.Scene {
   update(time, dtMs) {
     this.adaptFx(time);
     const dt = Math.min(0.05, dtMs / 1000);      // the core's own MAX_DT clamp
-    if (this.stepping && state === 'play') update(dt);
+    // stepDelve, not update: it is update behind the hit-stop (see the core).
+    if (this.stepping && state === 'play') stepDelve(dt);
 
     // Bodies: one sprite each, pooled. Sorted by y, which is what makes a
     // crowd read as standing on a floor rather than floating over it.
@@ -1047,9 +1133,8 @@ export class Delve extends Phaser.Scene {
       // Struck bodies flash, calcifying ones sit under a shell of light, and a
       // body wearing borrowed art carries its own colour so it is not mistaken
       // for three of the thing it is drawn as.
-      s.setTint(e.hitFlash > 0 ? 0xffffff
-                : e.calcify > 0 ? 0x9fd8e8
-                : (LOOK_TINT[e.kind] || 0xffffff));
+      this.flashOrTint(s, e.hitFlash > 0, e.calcify > 0 ? 0x9fd8e8
+                                          : (LOOK_TINT[e.kind] || 0xffffff));
     }
 
     if (!this.stepping) return;
@@ -1057,12 +1142,15 @@ export class Delve extends Phaser.Scene {
     this.wearFrame(this.hero, hk);
     this.hero.setPosition(player.x, player.y).setFlipX(player.face < 0)
         .setDepth(player.y);
+    this.flashOrTint(this.hero, player.hitFlash > 0, 0xffffff);
     const hx = this.hero.scaleY *
         (player.pace < GAIT_STILL ? breathScale(player) : 1);
     if (this.hero.scaleX !== hx) this.hero.scaleX = hx;
     this.heroShadow.setPosition(player.x + LIGHT.x * LIGHT.body,
                                 player.y + LIGHT.y * LIGHT.body + 13 * 0.42);
 
+    this.placeCamera(dt);
+    this.syncBreakables();
     this.syncChests(time);
     this.syncLoot(time);
     this.cullDressing();

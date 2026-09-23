@@ -1,0 +1,27 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>The Rivenmark — the forge</title>
+<!-- The art tool. The rules first, because the paint reads their tables;
+     then the forge; then one call that draws everything. export-art.js
+     opens this page and writes what it drew to art/. See forge.js. -->
+<script src="../../phaser/public/host-stubs.js"></script>
+<script src="../../phaser/public/host-real.js"></script>
+<script src="../../phaser/src/core/core.js"></script>
+<script src="forge.js"></script>
+<script>
+// The old build forged at the display's ratio, capped at 2 -- which is the
+// art's native resolution. Fixed here so the export never depends on the
+// screen it happened to run on.
+view.dpr = 2;
+forgeAll();
+// The walls and the ground are forged again for the ground a delve stands on
+// -- resetRun does it, in its region's palette. Ground and stone are the only
+// region-coloured art, and the atlas carries one set, so it is cut in the
+// first region's stone: the Slag-Moors, the ground the game opens on. (The old
+// build left this to whichever region the gate-house rung happened to roll at
+// boot, so the stone in art/ changed colour from one export to the next.)
+stash = blankStash();
+stash.region = REGIONS[0].id;
+resetRun('isaac', LEVELS[0].id);
+window.__forged = true;
+</script>

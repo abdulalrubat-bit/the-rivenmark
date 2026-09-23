@@ -178,6 +178,25 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
      'diag at ' + Math.round(lay.diag.x) + ',' + Math.round(lay.diag.y));
   ck('the resource meter is on screen', !lay.res || onScreen(lay.res));
 
+  // The keyboard's commands, and being put down. The canvas build had both and
+  // the port kept only the movement keys: Escape/P hold and release the delve,
+  // B/I open and close the bag, and a page that is hidden holds the delve.
+  await p.evaluate(()=>{ state==='play' || (state='play'); });
+  const keyed = [];
+  for (const k of ['Escape','p','b','i']) {
+    await p.keyboard.press(k); await sleep(150);
+    keyed.push(await p.evaluate(()=>state));
+  }
+  ck('Escape holds the delve and P lets it go', keyed[0]==='pause' && keyed[1]==='play',
+     keyed.slice(0,2).join(' -> '));
+  ck('B opens the bag and I closes it', keyed[2]==='gear' && keyed[3]==='play',
+     keyed.slice(2).join(' -> '));
+  const hidden = await p.evaluate(()=>{
+    Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});
+    document.dispatchEvent(new Event('visibilitychange'));
+    const s=state; delete document.hidden; return s; });
+  ck('putting the game down holds the delve', hidden==='pause', hidden);
+
   ck('no console errors', errs.length===0, errs.slice(0,3).join(' | '));
 
   await p.screenshot({path:path.join(__dirname,'..','playable.png')});

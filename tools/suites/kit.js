@@ -15,17 +15,17 @@ const { chromium } = require('playwright');
 // source. verify-core uses it to run the SAME file against index.html and
 // against the extracted core; it used to rewrite the URL with a string
 // replace, which silently stopped matching the moment this line changed.
-const PAGE = f => process.env.RIVENMARK_PAGE ||
-  ('file://' + require('path').join(__dirname, '..', '..', f));
+const pages = require('./_pages.js');
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''));
 
-(async()=>{
+(async () => {
+  await pages.serve();
   const b=await chromium.launch();
   const p=await (await b.newContext({viewport:{width:390,height:844}})).newPage();
   const errs=[]; p.on('pageerror',e=>errs.push(e.message));
   p.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
-  await p.goto(PAGE('index.html')); await sleep(900);
+  await p.goto(pages.core()); await sleep(900);
 
   // ---- the beat -----------------------------------------------------------
   const gcd = await p.evaluate(()=>{
@@ -45,7 +45,8 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   const fz = await p.evaluate(async()=>{
     stash=blankStash();saveStash();startRun('isaac',LEVELS[6].id,'riven');run.banner=0;
     const e=newBody('thrall',player.x+240,player.y,0); e.awake=true; enemies.push(e);
-    const wait=n=>new Promise(r=>{let k=0;const f=()=>{if(++k>=n)return r();requestAnimationFrame(f);};requestAnimationFrame(f);});
+    // Frames as the game steps them: stepDelve is update behind the hit-stop.
+    const wait=async n=>{ for(let k=0;k<n;k++) stepDelve(1/60); };
     hitStop=0; await wait(3);
     const t0=run.time; freeze(0.09); await wait(3);
     const frozen=run.time-t0;
@@ -207,12 +208,21 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   // ---- the glass ----------------------------------------------------------
   // The stick floats under the left thumb; the kit is fixed under the right.
   // If they ever want the same pixels the game becomes unplayable, and no
-  // amount of correct damage numbers will save it.
-  const glass = await p.evaluate(()=>{
+  // amount of correct damage numbers will save it. Asked of the HUD that
+  // ships, on a phone-sized screen, with the game loop running.
+  const gp = await (await b.newContext({viewport:{width:390,height:844}, isMobile:true,
+                                        hasTouch:true})).newPage();
+  gp.on('pageerror',e=>errs.push(e.message));
+  gp.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
+  await gp.goto(pages.game('nogate&nogov'));
+  await gp.waitForFunction(()=>state==='play' && document.querySelectorAll('#hud .kit button').length>0,
+                           null, {timeout:30000});
+  const glass = await gp.evaluate(()=>{
     // The swap counts as a key for every one of these: it is the same size,
     // in the same corner, and under the same thumb.
-    const keys=[...document.querySelectorAll('#kitBar .key')].map(k=>k.getBoundingClientRect());
-    const bag=document.getElementById('bagBtn').getBoundingClientRect();
+    const keys=[...document.querySelectorAll('#hud .kit button, #hud .swap button')]
+      .map(k=>k.getBoundingClientRect());
+    const bag=document.querySelector('#hud .hold .bag').getBoundingClientRect();
     const hit=(a,b)=>!(a.right<=b.left||a.left>=b.right||a.bottom<=b.top||a.top>=b.bottom);
     return { n:keys.length,
              leftHalf: keys.filter(k=>k.left < innerWidth*0.5).length,
@@ -236,29 +246,32 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   // Charged first: every key Isaac has left either spends three or is a
   // channel, so a fresh hero pressing one is a press that correctly refuses.
   // The check below is about the glass, not about affording anything.
-  await p.evaluate(()=>{stash=blankStash();saveStash();startRun('isaac',LEVELS[6].id,'riven');
-                        run.banner=0; player.charges=CHARGE_MAX; player.gcd=0;});
+  await gp.evaluate(()=>{ run.banner=0; player.charges=CHARGE_MAX; player.gcd=0; });
   await sleep(200);
-  const before = await p.evaluate(()=>({x:player.x,y:player.y}));
-  const box = await p.$eval('#key_aegis', e=>{const r=e.getBoundingClientRect();
+  const before = await gp.evaluate(()=>({x:player.x,y:player.y}));
+  const box = await gp.$eval('#hud .kit button[data-id="aegis"]', e=>{const r=e.getBoundingClientRect();
     return {x:r.left+r.width/2, y:r.top+r.height/2};});
-  await p.mouse.move(box.x, box.y); await p.mouse.down(); await sleep(90);
-  const during = await p.evaluate(()=>({mag:stick.mag, active:stick.active}));
-  await p.mouse.up(); await sleep(120);
-  const after = await p.evaluate(()=>({x:player.x,y:player.y,gcd:player.gcd}));
+  await gp.mouse.move(box.x, box.y); await gp.mouse.down(); await sleep(90);
+  const during = await gp.evaluate(()=>({mag:stick.mag, active:stick.active}));
+  await gp.mouse.up(); await sleep(120);
+  const after = await gp.evaluate(()=>({x:player.x,y:player.y,gcd:player.gcd,
+                                         aegis:(player.cds||{}).aegis||0}));
   ck('a key press does not grab the stick', !during.active && during.mag===0,
      JSON.stringify(during));
   ck('and does not walk the hero',
      Math.hypot(after.x-before.x, after.y-before.y) < 2,
      Math.hypot(after.x-before.x, after.y-before.y).toFixed(1)+'px');
-  ck('but it does cast', after.gcd>0, 'gcd '+after.gcd.toFixed(2));
+  ck('but it does cast', after.gcd>0 || after.aegis>0,
+     'gcd '+after.gcd.toFixed(2)+', cooldown '+(+after.aegis).toFixed(1));
 
   // The bar belongs to a delve.
-  const away = await p.evaluate(()=>{
-    showScreen('splash'); state='menu'; syncKit();
-    return document.getElementById('kitBar').hidden;
+  const away = await gp.evaluate(async ()=>{
+    __game.scene.getScene('delve').abandonRun();
+    await new Promise(r=>setTimeout(r,200));
+    return document.getElementById('hud').hidden;
   });
   ck('the kit is put away outside a delve', away);
+  await gp.close();
 
   /* --- WHOSE DAMAGE IS IT ------------------------------------------------
    * The swing used to happen by itself and win the fight by itself: measured
@@ -334,5 +347,5 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   ck('no console errors', errs.length===0, errs.slice(0,3).join(' | '));
   console.log('\nPASS '+pass.length+'\n  '+pass.join('\n  '));
   console.log('\nFAIL '+fail.length+(fail.length?'\n  '+fail.join('\n  '):''));
-  await b.close(); process.exit(fail.length?1:0);
+  await b.close(); pages.stop(); process.exit(fail.length?1:0);
 })();

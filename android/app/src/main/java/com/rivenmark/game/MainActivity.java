@@ -140,12 +140,17 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public void onBackPressed() {
-        // Back pauses a run in progress rather than closing the app out from
-        // under it -- but it must still be able to leave, or the only way out
-        // of the app is the home button.
+        // Back steps out of whatever is on top, the way it does everywhere
+        // else on Android: the bag closes, a delve in progress is held, and
+        // the held card lets it go again. Only from the gate-house does it
+        // leave the app -- it must still be able to, or the only way out is
+        // the home button. It used to know only about a delve in progress, so
+        // Back with the bag open closed the whole app.
         web.evaluateJavascript(
-                "(function(){ try{ if(typeof state!=='undefined' && state==='play'" +
-                " && typeof pauseRun==='function'){ pauseRun(); return 'paused'; } }" +
+                "(function(){ try{ if(typeof state==='undefined') return 'exit';" +
+                " if(state==='gear'){ closeGear(); return 'closed'; }" +
+                " if(state==='play'){ pauseRun(); return 'paused'; }" +
+                " if(state==='pause'){ resumeRun(); return 'resumed'; } }" +
                 "catch(e){} return 'exit'; })()",
                 value -> {
                     if (value == null || value.contains("exit")) super.onBackPressed();
