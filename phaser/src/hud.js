@@ -896,8 +896,10 @@ export class Hud {
     this.boss.classList.toggle('invader', !!bs.invader);
     const title = bs.title || (bs.invader ? 'The Uninvited' : 'The Gilded Deceiver');
     if (this.bossName.textContent !== title) this.bossName.textContent = title;
+    // Both rounded the same way: ceil against round read "1667 / 1666" on a
+    // bar that was exactly full.
     this.bossCount.textContent =
-      Math.max(0, Math.ceil(bs.hp)) + ' / ' + Math.round(bs.maxHp);
+      Math.max(0, Math.ceil(bs.hp)) + ' / ' + Math.ceil(bs.maxHp);
     const f = Math.max(0, Math.min(1, bs.hp / bs.maxHp));
     this.bossFill.style.width = (f * 100).toFixed(1) + '%';
 
@@ -906,6 +908,19 @@ export class Hud {
      * will not fall while a Lieutenant stands, and the Crucible-Mass's climbs
      * back up while a totem does. Same shape, different verb and colour, and
      * the pips count whichever thing is doing it. */
+    // The Choir: the pips are the chord -- notes sung so far, out of five.
+    if (bs.kind === 'choir') {
+      const n = bs.notes || 0;
+      this.bossBar.classList.remove('held'); this.bossBar.classList.toggle('mend', false);
+      if (!n) { this.bossHeld.hidden = true; this.heldPips = -1; return; }
+      const stamp = 'c' + n;
+      if (this.heldPips !== stamp) {
+        this.heldPips = stamp;
+        this.bossHeld.innerHTML = '<s>CHORD</s>' + '<span></span>'.repeat(n);
+      }
+      this.bossHeld.hidden = false;
+      return;
+    }
     const mass = bs.kind === 'crucible';
     const held = !bs.invader &&
                  (mass ? (bs.tended || 0) > 0 : (g.escortAlive && g.escortAlive()));

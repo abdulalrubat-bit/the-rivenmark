@@ -15,7 +15,7 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   // ---- the escort ---------------------------------------------------------
   const esc = await p.evaluate(()=>{
     stash=blankStash(); saveStash();
-    startRun('isaac', LEVELS[30].id, 'riven');
+    startRun('isaac', LEVELS.find((L, i) => i >= 30 && L.boss === 'deceiver').id, 'riven');
     run.tech = LEVEL.quota;
     updatePortal(1/60);                       // reaching the quota calls him
     const guard = enemies.filter(e=>e.kind==='lieutenant');
@@ -39,7 +39,7 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
 
   // ---- the slam -----------------------------------------------------------
   const slam = await p.evaluate(()=>{
-    startRun('isaac', LEVELS[30].id, 'riven');
+    startRun('isaac', LEVELS.find((L, i) => i >= 30 && L.boss === 'deceiver').id, 'riven');
     enemies.length=0; slams.length=0;
     // Both ends of the pair have to be on clear ground: dropped in rock the
     // body is shoved out on its first frame and can land outside slam range,

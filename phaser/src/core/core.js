@@ -442,7 +442,12 @@ const ENEMY_TYPES = {
    */
   crucible: { r: 45, speed: 0, hp: 820, dmg: 30, tech: 30, cd: 1.6, mass: 40,
               role: 'press', anchored: true, look: 'gorger',
-              color: '#ff5a24', halo: 'rgba(255,90,36,.34)', weight: 0, from: 1e9 }
+              color: '#ff5a24', halo: 'rgba(255,90,36,.34)', weight: 0, from: 1e9 },
+  // One voice of the Silent Choir. It never moves and never strikes: its
+  // whole threat is the note it sings. See THE SILENT CHOIR.
+  singer:   { r: 17, speed: 0, hp: 150, dmg: 22, tech: 0, cd: 9.0, mass: 30,
+              role: 'press', anchored: true, look: 'cantor',
+              color: '#c8b8ff', halo: 'rgba(200,184,255,.30)', weight: 0, from: 1e9 }
 };
 
 /* An avatar, of either kind. There are two now, and every place that used to
@@ -754,6 +759,7 @@ const LEVEL_COUNT = 52;
  * Changing CURVE_DEEP re-tunes the whole ladder and should be a decision,
  * not a side effect -- which is the point. */
 const CURVE_DEEP = 51;
+const CHOIR_FROM = 18;          // "The Silent Choir", the nineteenth rung
 const rungDepth = i => i / CURVE_DEEP;
 const DELVE_NAMES = [
   'The Test Delve', 'Ashfall Shallows', 'The Weeping Stair', 'Tor-Varden Undercroft',
@@ -935,6 +941,11 @@ function buildLevels(count = LEVEL_COUNT) {
     const ramp = RAMP[i];
     const horde = ramp ? ramp.horde.slice() : FULL_HORDE.slice();
     const crucible = !ramp && i % 3 === 2;
+    // The Silent Choir takes its own rung first -- the ladder already named
+    // rung 19 for it -- then every third rung below, and the bottom of the
+    // ladder is its finale.
+    const choir = !ramp && i >= CHOIR_FROM && i % 3 === 0;
+    const finale = i === CURVE_DEEP;
     out.push({
       id: i === 0 ? 'test' : 'delve' + i,
       name: name,
@@ -955,13 +966,14 @@ function buildLevels(count = LEVEL_COUNT) {
        * Fixed by index and not rolled, like everything else here: the same
        * rung always answers with the same thing, so a delve is learnable.
        */
-      boss: crucible ? 'crucible' : 'deceiver',
+      boss: crucible ? 'crucible' : choir ? 'choir' : 'deceiver',
+      finale,
       // The first rungs meet the avatar plainly. An epithet is a rule you have
       // to read, and there is nothing to read it against yet. The mutators are
       // the Deceiver's own besides -- they set his blink, his mirages and his
       // guard, and nothing in them means anything to a body that cannot move
       // -- so a Crucible rung rolls none and its card says what it is instead.
-      mutators: (crucible || (ramp && !ramp.mutate)) ? [] : rollMutators(i, d),
+      mutators: (crucible || choir || (ramp && !ramp.mutate)) ? [] : rollMutators(i, d),
       elites: ramp ? ramp.elites : ELITE_CHANCE,
       pitch: ramp ? ramp.pitch : PITCH_RATE,
       invade: ramp ? ramp.invade : 1,
@@ -4884,7 +4896,9 @@ function hurtPlayerBy(dmg, fx, fy, sized) {
   // Ward is a SHARE off every blow, not a subtraction: see delveBite above.
   // Mitigation is the kit's own, on top of it and for a few seconds only.
   const mit = (player.mitigate || 0) > 0 ? 0.5 : 0;
-  const taken = dmg * (sized ? 1 : delveBite()) *
+  // Every note the Choir has landed makes the delve bite harder.
+  const chord = run && run.choir ? 1 + CHOIR_BITE * run.choir.notes : 1;
+  const taken = dmg * (sized ? 1 : delveBite()) * chord *
                 (1 - (player.ward || 0)) * (1 - mit);
   breakChannel('hurt');
   clog('hurt', '', { dmg: Math.round(taken), from: fx === undefined ? 'self' : Math.round(Math.atan2(fy - player.y, fx - player.x) * 57.3) });
@@ -5066,7 +5080,9 @@ function damageEnemy(e, dmg, fx, fy) {
         ring(bs.x, bs.y, '#c2352a', 6, 34, 0.35);
       }
     }
-    dropLoot(e);
+    // A singer that goes down comes back up, so it is not a body to loot --
+    // or the Choir would be a slag well you could draw from for ever.
+    if (e.kind !== 'singer') dropLoot(e);
     // The beat. A big body is worth a longer one, and the ring gives the
     // break an edge that expands rather than a puff that fades.
     const big = e.r > 18;
@@ -5782,6 +5798,9 @@ function updateEnemies(dt) {
     } else if (e.kind === 'crucible') {
       updateCrucible(e, dt);
       continue;
+    } else if (e.kind === 'singer') {
+      updateSinger(e, dt);
+      continue;
     } else if (e.kind === 'deceiver') {
       // Nullified. Ten seconds on the floor with the guard down, which is the
       // only stretch of this fight where his health bar is the thing moving.
@@ -6374,6 +6393,13 @@ function updateArcs(dt) {
         if (!inCrescent(b, e)) continue;
         // The shield gives way BEFORE the blow is scored, so a gathered one
         // lands whole rather than being eaten by the guard it just broke.
+        // A gathered blow also snaps a singer's note mid-breath.
+        if (b.breaks && e.kind === 'singer' && (e.casting || 0) > 0) {
+          e.casting = 0; e.note = false;
+          clog('choir', 'broken-by-heavy');
+          sfx('decrypt', e.x, e.y);
+          toast('The note is broken', '#c8b8ff');
+        }
         if (e.braced && b.breaks) {
           e.braced = false;
           toast('Guard broken', '#ffd870');
@@ -6559,6 +6585,7 @@ function updateInvasion(dt) {
 function spawnBoss() {
   if (!LEVEL.boss) { run.bossDown = true; return; }
   if (LEVEL.boss === 'crucible') spawnCrucible();
+  else if (LEVEL.boss === 'choir') spawnChoir();
   else spawnDeceiver();
 }
 
@@ -6740,6 +6767,201 @@ function updateCrucible(e, dt) {
     if (d < e.r + player.r + MELEE_BITE && e.atk <= 0) {
       e.tell = meleeWind(e);
       e.tellMax = e.tell;
+    }
+  }
+}
+
+/* --- THE SILENT CHOIR ------------------------------------------------------
+ *
+ * The third avatar, and the opposite of the other two: the Deceiver is a
+ * duel and the Crucible-Mass is a siege, and both are won by standing and
+ * cutting. The Choir is won by moving and interrupting.
+ *
+ * Five singers (seven at the bottom of the ladder) stand in a ring around
+ * the gate. They never move and never strike. In turn, one draws breath and
+ * sings a note -- a cast, CHOIR_WIND long, that Focal Decryption snaps, a
+ * Null-Zone drags out, and a gathered blow breaks. A note that lands:
+ *
+ *   - adds to the chord; the fifth note is the whole chord, and nothing in
+ *     the room survives it
+ *   - darkens the room and makes the delve bite harder (CHOIR_BITE a note)
+ *   - brings a slam down where you are standing -- so you move
+ *
+ * And they will not stay down. A singer struck to nothing only falls, and
+ * rises again after CHOIR_REVIVE at half its voice -- UNLESS both singers
+ * beside it are down at the same moment. Then all of them that are down in
+ * that run are stilled for good. So the Choir is not cut down one at a time;
+ * it is silenced in runs of three, which means crossing the ring and
+ * choosing which voices to break, while the chord climbs.
+ *
+ * run.boss is a stand-in whose health is the sum of the standing singers',
+ * so the bar rises as they rise again -- which is the thing to read.
+ * ------------------------------------------------------------------------ */
+const CHOIR_R      = 230;    // the ring's radius
+const CHOIR_WIND   = 2.2;    // a breath drawn is this long to snap
+const CHOIR_BEAT   = 6.5;    // between notes, at the top of the ladder
+const CHOIR_FULL   = 5;      // notes to the whole chord
+const CHOIR_BITE   = 0.12;   // the delve's bite, more per note landed
+const CHOIR_REVIVE = 6.5;    // seconds a fallen singer stays down
+
+function spawnChoir() {
+  const d = ENEMY_TYPES.singer;
+  const n = LEVEL.finale ? 7 : 5;
+  const room = CHOIR_R + 60;
+  const cx = clamp(portal.x, Math.min(room, WORLD.w / 2), Math.max(room, WORLD.w - room));
+  const cy = clamp(portal.y, Math.min(room, WORLD.h / 2), Math.max(room, WORLD.h - room));
+  const dep = LEVEL.depth || 0;
+  const singers = [];
+  const spin = Math.random() * TAU;
+  for (let i = 0; i < n; i++) {
+    const a = spin + (i / n) * TAU;
+    // Rock on the ring pulls a singer to the nearest open ground, which can
+    // be well inside it. Try the ring a little further out or in first, and
+    // keep whichever lands nearest the ring's own radius.
+    let p = null, best = Infinity;
+    for (const r of [CHOIR_R, CHOIR_R + 45, CHOIR_R - 35, CHOIR_R + 90]) {
+      const q = openNear(cx + Math.cos(a) * r, cy + Math.sin(a) * r, d.r);
+      const off = Math.abs(Math.hypot(q.x - cx, q.y - cy) - CHOIR_R);
+      if (off < best) { best = off; p = q; }
+      if (off < 20) break;
+    }
+    const e = newBody('singer', p.x, p.y, 0);
+    e.hp = e.maxHp = d.hp * (1 + dep * 1.6) * DIFF.threat;
+    e.dmg = d.dmg * DIFF.threat;
+    e.awake = true; e.anchored = true; e.speed = 0;
+    e.voice = i;
+    enemies.push(e);
+    singers.push({ e, state: 'up', down: 0 });
+  }
+  const maxHp = singers.reduce((t, s) => t + s.e.maxHp, 0);
+  run.choir = { singers, notes: 0, beat: 3.5, x: cx, y: cy, n };
+  run.boss = { kind: 'choir', title: LEVEL.finale ? 'The Silent Choir, Whole' : 'The Silent Choir',
+               x: cx, y: cy, r: CHOIR_R, hp: maxHp, maxHp };
+  run.bossTitle = run.boss.title;
+  run.banner = 3.8;
+  run.bannerText = run.boss.title;
+  run.bannerNote = 'Break their notes. Bring them down three together, or they rise.';
+  sfx('arrive', cx, cy, 0.9);
+  shake(10);
+  clog('choir', 'arrive', { n });
+}
+
+// A singer's own clock: only the breath it is drawing.
+function updateSinger(e, dt) {
+  e.pace = 0;
+  e.angle = Math.atan2(player.y - e.y, player.x - e.x);
+  if (Math.abs(player.x - e.x) > 3) e.face = player.x < e.x ? -1 : 1;
+  if ((e.silenced || 0) > 0) e.silenced = Math.max(0, e.silenced - dt);
+  if (e.note && !((e.casting || 0) > 0)) {
+    // The breath was taken away -- by Decrypt (silence() zeroes it) or a
+    // Null-Zone that ran it out. The note is lost.
+    e.note = false;
+    clog('choir', 'snapped', { voice: e.voice });
+    return;
+  }
+  if ((e.casting || 0) > 0) {
+    e.casting -= dt;
+    if (e.casting <= 0) { e.casting = 0; e.note = false; landNote(e); }
+  }
+}
+
+function landNote(e) {
+  const C = run.choir;
+  if (!C) return;
+  C.notes++;
+  clog('choir', 'note', { voice: e.voice, notes: C.notes });
+  sfx('choirnote', e.x, e.y, C.notes / CHOIR_FULL);
+  ring(e.x, e.y, '#c8b8ff', 10, 120, 0.5);
+  if (C.notes >= CHOIR_FULL) {
+    C.notes = 0;
+    run.dawnFired = true;
+    sfx('chord');
+    shake(30);
+    ring(player.x, player.y, '#e8e0ff', 20, 900, 1.1);
+    run.banner = 3.6;
+    run.bannerText = 'The Chord';
+    run.bannerNote = 'Five notes, and every voice together. Break them sooner.';
+    player.invuln = 0;
+    hurtPlayerBy(player.maxHp * 4, player.x, player.y - 200, true);
+    return;
+  }
+  // The note comes down where you stand. Move.
+  slams.push({ x: player.x, y: player.y, r: 78, wind: 0.95, t: 0,
+               dmg: e.dmg, struck: false });
+  toast('A note lands \u00b7 ' + C.notes + ' of ' + CHOIR_FULL, '#c8b8ff');
+}
+
+function updateChoir(dt) {
+  const C = run.choir;
+  const S = C.singers, n = S.length;
+  // Falls: a singer at nothing is down, on its clock.
+  for (const s of S) {
+    if (s.state === 'up' && s.e.hp <= 0) {
+      s.state = 'down'; s.down = CHOIR_REVIVE;
+      s.e.casting = 0; s.e.note = false;
+      sfx('choirfall', s.e.x, s.e.y);
+      clog('choir', 'down', { voice: s.e.voice });
+    }
+  }
+  // Stilled: a run of downed singers with both ends down too is gone for good.
+  for (let i = 0; i < n; i++) {
+    const s = S[i];
+    if (s.state !== 'down') continue;
+    const L = S[(i + n - 1) % n], R = S[(i + 1) % n];
+    const low = x => x.state === 'down' || x.state === 'stilled';
+    if (low(L) && low(R)) {
+      for (const x of [L, s, R]) if (x.state === 'down') {
+        x.state = 'stilled';
+        ring(x.e.x, x.e.y, '#8c8168', 8, 70, 0.8);
+        burst(x.e.x, x.e.y, '#c8b8ff', 20, 200);
+        clog('choir', 'stilled', { voice: x.e.voice });
+      }
+      sfx('stilled', s.e.x, s.e.y);
+    }
+  }
+  // Rising again, at half its voice.
+  for (const s of S) {
+    if (s.state !== 'down') continue;
+    s.down -= dt;
+    if (!lowFx && Math.random() < dt * 2) ring(s.e.x, s.e.y, '#c8b8ff', 3, 26, 0.4);
+    if (s.down <= 0) {
+      s.state = 'up';
+      s.e.hp = s.e.maxHp * 0.5; s.e.hitFlash = 0;
+      enemies.push(s.e);
+      burst(s.e.x, s.e.y, '#c8b8ff', 14, 160);
+      sfx('choirrise', s.e.x, s.e.y);
+      clog('choir', 'rise', { voice: s.e.voice });
+    }
+  }
+  // The bar: what is still standing.
+  run.boss.hp = S.reduce((t, s) => t + (s.state === 'up' ? Math.max(0, s.e.hp) : 0), 0);
+  run.boss.notes = C.notes;
+  // The dark, deeper with every note held.
+  if (C.notes > 0) run.gloom = Math.max(run.gloom || 0, GLOOM_TIME * Math.min(0.9, 0.18 * C.notes));
+  // Silence: every voice stilled.
+  if (S.every(s => s.state === 'stilled')) {
+    run.choir = null;
+    run.boss.hp = 0;
+    run.boss = null;
+    run.bossDown = true;
+    run.banner = 3.4;
+    run.bannerText = 'The Choir is silent';
+    run.bannerNote = 'The ley-gate answers. Hold the circle.';
+    sfx('fall', C.x, C.y, 1);
+    shake(14);
+    clog('choir', 'silent');
+    return;
+  }
+  // The next breath. Deeper rungs breathe faster.
+  C.beat -= dt;
+  if (C.beat <= 0) {
+    const up = S.filter(s => s.state === 'up' && !(s.e.casting > 0) && !((s.e.silenced || 0) > 0));
+    C.beat = CHOIR_BEAT * (1 - 0.35 * Math.min(1, LEVEL.depth || 0)) * rand(0.85, 1.15);
+    if (up.length) {
+      const s = up[(Math.random() * up.length) | 0];
+      s.e.casting = CHOIR_WIND; s.e.castMax = CHOIR_WIND; s.e.note = true;
+      sfx('choirwind', s.e.x, s.e.y);
+      clog('choir', 'breath', { voice: s.e.voice });
     }
   }
 }
@@ -7026,6 +7248,7 @@ function update(dt) {
   updateFallen(dt);
   updateRuptures(dt);
   if (run.boss && run.boss.hp > 0) updateAgony(dt);
+  if (run.choir) updateChoir(dt);
   if (swapFlash > 0) swapFlash = Math.max(0, swapFlash - dt * 3.4);
   if (run.dawnPop > 0) run.dawnPop = Math.max(0, run.dawnPop - dt * 3.2);
   updateDrops(dt);
@@ -9051,14 +9274,38 @@ function endRun(won) {
   // and after the trophy, which is the one thing death cannot reach.
   if (hardcore && !won) wipeHardcore();
 
-  el.overTitle.innerHTML = won ? '<em>Escaped</em>'
+  // THE END OF THE LADDER. Out of the bottom rung with the whole Choir
+  // silenced is the one ending the game has. It is kept as an honour (so the
+  // Hall can say so, in either mode, for ever) and told on the outcome card;
+  // the first time at length, after that in a line. Nothing closes: every rung
+  // stays open to delve again.
+  run.ending = null;
+  if (won && LEVEL.finale && run.bossDown) {
+    const h = Object.assign({}, honours());
+    run.ending = h.silence ? 'again' : 'first';
+    h.silence = (h.silence || 0) + 1;
+    if (!h.silenceAt) h.silenceAt = Date.now();
+    keepHonours(h);
+    sfx('dawn', undefined, undefined, 1);
+  }
+
+  el.overTitle.innerHTML = run.ending ? '<em>Silence</em>'
+                         : won ? '<em>Escaped</em>'
                               : hardcore ? '<span>Ended</span>' : '<span>Slain</span>';
   // A Hardcore death is not the ordinary one and must not read like it. The
   // corpse branch below is right by accident -- the wipe cleared the corpse,
   // so it falls through to the short line -- but "the hive-mind claimed
   // another" is what it says every other time you die, and this time nothing
   // is owed to you and there is nothing to descend for.
-  el.overSub.textContent = won
+  el.overSub.textContent = run.ending === 'first'
+    ? 'The last voice is stilled, and the Rivenmark is quiet for the first time since the ' +
+      'hive-mind woke. Nothing sings under the Slag-Fields now; what is left down there ' +
+      'is only ground, and ground can be taken back. The ladder stays open. Every rung ' +
+      'can be delved again, and the deep ones will learn to sing again in time.'
+    : run.ending === 'again'
+    ? 'The Choir is silenced again. It will not stay so, but tonight it is quiet.' +
+      (carried ? ' You carried ' + carried + (carried === 1 ? ' find' : ' finds') + ' out.' : '')
+    : won
     ? ((carried ? 'The ley-gate held. You carried ' + carried +
                  (carried === 1 ? ' find' : ' finds') + ' out with the slag.'
                : 'The ley-gate held. You carried the slag out.') +

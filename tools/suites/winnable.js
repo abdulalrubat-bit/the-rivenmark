@@ -270,7 +270,26 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
      * Deceiver, the avatar itself. These are the only cases where the blade's
      * bearing is a decision, and therefore the only ones worth a drag. */
     const named = e => !!e && (e === run.boss || e.tender ||
-                               e.kind === 'lieutenant' || isAvatar(e));
+                               e.kind === 'lieutenant' || e.kind === 'singer' || isAvatar(e));
+
+    /* The Choir, as a player would learn to fight it: bring down the singer
+     * beside one already down (that is how a run of three is made), and a
+     * singer drawing breath is worth breaking first; otherwise the nearest. */
+    const choirTarget = () => {
+      const S = run.choir && run.choir.singers;
+      if (!S) return null;
+      const n = S.length, low = x => x.state !== 'up';
+      let best = null, bs = -Infinity;
+      for (let i = 0; i < n; i++) {
+        const s = S[i];
+        if (s.state !== 'up') continue;
+        const beside = (low(S[(i + n - 1) % n]) ? 1 : 0) + (low(S[(i + 1) % n]) ? 1 : 0);
+        const score = beside * 3 + ((s.e.casting || 0) > 0 ? 2 : 0) -
+                      Math.hypot(s.e.x - player.x, s.e.y - player.y) / 400;
+        if (score > bs) { bs = score; best = s.e; }
+      }
+      return best;
+    };
 
     /* One decision, made every THUMB_LAG frames and held in between. `wanted`
      * is what the bot came for; `nd` is how far off the nearest awake body
@@ -687,6 +706,7 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
             target = (run.boss.kind === 'crucible'
                         ? (totems.find(t => t.tender && t.hp > 0) ||
                            enemies.find(e => e.tender && e.hp > 0))
+                        : run.boss.kind === 'choir' ? choirTarget()
                         : enemies.find(e => e.kind === 'lieutenant' && e.hp > 0))
                      || run.boss;
           } else { mode = 'gate'; target = portal; }

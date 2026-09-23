@@ -784,6 +784,7 @@ export class Screens {
         '<h1>The Hall</h1>' + this.tabs('hall') + this.purse() +
         (this.note ? '<p class="sub">' + this.note + '</p>' : '') +
         '<p class="sub">What you build here outlasts every delve.</p>' +
+        this.silenced() +
         '<div class="rows">' + rows + '</div>' +
       '</div>';
 
@@ -796,6 +797,13 @@ export class Screens {
         this.note = why ? 'The mason shakes his head — ' + why + '.' : 'Built.';
         this.renderHall();
       }));
+  }
+  /* The ending, kept: once the whole Choir has been silenced and carried out
+   * of, the Hall says so, and how many times. */
+  silenced() {
+    const n = typeof honours === 'function' ? (honours().silence || 0) : 0;
+    return n ? '<p class="sub honour">\u25c8 The Silent Choir, Whole, was silenced' +
+               (n > 1 ? ' ' + n + ' times' : '') + '. The ladder stays open.</p>' : '';
   }
   wireTabs() {
     this.root.querySelectorAll('[data-tab]').forEach(b =>
