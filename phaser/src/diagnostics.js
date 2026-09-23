@@ -365,6 +365,10 @@ export function collect(game, log, extra) {
     dpr: window.devicePixelRatio,
     screen: screen.width + 'x' + screen.height,
     frame: s || 'not enough frames yet',
+    // What happened to each input -- see the combat log in the core. The
+    // summary is the part to read first; the tail is for finding the moment.
+    combat: typeof combatSummary === 'function' ? combatSummary() : null,
+    combatTail: typeof combatLog !== 'undefined' ? combatLog.slice(-120) : [],
     ...(extra || {}),
     ua: navigator.userAgent,
     mem: navigator.deviceMemory ? navigator.deviceMemory + 'GB' : 'not reported',
@@ -396,6 +400,14 @@ export function asText(d) {
     f ? 'over 20ms  ' + f.overPct + '% of frames' : '',
     d.bodies !== undefined ? 'bodies     ' + d.bodies : '',
     'ua         ' + d.ua,
+    d.combat ? '--- combat (what each input became) ---' : null,
+    d.combat ? Object.entries(d.combat).map(([k, n]) => k.padEnd(28) + n).join('\n') : null,
+    d.combatTail && d.combatTail.length ? '--- last ' + d.combatTail.length + ' combat events ---' : null,
+    d.combatTail && d.combatTail.length ? d.combatTail.map(e => {
+      const rest = Object.keys(e).filter(k => !['n', 'at', 't', 'k', 'r'].includes(k) && e[k] !== undefined)
+        .map(k => k + '=' + e[k]).join(' ');
+      return String(e.at).padStart(8) + 'ms  ' + (e.k + (e.r ? ' ' + e.r : '')).padEnd(24) + rest;
+    }).join('\n') : null,
     '--- end ---'
   ].filter(Boolean).join('\n');
 }

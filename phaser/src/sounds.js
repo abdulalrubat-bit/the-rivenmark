@@ -224,8 +224,8 @@ define('gear', { max: 2, gap: 0.08, vol: 0.55, make(ctx, out, t, mag, noise) {
 
 // A barrel or a husk going off: the biggest noise the floor makes.
 define('blast', { max: 2, gap: 0.06, vol: 0.8, make(ctx, out, t, mag, noise) {
-  noiseBurst(ctx, out, t, noise, { f0: 2800, f1: 70, a: 0.003, d: 0.4 + 0.25 * mag, peak: 0.55 });
-  return tone(ctx, out, t, { f0: 64, f1: 28, a: 0.004, d: 0.5 + 0.2 * mag, peak: 0.45 + 0.2 * mag });
+  noiseBurst(ctx, out, t, noise, { f0: 2800, f1: 70, a: 0.003, d: 0.4 + 0.25 * mag, peak: 0.42 });
+  return tone(ctx, out, t, { f0: 64, f1: 28, a: 0.004, d: 0.5 + 0.2 * mag, peak: 0.4 + 0.15 * mag });
 } });
 
 // A pillar coming down: rubble, in several falls.
@@ -303,4 +303,159 @@ define('death', { max: 1, gap: 1, vol: 0.85, make(ctx, out, t, mag, noise) {
   if (mag > 0.75) len = Math.max(len, 0.3 + ring(ctx, out, t + 0.3, { f: 73.4, d: 2.2, peak: 0.2,
                                                                   ratios: [1, 2.0, 2.4, 3.0] }));
   return len;
+} });
+
+/* ---- the bosses ---------------------------------------------------------------
+ * Each boss event is a warning or a verdict, so each is longer and lower than
+ * anything the horde makes, and the ones the player must answer (the ring,
+ * the Agony, the Breath) are heard wherever the player is standing.
+ */
+
+// An avatar arrives. A swell from underneath and a struck bell with a tritone
+// in it. The Crucible (mag 1) is lowest; the uninvited Deceiver is shorter.
+define('arrive', { max: 1, gap: 1, vol: 0.8, far: 0.5, make(ctx, out, t, mag, noise) {
+  const base = 55 - 12 * mag;
+  noiseBurst(ctx, out, t, noise, { f0: 200, f1: 900, a: 0.5, d: 0.6, peak: 0.12 });
+  tone(ctx, out, t, { f0: base, f1: base * 0.94, a: 0.4, d: 1.4 * (0.6 + mag * 0.5), peak: 0.45 });
+  return 0.3 + ring(ctx, out, t + 0.3, { f: base * 2, d: 1.8, peak: 0.14, ratios: [1, 1.414, 2.0, 2.83] });
+} });
+
+// The Deceiver stepping from one place to another: gold air, sucked in.
+define('blink', { max: 1, gap: 0.3, vol: 0.55, make(ctx, out, t, mag, noise) {
+  noiseBurst(ctx, out, t, noise, { type: 'bandpass', q: 2, f0: 3000, f1: 400, a: 0.02, d: 0.16, peak: 0.2 });
+  return tone(ctx, out, t, { wave: 'triangle', f0: 660, f1: 220, a: 0.005, d: 0.18, peak: 0.08 });
+} });
+
+// His guard coming up: a closed metal note. Blows are wasted until it drops.
+define('guard', { max: 1, gap: 0.5, vol: 0.55, make(ctx, out, t) {
+  tone(ctx, out, t, { f0: 98, f1: 96, a: 0.01, d: 0.4, peak: 0.2 });
+  return ring(ctx, out, t, { f: 294, d: 0.5, peak: 0.12, ratios: [1, 2.0, 2.76] });
+} });
+
+// The mirages: the same note three times, a little apart, a little out of tune.
+define('mirage', { max: 1, gap: 0.5, vol: 0.5, make(ctx, out, t) {
+  let len = 0;
+  [[0, 523], [0.06, 530], [0.12, 516]].forEach(([dt, f]) => {
+    len = Math.max(len, dt + tone(ctx, out, t + dt, { wave: 'triangle', f0: f, f1: f * 0.9, a: 0.01, d: 0.35, peak: 0.05 }));
+  });
+  return len;
+} });
+
+// Bodies called up: a low groan out of the ground.
+define('summon', { max: 1, gap: 0.5, vol: 0.55, make(ctx, out, t, mag, noise) {
+  noiseBurst(ctx, out, t, noise, { f0: 220, f1: 500, a: 0.2, d: 0.35, peak: 0.18 });
+  return tone(ctx, out, t, { wave: 'triangle', f0: 70, f1: 90, a: 0.2, d: 0.45, peak: 0.2 });
+} });
+
+// The Furnace thrown: a roar that rises into the ring before it lands. The
+// only boss sound that climbs, because it is a warning that something is
+// coming down, and it is heard wherever you are.
+define('furnace', { max: 1, gap: 1, vol: 0.75, far: 0.55, make(ctx, out, t, mag, noise) {
+  noiseBurst(ctx, out, t, noise, { f0: 180, f1: 1400, a: 0.45, d: 0.35, peak: 0.35 });
+  return tone(ctx, out, t, { f0: 60, f1: 120, a: 0.45, d: 0.4, peak: 0.35 });
+} });
+
+// Synchronized Agony, winding: three blades drawn at once.
+define('agonywind', { max: 1, gap: 1, vol: 0.6, far: 0.5, make(ctx, out, t, mag, noise) {
+  let len = 0;
+  [0, 0.05, 0.1].forEach((dt, i) => {
+    len = Math.max(len, dt + noiseBurst(ctx, out, t + dt, noise,
+      { type: 'bandpass', q: 3, f0: 1800 + i * 300, f1: 4200, a: 0.12, d: 0.12, peak: 0.1 }));
+  });
+  return Math.max(len, tone(ctx, out, t, { wave: 'triangle', f0: 147, f1: 139, a: 0.2, d: 0.5, peak: 0.1 }));
+} });
+
+// And landing: one blow, the three summed. Quieter when it found nobody.
+define('agony', { max: 1, gap: 0.5, vol: 0.85, make(ctx, out, t, mag, noise) {
+  noiseBurst(ctx, out, t, noise, { f0: 3000, f1: 120, a: 0.002, d: 0.3, peak: 0.3 + 0.25 * mag });
+  return tone(ctx, out, t, { f0: 82, f1: 30, a: 0.003, d: 0.55, peak: 0.3 + 0.3 * mag });
+} });
+
+// The Breath of the Void: a long inhale the whole room hears. It must be
+// answered, so it is the most insistent sound the Deceiver has.
+define('breath', { max: 1, gap: 2, vol: 0.75, far: 0.6, make(ctx, out, t, mag, noise) {
+  noiseBurst(ctx, out, t, noise, { f0: 150, f1: 1200, a: 1.4, d: 0.4, peak: 0.22 });
+  tone(ctx, out, t, { f0: 49, f1: 49, a: 0.6, d: 1.4, peak: 0.3 });
+  tone(ctx, out, t, { f0: 233, f1: 247, a: 1.2, d: 0.6, peak: 0.06 });
+  return tone(ctx, out, t, { f0: 220, f1: 262, a: 1.2, d: 0.6, peak: 0.06 });
+} });
+
+// The Breath snuffed by a Null-Zone: the void closing over the light.
+define('nullified', { max: 1, gap: 1, vol: 0.75, make(ctx, out, t, mag, noise) {
+  noiseBurst(ctx, out, t, noise, { f0: 2400, f1: 80, a: 0.003, d: 0.5, peak: 0.35 });
+  tone(ctx, out, t, { f0: 62, f1: 28, a: 0.005, d: 0.8, peak: 0.5 });
+  return ring(ctx, out, t, { f: 196, d: 0.9, peak: 0.08, bend: 0.97, ratios: [1, 1.5] });
+} });
+
+// False Dawn: the light coming up, and everything in it.
+define('dawn', { max: 1, gap: 2, vol: 0.9, far: 0.9, make(ctx, out, t, mag, noise) {
+  noiseBurst(ctx, out, t, noise, { f0: 6000, f1: 200, a: 0.02, d: 1.6, peak: 0.4 });
+  tone(ctx, out, t, { f0: 40, f1: 25, a: 0.01, d: 1.8, peak: 0.6 });
+  let len = 0;
+  for (const f of [262, 330, 392, 523])
+    len = Math.max(len, tone(ctx, out, t, { f0: f, f1: f * 1.01, a: 0.05, d: 1.8, peak: 0.05 }));
+  return len;
+} });
+
+// An avatar falling. The arrival's bell again, cracked, falling away -- the
+// same voice, so the fall answers the arrival.
+define('fall', { max: 1, gap: 1, vol: 0.85, far: 0.6, make(ctx, out, t, mag, noise) {
+  noiseBurst(ctx, out, t, noise, { f0: 2400, f1: 60, a: 0.004, d: 0.9, peak: 0.4 });
+  tone(ctx, out, t, { f0: 70, f1: 26, a: 0.005, d: 1.6 * (0.6 + 0.4 * mag), peak: 0.55 });
+  return 0.1 + ring(ctx, out, t + 0.1, { f: 98, d: 2.0 * (0.6 + 0.4 * mag), peak: 0.13, bend: 0.93,
+                                         ratios: [1, 1.414, 2.0, 2.83] });
+} });
+
+/* ---- the menus ------------------------------------------------------------------
+ * Short and quiet: the menus are where a player reads, so nothing here should
+ * be louder than a page turning. The results of a tap (bought, built, worn)
+ * are a little fuller than the tap, so the ear knows the tap did something.
+ */
+
+// Any button: a soft wooden click.
+define('tap', { max: 2, gap: 0.04, vol: 0.4, make(ctx, out, t, mag, noise) {
+  noiseBurst(ctx, out, t, noise, { type: 'bandpass', q: 2.5, f0: 1300, f1: 700, a: 0.001, d: 0.025, peak: 0.12 });
+  return tone(ctx, out, t, { wave: 'triangle', f0: 240, f1: 180, a: 0.002, d: 0.04, peak: 0.08 });
+} });
+
+// Coin changing hands.
+define('buy', { max: 1, gap: 0.1, vol: 0.55, make(ctx, out, t) {
+  let len = 0;
+  [[0, 1900], [0.05, 2450], [0.1, 2150]].forEach(([dt, f]) => {
+    len = Math.max(len, dt + ring(ctx, out, t + dt, { f, d: 0.14, peak: 0.05, ratios: [1, 2.7] }));
+  });
+  return Math.max(len, tone(ctx, out, t, { f0: 130, f1: 110, a: 0.005, d: 0.18, peak: 0.12 }));
+} });
+
+// Stone set on stone: a Hall station raised.
+define('build', { max: 1, gap: 0.2, vol: 0.6, make(ctx, out, t, mag, noise) {
+  noiseBurst(ctx, out, t, noise, { f0: 1200, f1: 140, a: 0.003, d: 0.2, peak: 0.3 });
+  tone(ctx, out, t, { f0: 90, f1: 55, a: 0.004, d: 0.3, peak: 0.35 });
+  return 0.12 + ring(ctx, out, t + 0.12, { f: 196, d: 0.6, peak: 0.07, ratios: [1, 2.0, 3.0] });
+} });
+
+// A piece put on: metal settling into place.
+define('equip', { max: 1, gap: 0.08, vol: 0.55, make(ctx, out, t, mag, noise) {
+  noiseBurst(ctx, out, t, noise, { type: 'highpass', f0: 2500, f1: 1200, a: 0.002, d: 0.05, peak: 0.12 });
+  tone(ctx, out, t, { f0: 140, f1: 100, a: 0.003, d: 0.1, peak: 0.18 });
+  return ring(ctx, out, t + 0.02, { f: 520, d: 0.25, peak: 0.05, ratios: [1, 2.76] });
+} });
+
+// And taken off: the same, lower and duller.
+define('unequip', { max: 1, gap: 0.08, vol: 0.5, make(ctx, out, t, mag, noise) {
+  noiseBurst(ctx, out, t, noise, { f0: 1500, f1: 400, a: 0.002, d: 0.05, peak: 0.1 });
+  return tone(ctx, out, t, { f0: 120, f1: 85, a: 0.003, d: 0.12, peak: 0.16 });
+} });
+
+// A piece thrown out, for good: a falling scrape.
+define('discard', { max: 1, gap: 0.1, vol: 0.5, make(ctx, out, t, mag, noise) {
+  noiseBurst(ctx, out, t, noise, { type: 'bandpass', q: 1.5, f0: 1600, f1: 250, a: 0.005, d: 0.22, peak: 0.16 });
+  return tone(ctx, out, t, { wave: 'triangle', f0: 180, f1: 70, a: 0.004, d: 0.22, peak: 0.1 });
+} });
+
+// Descending: the gate-house door, and a long fall into the dark.
+define('descend', { max: 1, gap: 1, vol: 0.7, make(ctx, out, t, mag, noise) {
+  noiseBurst(ctx, out, t, noise, { f0: 900, f1: 90, a: 0.02, d: 0.9, peak: 0.25 });
+  tone(ctx, out, t, { f0: 110, f1: 41, a: 0.05, d: 1.1, peak: 0.35 });
+  return ring(ctx, out, t, { f: 147, d: 1.2, peak: 0.08, bend: 0.9, ratios: [1, 2.0] });
 } });

@@ -3083,6 +3083,58 @@ function nearestFoe(R) {
   return avatar || best;
 }
 
+/* THE ASSIST, under the new controls. What an undirected blow is aimed at.
+ *
+ * nearestFoe above put the avatar first, always -- so with a thrall at arm's
+ * length and the avatar across the room, a tap swung across the room and the
+ * thrall hit you (the analysis' C08). Boss focus is a choice now: drag the
+ * attack at him. The assist scores what is in reach instead:
+ *
+ *   distance        nearer is better
+ *   bearing         something in front of where you are going or facing is
+ *                   better than something behind you -- scaled by distance,
+ *                   so it steers between far bodies and barely touches a
+ *                   near one: a body at your shoulder is the threat whichever
+ *                   way you face
+ *   threat          a body winding a blow or a cast at you right now is
+ *                   better still -- it is the one that is about to matter
+ *
+ * and it KEEPS what it had unless something else scores clearly better
+ * (ASSIST_KEEP), so two bodies at nearly the same range do not flip the aim
+ * back and forth between swings. Rock and Isaac's blindness to mirages are
+ * the same rules nearestFoe keeps.
+ */
+const ASSIST_KEEP = 1.25;
+function assistScore(e, R, fx, fy) {
+  const dx = e.x - player.x, dy = e.y - player.y, d = Math.hypot(dx, dy) || 1;
+  const off = fx === null ? 0 : Math.acos(clamp((dx * fx + dy * fy) / d, -1, 1)) / Math.PI;
+  const threat = ((e.tell || 0) > 0 || (e.casting || 0) > 0 || (e.agony || 0) > 0) ? 0.3 : 0;
+  return (d / R) * (1 + 0.8 * off) - threat;
+}
+function assistTarget(R) {
+  enemyGrid.query(player.x, player.y, R, _near);
+  const blind = player.hero === 'isaac';
+  // Which way the hero means to go: the stick if it is being pushed, else
+  // the way the hero faces.
+  let fx = null, fy = null;
+  if (stick.mag > 0.2) { fx = stick.dx; fy = stick.dy; }
+  else if (typeof player.angle === 'number') { fx = Math.cos(player.angle); fy = Math.sin(player.angle); }
+  let best = null, bestS = Infinity, keepS = Infinity;
+  const held = player.assistT;
+  for (let i = 0; i < _near.length; i++) {
+    const e = _near[i];
+    if (e.hp <= 0 || (blind && e.kind === 'mirage')) continue;
+    if (dist2(player.x, player.y, e.x, e.y) > R * R) continue;
+    if (!clearShot(player.x, player.y, e.x, e.y)) continue;
+    const s = assistScore(e, R, fx, fy);
+    if (e === held) keepS = s;
+    if (s < bestS) { bestS = s; best = e; }
+  }
+  const pick = held && keepS < Infinity && keepS <= bestS * ASSIST_KEEP + 0.05 ? held : best;
+  player.assistT = pick;
+  return pick;
+}
+
 /* THE AUTOMATIC BLADE IS GONE, AND THIS IS WHERE IT WAS.
  *
  * fire() found the nearest body and swung at it on a timer, at 0.62 of a real
@@ -4158,7 +4210,7 @@ const ABILITIES = {
       cd: 0, gcd: 1, cost: CHARGE_MAX, radius: 150, dmg: 3.2, mitigate: 2 },
     { id: 'guillotine', tag: 'GUILLOTINE', role: 'strike', name: 'Star-Forged Guillotine', mark: '⚔',
       note: 'Spends three. Comes down on one body, and on the Vulnerable it ends things.',
-      cd: 0, gcd: 1.25, cost: CHARGE_MAX, reach: 96, dmg: 7 },
+      cd: 0, gcd: 1.25, cost: CHARGE_MAX, reach: 96, dmg: 7, needsTarget: true },
     { id: 'purge', tag: 'PURGE', role: 'mend', name: 'Grounding Purge', mark: '✚',
       note: 'Channelled. Breaks the moment you are struck or move.',
       cd: 14, gcd: 1, channel: 3, healPct: 0.15 }
@@ -4190,6 +4242,9 @@ function abilityBlock(a) {
   if (a.cost && (player.charges || 0) < a.cost) return 'cost';
   if (a.costPct && (player.tension || 0) < TENSION_MAX * a.costPct) return 'cost';
   if (a.uses && (player.jars || 0) <= 0) return 'cost';
+  // A finisher with nothing to finish is refused BEFORE anything is spent.
+  // It used to spend three Charges and then find out (the analysis' C09).
+  if (a.needsTarget && !nearestBody(a.reach)) return 'no-target';
   return null;
 }
 
@@ -4199,7 +4254,8 @@ function castAbility(id) {
   const block = abilityBlock(a);
   // A press that does nothing still has to answer, or it reads as a missed
   // tap and gets pressed again. 'no' is the game not running: nothing to say.
-  if (block) { if (block !== 'no') sfx('deny'); return false; }
+  if (block) { if (block !== 'no') { sfx('deny'); clog('ability', 'refused', { id, why: block }); } return false; }
+  clog('ability', 'cast', { id });
   if (a.cost) spendCharges(a.cost);
   if (a.costPct) { player.tension = Math.max(0, (player.tension || 0) - TENSION_MAX * a.costPct);
                    player.chargePop = 1; }
@@ -4539,7 +4595,29 @@ let hitStop = 0;
 
 // Freeze the simulation for a moment. Called at the point of impact, not at
 // the point of the swing: the pause has to land with the blow.
-function freeze(seconds) {
+/* `kind` is 'routine' for the beat an ordinary kill is worth, and anything
+ * else for the big moments (a heavy blow, the Aegis, the Guillotine, a boss's
+ * move). Under the new controls a routine freeze does not happen at all --
+ * the kill is felt through the flash, the recoil, the shake and the sound,
+ * and the hero keeps moving -- and the big ones share FREEZE_BUDGET: at most
+ * that much of the world stopped in any one-second window, however many
+ * land. The window is on stepClock, which runs through a freeze as well as
+ * outside one, so a freeze cannot buy itself more freeze. The classic
+ * controls keep the old rule, so the two can be compared. */
+const FREEZE_BUDGET = 0.12;
+let stepClock = 0;
+const freezesSpent = [];            // [when, seconds] granted inside the window
+function freeze(seconds, kind) {
+  if (controlScheme !== 'classic') {
+    if (kind === 'routine') return;
+    while (freezesSpent.length && freezesSpent[0][0] <= stepClock - 1) freezesSpent.shift();
+    let used = 0;
+    for (const f of freezesSpent) used += f[1];
+    seconds = Math.min(seconds, FREEZE_BUDGET - used);
+    if (seconds <= hitStop) return;
+    freezesSpent.push([stepClock, seconds - hitStop]);
+  }
+  if (seconds > hitStop) clog('freeze', kind || '', { s: +seconds.toFixed(3) });
   hitStop = Math.min(HITSTOP_MAX, Math.max(hitStop, seconds));
 }
 
@@ -4550,6 +4628,7 @@ function freeze(seconds) {
  * called update() directly, never froze on a blow at all. Returns whether the
  * world moved. */
 function stepDelve(dt) {
+  stepClock += dt;
   if (hitStop > 0) { hitStop = Math.max(0, hitStop - dt); return false; }
   update(dt);
   return true;
@@ -4717,7 +4796,12 @@ function moveVector() {
 const view = { w: 0, h: 0, dpr: 1, safeT: 0, safeR: 0 };
 const cam  = { x: 0, y: 0, shake: 0 };
 
-function shake(amount) { cam.shake = Math.min(16, cam.shake + amount); }
+// How much the camera may shake: the player's setting (full, reduced, off),
+// for anyone the motion makes ill. The rules still ASK for the shake; only
+// how far it moves is theirs.
+let motionScale = 1;
+function setMotion(m) { motionScale = clamp(+m || 0, 0, 1); return motionScale; }
+function shake(amount) { cam.shake = Math.min(16, cam.shake + amount * motionScale); }
 
 function updateCamera(dt) {
   const tx = clamp(player.x - view.w / 2, 0, Math.max(0, WORLD.w - view.w));
@@ -4782,6 +4866,7 @@ function hurtPlayerBy(dmg, fx, fy, sized) {
   const taken = dmg * (sized ? 1 : delveBite()) *
                 (1 - (player.ward || 0)) * (1 - mit);
   breakChannel('hurt');
+  clog('hurt', '', { dmg: Math.round(taken), from: fx === undefined ? 'self' : Math.round(Math.atan2(fy - player.y, fx - player.x) * 57.3) });
   player.hp -= taken;
   player.invuln = player.iframe;
   player.hitFlash = 0.3;
@@ -4908,6 +4993,7 @@ function damageEnemy(e, dmg, fx, fy) {
       return;                                   // a lie, not a body
     }
     if (e.kind === 'crucible') {
+      sfx('fall', e.x, e.y, 1);
       run.bossDown = true;
       run.boss = null;
       run.banner = 3.4;
@@ -4923,6 +5009,7 @@ function damageEnemy(e, dmg, fx, fy) {
       // An invader is not the avatar the delve is waiting on. Killing him must
       // not open the ley-gate, or the quota stops meaning anything the moment
       // one turns up.
+      sfx('fall', e.x, e.y, e.invader ? 0.6 : 1);
       if (e.invader) {
         run.invader = null;
         run.invadeKills = (run.invadeKills || 0) + 1;
@@ -4963,7 +5050,7 @@ function damageEnemy(e, dmg, fx, fy) {
     // break an edge that expands rather than a puff that fades.
     const big = e.r > 18;
     sfx('kill', e.x, e.y, clamp((e.r - 8) / 18, 0, 1));
-    freeze(KILL_FREEZE * (big ? 1.6 : 1));
+    freeze(KILL_FREEZE * (big ? 1.6 : 1), 'routine');
     shake(KILL_SHAKE * (big ? 2 : 1));
     burst(e.x, e.y, e.color, big ? 18 : 10, 210);
     ring(e.x, e.y, e.color, 3, e.r * 2.4, 0.22);
@@ -5053,7 +5140,7 @@ function updatePlayer(dt) {
   }
   if (player.regen > 0) player.hp = Math.min(player.maxHp, player.hp + player.regen * dt);
 
-  updateConduit(dt);
+  if (controlScheme === 'classic') updateConduit(dt); else updateAttack(dt);
 }
 
 /* --- THE CONDUIT ----------------------------------------------------------
@@ -5131,8 +5218,40 @@ const CLEAVE_SWEEP   = 2.1;
 const CLEAVE_REACH   = 1.6;
 const CLEAVE_STRIDE  = 0.45;  // what it costs to stand there gathering
 
+/* THE COMBAT LOG. What happened to every input, kept in memory and never
+ * written anywhere: a press, and whether it became a swing, was held too long
+ * to count as a tap, landed while the blade was still coming round, or turned
+ * into a gather because the thumb drifted to the edge. A player saying "it
+ * feels off" is describing this list without being able to see it; the
+ * diagnostics dump exports it, so a phone session can be read afterwards.
+ *
+ * Bounded (COMBAT_LOG_MAX entries, oldest dropped) and cheap -- one small
+ * object per event, and nothing per frame. `at` is the page's own monotonic
+ * clock in ms, because the delve's clock stops during a hit-stop and the
+ * point is partly to see what a hit-stop costs. */
+const COMBAT_LOG_MAX = 400;
+const combatLog = [];
+// Every entry is numbered, so "what happened since" can be asked by number
+// even once the oldest entries have been let go.
+let combatSeq = 0;
+function clog(k, r, extra) {
+  const e = { n: ++combatSeq, at: Math.round(performance.now()),
+              t: run ? +(+run.time || 0).toFixed(3) : 0, k, r: r || '' };
+  if (extra) for (const key in extra) e[key] = extra[key];
+  combatLog.push(e);
+  if (combatLog.length > COMBAT_LOG_MAX) combatLog.shift();
+  return e;
+}
+// Counts by kind and result: the log at a glance.
+function combatSummary() {
+  const out = {};
+  for (const e of combatLog) { const key = e.k + (e.r ? ':' + e.r : ''); out[key] = (out[key] || 0) + 1; }
+  return out;
+}
+
 // The three calls a host makes. Nothing here knows about pixels or pointers.
 function conduitPress() {
+  clog('press');
   player.conDown = true;
   player.conT = 0;
   player.conAim = false;
@@ -5143,17 +5262,23 @@ function conduitPress() {
 // host reports it; inside, it does not call this at all.
 function conduitAim(angle, mag) {
   if (!player.conDown) return;
+  const m = clamp(mag, 0, 1);
+  if (!player.conAim) clog('aim', 'start', { mag: +m.toFixed(2) });
+  else if (m >= CONDUIT_EDGE && (player.conMag || 0) < CONDUIT_EDGE)
+    clog('aim', 'edge', { held: +player.conT.toFixed(3) });
   player.conAim = true;
   player.conA = angle;
-  player.conMag = clamp(mag, 0, 1);
+  player.conMag = m;
 }
 
 function conduitRelease() {
   if (!player.conDown) return;
   player.conDown = false;
+  const held = +(player.conT || 0).toFixed(3);
   if ((player.cleave || 0) >= CLEAVE_MIN) {
     // A gathered blow, worth what it gathered.
     const f = player.cleave;
+    clog('release', 'heavy', { held, f: +f.toFixed(2) });
     swingAt(player.conA, { bite: 1 + (CLEAVE_BITE - 1) * f,
                            sweep: 1 + (CLEAVE_SWEEP - 1) * f,
                            reach: 1 + (CLEAVE_REACH - 1) * f,
@@ -5167,7 +5292,15 @@ function conduitRelease() {
     ring(player.x, player.y, HEROES[player.hero].magic, 12, 60 + 90 * f, 0.3);
     player.combo = 0; player.comboT = 0;
   } else if (!player.conAim && player.conT <= CONDUIT_TAP) {
-    tapSwing();
+    const ok = tapSwing();
+    clog('release', ok ? 'tap' : 'tap-refused', { held, why: ok ? undefined : player.tapWhy });
+  } else if ((player.cleave || 0) > 0) {
+    clog('release', 'heavy-too-short', { held, f: +player.cleave.toFixed(2) });
+  } else if (player.conAim) {
+    clog('release', 'aimed', { held });
+  } else {
+    // Held still past the tap window: nothing happens at all. The audit's C01.
+    clog('release', 'held-too-long', { held });
   }
   player.cleave = 0;
   player.conAim = false;
@@ -5180,7 +5313,8 @@ function conduitRelease() {
  * and hitting the moment again inside the window carries the chain on.
  */
 function tapSwing() {
-  if (player.fireTimer > 0) return false;
+  if (player.fireTimer > 0) { player.tapWhy = 'blade-busy ' + player.fireTimer.toFixed(3) + 's'; return false; }
+  player.tapWhy = null;
   const last = player.combo || 0;
   const n = (player.comboT || 0) > 0 ? Math.min(COMBO_LEN, last + 1) : 1;
   const finisher = n >= COMBO_LEN;
@@ -5208,7 +5342,7 @@ function tapSwing() {
  * answer.
  */
 function aimAngle() {
-  const t = nearestFoe(player.range);
+  const t = controlScheme === 'classic' ? nearestFoe(player.range) : assistTarget(player.range);
   if (t) return Math.atan2(t.y - player.y, t.x - player.x);
   if (stick.mag > 0.05) return Math.atan2(stick.dy, stick.dx);
   return player.angle || 0;
@@ -5231,6 +5365,7 @@ function updateConduit(dt) {
     player.conT += dt;
     // At the edge, and held: gathering. Nothing else happens while it does.
     if (player.conAim && player.conMag >= CONDUIT_EDGE && player.conT >= CONDUIT_HOLD) {
+      if (!(player.cleave > 0)) clog('gather', 'start', { held: +player.conT.toFixed(3) });
       player.cleave = clamp((player.conT - CONDUIT_HOLD) /
                             (CONDUIT_FULL - CONDUIT_HOLD), 0, 1);
       return;
@@ -5245,11 +5380,230 @@ function updateConduit(dt) {
   player.fireTimer = 0;
   if (player.conDown && player.conAim) {
     // Driven: down the line you are pointing, at the whole of the blade.
+    clog('swing', 'driven');
     swingAt(player.conA, { bite: 1 });
     clamour(CLAMOUR_SWING);
     player.fireTimer = player.fireDelay;
   }
 }
+
+/* === THE BLADE, REBUILT ===================================================
+ *
+ * What the Conduit above does to a thumb, measured (docs/COMBAT_BASELINE.md):
+ * a still press held past 200ms does nothing; a tap while the blade is still
+ * coming round is lost; aiming out near the rim quietly turns the attack into
+ * a gather, stops the swings and slows the walk; a cancelled touch fires a
+ * heavy blow; and every kill stops the world, movement and all -- half of all
+ * frames, in a second of ten kills. Each is a way for a correct input to do
+ * the wrong thing, and a player feels all of them as "it's not fluid".
+ *
+ * So the attack is a CONTRACT now, and every input is either carried out,
+ * held a moment, or refused with a reason in the combat log:
+ *
+ *   press       strikes now if the blade is ready -- the next simulation step
+ *   held        strikes again every time the blade comes round, for as long as
+ *               it is held; how far the thumb is from the middle changes WHERE
+ *               the blow goes and nothing else
+ *   aim         a drag past the host's deadzone aims by hand; brought back to
+ *               the middle, the host says so (attackNeutral) and aim goes back
+ *               to the assist -- the knob and the simulation agree
+ *   early       a press while the blade is still coming round waits in ONE slot
+ *               and strikes the moment it is ready, if it is ready within
+ *               ATTACK_BUFFER; older than that it has expired (a hold, though,
+ *               is still a hold, and strikes on the beat regardless)
+ *   cancelled   a touch the system took away (pointercancel, lost capture),
+ *               a pause, a swap, a death or a new delve: the intent is
+ *               dropped -- never turned into a blow
+ *
+ * The heavy blow is not here: it is its own control (see HEAVY), because a
+ * gesture that changes meaning with thumb distance is the thing being fixed.
+ *
+ * The old Conduit is kept whole behind controlScheme 'classic', so the two
+ * can be compared on the same phone.
+ * ------------------------------------------------------------------------ */
+const ATTACK_BUFFER = 0.125;  // seconds an early press waits. Provisional: the
+                              // analysis asks for 100-150ms, tried on a phone
+let controlScheme = 'new';
+function setControls(s) {
+  attackCancel('scheme');
+  if (player) { player.conDown = false; player.cleave = 0; player.conAim = false; }
+  controlScheme = s === 'classic' ? 'classic' : 'new';
+  return controlScheme;
+}
+
+function attackPress() {
+  if (!player) return;
+  player.atkHeld = true;
+  // One slot. A new press replaces an older one rather than queueing behind
+  // it: two quick taps inside one beat are one strike, not a backlog.
+  player.atkQ = { age: 0 };
+  clog('press', player.fireTimer > 0 ? 'early ' + player.fireTimer.toFixed(3) + 's' : 'ready');
+}
+function attackAim(angle, mag) {
+  if (!player) return;
+  if (typeof player.atkAim !== 'number') clog('aim', 'manual');
+  player.atkAim = angle;
+  player.atkMag = clamp(mag, 0, 1);
+}
+function attackNeutral() {
+  if (!player) return;
+  if (typeof player.atkAim === 'number') clog('aim', 'neutral');
+  player.atkAim = null;
+  player.atkMag = 0;
+}
+// Letting go stops the repeat. A press already waiting in the slot stays
+// owed: a quick tap during the recovery is a strike when the blade is ready.
+function attackRelease() {
+  if (!player || !player.atkHeld) return;
+  player.atkHeld = false;
+  clog('release', 'lift');
+}
+function attackCancel(why) {
+  if (!player) return;
+  if (player.atkHeld || player.atkQ) clog('cancel', why || '');
+  player.atkHeld = false;
+  player.atkQ = null;
+  player.atkAim = null;
+  player.atkMag = 0;
+  heavyCancel(why);
+}
+
+function updateAttack(dt) {
+  updateHeavy(dt);
+  if ((player.comboT || 0) > 0) {
+    player.comboT -= dt;
+    if (player.comboT <= 0) { player.combo = 0; player.comboT = 0; }
+  }
+  if ((player.comboPop || 0) > 0) player.comboPop = Math.max(0, player.comboPop - dt * 2.5);
+  if (player.fireTimer > 0) player.fireTimer = Math.max(0, player.fireTimer - dt);
+  const q = player.atkQ;
+  if (q) q.age += dt;
+  if (player.fireTimer > 0) return;
+  if (heavyBusy()) return;                   // the heavy owns the blade while it is up
+  if (q && !player.atkHeld && q.age > ATTACK_BUFFER + 1e-9) {
+    clog('press', 'expired', { waited: +q.age.toFixed(3) });
+    player.atkQ = null;
+    return;
+  }
+  if (q || player.atkHeld) {
+    player.atkQ = null;
+    lightStrike();
+  }
+}
+
+/* One light blow. The same chain the tapped Conduit had -- three in rhythm
+ * and the third goes wide -- because a held attack keeps the rhythm for you. */
+function lightStrike() {
+  const manual = typeof player.atkAim === 'number';
+  const last = player.combo || 0;
+  const n = (player.comboT || 0) > 0 ? Math.min(COMBO_LEN, last + 1) : 1;
+  const finisher = n >= COMBO_LEN;
+  swingAt(manual ? player.atkAim : aimAngle(), { bite: 1, sweep: finisher ? COMBO_SWEEP : 1 });
+  clamour(CLAMOUR_SWING);
+  player.combo = finisher ? 0 : n;
+  player.comboT = finisher ? 0 : player.fireDelay * COMBO_WINDOW;
+  player.comboPop = finisher ? 1 : 0.6;
+  if (finisher) ring(player.x, player.y, HEROES[player.hero].magic, 10, 54, 0.22);
+  player.fireTimer = player.fireDelay;
+  clog('swing', manual ? 'manual' : 'assist', finisher ? { finisher: true } : undefined);
+}
+
+/* HEAVY: the gathered blow, on its own button.
+ *
+ * It used to live at the Conduit's rim, reached by holding a drag out there
+ * long enough -- which meant a player aiming at something far off turned
+ * their attack into a gather without asking to. Now it is asked for, and
+ * nothing else asks for it:
+ *
+ *   press      the gather begins at once, and shows: the charge fills over
+ *              HEAVY_FULL, the walk drops to CLEAVE_STRIDE (the price of a
+ *              heavy blow is a moment of being easy to reach), and the light
+ *              attack waits -- the heavy owns the blade while it is up
+ *   release    a gather of CLEAVE_MIN or more lands as the gathered blow,
+ *              through a guard from GUARD_BREAK; less than that is a light
+ *              strike if the blade is ready, and a logged cancel if it is not
+ *              -- never a press that silently did nothing
+ *   cancelled  a touch the system took, a pause, a swap, a death: no blow
+ *
+ * Aimed like the light attack: by hand while the attack control is dragged,
+ * by the assist otherwise. */
+const HEAVY_FULL = 0.7;       // seconds to a full gather
+
+function heavyPress() {
+  if (!player || state !== 'play') return;
+  player.hvy = { t: 0 };
+  player.cleave = 0;
+  clog('heavy', 'press');
+}
+function heavyRelease() {
+  const h = player && player.hvy;
+  if (!h) return;
+  player.hvy = null;
+  const f = player.cleave || 0;
+  player.cleave = 0;
+  if (f >= CLEAVE_MIN) {
+    heavyStrike(f);
+  } else if ((player.fireTimer || 0) <= 0) {
+    clog('heavy', 'short-light', { f: +f.toFixed(2) });
+    lightStrike();
+  } else {
+    clog('heavy', 'short-cancelled', { f: +f.toFixed(2), why: 'blade-busy' });
+    sfx('fizzle');
+  }
+}
+function heavyCancel(why) {
+  if (!player || !player.hvy) return;
+  clog('heavy', 'cancel', { why: why || '' });
+  player.hvy = null;
+  player.cleave = 0;
+}
+function heavyBusy() { return !!(player && player.hvy); }
+
+function updateHeavy(dt) {
+  const h = player.hvy;
+  if (!h) return;
+  h.t += dt;
+  player.cleave = clamp(h.t / HEAVY_FULL, 0, 1);
+}
+
+// The gathered blow itself -- the same one the classic rim-gather throws.
+function heavyStrike(f) {
+  const manual = typeof player.atkAim === 'number';
+  const a = manual ? player.atkAim : aimAngle();
+  clog('heavy', 'strike', { f: +f.toFixed(2), breaks: f >= GUARD_BREAK, aim: manual ? 'manual' : 'assist' });
+  swingAt(a, { bite: 1 + (CLEAVE_BITE - 1) * f,
+               sweep: 1 + (CLEAVE_SWEEP - 1) * f,
+               reach: 1 + (CLEAVE_REACH - 1) * f,
+               breaks: f >= GUARD_BREAK,
+               heavy: true });
+  clamour(CLAMOUR_SWING + (CLAMOUR_HEAVY - CLAMOUR_SWING) * f);
+  player.fireTimer = player.fireDelay;
+  freeze(0.05 * f, 'heavy');
+  shake(5 + 9 * f);
+  ring(player.x, player.y, HEROES[player.hero].magic, 12, 60 + 90 * f, 0.3);
+  player.combo = 0; player.comboT = 0;
+}
+
+/* THE STEP. The simulation runs at a fixed 60Hz whatever the screen does, so
+ * a blow, a cooldown and a stride come out the same at 30, 60, 90 or 120
+ * frames a second. The host hands over the real time that passed; this runs
+ * as many whole steps as that covers. A stall longer than STEP_CATCHUP (a
+ * phone that stopped for a moment) is not paid back in a burst -- that would
+ * be a quarter-second of the fight arriving at once -- but logged and resumed. */
+const STEP = 1 / 60;
+const STEP_CATCHUP = 0.25;
+const STEP_BURST = 8;
+let stepAcc = 0;
+function advanceDelve(realDt) {
+  if (!(realDt > 0)) return 0;
+  if (realDt > STEP_CATCHUP) { clog('stall', '', { ms: Math.round(realDt * 1000) }); realDt = STEP; }
+  stepAcc += realDt;
+  let n = 0;
+  while (stepAcc >= STEP - 1e-9 && n < STEP_BURST) { stepDelve(STEP); stepAcc -= STEP; n++; }
+  if (n === STEP_BURST) stepAcc = 0;
+  return n;
+}
+function resetStepClock() { stepAcc = 0; }
 
 /* Swarm navigation.
    Steering straight at the player works in an open arena and fails in a maze:
@@ -5370,6 +5724,7 @@ function updateEnemies(dt) {
     if (e.hp <= 0) continue;
     e.hitFlash = Math.max(0, e.hitFlash - dt);
     if (e.mended > 0) e.mended = Math.max(0, e.mended - dt);
+    if (e.dummy) { updateDummy(e, dt); continue; }     // the combat room's targets
 
     // Closing. A body doing this is not fighting, not moving and not being
     // steered by anything below -- it is a four-second window and nothing else.
@@ -5442,6 +5797,7 @@ function updateEnemies(dt) {
           // Riftborn: the hole he stepped through does not close.
           if (e.riftborn) addHazard(e.x, e.y, 74, e.dmg * 0.85, 7.5, '#b07cff');
           e.x = nx; e.y = ny;
+          sfx('blink', e.x, e.y);
           burst(e.x, e.y, '#e8c060', 16, 210);
           break;
         }
@@ -5454,7 +5810,7 @@ function updateEnemies(dt) {
         if (e.guardT <= 0) {
           e.braced = !e.braced;
           e.guardT = e.braced ? 2.0 : e.guardCd;
-          if (e.braced) ring(e.x, e.y, '#e8c060', 10, 90, 0.5);
+          if (e.braced) { ring(e.x, e.y, '#e8c060', 10, 90, 0.5); sfx('guard', e.x, e.y); }
         }
       }
       e.summon -= dt;
@@ -5462,6 +5818,7 @@ function updateEnemies(dt) {
         e.summon = 8.5;
         const batch = 2 + ((run.time / 90) | 0);
         for (let i = 0; i < batch; i++) spawnEnemy(run.time);
+        sfx('summon', e.x, e.y);
       }
       e.split -= dt;
       if (e.split <= 0) {
@@ -5469,7 +5826,7 @@ function updateEnemies(dt) {
         const want = e.mirages || 3;
         let live = 0;
         for (let i = 0; i < enemies.length; i++) if (enemies[i].kind === 'mirage') live++;
-        if (live < want) spawnMirages(e, want - live);
+        if (live < want) { spawnMirages(e, want - live); sfx('mirage', e.x, e.y); }
       }
     }
 
@@ -6147,6 +6504,7 @@ function spawnInvader() {
   run.banner = 3.4;
   run.bannerText = 'Something has come for you';
   run.bannerNote = 'He was not called. Kill him, or lose him in the dark.';
+  sfx('arrive', e.x, e.y, 0.6);
   shake(9);
   return e;
 }
@@ -6173,6 +6531,7 @@ function updateInvasion(dt) {
     run.banner = 2.6;
     run.bannerText = 'He has lost you';
     run.bannerNote = 'For now.';
+    sfx('blink', e.x, e.y);
   }
 }
 
@@ -6238,6 +6597,7 @@ function spawnCrucible() {
   run.banner = 3.8;
   run.bannerText = e.title;
   run.bannerNote = 'It cannot follow you. Its totems can mend it.';
+  sfx('arrive', e.x, e.y, 1);
   shake(10);
 }
 
@@ -6301,6 +6661,7 @@ function updateCrucible(e, dt) {
         sh.chant = 0.2;
         enemies.push(sh);
         burst(nx, ny, '#ff7a2c', 14, 180);
+        sfx('summon', nx, ny);
         break;
       }
     }
@@ -6326,6 +6687,9 @@ function updateCrucible(e, dt) {
     }
     e.spin = -e.spin;
     ring(e.x, e.y, '#ff5a24', 20, FURNACE_R, 0.55);
+    // The ring is thrown now and lands a beat later; this is the throw, so the
+    // player hears the warning while there is still time to move.
+    sfx('furnace', e.x, e.y);
     shake(5);
   }
 
@@ -6444,6 +6808,7 @@ function spawnDeceiver() {
   run.bannerNote = guard
     ? 'His Lieutenants hold him. Break them first.'
     : 'He offers you the gate. Look for the shattered eye.';
+  sfx('arrive', e.x, e.y, 0.8);
   shake(10);
 }
 
@@ -6871,8 +7236,40 @@ function blankStash() {
            bounty: null, bountyArmed: false,
            // A Hardcore delve in progress. See settleUnfinishedDelve.
            delving: false,
-           hall: { vault: 0, forge: 0, reliquary: 0, wardstone: 0 } };
+           hall: { vault: 0, forge: 0, reliquary: 0, wardstone: 0 },
+           // Which shape of save this is. See STASH_MIGRATIONS.
+           v: STASH_VERSION };
 }
+
+/* SAVE VERSIONS. A save carries the version of the shape it was written in,
+ * and loading walks it forward one step at a time through the migrations
+ * below before sanitizeStash filters it. Version 0 is every save written
+ * before the stamp existed; stepping it to 1 is the stamp itself. A change to
+ * the save's shape adds a step here, rather than a guess in the loader.
+ *
+ * A save from a NEWER build than this one (a downgrade) is not walked back --
+ * there is no way down -- but it is still filtered, so it loads whatever this
+ * build can understand of it and never crashes on the rest. */
+const STASH_VERSION = 1;
+const STASH_MIGRATIONS = [
+  st => st                                     // 0 -> 1: the version stamp
+];
+function migrateStash(st) {
+  let v = Math.max(0, Math.floor(finite(st.v, 0)));
+  while (v < STASH_VERSION && STASH_MIGRATIONS[v]) { st = STASH_MIGRATIONS[v](st) || st; v++; }
+  return st;
+}
+
+// A number from disk: a finite one, or the default. `+x || 0` let Infinity
+// through, and a save holding Infinity coins is a save that buys everything.
+function finite(x, d) {
+  const n = typeof x === 'number' ? x : typeof x === 'string' && x.trim() !== '' ? +x : NaN;
+  return Number.isFinite(n) ? n : d;
+}
+// Is `k` one of the table's own keys? Every id table here is a plain object,
+// so HEROES['constructor'] is truthy -- and a save naming its hero
+// 'constructor' passed the check and broke the game later instead of here.
+const owns = (tbl, k) => typeof k === 'string' && Object.prototype.hasOwnProperty.call(tbl, k);
 
 /* WHAT A SAVE IS ALLOWED TO SAY, split from where it is read.
  *
@@ -6884,46 +7281,48 @@ function blankStash() {
  * longer exists. This half touches nothing but its argument, so it goes into
  * the core and loadStash is one line of reading and a call. */
 function sanitizeStash(st) {
-  if (!st || typeof st !== 'object') return blankStash();
+  if (!st || typeof st !== 'object' || Array.isArray(st)) return blankStash();
+  st = migrateStash(st);
   const out = blankStash();
   // Anything on disk is last session's data and may predate a change to the
   // slots or the affix table, so it is filtered rather than trusted.
-  if (st.gear) for (const sl of SLOTS) {
-    if (validItem(st.gear[sl.id], sl.id)) out.gear[sl.id] = st.gear[sl.id];
+  if (st.gear && typeof st.gear === 'object') for (const sl of SLOTS) {
+    if (validItem(st.gear[sl.id], sl.id)) out.gear[sl.id] = mendItem(st.gear[sl.id]);
   }
   if (Array.isArray(st.vault)) {
-    out.vault = st.vault.filter(it => validItem(it)).slice(0, vaultCap());
+    out.vault = st.vault.filter(it => validItem(it)).slice(0, vaultCap()).map(mendItem);
   }
-  if (HEROES[st.hero]) out.hero = st.hero;
-  out.seq = +st.seq || 0;
-  out.xp = Math.max(0, +st.xp || 0);
+  if (owns(HEROES, st.hero)) out.hero = st.hero;
+  out.seq = Math.max(0, finite(st.seq, 0));
+  out.xp = Math.max(0, finite(st.xp, 0));
   out.level = levelForXp(out.xp);            // derived, never trusted from disk
-  out.coins = Math.max(0, +st.coins || 0);
-  out.pity = clamp(+st.pity || 0, 0, 20);
-  if (REGION_BY_ID[st.region]) out.region = st.region;
+  out.coins = Math.max(0, finite(st.coins, 0));
+  out.pity = clamp(finite(st.pity, 0), 0, 20);
+  if (owns(REGION_BY_ID, st.region)) out.region = st.region;
   // Only today's claim is worth keeping. Yesterday's is not a record of
   // anything, and a stale one that outlived its day would lock out the daily.
-  if (st.bounty && typeof st.bounty === 'object' && +st.bounty.day === dayStamp())
-    out.bounty = { day: +st.bounty.day, done: !!st.bounty.done };
+  if (st.bounty && typeof st.bounty === 'object' && finite(st.bounty.day, -1) === dayStamp())
+    out.bounty = { day: dayStamp(), done: !!st.bounty.done };
   out.bountyArmed = !!st.bountyArmed;
   out.delving = !!st.delving;
   // Tiers are the only thing on disk that cannot be re-earned, so they are
   // filtered as carefully as the gear: an id that no longer exists is dropped
   // rather than carried, and a tier above the ceiling is clamped to it.
   if (st.hall && typeof st.hall === 'object') {
-    for (const h of HALL) out.hall[h.id] = clamp(+st.hall[h.id] || 0, 0, HALL_MAX);
+    for (const h of HALL) out.hall[h.id] = clamp(Math.floor(finite(st.hall[h.id], 0)), 0, HALL_MAX);
   }
   // Loadouts hold item ids, not items, so a preset can never resurrect a
   // piece that has since been sold, tempered away or left in a delve.
   if (Array.isArray(st.loadouts)) {
-    out.loadouts = st.loadouts.slice(0, loadoutCap()).map(L => ({
-      name: String(L && L.name || 'Kit').slice(0, 18),
-      hero: HEROES[L && L.hero] ? L.hero : 'isaac',
+    out.loadouts = st.loadouts.filter(L => L && typeof L === 'object')
+      .slice(0, loadoutCap()).map(L => ({
+      name: (typeof L.name === 'string' && L.name ? L.name : 'Kit').slice(0, 18),
+      hero: owns(HEROES, L.hero) ? L.hero : 'isaac',
       slots: (() => {
         const o = {};
         for (const sl of SLOTS) {
-          const v = L && L.slots && L.slots[sl.id];
-          o[sl.id] = typeof v === 'number' ? v : null;
+          const v = L.slots && typeof L.slots === 'object' ? L.slots[sl.id] : null;
+          o[sl.id] = typeof v === 'number' && Number.isFinite(v) ? v : null;
         }
         return o;
       })()
@@ -6932,26 +7331,62 @@ function sanitizeStash(st) {
   // The corpse is filtered like everything else: a level id that no longer
   // exists, or items that no longer validate, simply stop being owed to you.
   const cp = st.corpse;
-  if (cp && typeof cp === 'object' && LEVEL_BY_ID[cp.level_id]) {
+  if (cp && typeof cp === 'object' && owns(LEVEL_BY_ID, cp.level_id)) {
     const items = Array.isArray(cp.items)
-      ? cp.items.filter(it => validItem(it)).slice(0, CORPSE_CARRY) : [];
-    const coins = Math.max(0, +cp.coins || 0);
+      ? cp.items.filter(it => validItem(it)).slice(0, CORPSE_CARRY).map(mendItem) : [];
+    const coins = Math.max(0, finite(cp.coins, 0));
     if (items.length || coins) {
       out.corpse = { level_id: cp.level_id,
-                     hero: HEROES[cp.hero] ? cp.hero : 'isaac',
-                     x: +cp.x || 0, y: +cp.y || 0, items, coins };
+                     hero: owns(HEROES, cp.hero) ? cp.hero : 'isaac',
+                     x: clamp(finite(cp.x, 0), 0, WORLD.w), y: clamp(finite(cp.y, 0), 0, WORLD.h),
+                     items, coins };
     }
   }
+  // Ids. A piece that came in without one gets one above every id in the
+  // save, and the counter moves past them all, so nothing handed out later
+  // can collide with a piece already owned.
+  const held = [...SLOTS.map(sl => out.gear[sl.id]), ...out.vault,
+                ...(out.corpse ? out.corpse.items : [])].filter(Boolean);
+  let top = out.seq;
+  for (const it of held) if (it.uid !== null) top = Math.max(top, it.uid);
+  for (const it of held) if (it.uid === null) it.uid = ++top;
+  out.seq = top;
   return out;
 }
 
+/* Is this a piece the game can hold? Every nested record is checked for its
+ * SHAPE before anything is read off it: this used to read `a.id` straight off
+ * each affix, so one `null` in a save's affix list threw inside the loader and
+ * took the whole stash down with it -- a crash at startup, every startup.
+ * It never throws now; anything it cannot vouch for is simply not a piece. */
+const AFFIX_SANE = 1e5;          // no real affix value is anywhere near this
 function validItem(it, slotId) {
-  if (!it || typeof it !== 'object') return false;
-  if (!SLOT_BY_ID[it.slot]) return false;
+  if (!it || typeof it !== 'object' || Array.isArray(it)) return false;
+  if (!owns(SLOT_BY_ID, it.slot)) return false;
   if (slotId && it.slot !== slotId) return false;
   if (!RARITY.some(r => r.id === it.rarity)) return false;
-  if (!Array.isArray(it.affixes)) return false;
-  return it.affixes.every(a => AFFIX_BY_ID[a.id] && isFinite(a.v));
+  if (!Array.isArray(it.affixes) || it.affixes.length > 12) return false;
+  for (const a of it.affixes) {
+    if (!a || typeof a !== 'object') return false;
+    if (!owns(AFFIX_BY_ID, a.id)) return false;
+    if (typeof a.v !== 'number' || !Number.isFinite(a.v) || Math.abs(a.v) > AFFIX_SANE) return false;
+  }
+  return true;
+}
+
+/* A valid piece, with the parts that are safe to repair repaired rather than
+ * the piece thrown away: a name or base that is not text, or an id that is
+ * not a number. The affixes are copied down to what they are, so nothing
+ * else a save smuggled in rides along on them. */
+function mendItem(it) {
+  const out = Object.assign({}, it);
+  out.affixes = it.affixes.map(a => ({ id: a.id, v: a.v }));
+  if (typeof out.base !== 'string' || !out.base) out.base = SLOT_BY_ID[it.slot].name;
+  if (typeof out.name !== 'string' || !out.name) out.name = out.base;
+  out.name = out.name.slice(0, 80);
+  if (!Number.isFinite(out.uid)) out.uid = null;     // given a fresh one by sanitizeStash
+  if (out.set !== undefined && out.set !== SET_ID) delete out.set;
+  return out;
 }
 
 let stash = blankStash();
@@ -7198,6 +7633,7 @@ function dawnAdd(n, why) {
 // is the game saying which upstream thing you missed.
 function wipeRoom(why) {
   run.dawnFired = true;
+  sfx('dawn');
   shake(30);
   ring(player.x, player.y, '#fff2c8', 20, 900, 1.1);
   burst(player.x, player.y, '#ffd870', 60, 520);
@@ -7243,6 +7679,7 @@ function updateAgony(dt) {
         ring(L.x, L.y, '#c2352a', 20, AGONY_REACH, 0.32);
       }
       for (let i = 0; i < live.length; i++) live[i].agonyA = undefined;
+      sfx('agony', undefined, undefined, dmg > 0 ? 1 : 0.4);
       shake(dmg > 0 ? 18 : 7);
       if (dmg > 0) {
         freeze(0.07);
@@ -7271,6 +7708,7 @@ function updateAgony(dt) {
     L.agony  = AGONY_WIND;
   }
   toast('Synchronized Agony', '#c2352a');
+  sfx('agonywind');
 }
 
 // --- Slag Siphon -----------------------------------------------------------
@@ -7290,6 +7728,7 @@ function updateSiphon(e, dt) {
       e.siphon = SIPHON_CD * 0.6;
       ring(e.x, e.y, '#7fd4ff', 8, 70, 0.4);
       toast('The pour is broken', '#7fd4ff');
+      sfx('decrypt', e.x, e.y);
       return false;
     }
     e.casting -= dt;
@@ -7417,6 +7856,7 @@ function beginBreath(boss) {
   run.banner = 3.4;
   run.bannerText = 'Breath of the Void';
   run.bannerNote = 'Put a Null-Zone underneath him.';
+  sfx('breath', boss.x, boss.y);
   ring(boss.x, boss.y, '#e8c060', 20, 260, 0.7);
   shake(14);
 }
@@ -7455,6 +7895,7 @@ function tryNullify(zx, zy, zr) {
   run.breath = 0;
   run.dawn = 0;
   run.dawnPop = 1;
+  sfx('nullified', boss.x, boss.y);
   boss.casting = 0;
   boss.braced = false;
   boss.blink = 1e9;
@@ -7513,6 +7954,7 @@ function swapBlocked() {
 function swapHero() {
   if (swapBlocked()) return false;
   const from = player.hero, to = otherHero();
+  attackCancel('swap');
 
   breakChannel('swap');
   // Bank what this one is carrying, then take up what the other was left with.
@@ -7569,6 +8011,8 @@ let kitCache = {};
 /* --- run lifecycle ------------------------------------------------------ */
 
 function resetRun(heroId, levelId, diffId) {
+  attackCancel('restart');
+  resetStepClock();
   const hero = heroId || (run && run.hero) || 'isaac';
   DIFF = DIFF_BY_ID[diffId || (run && run.diff_id) || DIFF.id] || DIFF_BY_ID.riven;
   LEVEL = LEVEL_BY_ID[levelId || (run && run.level_id) || LEVELS[0].id] || LEVELS[0];
@@ -8078,10 +8522,116 @@ function discardSelected() {
   afterGearChange();
 }
 
+/* --- THE COMBAT ROOM -------------------------------------------------------
+ * A fixed place to feel the fight in, and to measure it: the same seed, the
+ * same hero, the same five stations every time, so a change to the controls
+ * can be tried against the one before it on the same phone in the same room.
+ * Opened with ?room=combat (and &hero=zayd, &seed=N) -- a developer door,
+ * like ?nogate; nothing in the game points at it.
+ *
+ *   still     a target that stands there and takes it
+ *   orbit     one walking a slow circle, for aiming at something that moves
+ *   guard     one whose shield comes up for two seconds in every four
+ *   ranged    a real cantor, awake: something that fights back from range
+ *   pack      a dormant mixed pack, for the whole fight at once
+ *
+ * The first three are DUMMIES: they skip the enemy AI entirely (updateDummy),
+ * never swing, and cannot die, so they measure the hero and nothing else.
+ * ------------------------------------------------------------------------ */
+const DUMMY_HP = 1e7;
+function seedRandom(seed) {
+  let a = seed | 0;
+  Math.random = function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// The nearest open ground to a point, so a station never lands in rock.
+function openNear(x, y, r) {
+  let best = null, bestD = Infinity;
+  for (let i = 0; i < openCells.length; i++) {
+    const o = openCells[i];
+    if (pointInWalls(o.x, o.y, r + 4)) continue;
+    const d = dist2(o.x, o.y, x, y);
+    if (d < bestD) { bestD = d; best = o; }
+  }
+  return best || { x, y };
+}
+
+function buildCombatRoom() {
+  for (const e of enemies) e.hp = 0;
+  enemies.length = 0;
+  loot.length = 0; drops.length = 0; slams.length = 0; hazards.length = 0;
+  run.bossCalled = true;               // no avatar: this room is for the hero
+  run.invadeAt = 0;
+  run.room = 'combat';
+  const at = (kind, deg, dist) => {
+    const a = deg / 57.2958;
+    const p = openNear(player.x + Math.cos(a) * dist, player.y + Math.sin(a) * dist, ENEMY_TYPES[kind].r);
+    const e = newBody(kind, p.x, p.y, 0);
+    enemies.push(e);
+    return e;
+  };
+  const dummy = (e, how) => { e.dummy = how; e.hp = e.maxHp = DUMMY_HP; e.dmg = 0;
+                              e.awake = false; return e; };
+  dummy(at('thrall', 0, 110), 'still');
+  const o = dummy(at('thrall', 90, 190), 'orbit');
+  o.orbit = { x: o.x, y: o.y, r: 70, a: 0 };
+  const g = dummy(at('breaker', 180, 150), 'guard');
+  g.guardT = 2;
+  const c = at('cantor', 270, 300);
+  c.awake = true;
+  const pk = openNear(player.x + 300, player.y + 300, 20);
+  for (const [kind, n] of [['thrall', 4], ['flayer', 1], ['husk', 1], ['breaker', 1]]) {
+    for (let i = 0; i < n; i++) {
+      const p = openNear(pk.x + rand(-60, 60), pk.y + rand(-60, 60), ENEMY_TYPES[kind].r);
+      const e = newBody(kind, p.x, p.y, 0);
+      e.awake = false;
+      enemies.push(e);
+    }
+  }
+  clog('room', 'combat', { hero: player.hero });
+  return enemies.length;
+}
+
+/* The practice room, from the gate-house: the rung-0 ground with the combat
+ * room's stations, and deliberately NOT startRun -- that marks a Hardcore
+ * delve as begun, and closing the app in the middle of practice must never
+ * count as a death. endRun sees run.room and settles nothing. */
+function startPractice(heroId) {
+  resetRun(heroId, LEVELS[0].id, 'riven');
+  state = 'play';
+  buildCombatRoom();
+  buildKit();
+  syncHeroSkin();
+  showScreen(null);
+}
+
+function updateDummy(e, dt) {
+  e.pace = 0;
+  if (e.dummy === 'orbit') {
+    const o = e.orbit;
+    o.a += dt * 0.9;
+    const nx = o.x + Math.cos(o.a) * o.r, ny = o.y + Math.sin(o.a) * o.r;
+    e.pace = Math.hypot(nx - e.x, ny - e.y);
+    e.gait = (e.gait || 0) + e.pace;
+    if (Math.abs(nx - e.x) > 0.01) e.face = nx < e.x ? -1 : 1;
+    e.x = nx; e.y = ny;
+  } else if (e.dummy === 'guard') {
+    e.guardT -= dt;
+    if (e.guardT <= 0) { e.braced = !e.braced; e.guardT = 2; }
+  }
+  if (e.hp < e.maxHp * 0.5) e.hp = e.maxHp;             // cannot die
+}
+
 /* --- pause -------------------------------------------------------------- */
 
 function pauseRun() {
   if (state !== 'play') return;
+  attackCancel('pause');
   state = 'pause';
   stickEnd();
   keys.clear();
@@ -8354,8 +8904,20 @@ function indexBreakables() {
 
 function endRun(won) {
   if (state === 'over') return;
+  attackCancel('end');
   state = 'over';
   stickEnd();
+  // Practice is sealed off from everything that lasts: no records, no
+  // banking, no corpse, and above all no Hardcore wipe. Nothing was carried
+  // in or out of the room, so nothing is settled on the way out of it.
+  if (run.room) {
+    el.overTitle.innerHTML = '<em>Practice</em>';
+    el.overSub.textContent = 'Nothing was carried in, and nothing is carried out.';
+    el.overStats.innerHTML = '<div>Time<b>' + fmtTime(run.time) + '</b></div>' +
+                             '<div>Slain<b>' + run.kills + '</b></div>';
+    showScreen('over');
+    return;
+  }
   // A Hardcore death is the heaviest sound in the game, because it is the
   // heaviest thing that can happen in it.
   sfx(won ? 'extract' : 'death', undefined, undefined, !won && hardcore ? 1 : 0.5);

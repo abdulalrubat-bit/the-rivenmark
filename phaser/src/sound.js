@@ -7,8 +7,12 @@
  *
  * The chain is short on purpose:
  *
- *   voice -> panner -> gain --\
- *   voice -> panner -> gain ---+-> master -> limiter -> speakers
+ *   voice -> panner -> gain --+-> fx ----\
+ *   voice -> panner -> gain --/           +-> master -> limiter -> speakers
+ *   ambience and music (music.js) -> music --/
+ *
+ * Two buses, so a player can turn the music down without losing the fight,
+ * or the other way round. Both volumes are remembered with the mute.
  *
  * THE LIMITER is a compressor set hard (ratio 12, fast attack). A hundred
  * thralls dying in one frame is a real event in this game, and without it the
@@ -35,9 +39,12 @@
  * battery, a silent running one does.
  */
 
+import { pulse } from './settings.js';
+
 const MUTE_KEY = 'rivenmark.sound.v1';
 const VOICE_CAP = 24;       // everything sounding at once, across all recipes
 const MASTER = 0.8;
+const LIMIT = { threshold: -14, knee: 6, ratio: 12, attack: 0.003, release: 0.25 };
 const HEAR_FULL = 260;      // world units: inside this, full volume
 const HEAR_EDGE = 1100;     // past this, not played at all
 const PAN_SPAN = 520;       // this far to one side is hard left or right
@@ -117,11 +124,21 @@ export function ring(ctx, out, t, o) {
   return len;
 }
 
+/* The hard limiter at the end of the chain, made the same way wherever it is
+ * needed -- the game, and the suite that renders the chain offline. */
+export function limiter(ctx) {
+  const lim = ctx.createDynamicsCompressor();
+  for (const k in LIMIT) lim[k].value = LIMIT[k];
+  return lim;
+}
+
 /* ---- the engine ----------------------------------------------------------- */
 class Engine {
   constructor() {
     this.ctx = null;
-    this.muted = readMuted();
+    const pr = readPrefs();
+    this.muted = pr.muted;
+    this.vol = { fx: pr.fx, music: pr.music };
     this.hidden = typeof document !== 'undefined' && document.hidden;
     this.voices = [];            // { name, end } for everything still sounding
     this.last = Object.create(null);
@@ -145,10 +162,11 @@ class Engine {
       const ctx = this.ctx = new AC({ latencyHint: 'interactive' });
       this.master = ctx.createGain();
       this.master.gain.value = this.muted ? 0 : MASTER;
-      const lim = ctx.createDynamicsCompressor();
-      lim.threshold.value = -14; lim.knee.value = 6; lim.ratio.value = 12;
-      lim.attack.value = 0.003; lim.release.value = 0.25;
+      const lim = limiter(ctx);
       this.master.connect(lim); lim.connect(ctx.destination);
+      this.fx = ctx.createGain(); this.fx.gain.value = this.vol.fx;
+      this.music = ctx.createGain(); this.music.gain.value = this.vol.music;
+      this.fx.connect(this.master); this.music.connect(this.master);
       // One second of white noise, made once and shared by every burst.
       const n = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
       const d = n.getChannelData(0);
@@ -170,7 +188,7 @@ class Engine {
 
   setMuted(on) {
     this.muted = !!on;
-    try { localStorage.setItem(MUTE_KEY, JSON.stringify({ muted: this.muted })); } catch (e) {}
+    this.save();
     if (this.master) {
       const t = this.ctx.currentTime;
       this.master.gain.cancelScheduledValues(t);
@@ -183,6 +201,20 @@ class Engine {
    * the context is actually running, so the player hears that it worked. The
    * press itself is a gesture, so this is also where a context that has never
    * been unlocked gets unlocked. */
+  save() {
+    try { localStorage.setItem(MUTE_KEY, JSON.stringify({ muted: this.muted, fx: this.vol.fx,
+                                                          music: this.vol.music })); } catch (e) {}
+  }
+
+  /* 'fx' or 'music', 0..1. */
+  setVolume(bus, v) {
+    if (!(bus in this.vol)) return;
+    this.vol[bus] = Math.max(0, Math.min(1, +v || 0));
+    this.save();
+    const node = this[bus];
+    if (node && this.ctx) node.gain.setTargetAtTime(this.vol[bus], this.ctx.currentTime, 0.03);
+  }
+
   toggle() {
     this.unlock();
     const on = this.muted;
@@ -239,7 +271,7 @@ class Engine {
       const p = ctx.createStereoPanner(); p.pan.value = pan;
       p.connect(g); out = p;
     }
-    g.connect(this.master);
+    g.connect(this.fx);
     const t = now + 0.005;
     // The core calls this from inside the fight -- damageEnemy, hurtPlayerBy --
     // so a recipe that throws must cost a sound, never the frame.
@@ -276,9 +308,11 @@ class Engine {
     };
   }
 }
-function readMuted() {
-  try { return !!(JSON.parse(localStorage.getItem(MUTE_KEY)) || {}).muted; }
-  catch (e) { return false; }
+function readPrefs() {
+  let o = {};
+  try { o = JSON.parse(localStorage.getItem(MUTE_KEY)) || {}; } catch (e) {}
+  const v = x => (typeof x === 'number' && x >= 0 && x <= 1 ? x : 1);
+  return { muted: !!o.muted, fx: v(o.fx), music: v(o.music) };
 }
 
 export const sound = new Engine();
@@ -286,6 +320,8 @@ export const sound = new Engine();
 // measure the caps with something whose limits it chose.
 sound.define = define;
 sound.recipes = RECIPES;
+sound.limiter = limiter;
+sound.MASTER = MASTER;
 
 /* ---- the one sound the engine needs itself ---------------------------------
  * Turning sound ON has to make a sound, or the player cannot tell it worked. A
@@ -303,7 +339,9 @@ export function installSound() {
   installed = true;
   // The core's hook. It was a no-op (public/host-stubs.js) until now, and it
   // still is on the test page, so the rules suites stay silent.
-  window.sfx = (name, x, y, mag) => sound.play(name, x, y, mag);
+  // ...and the same moments drive the vibration, which is its own switch
+  // (settings.js) and does not care whether the sound is muted.
+  window.sfx = (name, x, y, mag) => { pulse(name, mag); return sound.play(name, x, y, mag); };
   window.__sound = sound;
   const first = () => sound.unlock();
   for (const ev of ['pointerdown', 'touchend', 'keydown'])

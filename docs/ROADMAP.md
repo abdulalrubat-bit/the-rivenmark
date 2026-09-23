@@ -55,9 +55,9 @@ Synthesised with Web Audio, no files. One small engine, one switch.
 - [x] The run: slag pickup, a coffer opening, the gate waking, stepping through,
       death, extraction — and the quota, gear by rarity, a full bag, blasts,
       slams, a surge held and a corpse reclaimed
-- [ ] Bosses: arrival, their big moves, their fall
-- [ ] Menus: taps, buying, forging
-- [ ] Ambience, then music — last, once the effects are right
+- [x] Bosses: arrival, their big moves, their fall
+- [x] Menus: taps, buying, building, equipping, discarding, descending
+- [x] Ambience, then music — a bed per region and the hearth; a generative score that follows the game (hearth, delve, boss, hold)
 
 ## Polish, found on the way
 
@@ -70,16 +70,25 @@ Synthesised with Web Audio, no files. One small engine, one switch.
 - [ ] `clamour`'s "a loud hero is harder to shake" fails about one run in
       six, on `main` too: its fixture sits near a range edge that the
       generated room sometimes moves. Find why before trusting it
+- [ ] `crucible`'s "the escort is the same gate at both ends" fails about one
+      run in three: the rung-50 hero median rides the gear lottery (single
+      rolls 19%/s to 76%/s). Seeded, it reads identically under both control
+      schemes, so it is the dice, not the controls. Seed the gear rolls, or
+      widen the sample
 - [ ] A dev panel (god mode, seeds, jump to a region) — the canvas build's
       `debug.html` had one; Phaser has the diagnostics dump, the profiler and
       the `?nogate` / `?nogov` / `?norun` flags
 
 ## Phase 3 — Settings and learning to play
 
-- [ ] A settings screen: sound, music, vibration, effects quality
-- [ ] Vibration on the moments that matter (hit taken, kill, gate)
-- [ ] Teach the controls on the first delve — the stick and the Conduit's
-      three touches — shown once, skippable, replayable from settings
+- [x] A settings screen: sound, effects and music volumes, vibration, screen
+      shake, hit flashes, effects quality, controls (`smoke:settings`)
+- [x] Vibration on the moments that matter (hit taken, big kill, gate, a boss
+      falling, death), its own switch; the APK declares VIBRATE
+- [x] Teach the controls on the first delve — walk, strike, aim, the heavy,
+      an ability, and what getting out keeps and dying loses (Hardcore spelled
+      out) — each step finished by doing it; skippable, replayable from
+      settings, never in practice (`smoke:tutorial`)
 
 ## Phase 4 — Content
 

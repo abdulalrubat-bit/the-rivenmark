@@ -67,8 +67,11 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     };
 
     // --- a save that is not a save at all ----------------------------------
+    // Nothing to fall back on: the backup a clean read leaves is tested below.
+    localStorage.removeItem(KEY + '.bak');
     localStorage.setItem(KEY, '{not json');
     const garbled = loadStash();
+    localStorage.removeItem(KEY + '.bak');
     localStorage.setItem(KEY, '"a string"');
     const str = loadStash();
     o.garbledBlank = JSON.stringify(garbled) === JSON.stringify(blankStash()) &&
@@ -90,6 +93,70 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
       level: back.level, want: clean.level, hero: back.hero, pity: back.pity,
       hall: HALL.reduce((a, h) => a + back.hall[h.id], 0), halls: HALL.length
     };
+    // --- malformed records inside an otherwise good save -------------------
+    // The crash in the audit: one null in an affix list threw inside the
+    // loader, and with it every startup. Each bad record here sits beside a
+    // good one, and the good one has to come through.
+    const keep = rollItem(0.6, s0.id);
+    const bads = [
+      Object.assign(rollItem(0.5), { affixes: [null] }),
+      Object.assign(rollItem(0.5), { affixes: [{}] }),
+      Object.assign(rollItem(0.5), { affixes: [{ id: 'constructor', v: 1 }] }),
+      Object.assign(rollItem(0.5), { affixes: [{ id: SLOT_AFFIXES.blade[0], v: '3' }] }),
+      Object.assign(rollItem(0.5), { affixes: [{ id: SLOT_AFFIXES.blade[0], v: 1e300 }] }),
+      Object.assign(rollItem(0.5), { slot: 'constructor' }),
+      Object.assign(rollItem(0.5), { affixes: 'lots' }),
+      [], 7, 'a string'
+    ];
+    const noName = Object.assign(rollItem(0.5), { name: 42, uid: 'x' });
+    let threw = null, mal = null;
+    try {
+      localStorage.setItem(KEY, JSON.stringify({
+        gear: { [s0.id]: keep }, vault: [...bads, noName],
+        hero: 'constructor', region: 'toString', coins: 'Infinity', xp: '1e999', seq: 3,
+        loadouts: [null, 'x', { name: 99, hero: 'toString', slots: null },
+                   { name: 'ok', hero: 'zayd', slots: { [s0.id]: keep.uid } }],
+        corpse: { level_id: 'constructor', items: [keep], coins: 5 },
+        hall: { vault: 'Infinity', forge: null }
+      }));
+      mal = loadStash();
+    } catch (e) { threw = e.message; }
+    o.mal = mal && {
+      threw, keptWorn: !!(mal.gear[s0.id] && mal.gear[s0.id].uid === keep.uid),
+      vault: mal.vault.length, mended: mal.vault[0] || null,
+      hero: mal.hero, region: mal.region, coins: mal.coins, xp: mal.xp,
+      loadouts: mal.loadouts.map(L => L.name + '/' + L.hero),
+      corpse: mal.corpse, hallVault: mal.hall.vault, seq: mal.seq,
+      uids: [...Object.values(mal.gear).filter(Boolean), ...mal.vault].map(it => it.uid)
+    };
+    if (!mal) o.mal = { threw };
+
+    // --- versions -----------------------------------------------------------
+    const v0 = blankStash(); delete v0.v; v0.coins = 12;
+    localStorage.setItem(KEY, JSON.stringify(v0));
+    const l0 = loadStash();
+    const v9 = blankStash(); v9.v = 99; v9.coins = 34;
+    localStorage.setItem(KEY, JSON.stringify(v9));
+    let l9 = null; try { l9 = loadStash(); } catch (e) {}
+    o.ver = { current: blankStash().v, fromOld: l0.v, oldCoins: l0.coins,
+              future: l9 && l9.coins };
+
+    // --- the backup ----------------------------------------------------------
+    const lastGood = blankStash(); lastGood.coins = 777; lastGood.xp = 999;
+    localStorage.clear();
+    localStorage.setItem(KEY, JSON.stringify(lastGood));
+    loadStash();                                   // a clean read leaves a backup
+    localStorage.setItem(KEY, '{"coins": 5, "vault": [');     // cut off mid-write
+    const rec = loadStash();
+    o.bak = { coins: rec.coins, xp: rec.xp, flagged: window.stashRecovered === true };
+    localStorage.clear(); window.stashRecovered = false;
+    const fresh = loadStash();
+    o.bak.freshBlank = fresh.coins === 0 && window.stashRecovered === false;
+    localStorage.setItem('rivenmark.hc.stash.v1', '{}');
+    localStorage.setItem('rivenmark.hc.stash.v1.bak', '{}');
+    dropHardcoreStash();
+    o.bak.hcGone = localStorage.getItem('rivenmark.hc.stash.v1.bak') === null;
+
     localStorage.clear();
     return o;
   });
@@ -118,6 +185,39 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
      C.gear === C.slots && C.vault === 2 && C.coins === 640 && C.xp === 5200 &&
      C.level === C.want && C.hero === 'zayd' && C.pity === 7 && C.hall === C.halls,
      JSON.stringify(C));
+
+  // --- malformed records ----------------------------------------------------
+  const M = R.mal && !R.mal.threw ? R.mal : null;   // null: the load itself threw
+  ck('a null inside an affix list does not crash the load', !!M, R.mal && R.mal.threw);
+  ck('and the good piece beside the bad ones is kept', M && M.keptWorn === true);
+  ck('every malformed piece is dropped, and only those', M && M.vault === 1,
+     M && M.vault + ' left in the vault of ' + 11);
+  ck('a piece with a broken name or id is repaired, not thrown away',
+     M && M.mended && typeof M.mended.name === 'string' && Number.isFinite(M.mended.uid),
+     M && JSON.stringify(M.mended && { name: M.mended.name, uid: M.mended.uid }));
+  ck('and its new id collides with nothing, and the counter is past it',
+     M && new Set(M.uids).size === M.uids.length && M.uids.every(u => u <= M.seq),
+     M && 'uids ' + M.uids.join(',') + ', seq ' + M.seq);
+  ck('an id borrowed from the language (constructor, toString) is not a hero or region',
+     M && M.hero === 'isaac' && M.region === null, M && M.hero + ' / ' + M.region);
+  ck('Infinity from disk is not a number the game will hold',
+     M && M.coins === 0 && M.xp === 0 && M.hallVault === 0,
+     M && 'coins ' + M.coins + ', xp ' + M.xp + ', hall ' + M.hallVault);
+  ck('junk loadouts are dropped and the real one kept',
+     M && M.loadouts.length === 2 && M.loadouts.includes('ok/zayd') && M.loadouts.includes('Kit/isaac'),
+     M && M.loadouts.join(', '));
+  ck('a corpse on a rung named "constructor" is not owed', M && M.corpse === null);
+  // --- versions ----------------------------------------------------------------
+  ck('a save written now carries its version', R.ver.current >= 1, 'v' + R.ver.current);
+  ck('a save from before versions walks forward and keeps its contents',
+     R.ver.fromOld === R.ver.current && R.ver.oldCoins === 12, JSON.stringify(R.ver));
+  ck('a save from a newer build still loads what it can', R.ver.future === 34);
+  // --- the backup ---------------------------------------------------------------
+  ck('a save cut off mid-write comes back from the last good one',
+     R.bak.coins === 777 && R.bak.xp === 999, JSON.stringify(R.bak));
+  ck('and says it was recovered', R.bak.flagged === true);
+  ck('no save at all is a blank stash, not a recovery', R.bak.freshBlank === true);
+  ck('a Hardcore death takes the backup with it', R.bak.hcGone === true);
 
   ck('no console errors', errs.length === 0, errs.slice(0, 3).join(' | '));
   console.log('\nPASS ' + pass.length + '\n  ' + pass.join('\n  '));

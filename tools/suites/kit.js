@@ -145,6 +145,10 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
     fresh(); const g=mob(50); g.hp=g.maxHp=99999; player.charges=3;
     const gh=g.hp; castAbility('guillotine'); const plain=gh-g.hp;
     fresh(); const v=mob(50); v.hp=v.maxHp=99999; v.vuln=VULN_TIME; player.charges=3;
+    // The big moments share a one-second freeze budget, and the plain one just
+    // above spent 0.08 of it in the same instant -- so this one is measured on
+    // a budget of its own, which is what a Guillotine landing in a fight gets.
+    freezesSpent.length=0; hitStop=0;
     const vh=v.hp; castAbility('guillotine');
     o.guillotine={plain, vuln:vh-v.hp, ratio:(vh-v.hp)/plain, froze:hitStop};
     return o;

@@ -122,6 +122,11 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
      * number where a mark had been and the check could not see the thing it
      * is about. `mass` is 12 seconds. */
     const own = ABILITIES[player.hero].find(a => a.cd > 0) || ABILITIES[player.hero][0];
+    // Nothing may touch the hero while this reads the wedge: Purge is a
+    // channel, a blow breaks it and restarts its cooldown, and one stray hit
+    // made the wedge read as filling instead of draining.
+    for (const e of enemies) e.awake = false;
+    player.invuln = 1e9;
     player.charges = CHARGE_MAX; player.tension = TENSION_MAX;  // cost is not the blocker
     player.gcd = 0;                                             // nor the beat
     const why = abilityBlock(own);
@@ -177,6 +182,55 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
      !lay.btns.some(b=>hits(b, lay.diag)) && !hits(lay.swap, lay.diag),
      'diag at ' + Math.round(lay.diag.x) + ',' + Math.round(lay.diag.y));
   ck('the resource meter is on screen', !lay.res || onScreen(lay.res));
+
+  // The heavy button (new controls): in the right thumb's reach, big enough,
+  // clear of everything else on that side -- and right of the middle, so it
+  // never lands in the stick's half. Measured at 390 and at 360, the
+  // narrowest common phone.
+  for (const w of [390, 360]) {
+    await p.setViewportSize({ width: w, height: 844 }); await sleep(300);
+    const hv = await p.evaluate(()=>{
+      const r = el => { const b = el.getBoundingClientRect();
+                        return {x:b.x,y:b.y,w:b.width,h:b.height,r:b.right,b:b.bottom}; };
+      const q = s => document.querySelector(s);
+      return { vw: innerWidth, vh: innerHeight, heavy: r(q('#hud .heavy')), conduit: r(q('#hud .conduit')),
+               swap: r(q('#hud .swap button')), diag: r(q('#diagBtn')),
+               btns: [...document.querySelectorAll('#hud .kit button')].map(r),
+               shown: getComputedStyle(q('#hud .heavy')).display !== 'none' };
+    });
+    const on = b => b.x >= 0 && b.y >= 0 && b.r <= hv.vw + 0.5 && b.b <= hv.vh + 0.5;
+    ck(w + 'px: the heavy button is shown, on screen and big enough',
+       hv.shown && on(hv.heavy) && hv.heavy.w >= 44, Math.round(hv.heavy.w) + 'px');
+    ck(w + 'px: and clear of the Conduit, the kit, the swap and diagnostics',
+       ![hv.conduit, hv.swap, hv.diag, ...hv.btns].some(o => hits(o, hv.heavy)));
+    ck(w + 'px: and right of the middle, out of the stick\u2019s half', hv.heavy.x >= hv.vw / 2,
+       'left edge ' + Math.round(hv.heavy.x) + ', middle ' + hv.vw / 2);
+  }
+  await p.setViewportSize({ width: 390, height: 844 }); await sleep(300);
+
+  // And the heavy button through a real pointer: held, it gathers and shows
+  // it; let go, it lands; a touch the system takes away throws nothing.
+  {
+    await p.evaluate(()=>{ for (const e of enemies) e.awake=false; player.invuln=1e9; player.fireTimer=0; });
+    const hb = await p.$eval('#hud .heavy', e=>{ const r=e.getBoundingClientRect();
+      return {x:r.left+r.width/2, y:r.top+r.height/2}; });
+    await p.mouse.move(hb.x, hb.y); await p.mouse.down(); await sleep(900);
+    const mid = await p.evaluate(()=>({ gather: player.cleave||0,
+      shown: parseFloat(getComputedStyle(document.querySelector('#hud .heavy')).getPropertyValue('--chg'))||0 }));
+    const n0 = await p.evaluate(()=>combatLog.length);
+    await p.mouse.up(); await sleep(150);
+    const landed = await p.evaluate(n0=>combatLog.slice(n0).some(e=>e.k==='heavy'&&e.r==='strike'), n0);
+    ck('held, the heavy button gathers, and shows it', mid.gather>0.9 && mid.shown>0.9, JSON.stringify(mid));
+    ck('let go, the heavy lands', landed===true);
+    await sleep(800);
+    await p.mouse.move(hb.x, hb.y); await p.mouse.down(); await sleep(500);
+    const c = await p.evaluate(()=>{ const n=combatLog.length;
+      document.querySelector('#hud .heavy').dispatchEvent(new PointerEvent('pointercancel',{pointerId:1,bubbles:true}));
+      const l=combatLog.slice(n); return { cancel: l.some(e=>e.k==='heavy'&&e.r==='cancel'),
+        struck: l.some(e=>e.k==='heavy'&&e.r==='strike'), gather: player.cleave||0 }; });
+    await p.mouse.up();
+    ck('a cancelled touch on it throws nothing', c.cancel && !c.struck && c.gather===0, JSON.stringify(c));
+  }
 
   // The keyboard's commands, and being put down. The canvas build had both and
   // the port kept only the movement keys: Escape/P hold and release the delve,

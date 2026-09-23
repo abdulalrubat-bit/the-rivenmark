@@ -22,6 +22,9 @@ import { Atmosphere } from './atmosphere.js';
 import { screenOrigin, pinToScreen, cssPoint } from './screen.js';
 import { installSound } from './sound.js';
 import './sounds.js';
+import { Score } from './music.js';
+import { settings, applyAll } from './settings.js';
+import { Tutorial } from './tutorial.js';
 
 // The core's palette is CSS hex strings; Phaser wants numbers.
 const hex = (css, fallback) => {
@@ -203,6 +206,12 @@ export class Delve extends Phaser.Scene {
       // which mode they were in by dying in the wrong one.
       hardcore = loadHardcoreMode();
       stash = loadStash();
+      // Which controls: the saved choice (settings), or ?controls= for a
+      // test, or the new ones.
+      setControls(new URLSearchParams(location.search).get('controls') ||
+                  (() => { try { return localStorage.getItem('rivenmark.controls.v1'); } catch (e) { return null; } })() ||
+                  'new');
+      applyAll();
       // A Hardcore delve the app was closed in the middle of is a death.
       settleUnfinishedDelve();
       const t0 = performance.now();
@@ -225,8 +234,16 @@ export class Delve extends Phaser.Scene {
         state = 'menu';
         resetRun('isaac', LEVELS[0].id, 'riven');
       } else {
+        /* ?room=combat: the combat room (see the core). Seeded, so it is the
+         * same room every time -- &seed=N for another, &hero=zayd for him. */
+        const q = new URLSearchParams(location.search);
+        const room = q.get('room') === 'combat';
+        if (q.get('controls')) setControls(q.get('controls'));
+        if (room) seedRandom(+q.get('seed') || 1);
+        const hero = HEROES[q.get('hero')] ? q.get('hero') : 'isaac';
         state = 'play';
-        startRun('isaac', LEVELS[3].id, 'riven');
+        startRun(hero, LEVELS[room ? 0 : 3].id, 'riven');
+        if (room) buildCombatRoom();
         run.banner = 0;
       }
       console.log((this.gated ? 'resetRun ' : 'startRun ') +
@@ -293,8 +310,20 @@ export class Delve extends Phaser.Scene {
     this.screens = new Screens((hero, level, diff) => this.newRun(hero, level, diff),
                                () => this.abandonRun());
     window.showScreen = name => this.screens.show(name);
+    // The practice room: the rung-0 ground, emptied and restocked with the
+    // combat room's stations. Unseeded -- the seed is for measuring, not play.
+    this.screens.onPractice = hero => {
+      this.clearWorldArt();
+      startPractice(hero);
+      run.banner = 0;
+      this.paintStatics();
+      this.hero.setPosition(player.x, player.y);
+      this.culledAt = null;
+    };
     // Before the HUD, which puts a switch on it.
     this.sound = installSound();
+    this.score = window.__score = new Score(this.sound);
+    this.tutorial = new Tutorial();
     this.wireInput();
     this.hud = new Hud();
     // Stepping through is a deliberate act, not something you do by walking
@@ -390,6 +419,7 @@ export class Delve extends Phaser.Scene {
     this.paintStatics();
     this.hero.setPosition(player.x, player.y);
     this.culledAt = null;
+    this.tutorial.maybeStart();         // the first real delve teaches itself
   }
 
   /* Everything drawn from a delve, unmade. Its own method because two things
@@ -895,6 +925,7 @@ export class Delve extends Phaser.Scene {
    * flashed. Guarded like the scale and rotation, so a body neither struck nor
    * tinted costs nothing. */
   flashOrTint(sp, flash, tint) {
+    if (!settings.flash) flash = false;      // the player turned flashes off
     const mode = flash ? Phaser.TintModes.ADD : Phaser.TintModes.MULTIPLY;
     if (sp.tintMode !== mode) sp.setTintMode(mode);
     const want = flash ? 0x9a9a9a : tint;
@@ -969,11 +1000,22 @@ export class Delve extends Phaser.Scene {
         else if (state === 'play') openGear('run');
         return;
       }
+      // Space is the attack on a keyboard (new controls): press to strike,
+      // hold to keep striking, aimed by the assist.
+      if (k === ' ' && controlScheme !== 'classic') {
+        if (!e.repeat && state === 'play') attackPress();
+        return;
+      }
       keys.add(k);
     });
-    this.input.keyboard?.on('keyup',   e => keys.delete(e.key.toLowerCase()));
-    // A window that loses focus mid-delve must not leave a key held down.
-    window.addEventListener('blur', () => { keys.clear(); stickEnd(); });
+    this.input.keyboard?.on('keyup', e => {
+      const k = e.key.toLowerCase();
+      if (k === ' ' && controlScheme !== 'classic') { attackRelease(); return; }
+      keys.delete(k);
+    });
+    // A window that loses focus mid-delve must not leave a key held down --
+    // or an attack.
+    window.addEventListener('blur', () => { keys.clear(); stickEnd(); attackCancel('blur'); });
     // Put down in the middle of a fight -- another app, the lock button, a
     // call -- and the delve is held, not left running for the moment it comes
     // back. The APK's activity does this through onPause; this is the same for
@@ -1053,17 +1095,40 @@ export class Delve extends Phaser.Scene {
     // so the governor sheds it halfway through the measurement and the picture
     // under test stops existing.
     if (/nogov/.test(location.search)) return;
+    // The player can pin it (settings): full keeps every effect whatever the
+    // frame costs, reduced sheds them from the start. Auto is the governor.
+    if (settings.fx !== 'auto') { lowFx = settings.fx === 'reduced'; return; }
     const call = this.gov.decide(lowFx, FX_DROP, FX_RAISE);
     if (call === 'drop') lowFx = true;
     else if (call === 'raise') lowFx = false;
     this.gov.begin(time);
   }
 
+  /* What the music should be doing: [mode, place]. A boss or an invader up
+   * is the boss music; standing in an open gate is the hold; otherwise the
+   * delve is the delve and everything else is the gate-house hearth. */
+  musicFor() {
+    if (state === 'play' || state === 'pause' || (state === 'gear' && gearCtx && gearCtx.live)) {
+      const place = REGION ? REGION.id : null;
+      if ((run.boss && run.boss.hp > 0) || (run.invader && run.invader.hp > 0)) return ['boss', place];
+      if (run.gateOpen && portal.inside) return ['hold', place];
+      return ['delve', place];
+    }
+    if (state === 'over') return ['over', null];
+    return ['hearth', 'hearth'];
+  }
+
   update(time, dtMs) {
     this.adaptFx(time);
     const dt = Math.min(0.05, dtMs / 1000);      // the core's own MAX_DT clamp
     // stepDelve, not update: it is update behind the hit-stop (see the core).
-    if (this.stepping && state === 'play') stepDelve(dt);
+    // The simulation's own fixed step: the real time that passed, and the core
+    // runs as many 60Hz steps as it covers. Anything but play resets the clock,
+    // so coming back from a pause or a menu is not a burst of stored-up steps.
+    if (this.stepping && state === 'play') advanceDelve(dtMs / 1000);
+    else resetStepClock();
+    this.score.set(...this.musicFor());
+    this.tutorial.tick();
 
     // Bodies: one sprite each, pooled. Sorted by y, which is what makes a
     // crowd read as standing on a floor rather than floating over it.

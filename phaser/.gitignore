@@ -10,6 +10,10 @@ public/atlas.json
 public/manifest.json
 public/bundle.js
 public/bundle.js.map
+# Copied from src/core/core.js by build.js on every build, after check-core
+# passes it. It was tracked, and so went stale in git whenever a commit
+# changed the source without a build beside it.
+public/core.js
 # The smoke tests' screenshots. Paths in here are relative to this folder, so
 # it is proving.png, not phaser/proving.png.
 #
