@@ -347,6 +347,42 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     const dd = await endHeard(false);
     ck('dying is heard', dd.includes('death') && !dd.includes('extract'), dd.join());
 
+    /* ---- the bosses ------------------------------------------------------------ */
+    await p.goto(URL);
+    await p.waitForFunction(() => state === 'play' && window.__sound, null, { timeout: 30000 });
+    await p.mouse.click(195, 330); await sleep(400);
+    await p.evaluate(() => { for (const e of enemies) e.awake = false;
+      player.hp = player.maxHp = 1e9; player.invuln = 1e9; });
+    // Waits of a second and more: the boss sounds are long and space themselves.
+    const boss = async (f, arg) => { await sleep(1100); return since(f, arg); };
+    const ar = await boss(() => { portal.x = player.x + 200; portal.y = player.y; spawnDeceiver(); });
+    ck('the Deceiver arriving is heard', ar.includes('arrive'), ar.join());
+    const bl = await boss(async () => { run.boss.blink = 0; await new Promise(r => setTimeout(r, 300)); });
+    ck('his blink is heard', bl.includes('blink'), bl.join());
+    const mi = await boss(async () => { run.boss.split = 0; await new Promise(r => setTimeout(r, 300)); });
+    ck('his mirages are heard', mi.includes('mirage'), mi.join());
+    const gd = await boss(async () => { run.boss.guardCd = 5; run.boss.braced = false; run.boss.guardT = 0;
+      await new Promise(r => setTimeout(r, 300)); run.boss.guardCd = 0; run.boss.braced = false; });
+    ck('his guard coming up is heard', gd.includes('guard'), gd.join());
+    const br = await boss(() => { beginBreath(run.boss); });
+    ck('the Breath is heard', br.includes('breath'), br.join());
+    const nl = await boss(() => { tryNullify(run.boss.x, run.boss.y, 96); });
+    ck('and snuffing it is heard', nl.includes('nullified'), nl.join());
+    const fl = await boss(() => { for (const e of enemies) if (e.kind === 'lieutenant') e.hp = 0;
+      run.boss.hp = 1; damageEnemy(run.boss, 1e6, player.x, player.y); });
+    ck('his fall is heard', fl.includes('fall'), fl.join());
+    await p.evaluate(() => { for (const e of enemies) e.hp = 0; enemies.length = 0; });
+    const cr = await boss(() => { portal.x = player.x + 300; portal.y = player.y; spawnCrucible(); });
+    ck('the Crucible arriving is heard', cr.includes('arrive'), cr.join());
+    const fu = await boss(async () => { run.boss.furnace = 0; await new Promise(r => setTimeout(r, 300)); });
+    ck('its Furnace ring is heard as it is thrown', fu.includes('furnace'), fu.join());
+    await p.evaluate(() => { slams.length = 0; hazards.length = 0; });
+    const inv = await boss(() => { run.boss.hp = 1; damageEnemy(run.boss, 1e6, player.x, player.y);
+      for (const e of enemies) e.hp = 0; enemies.length = 0; spawnInvader(); });
+    ck('the uninvited arriving is heard', inv.includes('arrive'), inv.join());
+    const dw = await boss(() => { run.boss = run.invader; wipeRoom('test'); });
+    ck('False Dawn is heard', dw.includes('dawn'), dw.join());
+
     /* ---- the rules page stays silent ---------------------------------------- */
     const t = await ctxB.newPage();
     await t.goto('http://localhost:' + PORT + '/core-test.html');

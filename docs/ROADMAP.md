@@ -55,7 +55,7 @@ Synthesised with Web Audio, no files. One small engine, one switch.
 - [x] The run: slag pickup, a coffer opening, the gate waking, stepping through,
       death, extraction — and the quota, gear by rarity, a full bag, blasts,
       slams, a surge held and a corpse reclaimed
-- [ ] Bosses: arrival, their big moves, their fall
+- [x] Bosses: arrival, their big moves, their fall
 - [ ] Menus: taps, buying, forging
 - [ ] Ambience, then music — last, once the effects are right
 

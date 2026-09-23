@@ -4908,6 +4908,7 @@ function damageEnemy(e, dmg, fx, fy) {
       return;                                   // a lie, not a body
     }
     if (e.kind === 'crucible') {
+      sfx('fall', e.x, e.y, 1);
       run.bossDown = true;
       run.boss = null;
       run.banner = 3.4;
@@ -4923,6 +4924,7 @@ function damageEnemy(e, dmg, fx, fy) {
       // An invader is not the avatar the delve is waiting on. Killing him must
       // not open the ley-gate, or the quota stops meaning anything the moment
       // one turns up.
+      sfx('fall', e.x, e.y, e.invader ? 0.6 : 1);
       if (e.invader) {
         run.invader = null;
         run.invadeKills = (run.invadeKills || 0) + 1;
@@ -5442,6 +5444,7 @@ function updateEnemies(dt) {
           // Riftborn: the hole he stepped through does not close.
           if (e.riftborn) addHazard(e.x, e.y, 74, e.dmg * 0.85, 7.5, '#b07cff');
           e.x = nx; e.y = ny;
+          sfx('blink', e.x, e.y);
           burst(e.x, e.y, '#e8c060', 16, 210);
           break;
         }
@@ -5454,7 +5457,7 @@ function updateEnemies(dt) {
         if (e.guardT <= 0) {
           e.braced = !e.braced;
           e.guardT = e.braced ? 2.0 : e.guardCd;
-          if (e.braced) ring(e.x, e.y, '#e8c060', 10, 90, 0.5);
+          if (e.braced) { ring(e.x, e.y, '#e8c060', 10, 90, 0.5); sfx('guard', e.x, e.y); }
         }
       }
       e.summon -= dt;
@@ -5462,6 +5465,7 @@ function updateEnemies(dt) {
         e.summon = 8.5;
         const batch = 2 + ((run.time / 90) | 0);
         for (let i = 0; i < batch; i++) spawnEnemy(run.time);
+        sfx('summon', e.x, e.y);
       }
       e.split -= dt;
       if (e.split <= 0) {
@@ -5469,7 +5473,7 @@ function updateEnemies(dt) {
         const want = e.mirages || 3;
         let live = 0;
         for (let i = 0; i < enemies.length; i++) if (enemies[i].kind === 'mirage') live++;
-        if (live < want) spawnMirages(e, want - live);
+        if (live < want) { spawnMirages(e, want - live); sfx('mirage', e.x, e.y); }
       }
     }
 
@@ -6147,6 +6151,7 @@ function spawnInvader() {
   run.banner = 3.4;
   run.bannerText = 'Something has come for you';
   run.bannerNote = 'He was not called. Kill him, or lose him in the dark.';
+  sfx('arrive', e.x, e.y, 0.6);
   shake(9);
   return e;
 }
@@ -6173,6 +6178,7 @@ function updateInvasion(dt) {
     run.banner = 2.6;
     run.bannerText = 'He has lost you';
     run.bannerNote = 'For now.';
+    sfx('blink', e.x, e.y);
   }
 }
 
@@ -6238,6 +6244,7 @@ function spawnCrucible() {
   run.banner = 3.8;
   run.bannerText = e.title;
   run.bannerNote = 'It cannot follow you. Its totems can mend it.';
+  sfx('arrive', e.x, e.y, 1);
   shake(10);
 }
 
@@ -6301,6 +6308,7 @@ function updateCrucible(e, dt) {
         sh.chant = 0.2;
         enemies.push(sh);
         burst(nx, ny, '#ff7a2c', 14, 180);
+        sfx('summon', nx, ny);
         break;
       }
     }
@@ -6326,6 +6334,9 @@ function updateCrucible(e, dt) {
     }
     e.spin = -e.spin;
     ring(e.x, e.y, '#ff5a24', 20, FURNACE_R, 0.55);
+    // The ring is thrown now and lands a beat later; this is the throw, so the
+    // player hears the warning while there is still time to move.
+    sfx('furnace', e.x, e.y);
     shake(5);
   }
 
@@ -6444,6 +6455,7 @@ function spawnDeceiver() {
   run.bannerNote = guard
     ? 'His Lieutenants hold him. Break them first.'
     : 'He offers you the gate. Look for the shattered eye.';
+  sfx('arrive', e.x, e.y, 0.8);
   shake(10);
 }
 
@@ -7198,6 +7210,7 @@ function dawnAdd(n, why) {
 // is the game saying which upstream thing you missed.
 function wipeRoom(why) {
   run.dawnFired = true;
+  sfx('dawn');
   shake(30);
   ring(player.x, player.y, '#fff2c8', 20, 900, 1.1);
   burst(player.x, player.y, '#ffd870', 60, 520);
@@ -7243,6 +7256,7 @@ function updateAgony(dt) {
         ring(L.x, L.y, '#c2352a', 20, AGONY_REACH, 0.32);
       }
       for (let i = 0; i < live.length; i++) live[i].agonyA = undefined;
+      sfx('agony', undefined, undefined, dmg > 0 ? 1 : 0.4);
       shake(dmg > 0 ? 18 : 7);
       if (dmg > 0) {
         freeze(0.07);
@@ -7271,6 +7285,7 @@ function updateAgony(dt) {
     L.agony  = AGONY_WIND;
   }
   toast('Synchronized Agony', '#c2352a');
+  sfx('agonywind');
 }
 
 // --- Slag Siphon -----------------------------------------------------------
@@ -7290,6 +7305,7 @@ function updateSiphon(e, dt) {
       e.siphon = SIPHON_CD * 0.6;
       ring(e.x, e.y, '#7fd4ff', 8, 70, 0.4);
       toast('The pour is broken', '#7fd4ff');
+      sfx('decrypt', e.x, e.y);
       return false;
     }
     e.casting -= dt;
@@ -7417,6 +7433,7 @@ function beginBreath(boss) {
   run.banner = 3.4;
   run.bannerText = 'Breath of the Void';
   run.bannerNote = 'Put a Null-Zone underneath him.';
+  sfx('breath', boss.x, boss.y);
   ring(boss.x, boss.y, '#e8c060', 20, 260, 0.7);
   shake(14);
 }
@@ -7455,6 +7472,7 @@ function tryNullify(zx, zy, zr) {
   run.breath = 0;
   run.dawn = 0;
   run.dawnPop = 1;
+  sfx('nullified', boss.x, boss.y);
   boss.casting = 0;
   boss.braced = false;
   boss.blink = 1e9;
