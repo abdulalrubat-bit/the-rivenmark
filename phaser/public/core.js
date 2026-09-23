@@ -3998,8 +3998,13 @@ function claimCorpse() {
                  item: c.items[i], r: 9, life: 0, pulled: false });
   }
 
-  stash.corpse = null;
-  saveStash();
+  /* NOT cleared from the stash here. It used to be, and saved, the moment it
+   * was claimed -- while the things in it were only in the bag, which is not
+   * saved. Abandon the delve or lose the app after claiming it and the corpse
+   * was gone from disk with its contents never banked: the one loss in the
+   * game nobody could get back. The claim is settled where the run is, in
+   * endRun: carried out, it is spent; died with, the new corpse replaces it;
+   * walked out of, it is still waiting where it lay. */
 
   burst(c.x, c.y, CORPSE_HUE, 30, 240);
   ring(c.x, c.y, CORPSE_HUE, 10, 150, 0.7);
@@ -8275,12 +8280,19 @@ function endRun(won) {
   let lost = 0;
   if (!won) {
     const items = player.bag.slice(0, CORPSE_CARRY);
-    lost = (stash.corpse && (stash.corpse.items.length || stash.corpse.coins)) ? 1 : 0;
+    // A corpse claimed on this run is in the bag you just died with, not lost
+    // separately -- it goes into the new one like anything else you carried.
+    const claimed = !!(run.corpse && run.corpse.taken);
+    lost = (!claimed && stash.corpse &&
+            (stash.corpse.items.length || stash.corpse.coins)) ? 1 : 0;
     stash.corpse = (items.length || run.coins)
       ? { level_id: LEVEL.id, hero: run.hero, x: player.x, y: player.y,
           items, coins: run.coins }
       : null;
   }
+  // Carried out: a corpse claimed on this run is spent, its contents banked
+  // with the rest of the bag below. (See claimCorpse for why not sooner.)
+  if (won && run.corpse && run.corpse.taken) stash.corpse = null;
   // THE TROPHY, before the wipe: eight pieces of the Regalia carried out of a
   // Hardcore delve. Checked against what is WORN plus what is in the bag,
   // because a set is only finished when the last piece is out of the ground,
@@ -8393,7 +8405,7 @@ function endRun(won) {
    before the core is stepped; this list is generated, so it cannot drift out
    of date the way a hand-written one would.
 
-     saveStash            called from claimCorpse, wipeHardcore, markDelving +7
+     saveStash            called from wipeHardcore, markDelving, hallBuy +6
      showScreen           called from startRun, openGear, closeGear +5
      syncBagBadge         called from updateDrops, claimCorpse, resetRun +1
      loadHonours          called from update, endRun
