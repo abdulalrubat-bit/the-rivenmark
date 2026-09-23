@@ -17,7 +17,9 @@
           todaysBounty, bountyDone,
           SLOTS, SLOT_BY_ID, RARITY, itemPower, affixText, saveStash,
           VENDOR, vendorCost, canAfford, vendorBuy, HALL, hallTier,
-          HALL_MAX, hallBuy, vaultCap */
+          HALL_MAX, hallBuy, vaultCap, loadoutCap, saveLoadout, applyLoadout,
+          deleteLoadout, discardFromVault, gearCtx, closeGear, compareLines,
+          bagCap, player, LOADOUT_MAX */
 
 const CSS = `
 /* The safe areas, same as the HUD -- see the note at the top of hud.js. The
@@ -79,6 +81,18 @@ const CSS = `
   background-origin:border-box;background-clip:padding-box,border-box;
   box-shadow:inset 0 1px 0 rgba(214,178,110,.22)}
 #screens .row small{color:#8c8168;display:block}
+/* A row with a second, smaller control beside it: discard on a vault piece,
+   let go on a preset. Kept apart from the row so the big target does the
+   common thing and the rare, permanent one needs its own deliberate tap. */
+#screens .pair{display:flex;gap:6px}
+#screens .pair>.row{flex:1;min-width:0}
+#screens .drop{flex:none;min-width:44px;min-height:44px;border-radius:6px;padding:0 6px;
+  background:#191510;border:1px solid #4a3f30;color:#8c8168;font:inherit}
+#screens .drop.armed{border-color:#c0392b;color:#ffb4a0;background:#2a1612}
+/* What a carried piece would change against what is worn, per stat. */
+#screens .cmp{display:block;margin-top:3px;font-size:11px}
+#screens .cmp .up{color:#8fd08a}
+#screens .cmp .down{color:#e08a7a}
 /* THE ONE BUTTON THAT DOES THE THING, ALWAYS WITHIN REACH.
  *
  * Measured on a 390x844 phone: the gate-house card is 1317px tall -- four
@@ -171,7 +185,13 @@ export class Screens {
     this.root.classList.add('up');
     if (name === 'paused') this.renderPaused();
     else if (name === 'over') this.renderOver();
-    else if (name === 'gear') this.renderForge();
+    // 'gear' is two screens. Mid-delve the core opens it on the bag you are
+    // carrying (openGear('run'), which also stops the delve); from the
+    // gate-house it is the Forge, on the vault.
+    else if (name === 'gear') {
+      if (state === 'gear' && gearCtx && gearCtx.live) this.renderBag();
+      else this.renderForge();
+    }
     else if (name === 'vendor') this.renderVendor();
     else if (name === 'hall') this.renderHall();
     else this.renderGatehouse();
@@ -628,52 +648,160 @@ export class Screens {
    * across, and re-implementing that model here would be inventing a second
    * way for the same two arrays to change.
    */
-  renderForge() {
-    const card = (it, worn) => {
-      const r = RARITY.find(x => x.id === it.rarity) || RARITY[0];
-      const aff = it.affixes.map(a => affixText(a, stash.hero)).filter(Boolean).join(' · ');
-      return '<span class="item"><span><b style="color:' + r.colour + '">' + it.name +
-             '</b><span class="aff">' + (aff || '&mdash;') + '</span></span>' +
-             // The number is the piece's power; the word is what tapping does.
-             // "41 · off" read as a state rather than an action.
-             '<span class="pw">' + Math.round(itemPower(it)) +
-             '<span class="act">' + (worn ? 'take off' : 'wear') + '</span>' +
-             '</span></span>';
-    };
+  /* One piece, as a row's contents: its name in its rarity's colour, what it
+   * does, its power, and the word for what tapping does. */
+  itemCard(it, act, extra) {
+    const r = RARITY.find(x => x.id === it.rarity) || RARITY[0];
+    const aff = it.affixes.map(a => affixText(a, stash.hero)).filter(Boolean).join(' · ');
+    return '<span class="item"><span><b style="color:' + r.colour + '">' + it.name +
+           '</b><span class="aff">' + (aff || '&mdash;') + '</span>' + (extra || '') +
+           '</span>' +
+           // The number is the piece's power; the word is what tapping does.
+           // "41 · off" read as a state rather than an action.
+           '<span class="pw">' + Math.round(itemPower(it)) +
+           (act ? '<span class="act">' + act + '</span>' : '') +
+           '</span></span>';
+  }
 
+  renderForge() {
+    const cap = typeof vaultCap === 'function' ? vaultCap() : stash.vault.length;
     this.root.innerHTML =
       '<div class="card">' +
         '<h1>The Forge</h1>' +
         this.tabs('gear') +
         '<div class="purse"><span>Power</span><b>' + stashPower() + '</b></div>' +
+        (this.note ? '<p class="sub">' + this.note + '</p>' : '') +
         '<p class="sub">Worn</p>' +
         '<div class="rows">' +
           SLOTS.map(sl => {
             const it = stash.gear[sl.id];
             return '<button class="row" type="button" data-off="' + sl.id + '"' +
               (it ? '' : ' disabled') + '>' +
-              (it ? card(it, true)
+              (it ? this.itemCard(it, 'take off')
                   : '<span class="item"><span>' + sl.mark + ' ' + sl.name +
                     '<span class="aff empty">nothing worn</span></span></span>') +
               '</button>';
           }).join('') +
         '</div>' +
-        '<p class="sub">The vault &mdash; ' + stash.vault.length + '</p>' +
+        this.presets() +
+        '<p class="sub">The vault &mdash; ' + stash.vault.length + ' of ' + cap + '</p>' +
         '<div class="rows">' +
           (stash.vault.length
             ? stash.vault.map((it, i) =>
-                '<button class="row" type="button" data-on="' + i + '">' +
-                card(it, false) + '</button>').join('')
+                '<div class="pair"><button class="row" type="button" data-on="' + i + '">' +
+                this.itemCard(it, 'wear') + '</button>' +
+                '<button class="drop' + (this.dropArmed === i ? ' armed' : '') +
+                '" type="button" data-drop="' + i + '" aria-label="discard">' +
+                (this.dropArmed === i ? 'discard?' : '\u2715') + '</button></div>').join('')
             : '<div class="row"><span class="empty">Nothing here yet. ' +
               'Champions and the avatar carry the Regalia.</span></div>') +
         '</div>' +
       '</div>';
 
+    // Any tap other than the second one on the same piece stands the discard
+    // down again, so an armed button never lingers to be hit by accident.
+    const done = () => { this.dropArmed = null; this.renderForge(); };
     this.wireTabs();
     this.root.querySelectorAll('[data-on]').forEach(b =>
-      b.addEventListener('click', () => { this.equip(+b.dataset.on); this.renderForge(); }));
+      b.addEventListener('click', () => { this.note = null; this.equip(+b.dataset.on); done(); }));
     this.root.querySelectorAll('[data-off]').forEach(b =>
-      b.addEventListener('click', () => { this.unequip(b.dataset.off); this.renderForge(); }));
+      b.addEventListener('click', () => { this.note = null; this.unequip(b.dataset.off); done(); }));
+    this.root.querySelectorAll('[data-drop]').forEach(b =>
+      b.addEventListener('click', () => {
+        const i = +b.dataset.drop;
+        if (this.dropArmed !== i) { this.dropArmed = i; this.renderForge(); return; }
+        const it = discardFromVault(i);
+        this.note = it ? it.name + ' is gone.' : null;
+        done();
+      }));
+    this.root.querySelectorAll('[data-load]').forEach(b =>
+      b.addEventListener('click', () => {
+        const L = stash.loadouts[+b.dataset.load];
+        const r = applyLoadout(L);
+        this.note = L.name + ': ' + r.set + ' equipped' +
+          (r.missing ? ', ' + r.missing + ' no longer in the vault' : '') + '.';
+        done();
+      }));
+    this.root.querySelectorAll('[data-unload]').forEach(b =>
+      b.addEventListener('click', () => {
+        const i = +b.dataset.unload;
+        if (this.unloadArmed !== i) { this.unloadArmed = i; this.renderForge(); return; }
+        const name = (stash.loadouts[i] || {}).name;
+        deleteLoadout(i);
+        this.unloadArmed = null;
+        this.note = name ? name + ' is let go. Nothing in it was touched.' : null;
+        done();
+      }));
+    const sv = this.root.querySelector('#saveKit');
+    if (sv) sv.addEventListener('click', () => {
+      const L = saveLoadout();
+      this.note = L.name + ' saved \u2014 the kit you are wearing, as it is now.';
+      done();
+    });
+  }
+
+  /* KIT PRESETS. A preset is a list of item ids, so wearing one takes each
+   * piece out of the vault if it is still there and says how many were not.
+   * Saved only while there is room -- the Hall's Vault is what buys more --
+   * and let go of with two taps, the same as a discard. */
+  presets() {
+    const cap = typeof loadoutCap === 'function' ? loadoutCap() : 0;
+    const Ls = stash.loadouts || [];
+    return '<p class="sub">Kit presets &mdash; ' + Ls.length + ' of ' + cap + '</p>' +
+      (Ls.length ? '<div class="rows">' + Ls.map((L, i) => {
+        const worn = SLOTS.filter(sl => L.slots[sl.id] != null).length;
+        return '<div class="pair"><button class="row" type="button" data-load="' + i + '">' +
+          '<span>' + L.name + '<small>' + worn + ' of ' + SLOTS.length + ' pieces \u00b7 ' +
+          ((HEROES[L.hero] || {}).name || '') + '</small></span>' +
+          '<span class="act">wear</span></button>' +
+          '<button class="drop' + (this.unloadArmed === i ? ' armed' : '') +
+          '" type="button" data-unload="' + i + '" aria-label="let go">' +
+          (this.unloadArmed === i ? 'let go?' : '\u2715') + '</button></div>';
+      }).join('') + '</div>' : '') +
+      (Ls.length < cap
+        ? '<button class="alt" type="button" id="saveKit">Save what you are wearing</button>'
+        : '<p class="sub">Every preset slot is taken. Let one go to save another' +
+          (cap < LOADOUT_MAX + HALL_MAX ? ', or build out the Vault in the Hall.' : '.') + '</p>');
+  }
+
+  /* THE BAG, mid-delve. Read-only, as it always was: what you have picked up
+   * and what each piece would change against what you are wearing. Swapping
+   * is for the gate-house -- a menu you can change your kit in is a pause
+   * button that also heals the fight. The delve is stopped while it is open
+   * (the core's openGear), and Back is the core's closeGear. */
+  renderBag() {
+    const C = gearCtx;
+    const lines = it => {
+      const c = typeof compareLines === 'function' ? compareLines(it) : [];
+      if (!c.length) return '<span class="cmp">no change against what you wear</span>';
+      return '<span class="cmp">' + c.map(x =>
+        '<span class="' + (x.good ? 'up' : 'down') + '">' + x.txt + ' ' + x.name +
+        '</span>').join(' \u00b7 ') + '</span>';
+    };
+    this.root.innerHTML =
+      '<div class="card">' +
+        '<h1>The Bag</h1>' +
+        '<p class="sub">Carried so far &mdash; ' + C.bag.length + ' of ' + C.cap +
+          '. It banks only if you walk out with it.</p>' +
+        '<div class="rows">' +
+          (C.bag.length
+            ? C.bag.map(it => '<div class="row">' + this.itemCard(it, null, lines(it)) +
+                              '</div>').join('')
+            : '<div class="row"><span class="empty">Nothing yet. Champions carry the ' +
+              'best of it.</span></div>') +
+        '</div>' +
+        '<p class="sub">Worn</p>' +
+        '<div class="rows">' +
+          SLOTS.map(sl => {
+            const it = C.gear[sl.id];
+            return '<div class="row">' + (it ? this.itemCard(it, null)
+              : '<span class="item"><span>' + sl.mark + ' ' + sl.name +
+                '<span class="aff empty">nothing worn</span></span></span>') + '</div>';
+          }).join('') +
+        '</div>' +
+        '<button class="go pinned" type="button" id="bagBack">Back to the delve</button>' +
+      '</div>';
+    this.root.querySelector('#bagBack').addEventListener('click', () => closeGear());
   }
 
   equip(index) {

@@ -7646,6 +7646,17 @@ function saveLoadout(name) {
   return L;
 }
 
+// A preset can be let go of. There was no way to until now: the canvas build
+// only saved while under the cap, so the day you reached it your presets were
+// permanent. Only the list changes -- a preset holds item ids, not items, so
+// nothing in the vault or the kit is touched.
+function deleteLoadout(index) {
+  if (!(index >= 0 && index < stash.loadouts.length)) return false;
+  stash.loadouts.splice(index, 1);
+  saveStash();
+  return true;
+}
+
 // Returns how many pieces it could actually restore, so the UI can say when a
 // preset has aged badly rather than silently equipping half a kit.
 function applyLoadout(L) {
@@ -7970,6 +7981,17 @@ function unequipSelected() {
   C.gear[gearSel.slot] = null;
   C.bag.push(it);
   afterGearChange();
+}
+
+/* Throwing a piece out of the vault, by position. The vault has a cap, and
+ * a full one refuses the bounty and drops what an extraction would have
+ * banked -- so a player has to be able to make room. Gone for good: there is
+ * no sale price, the same as the canvas build's discard. */
+function discardFromVault(index) {
+  if (!(index >= 0 && index < stash.vault.length)) return null;
+  const [it] = stash.vault.splice(index, 1);
+  saveStash();
+  return it;
 }
 
 function discardSelected() {

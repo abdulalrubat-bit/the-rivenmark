@@ -248,7 +248,9 @@ export class Delve extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, WORLD.w, WORLD.h);
 
     // ?nostatics skips the one-off bake, for isolating where a frame goes.
-    if (!/nostatics/.test(location.search)) {
+    // And ?norun has no world to bake: walls and the cell grid are empty, and
+    // the dressing pass read the grid and threw.
+    if (this.stepping && !/nostatics/.test(location.search)) {
       const t0 = performance.now();
       this.paintStatics();
       // Kept, not just logged. The only rough edge left on a real phone is a

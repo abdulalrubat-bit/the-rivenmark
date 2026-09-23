@@ -12,7 +12,7 @@
 
 import { bossShown, bossBarDrop, minimapBox } from './overlay.js';
 
-/* global player, run, state, enemies, view, LEVEL, REGION, HUD_H, ABILITIES,
+/* global bagCap, player, run, state, enemies, view, LEVEL, REGION, HUD_H, ABILITIES,
           ABILITY_BY_ID, CHARGE_MAX, TENSION_MAX, COMBO_LEN, CONDUIT_EDGE */
 
 /* Four roles, four colours, and the mapping lives beside the buttons because
@@ -89,7 +89,7 @@ const CSS = `
    the bottom two are thumbs, and this is a button you must never press by
    accident in a fight -- so it goes in the one corner a hand does not visit.
    Understated on purpose. It is not a control you use, it is one you find. */
-#hud .hold{position:absolute;left:10px;top:40px;pointer-events:auto}
+#hud .hold{position:absolute;left:10px;top:40px;pointer-events:auto;display:flex;gap:8px}
 /* Deliberately NOT the kit's plate. This is a control you find, not one you
    use, and giving it the same bronze would put a sixth big gold disc on the
    screen competing with the five that matter. */
@@ -98,6 +98,15 @@ const CSS = `
      box-shadow:none}
 #hud .hold button:before{display:none}
 #hud .hold button:active{background:#2a2419;color:#e8dcc0}
+/* The bag, beside the pause and built the same way: a thing you look at
+   between fights, not a control you reach for in one. The count is the only
+   part that asks for attention, and only when the bag is full. */
+#hud .hold .bag{position:relative;font-size:14px}
+#hud .hold .bag i{position:absolute;right:-4px;bottom:-4px;min-width:15px;height:15px;
+     border-radius:8px;background:#1a1712;border:1px solid #4a3f30;color:#cebe9e;
+     font:9px/13px ui-monospace,monospace;font-style:normal;text-align:center;padding:0 2px;
+     box-sizing:border-box}
+#hud .hold .bag.full i{border-color:#e8c060;color:#e8c060}
 /* The kit sits bottom-right in two rows of three. Its own bottom edge, the
    swap beside it rather than above it, and the resource meter over it are all
    placed so nothing lands on anything else -- measured in the play test, not
@@ -400,7 +409,9 @@ export class Hud {
       '<div class="swap"><button type="button" title="swap">' +
         '<span class="mark">\u21c4</span><span class="tag">SWAP</span>' +
         '<span class="cd"></span></button></div>' +
-      '<div class="hold"><button type="button" title="hold" aria-label="hold">❙❙</button></div>' +
+      '<div class="hold"><button type="button" title="hold" aria-label="hold">❙❙</button>' +
+        '<button type="button" class="bag" title="bag" aria-label="bag">\u25a3<i>0</i></button>' +
+      '</div>' +
       '<div class="kit"></div>' +
       '<div class="conduit"><span class="ring"></span><span class="chg"></span>' +
         '<span class="knob"></span><span class="glyph">\u2726</span>' +
@@ -445,6 +456,11 @@ export class Hud {
     // free, and a pointerdown here would fire on a thumb that only brushed it.
     this.holdBtn = root.querySelector('.hold button');
     this.holdBtn.addEventListener('click', () => g.pauseRun());
+    // The core's own door: it stops the delve and raises the bag screen.
+    this.bagBtn = root.querySelector('.hold .bag');
+    this.bagCount = root.querySelector('.hold .bag i');
+    this.bagSig = '';
+    this.bagBtn.addEventListener('click', () => g.openGear('run'));
 
     this.hero = null;      // which kit is currently built
     this.sig = '';         // last rendered button state, to skip DOM churn
@@ -592,6 +608,13 @@ export class Hud {
     this.root.hidden = !inDelve;
     if (!inDelve) return;
     if (this.hero !== p.hero) this.buildKit(p.hero);
+
+    const cap = bagCap(), n = p.bag.length, bs = n + '/' + cap;
+    if (this.bagSig !== bs) {
+      this.bagSig = bs;
+      this.bagCount.textContent = n;
+      this.bagBtn.classList.toggle('full', n >= cap);
+    }
 
     this.syncConduit();
     /* Rounded before it is compared, so this writes to the DOM about twenty
