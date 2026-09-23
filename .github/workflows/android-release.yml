@@ -49,7 +49,37 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The game has to PLAY before it is packaged (the analysis' R02). Packaging
+  # proves the APK carries the build; it says nothing about whether the build
+  # works. These are the rules a release must not break -- saves that cannot
+  # crash the game, the attack's contract, Hardcore, getting out, the ladder,
+  # the stash -- and the two smoke checks for booting and for a save problem
+  # never being silent. The full suites stay a local and manual job: they
+  # take the better part of an hour.
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install the Phaser build's tools
+        working-directory: phaser
+        run: npm ci --no-audit --no-fund
+      - name: Chromium for the suites
+        working-directory: phaser
+        run: npx playwright install --with-deps chromium
+      - name: Pack the atlas the game loads
+        working-directory: phaser
+        run: npm run atlas
+      - name: The rules a release must not break
+        run: NODE_PATH=$PWD/phaser/node_modules node tools/run-suites.js saves controls hardcore extract ladder stash
+      - name: It boots, and a save problem is never silent
+        working-directory: phaser
+        run: npm run smoke:boot && npm run smoke:savenotice
+
   aab:
+    needs: checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

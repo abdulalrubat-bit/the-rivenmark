@@ -7095,7 +7095,14 @@ const lootMult = () => DIFF.lootRate * (hardcore ? HC_LOOT : 1);
 const relicMult = () => DIFF.setRate * (hardcore ? HC_LOOT : 1);
 // The blood-red sweep. Earned once, kept for ever, and worn in either mode --
 // a trophy nobody can see outside the room it was won in is not a trophy.
-const honoured = () => !!loadHonours().crimson;
+/* The honours, held in memory. honoured() is asked every time a crescent is
+ * drawn -- hundreds of times a second in a fight -- and it used to go to
+ * localStorage and parse JSON on every one (the analysis' R05). Read once;
+ * the one place that earns an honour writes the cache and the disk together. */
+let honoursCache = null;
+const honours = () => honoursCache || (honoursCache = loadHonours() || {});
+function keepHonours(h) { honoursCache = h; saveHonours(h); }
+const honoured = () => !!honours().crimson;
 // The trophy, worn. A Vanguard who carried the whole Regalia out of one life
 // swings in crimson from then on, in either mode and for ever -- which is what
 // makes it a trophy rather than a line in a menu. Asked here, once, so
@@ -8980,11 +8987,11 @@ function endRun(won) {
   if (hardcore && won) {
     const carriedSet = player.bag.filter(it => it.set === SET_ID).length;
     if (setWorn(player) + carriedSet >= SLOTS.length) {
-      const h = loadHonours();
+      const h = Object.assign({}, honours());
       if (!h.crimson) {
         h.crimson = 1;
         h.crimsonAt = Date.now();
-        saveHonours(h);
+        keepHonours(h);
         run.banner = 4.0;
         run.bannerText = 'The Regalia is whole';
         run.bannerNote = 'Carried out of one life. The edge answers in crimson now.';

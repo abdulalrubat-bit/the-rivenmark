@@ -28,6 +28,8 @@ import { settings, setSetting, setControlsSaved, SHAKES, QUALITIES } from './set
 const snd = (name, mag) => { if (typeof window.sfx === 'function') window.sfx(name, undefined, undefined, mag); };
 
 const CSS = `
+#screens .sub.warn{color:#e8c060;border-left:2px solid #c9863e;padding-left:8px}
+
 /* Settings: a row that holds a slider instead of being a button. */
 #screens .row.slide{display:flex;align-items:center;gap:10px}
 #screens .row.slide input[type=range]{flex:1;min-width:0;accent-color:#c9a45a}
@@ -521,6 +523,21 @@ export class Screens {
 
   /* Which delve, and who goes down. The ladder is long, so this shows the
    * rungs around the one you can actually handle rather than all fifty-two. */
+  /* What the player must be told about their save, at the door: that the
+   * last one could not be written (and why it matters), or that it was
+   * damaged and the backup was loaded instead. Never silent. */
+  saveNotice() {
+    const out = [];
+    if (window.saveTrouble)
+      out.push('<b>Your progress could not be saved</b> (' + window.saveTrouble + '). ' +
+               'The phone\u2019s storage may be full; free some space before you descend.');
+    if (window.stashRecovered && !this.toldRecovered) {
+      this.toldRecovered = true;
+      out.push('Your last save was damaged, so the one before it was loaded instead.');
+    }
+    return out.length ? '<p class="sub warn">' + out.join('<br>') + '</p>' : '';
+  }
+
   renderGatehouse() {
     // The hero last taken down, not Isaac for everybody: the stash remembers
     // who that was, and the canvas gate-house opened on them. Once only -- a
@@ -562,7 +579,7 @@ export class Screens {
 
     this.root.innerHTML =
       '<div class="card">' +
-        '<h1>The Gate-House</h1>' +
+        '<h1>The Gate-House</h1>' + this.saveNotice() +
         this.tabs('splash') +
         '<p class="sub">Choose a rung and one of the Clear-Sighted.</p>' +
         this.purse() +
