@@ -179,3 +179,128 @@ define('charged', { max: 1, gap: 0.25, vol: 0.55, make(ctx, out, t) {
 define('ready', { max: 1, gap: 0.2, vol: 0.4, make(ctx, out, t) {
   return ring(ctx, out, t, { f: 392, d: 0.4, peak: 0.08, ratios: [1, 2.0, 3.0] });
 } });
+
+/* ---- the run ------------------------------------------------------------------
+ * The things a delve is FOR -- slag, coffers, the gate -- are the few sounds
+ * allowed a little light, because they are rewards. The ends of a delve are
+ * the longest sounds in the game: they close something.
+ */
+
+// Slag picked up. A small crystal tick that climbs as the quota fills, so the
+// pickups themselves say how close you are.
+define('slag', { max: 3, gap: 0.03, vol: 0.5, make(ctx, out, t, mag) {
+  const f = 294 * (1 + mag);
+  tone(ctx, out, t, { wave: 'triangle', f0: f, f1: f * 0.98, a: 0.002, d: 0.09, peak: 0.1 });
+  return tone(ctx, out, t, { wave: 'sine', f0: f * 2, f1: f * 1.96, a: 0.002, d: 0.05, peak: 0.03 });
+} });
+
+// The quota met. It is what calls the avatar, so it is not a fanfare: a low
+// swell and a bell with a minor third in it.
+define('quota', { max: 1, gap: 1, vol: 0.7, make(ctx, out, t) {
+  tone(ctx, out, t, { f0: 98, f1: 96, a: 0.08, d: 1.1, peak: 0.3 });
+  tone(ctx, out, t, { f0: 116.5, f1: 115, a: 0.1, d: 1.0, peak: 0.12 });
+  return ring(ctx, out, t, { f: 147, d: 1.4, peak: 0.12, ratios: [1, 2.0, 2.4] });
+} });
+
+// A coffer: the lid, then the coin inside it.
+define('coffer', { max: 2, gap: 0.1, vol: 0.6, make(ctx, out, t, mag, noise) {
+  noiseBurst(ctx, out, t, noise, { type: 'bandpass', q: 3, f0: 420, f1: 240, a: 0.04, d: 0.18, peak: 0.16 });
+  tone(ctx, out, t, { f0: 90, f1: 60, a: 0.01, d: 0.15, peak: 0.2 });
+  let len = 0;
+  [[0.16, 1800], [0.22, 2350], [0.29, 2050]].forEach(([dt, f]) => {
+    len = Math.max(len, dt + ring(ctx, out, t + dt, { f, d: 0.12, peak: 0.05, ratios: [1, 2.7] }));
+  });
+  return len;
+} });
+
+// Gear into the bag. A worn piece is a soft knock; a rare one rings, and the
+// rarer it is the brighter and longer.
+define('gear', { max: 2, gap: 0.08, vol: 0.55, make(ctx, out, t, mag, noise) {
+  noiseBurst(ctx, out, t, noise, { f0: 700, f1: 150, a: 0.003, d: 0.05, peak: 0.12 });
+  if (mag < 0.15) return tone(ctx, out, t, { f0: 150, f1: 110, a: 0.003, d: 0.1, peak: 0.15 });
+  return ring(ctx, out, t, { f: 262 * (1 + mag), d: 0.3 + 0.7 * mag, peak: 0.05 + 0.06 * mag,
+                             ratios: [1, 1.5, 2.0, 3.0] });
+} });
+
+// A barrel or a husk going off: the biggest noise the floor makes.
+define('blast', { max: 2, gap: 0.06, vol: 0.8, make(ctx, out, t, mag, noise) {
+  noiseBurst(ctx, out, t, noise, { f0: 2800, f1: 70, a: 0.003, d: 0.4 + 0.25 * mag, peak: 0.55 });
+  return tone(ctx, out, t, { f0: 64, f1: 28, a: 0.004, d: 0.5 + 0.2 * mag, peak: 0.45 + 0.2 * mag });
+} });
+
+// A pillar coming down: rubble, in several falls.
+define('crumble', { max: 1, gap: 0.2, vol: 0.75, make(ctx, out, t, mag, noise) {
+  let len = noiseBurst(ctx, out, t, noise, { f0: 1400, f1: 120, a: 0.01, d: 0.55, peak: 0.45 });
+  tone(ctx, out, t, { f0: 70, f1: 34, a: 0.005, d: 0.4, peak: 0.45 });
+  [0.12, 0.23, 0.31, 0.44].forEach((dt, i) => {
+    len = Math.max(len, dt + noiseBurst(ctx, out, t + dt, noise,
+      { type: 'bandpass', q: 1.8, f0: 900 - i * 120, f1: 250, a: 0.002, d: 0.06, peak: 0.18 }));
+  });
+  return len;
+} });
+
+// A body's slam landing on the floor. A gorger's, which opens the ground
+// (mag 1), is deeper and longer.
+define('slam', { max: 2, gap: 0.08, vol: 0.75, make(ctx, out, t, mag, noise) {
+  noiseBurst(ctx, out, t, noise, { f0: 900, f1: 60, a: 0.004, d: 0.25 + 0.2 * mag, peak: 0.45 });
+  return tone(ctx, out, t, { f0: 75, f1: 30, a: 0.004, d: 0.35 + 0.25 * mag, peak: 0.5 + 0.2 * mag });
+} });
+
+// The gate waking. Heard across the delve (far), placed, and long: a deep
+// fifth under a slow bell, so it reads as a place that is now open to you.
+define('gate', { max: 1, gap: 1, vol: 0.7, far: 0.45, make(ctx, out, t) {
+  tone(ctx, out, t, { f0: 55, f1: 55, a: 0.3, d: 1.6, peak: 0.3 });
+  tone(ctx, out, t, { f0: 82.5, f1: 82, a: 0.35, d: 1.5, peak: 0.16 });
+  return ring(ctx, out, t + 0.1, { f: 110, d: 1.8, peak: 0.1, ratios: [1, 2.0, 3.0, 4.1] });
+} });
+
+// Winding it open, in quarters: a low tick that climbs.
+define('wind', { max: 1, gap: 0.2, vol: 0.5, make(ctx, out, t, mag) {
+  const f = 110 * (1 + mag);
+  return tone(ctx, out, t, { wave: 'triangle', f0: f, f1: f * 0.99, a: 0.01, d: 0.25, peak: 0.16 });
+} });
+
+// It stands open: a rush of air, and the fifth again, higher.
+define('gateopen', { max: 1, gap: 1, vol: 0.75, make(ctx, out, t, mag, noise) {
+  noiseBurst(ctx, out, t, noise, { type: 'bandpass', q: 0.9, f0: 250, f1: 2200, a: 0.3, d: 0.5, peak: 0.25 });
+  tone(ctx, out, t + 0.25, { f0: 110, f1: 110, a: 0.05, d: 1.1, peak: 0.25 });
+  return 0.25 + ring(ctx, out, t + 0.25, { f: 165, d: 1.2, peak: 0.1, ratios: [1, 2.0, 3.0] });
+} });
+
+// A surge outlasted, and paid: coin, and a low hit under it.
+define('surge', { max: 1, gap: 0.5, vol: 0.6, make(ctx, out, t) {
+  tone(ctx, out, t, { f0: 110, f1: 70, a: 0.005, d: 0.3, peak: 0.3 });
+  let len = 0;
+  [[0, 1700], [0.07, 2250], [0.13, 1950], [0.2, 2500]].forEach(([dt, f]) => {
+    len = Math.max(len, dt + ring(ctx, out, t + dt, { f, d: 0.14, peak: 0.05, ratios: [1, 2.7] }));
+  });
+  return len;
+} });
+
+// Your own corpse, reclaimed -- and the champions it raises. A grim bell that
+// beats against itself.
+define('corpse', { max: 1, gap: 1, vol: 0.7, make(ctx, out, t) {
+  tone(ctx, out, t, { f0: 65, f1: 60, a: 0.02, d: 1.2, peak: 0.35 });
+  return ring(ctx, out, t, { f: 233, d: 1.3, peak: 0.11, ratios: [1, 1.06, 2.4] });
+} });
+
+// Out. The one sound that opens up rather than closing down: a rush, and a
+// warm major chord.
+define('extract', { max: 1, gap: 1, vol: 0.75, make(ctx, out, t, mag, noise) {
+  noiseBurst(ctx, out, t, noise, { type: 'bandpass', q: 0.8, f0: 300, f1: 1800, a: 0.25, d: 0.5, peak: 0.2 });
+  let len = 0;
+  for (const [f, p] of [[131, 0.2], [196, 0.12], [262, 0.1], [330, 0.07], [392, 0.05]])
+    len = Math.max(len, 0.2 + tone(ctx, out, t + 0.2, { f0: f, f1: f, a: 0.1, d: 1.5, peak: p }));
+  return len;
+} });
+
+// Dead. Everything falls: a drone sinking out, and a breath of air leaving.
+// In Hardcore (mag 1) a bell tolls under it, because that one is final.
+define('death', { max: 1, gap: 1, vol: 0.85, make(ctx, out, t, mag, noise) {
+  noiseBurst(ctx, out, t, noise, { f0: 500, f1: 50, a: 0.02, d: 1.2, peak: 0.3 });
+  tone(ctx, out, t, { wave: 'triangle', f0: 220, f1: 70, a: 0.01, d: 1.2, peak: 0.14 });
+  let len = tone(ctx, out, t, { f0: 110, f1: 38, a: 0.01, d: 1.7, peak: 0.5 });
+  if (mag > 0.75) len = Math.max(len, 0.3 + ring(ctx, out, t + 0.3, { f: 73.4, d: 2.2, peak: 0.2,
+                                                                  ratios: [1, 2.0, 2.4, 3.0] }));
+  return len;
+} });

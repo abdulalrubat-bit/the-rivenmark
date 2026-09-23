@@ -3509,6 +3509,7 @@ function openChest(ch) {
   burst(ch.x, ch.y, K.colour, 18, 190);
   ring(ch.x, ch.y, K.colour, 8, 46, 0.4);
   floatDmg(ch.x, ch.y - 12, coin, 'coin');
+  sfx('coffer', ch.x, ch.y);
 
   // SLAG, in a cluster. Coin is banked the instant the lid comes up and is
   // therefore not a reason to walk anywhere; slag has to be picked up off the
@@ -3857,6 +3858,8 @@ function updateSlams(dt) {
     s.t += dt;
     if (!s.struck && s.t >= s.wind) {
       s.struck = true;
+      sfx(s.pillar ? 'crumble' : (s.barrel || s.husk) ? 'blast' : 'slam', s.x, s.y,
+          s.barrel || s.fracture ? 1 : 0.5);
       if (s.barrel) {
         const dmg = 62 * (1 + (LEVEL.depth || 0));
         blastAt(s.x, s.y, s.r, dmg, '#ff9a3c');
@@ -3928,11 +3931,13 @@ function updateDrops(dt) {
         syncBagBadge();
         burst(d0.x, d0.y, rarityOf(d0.item).colour, 8, 150);
         toast(d0.item.name, rarityOf(d0.item).colour);
+        // Rarer is brighter: the one place a sound is allowed to be.
+        sfx('gear', undefined, undefined, RARITY.indexOf(rarityOf(d0.item)) / Math.max(1, RARITY.length - 1));
         continue;
       }
       // Bag full: leave it on the floor rather than silently binning it, and
       // say so once rather than every frame it is touched.
-      if (!run.bagWarned) { run.bagWarned = 2.5; toast('Bag full', '#c9863e'); }
+      if (!run.bagWarned) { run.bagWarned = 2.5; toast('Bag full', '#c9863e'); sfx('deny'); }
       d0.pulled = false;
       d0.vx = -(dx / d) * 90; d0.vy = -(dy / d) * 90;
     }
@@ -3983,6 +3988,7 @@ function claimCorpse() {
     took++;
   }
   const left = c.items.length - took;
+  sfx('corpse', c.x, c.y);
   run.found += took;
   run.coins += c.coins;
   syncBagBadge();
@@ -4973,7 +4979,11 @@ function damageEnemy(e, dmg, fx, fy) {
 // Slag is experience. It is banked on the hero at the end of the delve rather
 // than spent on a card mid-fight, so the run is never interrupted to choose.
 function collectTech(v) {
+  const was = run.tech;
   run.tech += v;
+  // The quota is the turn in a delve -- it is what calls the avatar -- so it
+  // gets its own sound rather than one more pickup.
+  if (was < LEVEL.quota && run.tech >= LEVEL.quota) sfx('quota');
 }
 
 function updatePlayer(dt) {
@@ -6047,6 +6057,8 @@ function updateLoot(dt) {
     l.x += l.vx * dt; l.y += l.vy * dt;
 
     if (d < player.r + 10) {
+      // Climbs with the quota, so the pickups themselves say how close you are.
+      sfx('slag', l.x, l.y, clamp(run.tech / Math.max(1, LEVEL.quota), 0, 1));
       collectTech(l.value);
       burst(l.x, l.y, PAL.gold, 5, 120);
       continue;
@@ -6474,14 +6486,23 @@ function updatePortal(dt) {
   }
   portal.active = (run.tech >= LEVEL.quota && run.bossDown) || run.forcedOpen;
   if (!portal.active) { portal.channel = 0; portal.inside = false; return; }
+  // The gate waking is heard across the delve: it is the way out, and the
+  // player may be nowhere near it. Placed, so it says which way.
+  if (!run.gateHeard) { run.gateHeard = true; sfx('gate', portal.x, portal.y); }
   const inside = dist2(player.x, player.y, portal.x, portal.y) < PORTAL_R * PORTAL_R;
   portal.inside = inside;
 
   if (!run.gateOpen) {
     // Winding it open. Nothing is escalating yet.
     if (inside) {
+      const was = portal.channel;
       portal.channel = Math.min(LEVEL.channel, portal.channel + dt);
+      // Winding it is heard in quarters, climbing, so the wait can be counted.
+      const q = c => Math.floor(c / LEVEL.channel * 4);
+      if (q(portal.channel) > q(was) && portal.channel < LEVEL.channel)
+        sfx('wind', undefined, undefined, portal.channel / LEVEL.channel);
       if (portal.channel >= LEVEL.channel) {
+        sfx('gateopen');
         run.gateOpen = true;
         run.holdTime = 0;
         run.holdTicks = 0;
@@ -6546,6 +6567,7 @@ function updatePortal(dt) {
                            (1 + (LEVEL.depth || 0)));
     run.coins += pay;
     toast('Surge ' + run.holdTicks + ' held \u00b7 ' + pay + ' coin', PAL.coin);
+    sfx('surge');
     // Every other surge, and not the best rolls until late: a piece per surge
     // arms you against the surge that follows it, and the hold ends up paying
     // for its own difficulty.
@@ -8334,6 +8356,9 @@ function endRun(won) {
   if (state === 'over') return;
   state = 'over';
   stickEnd();
+  // A Hardcore death is the heaviest sound in the game, because it is the
+  // heaviest thing that can happen in it.
+  sfx(won ? 'extract' : 'death', undefined, undefined, !won && hardcore ? 1 : 0.5);
 
   const b = loadBest();
   b.runs = (b.runs || 0) + 1;

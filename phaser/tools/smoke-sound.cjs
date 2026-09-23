@@ -101,7 +101,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
       const out = {};
       for (const name of Object.keys(__sound.recipes)) {
         if (name.startsWith('smoke-')) continue;
-        const sr = 44100, oc = new OfflineAudioContext(1, sr * 1.5, sr);
+        const sr = 44100, oc = new OfflineAudioContext(1, sr * 3, sr);
         const n = oc.createBuffer(1, sr, sr), d = n.getChannelData(0);
         for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
         const len = __sound.recipes[name].make(oc, oc.destination, 0, 1, n);
@@ -125,8 +125,9 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     /* ---- the fight is heard ------------------------------------------------ */
     // The events are the core's own: nothing here calls sfx() for the fight.
     const heard = () => p.evaluate(() => __sound.log.map(l => l.name));
-    const since = async f => { const n0 = (await heard()).length;
-      await sleep(260); await p.evaluate(f); return (await heard()).slice(n0); };
+    const since = async (f, arg) => { const n0 = await p.evaluate(() => __sound.played);
+      await sleep(260); await p.evaluate(f, arg);
+      return p.evaluate(n0 => __sound.log.filter(l => l.n > n0).map(l => l.name), n0); };
     const sw = await since(() => { swingAt(0); });
     ck('a swing is heard, blade and magic', sw.includes('swing') && sw.includes('crescent'), sw.join());
     await sleep(200);
@@ -196,15 +197,86 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     ck('the Jars are heard', jr.includes('jars'), jr.join());
     await p.evaluate(() => { for (const e of enemies) e.hp = 0; enemies.length = 0; });
 
+    /* ---- the run is heard ----------------------------------------------------- */
+    const last = n => p.evaluate(n => __sound.log.filter(l => l.name === n).slice(-1)[0] || null, n);
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    await p.evaluate(() => { run.bossCalled = true; run.tech = 0; player.bag = []; });
+    const drop = (tech) => since(async tech => { run.tech = tech;
+      loot.push({ x: player.x, y: player.y, vx: 0, vy: 0, value: 1, r: 6, spin: 0, life: 0, pulled: true });
+      await new Promise(r => setTimeout(r, 200)); }, tech);
+    const s0 = await drop(0), m0 = (await last('slag') || {}).mag;
+    const s1 = await drop(Math.round(await p.evaluate(() => LEVEL.quota * 0.8))), m1 = (await last('slag') || {}).mag;
+    ck('slag picked up is heard', s0.includes('slag') && s1.includes('slag'), s0.join() + ' / ' + s1.join());
+    ck('and climbs as the quota fills', m1 > m0, m0 + ' -> ' + m1);
+    const qt = await since(() => { run.tech = LEVEL.quota - 1; collectTech(1); });
+    ck('meeting the quota has its own sound', qt.includes('quota'), qt.join());
+    const qt2 = await since(() => { collectTech(1); });
+    ck('and only the once', !qt2.includes('quota'), qt2.join());
+    const cf = await since(() => { openChest({ x: player.x + 30, y: player.y, kind: Object.keys(CHEST_KINDS)[0],
+      open: false }); });
+    ck('a coffer opening is heard', cf.includes('coffer'), cf.join());
+    const gearAt = rid => since(async rid => { player.bag = []; const it = rollItem(0.5); it.rarity = rid;
+      drops.push({ x: player.x, y: player.y, vx: 0, vy: 0, item: it, r: 9, life: 0, pulled: true });
+      await new Promise(r => setTimeout(r, 200)); }, rid);
+    const g0 = await gearAt('worn'), gm0 = (await last('gear') || {}).mag;
+    await wait(200);
+    const g1 = await gearAt('riven'), gm1 = (await last('gear') || {}).mag;
+    ck('gear into the bag is heard', g0.includes('gear') && g1.includes('gear'), g0.join() + ' / ' + g1.join());
+    ck('and a rarer piece sounds bigger', gm1 > gm0, gm0 + ' -> ' + gm1);
+    const bf = await since(async () => { player.bag = []; while (player.bag.length < bagCap()) player.bag.push(rollItem(0.3));
+      run.bagWarned = 0;
+      drops.push({ x: player.x, y: player.y, vx: 0, vy: 0, item: rollItem(0.3), r: 9, life: 0, pulled: true });
+      await new Promise(r => setTimeout(r, 200)); });
+    ck('a full bag says so', bf.includes('deny'), bf.join());
+    await p.evaluate(() => { player.bag = []; drops.length = 0; });
+    const slam = kind => since(async kind => { const s = { x: player.x + 120, y: player.y, r: 40, wind: 0, t: 0,
+      dmg: 0, struck: false }; if (kind) s[kind] = true; slams.push(s);
+      await new Promise(r => setTimeout(r, 150)); }, kind);
+    const sb = await slam('barrel');
+    ck('a barrel going off is a blast', sb.includes('blast'), sb.join());
+    await wait(200);
+    const sp = await slam('pillar');
+    ck('a pillar coming down crumbles', sp.includes('crumble'), sp.join());
+    await wait(200);
+    const ss = await slam(null);
+    ck('a body’s slam is heard', ss.includes('slam'), ss.join());
+    await p.evaluate(() => { hazards.length = 0; slams.length = 0; });
+
+    // The gate, far across the map: heard anyway.
+    const gw = await since(async () => { portal.x = player.x + 3000; portal.y = player.y;
+      run.forcedOpen = true; await new Promise(r => setTimeout(r, 200)); });
+    const gv = await last('gate');
+    ck('the gate waking is heard across the delve', gw.includes('gate') && gv && gv.vol >= 0.44,
+       gw.join() + ' ' + JSON.stringify(gv));
+    ck('and from the side it is on', gv && gv.pan > 0.5, gv && 'pan ' + gv.pan);
+    // Waited on the game's own clock, not the wall's: headless frames are slow.
+    const wd = await since(async () => { portal.x = player.x; portal.y = player.y; portal.channel = 0;
+      const t0 = performance.now();
+      while (!run.gateOpen && performance.now() - t0 < 15000) {
+        portal.x = player.x; portal.y = player.y;
+        await new Promise(r => setTimeout(r, 100)); }
+      await new Promise(r => setTimeout(r, 150)); });
+    const winds = wd.filter(n => n === 'wind').length;
+    ck('winding it open is heard in steps', winds >= 2 && winds <= 3, winds + ' steps: ' + wd.join());
+    ck('and it opening is heard', wd.includes('gateopen'), wd.join());
+    const sg = await since(async () => { run.holdTime = HOLD_WAVE - HOLD_LULL - 0.02;
+      await new Promise(r => setTimeout(r, 200)); });
+    ck('a surge held is heard', sg.includes('surge'), sg.join());
+    await p.evaluate(() => { portal.x = player.x + 5000; for (const e of enemies) e.hp = 0; enemies.length = 0; });
+    const cp = await since(() => { run.corpse = { x: player.x + 20, y: player.y, items: [], coins: 0, taken: 0 };
+      claimCorpse(); });
+    ck('reclaiming your corpse is heard', cp.includes('corpse'), cp.join());
+    await p.evaluate(() => { for (const e of enemies) e.hp = 0; enemies.length = 0; run.corpse = null; });
+
     /* ---- a hundred die at once ---------------------------------------------- */
     await sleep(600);
     const mass = await p.evaluate(() => {
-      const n0 = __sound.log.length, d0 = __sound.dropped, body = [];
+      const n0 = __sound.played, d0 = __sound.dropped, body = [];
       for (let i = 0; i < 100; i++) { const e = newBody('thrall', player.x + 40 + (i % 10) * 6,
         player.y + Math.floor(i / 10) * 6, 0); e.awake = false; enemies.push(e); body.push(e); }
       const t0 = performance.now();
       for (const e of body) damageEnemy(e, 1e6, player.x, player.y);
-      return { kills: __sound.log.slice(n0).filter(l => l.name === 'kill').length,
+      return { kills: __sound.log.filter(l => l.n > n0 && l.name === 'kill').length,
                dropped: __sound.dropped - d0, ms: performance.now() - t0,
                voices: __sound.stats().voices, failed: __sound.failed || 0 };
     });
@@ -261,6 +333,19 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
       await sleep(300); return (await S()).state; };
     ck('sent to the background, it sleeps', await vis(true) === 'suspended');
     ck('and wakes when it comes back', await vis(false) === 'running');
+
+    /* ---- the ends of a delve -------------------------------------------------- */
+    const endHeard = async won => {
+      await p.goto(URL);
+      await p.waitForFunction(() => state === 'play' && window.__sound, null, { timeout: 30000 });
+      await p.mouse.click(195, 330); await sleep(400);
+      return p.evaluate(w => { const n0 = __sound.played; endRun(w);
+        return __sound.log.filter(l => l.n > n0).map(l => l.name); }, won);
+    };
+    const ex = await endHeard(true);
+    ck('getting out is heard', ex.includes('extract') && !ex.includes('death'), ex.join());
+    const dd = await endHeard(false);
+    ck('dying is heard', dd.includes('death') && !dd.includes('extract'), dd.join());
 
     /* ---- the rules page stays silent ---------------------------------------- */
     const t = await ctxB.newPage();

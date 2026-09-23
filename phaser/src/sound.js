@@ -43,7 +43,9 @@ const HEAR_EDGE = 1100;     // past this, not played at all
 const PAN_SPAN = 520;       // this far to one side is hard left or right
 
 /* ---- recipes ---------------------------------------------------------------
- * A recipe is { max, gap, vol, make(ctx, out, t, mag, noise) }. make() builds
+ * A recipe is { max, gap, vol, far, make(ctx, out, t, mag, noise) }. `far`,
+ * if set, is the quietest it may get with distance -- and it is never dropped
+ * for being too far, because it is something the whole delve should hear. make() builds
  * its nodes, connects them to `out`, starts them at `t`, and returns how long
  * it lasts in seconds, so the engine knows when the voice is free again.
  * `mag` is 0..1 and optional: how big this instance is (a heavy hit, a big
@@ -221,13 +223,15 @@ class Engine {
     const L = x !== undefined ? this.listener() : null;
     if (L) {
       const dx = x - L.x, dy = y - L.y, dist = Math.hypot(dx, dy);
-      if (dist > HEAR_EDGE) { this.dropped++; return false; }
-      vol = dist <= HEAR_FULL ? 1 : 1 - (dist - HEAR_FULL) / (HEAR_EDGE - HEAR_FULL);
+      vol = dist <= HEAR_FULL ? 1 : dist >= HEAR_EDGE ? 0
+          : 1 - (dist - HEAR_FULL) / (HEAR_EDGE - HEAR_FULL);
       vol *= vol;                           // falls away faster at the edge
       pan = Math.max(-1, Math.min(1, dx / PAN_SPAN));
     }
 
     const r = RECIPES[name];
+    if (vol === 0 && !r.far) { this.dropped++; return false; }
+    if (r.far) vol = Math.max(vol, r.far);
     const g = ctx.createGain();
     g.gain.value = vol * r.vol;
     let out = g;
@@ -254,7 +258,10 @@ class Engine {
     this.voices.push({ name, end: t + len });
     this.last[name] = now;
     this.played++;
-    this.log.push({ name, vol: +vol.toFixed(3), pan: +pan.toFixed(3), at: +now.toFixed(3) });
+    // `n` numbers every play, so a reader can ask for what came after a point
+    // even once the oldest entries have been let go.
+    this.log.push({ n: this.played, name, vol: +vol.toFixed(3), pan: +pan.toFixed(3), at: +now.toFixed(3),
+                    mag: mag === undefined ? null : +(+mag).toFixed(3) });
     if (this.log.length > 64) this.log.shift();
     return true;
   }
