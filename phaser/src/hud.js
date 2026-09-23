@@ -162,6 +162,24 @@ const CSS = `
 #hud .conduit .chg{position:absolute;inset:8px;border-radius:50%;pointer-events:none;
      background:conic-gradient(from -90deg,rgba(255,214,140,.55)
      calc(var(--chg,0) * 360deg),transparent 0)}
+/* THE HEAVY. Its own button, beside the Conduit and below the kit, so the
+   same right thumb reaches it -- and at 360px its left edge stays right of
+   the middle, clear of the stick's half. Hold to gather (the wedge fills),
+   let go to bring it round. Hidden under the classic controls, whose gather
+   is still at the Conduit's rim. */
+#hud .heavy{position:absolute;right:116px;bottom:24px;width:60px;height:60px;
+     border-radius:50%;pointer-events:auto;touch-action:none;display:grid;place-items:center;
+     background:linear-gradient(#b98a4a,#6d4d22 60%,#3a2610);box-shadow:0 3px 8px rgba(0,0,0,.55);
+     -webkit-user-select:none;user-select:none;color:#f0dcae;font:600 10px/1 Georgia,serif;
+     letter-spacing:.06em}
+#hud .heavy:before{content:'';position:absolute;inset:3px;border-radius:50%;
+     background:radial-gradient(circle at 50% 35%,#2a2230,#0e0b10)}
+#hud .heavy .chg{position:absolute;inset:6px;border-radius:50%;pointer-events:none;
+     background:conic-gradient(from -90deg,rgba(255,214,140,.6) calc(var(--chg,0) * 360deg),transparent 0)}
+#hud .heavy .mark{position:relative;font-size:20px;line-height:1;margin-top:-6px}
+#hud .heavy .tag{position:absolute;bottom:9px;left:0;right:0;text-align:center;opacity:.8}
+#hud .heavy.full{box-shadow:0 0 14px rgba(255,214,140,.8)}
+#hud.classic .heavy{display:none}
 /* Where the thumb actually is. It is the only part that moves, so it is the
    part that says the aim is yours now. */
 #hud .conduit .knob{position:absolute;width:26px;height:26px;border-radius:50%;
@@ -275,6 +293,7 @@ const CSS = `
  * in the HUD. Both of these states are said with colour, on a face that stays
  * opaque. */
 #hud button.broke{background:linear-gradient(#6d5a2c,#4a3c1e 40%,#332a14)}
+#hud button.aimless{opacity:.45;filter:saturate(.4)}
 #hud button.broke .tag{color:#c9a24a}
 /* Cooling and CANNOT are different states and used to look the same. Cooling
    keeps its colour and shows the wedge; blocked -- no charges, nothing in
@@ -431,6 +450,8 @@ export class Hud {
         '<button type="button" class="snd" title="sound" aria-label="sound" aria-pressed="true">\u266a</button>' +
       '</div>' +
       '<div class="kit"></div>' +
+      '<div class="heavy" title="heavy"><span class="chg"></span>' +
+        '<span class="mark">\u2694</span><span class="tag">HEAVY</span></div>' +
       '<div class="conduit"><span class="ring"></span><span class="chg"></span>' +
         '<span class="knob"></span><span class="glyph">\u2726</span>' +
         '<span class="chain"></span></div>' +
@@ -457,6 +478,8 @@ export class Hud {
     this.conChain = root.querySelector('.conduit .chain');
     for (let i = 0; i < COMBO_LEN; i++) this.conChain.appendChild(document.createElement('i'));
     this.wireConduit();
+    this.heavy = root.querySelector('.heavy');
+    this.wireHeavy();
     this.banner = root.querySelector('.banner');
     this.boss = root.querySelector('.boss');
     this.bossName = root.querySelector('.boss .name');
@@ -530,7 +553,10 @@ export class Hud {
       st.setProperty('--mark', mag > 0 ? '0.25' : '1');
       // The rim brightens as the drag reaches it, so "hold it at the edge" is
       // something the control says rather than something you are told.
-      st.setProperty('--rim', (0.16 + 0.7 * Math.min(1, mag / CONDUIT_EDGE)).toFixed(2));
+      // Under the new controls the rim does not light toward the edge: there
+      // is nothing out there to reach for any more, only a direction.
+      st.setProperty('--rim', (controlScheme === 'classic'
+        ? 0.16 + 0.7 * Math.min(1, mag / CONDUIT_EDGE) : mag > 0 ? 0.45 : 0.16).toFixed(2));
     };
 
     el.addEventListener('pointerdown', e => {
@@ -575,6 +601,31 @@ export class Hud {
     el.addEventListener('contextmenu', e => e.preventDefault());
   }
 
+  /* The heavy button: press to gather, release to strike, and a touch the
+   * system takes away is a cancel -- never a blow. */
+  wireHeavy() {
+    const el = this.heavy;
+    let id = null;
+    el.addEventListener('pointerdown', e => {
+      if (id !== null) return;
+      e.preventDefault(); e.stopPropagation();
+      id = e.pointerId;
+      try { el.setPointerCapture(id); } catch (err) { /* ignore */ }
+      g.heavyPress();
+    });
+    const end = (e, cancelled) => {
+      if (e.pointerId !== id) return;
+      e.preventDefault();
+      try { el.releasePointerCapture(id); } catch (err) { /* ignore */ }
+      id = null;
+      if (cancelled) g.heavyCancel('pointer'); else g.heavyRelease();
+    };
+    el.addEventListener('pointerup', e => end(e, false));
+    el.addEventListener('pointercancel', e => end(e, true));
+    el.addEventListener('lostpointercapture', e => end(e, true));
+    el.addEventListener('contextmenu', e => e.preventDefault());
+  }
+
   /* What the control shows back: how much is gathered, and how far along the
    * chain a tap has got. Both written only when they CHANGE -- this runs every
    * frame and a style write that sets the same string still dirties layout. */
@@ -584,8 +635,16 @@ export class Hud {
     const chg = (p.cleave || 0);
     if (this.lastChg !== chg) {
       this.lastChg = chg;
-      this.conduit.style.setProperty('--chg', chg.toFixed(3));
-      this.conduit.classList.toggle('gathering', chg > 0);
+      // The gather shows on whichever control is gathering: the rim under the
+      // classic controls, the heavy button under the new ones.
+      const on = controlScheme === 'classic' ? this.conduit : this.heavy;
+      on.style.setProperty('--chg', chg.toFixed(3));
+      this.conduit.classList.toggle('gathering', controlScheme === 'classic' && chg > 0);
+      this.heavy.classList.toggle('full', controlScheme !== 'classic' && chg >= 1);
+    }
+    if (this.lastScheme !== controlScheme) {
+      this.lastScheme = controlScheme;
+      this.root.classList.toggle('classic', controlScheme === 'classic');
     }
     const n = (p.comboT || 0) > 0 ? (p.combo || 0) : 0;
     if (this.lastChain !== n) {
@@ -719,6 +778,8 @@ export class Hud {
         // cooldown; only going and hitting something fixes this one, so it
         // says so rather than wearing the same grey.
         b.classList.toggle('broke', why === 'cost');
+        // Nothing in reach for a finisher: dimmed, and pressing it spends nothing.
+        b.classList.toggle('aimless', why === 'no-target');
         const secs = cd >= 1 ? String(Math.ceil(cd)) : '';
         b.querySelector('.cd').textContent = secs;
         b.classList.toggle('counting', secs !== '');

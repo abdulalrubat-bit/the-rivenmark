@@ -112,6 +112,80 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     // 11. a two-second stall is not paid back as a burst
     fresh('new'); const n0 = combatLog.length; const steps = advanceDelve(2.0);
     o.stall = { steps, logged: combatLog.slice(n0).some(e => e.k === 'stall') };
+    // --- B02: the heavy button ----------------------------------------------
+    const heavy = hero => {
+      const r = {};
+      fresh('new'); if (hero === 'zayd') { player.swapCd = 0; swapHero(); }
+      // It gathers, slows the walk, and holds the light attack while it is up.
+      stick.dx = 1; stick.dy = 0; stick.mag = 1; stick.active = true;
+      let x0 = player.x; step(0.5); const free = player.x - x0;
+      attackPress(); step(STEP); attackRelease(); step(player.fireDelay + 0.05);
+      let s1 = sw();
+      heavyPress(); attackPress();
+      x0 = player.x; step(0.5); const slowed = player.x - x0;
+      step(0.4); r.full = +player.cleave.toFixed(2);
+      r.lightWhileCharging = sw() - s1;
+      r.stride = +(slowed / free).toFixed(2);
+      attackRelease(); stick.mag = 0; stick.active = false;
+      const n0 = combatLog.length;
+      heavyRelease(); step(STEP);
+      const log = combatLog.slice(n0);
+      r.struck = log.some(e => e.k === 'heavy' && e.r === 'strike');
+      r.breaks = log.some(e => e.k === 'heavy' && e.r === 'strike' && e.breaks);
+      r.clearedGather = (player.cleave || 0) === 0;
+      return r;
+    };
+    o.heavyIsaac = heavy('isaac'); o.heavyZayd = heavy('zayd');
+    //    undercharged: a light strike if the blade is ready...
+    fresh('new'); s0 = sw(); heavyPress(); step(0.1); heavyRelease(); step(STEP);
+    o.shortReady = { swings: sw() - s0, logged: combatLog.some(e => e.k === 'heavy' && e.r === 'short-light') };
+    //    ...and a logged cancel, not silence, if it is not
+    attackPress(); step(STEP); attackRelease(); s0 = sw();
+    heavyPress(); step(0.05); heavyRelease(); step(STEP);
+    o.shortBusy = { swings: sw() - s0, logged: combatLog.some(e => e.k === 'heavy' && e.r === 'short-cancelled') };
+    //    cancelled or paused mid-gather: no blow
+    fresh('new'); heavyPress(); step(0.8); s0 = sw(); heavyCancel('pointer'); step(0.5);
+    o.heavyCancel = { swings: sw() - s0, gather: player.cleave || 0 };
+    fresh('new'); heavyPress(); step(0.8); pauseRun(); o.heavyPaused = !player.hvy && (player.cleave || 0) === 0;
+    state = 'play';
+
+    // --- B02: the assist --------------------------------------------------------
+    const body = (kind, dx, dy) => { const e = newBody(kind, player.x + dx, player.y + dy, 0);
+      e.awake = false; e.hp = e.maxHp = 1e6; enemies.push(e); return e; };
+    const aimAt = () => { step(STEP); const t = assistTarget(player.range); return t; };
+    // C08: a thrall close in front, the avatar further off
+    fresh('new'); player.angle = 0;
+    const th = body('thrall', 60, 0), av = body('deceiver', 0, 110);
+    o.assistNear = aimAt() === th;
+    setControls('classic'); step(STEP); const ca = nearestFoe(player.range); setControls('new');
+    o.classicAvatar = ca === av;
+    // retention: a near-tie does not flip it; a clear winner does
+    // Two bodies on nearly the same bearing; the second is nudged just nearer
+    // than the first -- without retention the aim would flip to it.
+    fresh('new'); player.angle = 0;
+    const A = body('thrall', 80, 0), Bb = body('thrall', 84, 14);
+    const first = aimAt();
+    const other = first === A ? Bb : A;
+    const mv = (e, d) => { const a = Math.atan2(e.y - player.y, e.x - player.x);
+      e.x = player.x + Math.cos(a) * d; e.y = player.y + Math.sin(a) * d; };
+    const dFirst = Math.hypot(first.x - player.x, first.y - player.y);
+    mv(other, dFirst - 4); const kept = aimAt() === first;
+    mv(other, 30); const moved = aimAt() === other;
+    o.retain = { kept, moved };
+    // threat: the body winding a blow at you over one standing idle a little nearer
+    fresh('new'); player.angle = 0;
+    const idle = body('thrall', 55, 0), winding = body('thrall', 0, 72);
+    winding.tell = 0.5; winding.tellMax = 0.5;
+    o.threat = aimAt() === winding;
+
+    // --- B02: a finisher with nothing to finish spends nothing (C09) ------------
+    fresh('new'); player.charges = CHARGE_MAX; const n1 = combatLog.length;
+    const took = castAbility('guillotine');
+    o.c09 = { took, charges: player.charges,
+              why: (combatLog.slice(n1).find(e => e.k === 'ability') || {}).why };
+    body('thrall', 50, 0); step(STEP);
+    o.c09.withTarget = castAbility('guillotine') && player.charges === 0;
+
     // 12. the classic controls are still the classic controls
     fresh('classic'); s0 = sw(); conduitPress(); step(0.25); conduitRelease(); o.classic250 = sw() - s0;
     setControls('new');
@@ -147,6 +221,30 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
      R.rates.r30 === R.rates.r60 && R.rates.r60 === R.rates.r120, JSON.stringify(R.rates));
   ck('a two-second stall is one step, not a burst, and is logged',
      R.stall.steps <= 1 && R.stall.logged, JSON.stringify(R.stall));
+  for (const [who, H] of [['Isaac', R.heavyIsaac], ['Zayd', R.heavyZayd]]) {
+    ck(who + ': the heavy gathers to full', H.full === 1, 'gather ' + H.full);
+    ck(who + ': and gathering slows the walk, on purpose', H.stride > 0.3 && H.stride < 0.6,
+       'x' + H.stride + ' of the free walk');
+    ck(who + ': and the light attack waits while it is up', H.lightWhileCharging === 0,
+       H.lightWhileCharging + ' light swings while charging');
+    ck(who + ': let go, it lands, and a full one breaks a guard', H.struck && H.breaks && H.clearedGather);
+  }
+  ck('an undercharged heavy with the blade ready is a light strike, and says so',
+     R.shortReady.swings === 1 && R.shortReady.logged, JSON.stringify(R.shortReady));
+  ck('...with the blade busy, a logged cancel -- not silence', R.shortBusy.swings === 0 && R.shortBusy.logged,
+     JSON.stringify(R.shortBusy));
+  ck('a cancelled heavy throws nothing', R.heavyCancel.swings === 0 && R.heavyCancel.gather === 0,
+     JSON.stringify(R.heavyCancel));
+  ck('a pause mid-gather drops it', R.heavyPaused === true);
+  ck('the assist takes the thrall at arm\u2019s length over the avatar across the room (C08)',
+     R.assistNear === true);
+  ck('...where the classic aim still took the avatar', R.classicAvatar === true);
+  ck('the assist keeps its target through a near-tie', R.retain.kept === true);
+  ck('...and changes when another is clearly closer', R.retain.moved === true);
+  ck('the assist prefers the body winding a blow at you', R.threat === true);
+  ck('a Guillotine with nothing in reach is refused before it spends (C09)',
+     R.c09.took === false && R.c09.charges === 3 && R.c09.why === 'no-target', JSON.stringify(R.c09));
+  ck('...and with a body in reach it goes', R.c09.withTarget === true);
   ck('the classic controls are still there (C01 still happens in them)', R.classic250 === 0,
      R.classic250 + ' swings');
   ck('no console errors', errs.length === 0, errs.slice(0, 3).join(' | '));

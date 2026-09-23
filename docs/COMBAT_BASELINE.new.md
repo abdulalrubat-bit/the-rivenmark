@@ -15,7 +15,7 @@ combat room (`?room=combat`) with the world stepped at 60Hz by the script.
 | C05 | Back inside the deadzone, the knob centres but the simulation keeps the old aim. | knob centred; simulation aiming: false at 0 | no |
 | C06 | A cancelled gesture is treated as a release. | gathering 0, then pointercancel: logged "cancel" | no |
 | C07 | Hit-stop freezes the whole world, movement included. | ten kills in a second: 0 of 60 frames frozen (0%) | no |
-| C08 | Assisted aim prefers the avatar over a nearer threat. | thrall at 60, avatar at 160: a tap aims at the avatar (160 away) | yes |
-| C09 | An ability can spend before finding it has nothing to act on. | Guillotine with nothing in reach: accepted, charges 3 -> 0 | yes |
+| C08 | Assisted aim prefers the avatar over a nearer threat. | thrall at 60, avatar at 160: a tap aims at the thrall (60 away) | no |
+| C09 | An ability can spend before finding it has nothing to act on. | Guillotine with nothing in reach: refused, charges 3 -> 3 | no |
 
 No page errors.

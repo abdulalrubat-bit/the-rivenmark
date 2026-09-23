@@ -3083,6 +3083,58 @@ function nearestFoe(R) {
   return avatar || best;
 }
 
+/* THE ASSIST, under the new controls. What an undirected blow is aimed at.
+ *
+ * nearestFoe above put the avatar first, always -- so with a thrall at arm's
+ * length and the avatar across the room, a tap swung across the room and the
+ * thrall hit you (the analysis' C08). Boss focus is a choice now: drag the
+ * attack at him. The assist scores what is in reach instead:
+ *
+ *   distance        nearer is better
+ *   bearing         something in front of where you are going or facing is
+ *                   better than something behind you -- scaled by distance,
+ *                   so it steers between far bodies and barely touches a
+ *                   near one: a body at your shoulder is the threat whichever
+ *                   way you face
+ *   threat          a body winding a blow or a cast at you right now is
+ *                   better still -- it is the one that is about to matter
+ *
+ * and it KEEPS what it had unless something else scores clearly better
+ * (ASSIST_KEEP), so two bodies at nearly the same range do not flip the aim
+ * back and forth between swings. Rock and Isaac's blindness to mirages are
+ * the same rules nearestFoe keeps.
+ */
+const ASSIST_KEEP = 1.25;
+function assistScore(e, R, fx, fy) {
+  const dx = e.x - player.x, dy = e.y - player.y, d = Math.hypot(dx, dy) || 1;
+  const off = fx === null ? 0 : Math.acos(clamp((dx * fx + dy * fy) / d, -1, 1)) / Math.PI;
+  const threat = ((e.tell || 0) > 0 || (e.casting || 0) > 0 || (e.agony || 0) > 0) ? 0.3 : 0;
+  return (d / R) * (1 + 0.8 * off) - threat;
+}
+function assistTarget(R) {
+  enemyGrid.query(player.x, player.y, R, _near);
+  const blind = player.hero === 'isaac';
+  // Which way the hero means to go: the stick if it is being pushed, else
+  // the way the hero faces.
+  let fx = null, fy = null;
+  if (stick.mag > 0.2) { fx = stick.dx; fy = stick.dy; }
+  else if (typeof player.angle === 'number') { fx = Math.cos(player.angle); fy = Math.sin(player.angle); }
+  let best = null, bestS = Infinity, keepS = Infinity;
+  const held = player.assistT;
+  for (let i = 0; i < _near.length; i++) {
+    const e = _near[i];
+    if (e.hp <= 0 || (blind && e.kind === 'mirage')) continue;
+    if (dist2(player.x, player.y, e.x, e.y) > R * R) continue;
+    if (!clearShot(player.x, player.y, e.x, e.y)) continue;
+    const s = assistScore(e, R, fx, fy);
+    if (e === held) keepS = s;
+    if (s < bestS) { bestS = s; best = e; }
+  }
+  const pick = held && keepS < Infinity && keepS <= bestS * ASSIST_KEEP + 0.05 ? held : best;
+  player.assistT = pick;
+  return pick;
+}
+
 /* THE AUTOMATIC BLADE IS GONE, AND THIS IS WHERE IT WAS.
  *
  * fire() found the nearest body and swung at it on a timer, at 0.62 of a real
@@ -4158,7 +4210,7 @@ const ABILITIES = {
       cd: 0, gcd: 1, cost: CHARGE_MAX, radius: 150, dmg: 3.2, mitigate: 2 },
     { id: 'guillotine', tag: 'GUILLOTINE', role: 'strike', name: 'Star-Forged Guillotine', mark: '⚔',
       note: 'Spends three. Comes down on one body, and on the Vulnerable it ends things.',
-      cd: 0, gcd: 1.25, cost: CHARGE_MAX, reach: 96, dmg: 7 },
+      cd: 0, gcd: 1.25, cost: CHARGE_MAX, reach: 96, dmg: 7, needsTarget: true },
     { id: 'purge', tag: 'PURGE', role: 'mend', name: 'Grounding Purge', mark: '✚',
       note: 'Channelled. Breaks the moment you are struck or move.',
       cd: 14, gcd: 1, channel: 3, healPct: 0.15 }
@@ -4190,6 +4242,9 @@ function abilityBlock(a) {
   if (a.cost && (player.charges || 0) < a.cost) return 'cost';
   if (a.costPct && (player.tension || 0) < TENSION_MAX * a.costPct) return 'cost';
   if (a.uses && (player.jars || 0) <= 0) return 'cost';
+  // A finisher with nothing to finish is refused BEFORE anything is spent.
+  // It used to spend three Charges and then find out (the analysis' C09).
+  if (a.needsTarget && !nearestBody(a.reach)) return 'no-target';
   return null;
 }
 
@@ -5278,7 +5333,7 @@ function tapSwing() {
  * answer.
  */
 function aimAngle() {
-  const t = nearestFoe(player.range);
+  const t = controlScheme === 'classic' ? nearestFoe(player.range) : assistTarget(player.range);
   if (t) return Math.atan2(t.y - player.y, t.x - player.x);
   if (stick.mag > 0.05) return Math.atan2(stick.dy, stick.dx);
   return player.angle || 0;
@@ -5405,6 +5460,7 @@ function attackCancel(why) {
 }
 
 function updateAttack(dt) {
+  updateHeavy(dt);
   if ((player.comboT || 0) > 0) {
     player.comboT -= dt;
     if (player.comboT <= 0) { player.combo = 0; player.comboT = 0; }
@@ -5443,10 +5499,81 @@ function lightStrike() {
   clog('swing', manual ? 'manual' : 'assist', finisher ? { finisher: true } : undefined);
 }
 
-/* HEAVY: the gathered blow, on its own control. Filled in with the heavy
- * button; until then there is no heavy to cancel and it never holds the blade. */
-function heavyCancel(why) {}
-function heavyBusy() { return false; }
+/* HEAVY: the gathered blow, on its own button.
+ *
+ * It used to live at the Conduit's rim, reached by holding a drag out there
+ * long enough -- which meant a player aiming at something far off turned
+ * their attack into a gather without asking to. Now it is asked for, and
+ * nothing else asks for it:
+ *
+ *   press      the gather begins at once, and shows: the charge fills over
+ *              HEAVY_FULL, the walk drops to CLEAVE_STRIDE (the price of a
+ *              heavy blow is a moment of being easy to reach), and the light
+ *              attack waits -- the heavy owns the blade while it is up
+ *   release    a gather of CLEAVE_MIN or more lands as the gathered blow,
+ *              through a guard from GUARD_BREAK; less than that is a light
+ *              strike if the blade is ready, and a logged cancel if it is not
+ *              -- never a press that silently did nothing
+ *   cancelled  a touch the system took, a pause, a swap, a death: no blow
+ *
+ * Aimed like the light attack: by hand while the attack control is dragged,
+ * by the assist otherwise. */
+const HEAVY_FULL = 0.7;       // seconds to a full gather
+
+function heavyPress() {
+  if (!player || state !== 'play') return;
+  player.hvy = { t: 0 };
+  player.cleave = 0;
+  clog('heavy', 'press');
+}
+function heavyRelease() {
+  const h = player && player.hvy;
+  if (!h) return;
+  player.hvy = null;
+  const f = player.cleave || 0;
+  player.cleave = 0;
+  if (f >= CLEAVE_MIN) {
+    heavyStrike(f);
+  } else if ((player.fireTimer || 0) <= 0) {
+    clog('heavy', 'short-light', { f: +f.toFixed(2) });
+    lightStrike();
+  } else {
+    clog('heavy', 'short-cancelled', { f: +f.toFixed(2), why: 'blade-busy' });
+    sfx('fizzle');
+  }
+}
+function heavyCancel(why) {
+  if (!player || !player.hvy) return;
+  clog('heavy', 'cancel', { why: why || '' });
+  player.hvy = null;
+  player.cleave = 0;
+}
+function heavyBusy() { return !!(player && player.hvy); }
+
+function updateHeavy(dt) {
+  const h = player.hvy;
+  if (!h) return;
+  h.t += dt;
+  player.cleave = clamp(h.t / HEAVY_FULL, 0, 1);
+}
+
+// The gathered blow itself -- the same one the classic rim-gather throws.
+function heavyStrike(f) {
+  const manual = typeof player.atkAim === 'number';
+  const a = manual ? player.atkAim : aimAngle();
+  clog('heavy', 'strike', { f: +f.toFixed(2), breaks: f >= GUARD_BREAK, aim: manual ? 'manual' : 'assist' });
+  swingAt(a, { bite: 1 + (CLEAVE_BITE - 1) * f,
+               sweep: 1 + (CLEAVE_SWEEP - 1) * f,
+               reach: 1 + (CLEAVE_REACH - 1) * f,
+               breaks: f >= GUARD_BREAK,
+               heavy: true });
+  clamour(CLAMOUR_SWING + (CLAMOUR_HEAVY - CLAMOUR_SWING) * f);
+  player.fireTimer = player.fireDelay;
+  freeze(0.05 * f, 'heavy');
+  shake(5 + 9 * f);
+  ring(player.x, player.y, HEROES[player.hero].magic, 12, 60 + 90 * f, 0.3);
+  player.combo = 0; player.comboT = 0;
+}
 
 /* THE STEP. The simulation runs at a fixed 60Hz whatever the screen does, so
  * a blow, a cooldown and a stride come out the same at 30, 60, 90 or 120

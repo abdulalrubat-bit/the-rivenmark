@@ -13,9 +13,9 @@ combat room (`?room=combat`) with the world stepped at 60Hz by the script.
 | C03 | Aiming out near the edge turns into a gather, stops the swings and slows the stride. | gather began at 0.467s; 1 swings before it, 0 after; stride x0.45 | yes |
 | C04 | Reaching the edge after a long press gathers at once. | one frame after reaching the edge (0.5s into the press): gather 0.095 | yes |
 | C05 | Back inside the deadzone, the knob centres but the simulation keeps the old aim. | knob centred; simulation aiming: true at 0.41 | yes |
-| C06 | A cancelled gesture is treated as a release. | gathering 0.43, then pointercancel: logged "heavy" | yes |
+| C06 | A cancelled gesture is treated as a release. | gathering 0.36, then pointercancel: logged "heavy" | yes |
 | C07 | Hit-stop freezes the whole world, movement included. | ten kills in a second: 30 of 60 frames frozen (50%) | yes |
 | C08 | Assisted aim prefers the avatar over a nearer threat. | thrall at 60, avatar at 160: a tap aims at the avatar (160 away) | yes |
-| C09 | An ability can spend before finding it has nothing to act on. | Guillotine with nothing in reach: accepted, charges 3 -> 0 | yes |
+| C09 | An ability can spend before finding it has nothing to act on. | Guillotine with nothing in reach: refused, charges 3 -> 3 | no |
 
 No page errors.

@@ -166,9 +166,12 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     ck('Aegis is heard', aeg.includes('aegis'), aeg.join());
     const no = await kit(() => { player.charges = 0; castAbility('guillotine'); });
     ck('a press that cannot fire says "not yet"', no.includes('deny') && !no.includes('guillotine'), no.join());
+    // A Guillotine with nothing in reach is refused before it spends now (the
+    // combat analysis' C09), so it says "not yet" rather than fizzling.
     const fz = await kit(() => { for (const e of enemies) e.hp = 0; enemies.length = 0;
       player.charges = CHARGE_MAX; castAbility('guillotine'); });
-    ck('Guillotine on nothing fizzles', fz.includes('fizzle'), fz.join());
+    ck('Guillotine on nothing is refused, and says "not yet"', fz.includes('deny') && !fz.includes('guillotine'),
+       fz.join());
     // A body pushed now is not in the spatial grid until the next frame, and
     // the kit finds its targets through the grid -- so place, then wait.
     const place1 = (dx, casting) => p.evaluate(([dx, casting]) => {

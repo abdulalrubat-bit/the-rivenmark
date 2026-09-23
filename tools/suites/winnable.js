@@ -249,7 +249,18 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
      * number the report prints. */
     const thumbUse = { press: 0, tap: 0, drag: 0, gather: 0 };
     window.__thumbUse = thumbUse;
-    const release = () => { if (player.conDown) conduitRelease(); thumb = ''; };
+    // THE NEW CONTROLS. The attack is HELD: it strikes on the blade's beat for
+    // as long as it is, aimed by the assist in the middle and by hand when
+    // dragged; the heavy is its own button. So the thumb's decisions are
+    // "hold", "hold and point", and "gather" -- and letting go of whatever it
+    // was doing is one call.
+    const release = () => {
+      if (player.atkHeld) attackRelease();
+      attackNeutral();
+      if (player.hvy) heavyCancel('bot');
+      thumb = '';
+    };
+    let swungAt = 0;
 
     const inReach = e => e && e !== portal && e.hp > 0 &&
       Math.hypot(e.x - player.x, e.y - player.y) <= player.range;
@@ -303,8 +314,12 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
       // punish, and a bot that made it would report the ladder as harder than
       // it is for a reason that is its own fault.
       if (thumb === 'gather') {
-        if ((player.cleave || 0) >= 0.99 || nd < GATHER_SAFE) { release(); return false; }
-        conduitAim(a, 1);
+        // Full, or something closing: bring it round (or drop it, if nothing
+        // is close enough to be worth it -- a short one is a light strike).
+        if ((player.cleave || 0) >= 0.99 || nd < GATHER_SAFE) {
+          attackAim(a, 1); heavyRelease(); attackNeutral(); thumb = ''; return false;
+        }
+        attackAim(a, 1);
         return true;
       }
 
@@ -312,7 +327,7 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
       // it lands, and only with the room to stand still for it.
       if (named(mark) && inReach(mark) && nd >= GATHER_SAFE && (player.cleave || 0) === 0) {
         release();
-        conduitPress(); conduitAim(a, 1);
+        heavyPress(); attackAim(a, 1);
         thumb = 'gather'; thumbUse.gather++;
         return true;
       }
@@ -323,8 +338,8 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
       if (aimAt) {
         const off = Math.abs(((aimAngle() - a + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
         if (off > AIM_SLOP) {
-          if (thumb !== 'drag') { release(); conduitPress(); thumb = 'drag'; thumbUse.drag++; }
-          conduitAim(a, 0.6);
+          if (thumb !== 'drag') { release(); attackPress(); thumb = 'drag'; thumbUse.drag++; }
+          attackAim(a, 0.6);
           return false;
         }
       }
@@ -345,19 +360,20 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
        * either way, and the first version of this counter reported every
        * single press as a landed tap.
        */
-      const ready = (player.fireTimer || 0) <= 0;
-      release();
-      conduitPress(); conduitRelease();
-      thumbUse.press++;
-      if (ready && (player.fireTimer || 0) > 0) thumbUse.tap++;
+      // Otherwise: hold the attack, and let the assist aim it. `press` counts
+      // holds begun and `tap` counts the light swings they actually landed.
+      if (thumb !== 'hold') { release(); attackPress(); thumb = 'hold'; thumbUse.press++; }
+      else attackNeutral();
+      const n = player.swingNo || 0;
+      if (n > swungAt) { thumbUse.tap += n - swungAt; }
+      swungAt = n;
       return false;
     };
 
     window.__delve = function (idx, hero, wantPower) {
-      // The bot's thumb is the classic Conduit's -- taps, drags and a gather
-      // held at the rim -- so it plays under those controls until it is taught
-      // the new ones along with the heavy button, which its gathers become.
-      setControls('classic');
+      // The game's own controls: the new ones. (The classic Conduit is kept for
+      // comparison on a phone, not for measuring the ladder.)
+      setControls('new');
       const L = LEVELS[idx];
       // The power to gear to, when asking "what would it actually take here?"
       // rather than "is the rung's own advice good?". Defaults to the rung's.
@@ -843,8 +859,8 @@ const TRIES = Math.max(12, +(process.env.WINNABLE_TRIES || 16));
     ', median ' + c.slag + '/' + c.need + ' slag in ' + c.mins + ' min' +
     '\n              damage: ' + c.bladePct + '% the swing, ' + c.kitPct +
     '% the bar, ' + c.delvePct + '% the delve itself' +
-    '\n              thumb: ' + c.thumb.tap + ' taps landed of ' +
-    c.thumb.press + ' pressed, ' + c.thumb.drag + ' drags, ' +
+    '\n              thumb: ' + c.thumb.tap + ' light swings from ' +
+    c.thumb.press + ' holds, ' + c.thumb.drag + ' drags, ' +
     c.thumb.gather + ' gathers' +
     '\n              took: ' + c.pressure + ' lives/min off ' + c.life +
     ' hp — ' + c.worst +
