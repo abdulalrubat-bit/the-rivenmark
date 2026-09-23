@@ -18,6 +18,7 @@
  * a gradient built per frame is the thing that made the canvas build slow.
  */
 import Phaser from 'phaser';
+import { pinToScreen } from './screen.js';
 
 /* global lamps, player, portal, loot, run, cam, view, PAL, PORTAL_R, TAU,
           lowFx, swapFlash, HEROES, GLOOM_TIME, GLOOM_DEPTH */
@@ -225,8 +226,14 @@ export class Atmosphere {
     for (const im of this.lights) im.setVisible(false);
   }
 
-  draw(t) {
+  /* `o` is where the screen's CSS origin sits under the zoomed camera (see
+   * screen.js). Every screen-space layer here is laid out from 0,0 in CSS
+   * pixels, so pinning them to it is all any of them needs. */
+  draw(t, o) {
     if (!this.on) return;
+    o = o || { x: 0, y: 0 };
+    for (const im of [this.fog, this.moteGfx, this.flash, this.vig, this.gloom])
+      pinToScreen(im, o);
     if (this.want.lights) this.lightPass(t);
     // Everything below this line is mood, and mood is the first thing to go
     // when the frame is under pressure. lowFx is the core's own answer to
@@ -274,9 +281,10 @@ export class Atmosphere {
     }
 
     // Wall lamps, and the guttering that stops a torch reading as a decal.
-    const c = this.s.cameras.main;
-    const vx0 = c.scrollX - 80, vy0 = c.scrollY - 80;
-    const vx1 = c.scrollX + c.width + 80, vy1 = c.scrollY + c.height + 80;
+    // worldView, not scrollX + width: see cullDressing in delve.js.
+    const v = this.s.cameras.main.worldView;
+    const vx0 = v.x - 80, vy0 = v.y - 80;
+    const vx1 = v.right + 80, vy1 = v.bottom + 80;
     const flick = 0.78 + 0.22 * Math.sin(t * 7.3) * Math.sin(t * 3.1);
     for (const L of lamps) {
       if (L.x < vx0 || L.x > vx1 || L.y < vy0 || L.y > vy1) continue;

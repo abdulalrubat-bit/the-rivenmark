@@ -19,6 +19,8 @@
 /* global walls, enemies, player, run, view, portal, chests, WORLD, TAU, PAL,
           HUD_H, CHEST_KINDS, CORPSE_HUE, DAWN_MAX, dawnCrystalRect */
 
+import { pinToScreen } from './screen.js';
+
 const hex = (css, fallback) => {
   if (typeof css !== 'string') return fallback === undefined ? 0xffffff : fallback;
   const n = parseInt(css.replace('#', ''), 16);
@@ -77,8 +79,13 @@ export class Overlay {
     window.minimapBox = minimapBox;
   }
 
-  draw(t) {
+  /* `o` is where the screen's CSS origin sits under the zoomed camera (see
+   * screen.js). The Graphics is pinned to it, so everything drawn into it stays
+   * in CSS pixels; the labels are separate objects and carry it themselves. */
+  draw(t, o) {
+    this.o = o || { x: 0, y: 0 };
     const g = this.g;
+    pinToScreen(g, this.o);
     g.clear();
     this.map(g);
     this.crystal(g, t);
@@ -163,9 +170,9 @@ export class Overlay {
 
     // Right-aligned to the crystal's own edge: centred on a 34px column the
     // words ran off the side of the phone.
-    this.dawnLabel.setPosition(r.x + r.w, r.y - 9)
+    this.dawnLabel.setPosition(this.o.x + r.x + r.w, this.o.y + r.y - 9)
                   .setColor(hot ? '#ffbe8c' : '#cebe9e').setVisible(true);
-    this.dawnPct.setPosition(r.x + r.w / 2, r.y + r.h + 9)
+    this.dawnPct.setPosition(this.o.x + r.x + r.w / 2, this.o.y + r.y + r.h + 9)
                 .setText(Math.round(run.dawn || 0) + '%')
                 .setColor(hot ? '#ffbe8c' : '#cebe9e').setVisible(true);
   }
@@ -264,7 +271,7 @@ export class Overlay {
     g.beginPath();
     g.moveTo(nx, ny + 8 * mk); g.lineTo(nx - 3 * mk, ny); g.lineTo(nx + 3 * mk, ny);
     g.closePath(); g.fillPath();
-    this.compass.setPosition(nx, ny - 11 * mk)
+    this.compass.setPosition(this.o.x + nx, this.o.y + ny - 11 * mk)
                 .setFontSize(Math.round(8 * mk))
                 .setVisible(true);
   }
@@ -276,16 +283,21 @@ export class Overlay {
    */
   arrow(g, t) {
     if (!portal) return;
-    const c = this.s.cameras.main;
-    const sx = portal.x - c.scrollX, sy = portal.y - c.scrollY;
+    // All in CSS pixels. worldView is the part of the world actually on
+    // screen, in world units, which ARE CSS pixels; scrollX with the camera's
+    // own width mixed world units with device pixels and put the arrow
+    // somewhere off the phone at any ratio above 1.
+    const v = this.s.cameras.main.worldView;
+    const W = v.width, H = v.height;
+    const sx = portal.x - v.x, sy = portal.y - v.y;
     const m = 48, mTop = 96;
-    if (sx > m && sx < c.width - m && sy > mTop && sy < c.height - m) return;
+    if (sx > m && sx < W - m && sy > mTop && sy < H - m) return;
 
-    const cx = c.width / 2, cy = (mTop + (c.height - m)) / 2;
+    const cx = W / 2, cy = (mTop + (H - m)) / 2;
     const a = Math.atan2(sy - cy, sx - cx);
     const dx = Math.cos(a), dy = Math.sin(a);
     const k = Math.min((cx - m) / Math.max(1e-6, Math.abs(dx)),
-                       ((c.height - m - mTop) / 2) / Math.max(1e-6, Math.abs(dy)));
+                       ((H - m - mTop) / 2) / Math.max(1e-6, Math.abs(dy)));
     const px = cx + dx * k, py = cy + dy * k;
     const col = portal.active ? hex(PAL.arcane, 0x5cb8ff) : 0x7a6e58;
     const al = 0.55 + (portal.active ? 0.4 * Math.abs(Math.sin(t * 3)) : 0.1);
