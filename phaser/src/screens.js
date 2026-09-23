@@ -22,6 +22,9 @@
           bagCap, player, LOADOUT_MAX, stashCtx, sortBag, bagShown, isUpgrade,
           BAG_SORTS, bagSort, bagFilter */
 
+// A sound, if the engine is there to make one (it is not on the test pages).
+const snd = (name, mag) => { if (typeof window.sfx === 'function') window.sfx(name, undefined, undefined, mag); };
+
 const CSS = `
 /* The safe areas, same as the HUD -- see the note at the top of hud.js. The
    scrim wants the whole glass, so the padding is on the scroller and the
@@ -187,6 +190,14 @@ export class Screens {
     this.root = document.createElement('div');
     this.root.id = 'screens';
     document.body.appendChild(this.root);
+    // Every button on every screen answers a tap with a soft click -- one
+    // listener here rather than one per button, so a screen added later
+    // cannot forget. What the tap DID (bought, built, equipped) is a second
+    // sound on top, from where that happens.
+    this.root.addEventListener('click', e => {
+      const b = e.target.closest && e.target.closest('button');
+      if (b && !b.disabled) snd('tap');
+    });
     // Difficulty is chosen per visit, as the canvas build did, and starts at
     // Riven -- the game as it is meant to be played -- every session.
     this.pick = { hero: 'isaac', level: null, diff: 'riven' };
@@ -405,7 +416,7 @@ export class Screens {
       this.pick.hero = hero;
       if (lvl) this.pick.level = lvl;
       this.pick.diff = diff;
-      this.onDescend(hero, lvl, diff);
+      snd('descend'); this.onDescend(hero, lvl, diff);
     });
     /* THROUGH THE SAME DOOR AS ABANDONING, NOT STRAIGHT TO THE CARD.
      *
@@ -550,7 +561,7 @@ export class Screens {
     this.wireTabs();
     this.root.querySelector('#descend').addEventListener('click', () => {
       this.root.classList.remove('up');
-      this.onDescend(this.pick.hero, this.pick.level, this.pick.diff);
+      snd('descend'); this.onDescend(this.pick.hero, this.pick.level, this.pick.diff);
     });
   }
 
@@ -631,6 +642,7 @@ export class Screens {
   finishBuy(v, arg) {
     const before = stash.coins || 0;
     const ok = vendorBuy(v, arg);
+    snd(ok === false ? 'deny' : 'buy');
     this.slotFor = null;
     this.note = ok === false
       ? 'The vendor turns you away.'
@@ -670,6 +682,7 @@ export class Screens {
       b.addEventListener('click', () => {
         const h = HALL.find(x => x.id === b.dataset.hall);
         const why = hallBuy(h);
+        snd(why ? 'deny' : 'build');
         this.note = why ? 'The mason shakes his head — ' + why + '.' : 'Built.';
         this.renderHall();
       }));
@@ -757,14 +770,15 @@ export class Screens {
     const done = () => { this.dropArmed = null; this.renderForge(); };
     this.wireTabs();
     this.root.querySelectorAll('[data-on]').forEach(b =>
-      b.addEventListener('click', () => { this.note = null; this.equip(+b.dataset.on); done(); }));
+      b.addEventListener('click', () => { this.note = null; this.equip(+b.dataset.on); snd('equip'); done(); }));
     this.root.querySelectorAll('[data-off]').forEach(b =>
-      b.addEventListener('click', () => { this.note = null; this.unequip(b.dataset.off); done(); }));
+      b.addEventListener('click', () => { this.note = null; this.unequip(b.dataset.off); snd('unequip'); done(); }));
     this.root.querySelectorAll('[data-drop]').forEach(b =>
       b.addEventListener('click', () => {
         const i = +b.dataset.drop;
         if (this.dropArmed !== i) { this.dropArmed = i; this.renderForge(); return; }
         const it = discardFromVault(i);
+        if (it) snd('discard');
         this.note = it ? it.name + ' is gone.' : null;
         done();
       }));
@@ -772,6 +786,7 @@ export class Screens {
       b.addEventListener('click', () => {
         const L = stash.loadouts[+b.dataset.load];
         const r = applyLoadout(L);
+        snd('equip');
         this.note = L.name + ': ' + r.set + ' equipped' +
           (r.missing ? ', ' + r.missing + ' no longer in the vault' : '') + '.';
         done();

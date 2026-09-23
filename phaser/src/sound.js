@@ -38,6 +38,7 @@
 const MUTE_KEY = 'rivenmark.sound.v1';
 const VOICE_CAP = 24;       // everything sounding at once, across all recipes
 const MASTER = 0.8;
+const LIMIT = { threshold: -14, knee: 6, ratio: 12, attack: 0.003, release: 0.25 };
 const HEAR_FULL = 260;      // world units: inside this, full volume
 const HEAR_EDGE = 1100;     // past this, not played at all
 const PAN_SPAN = 520;       // this far to one side is hard left or right
@@ -117,6 +118,14 @@ export function ring(ctx, out, t, o) {
   return len;
 }
 
+/* The hard limiter at the end of the chain, made the same way wherever it is
+ * needed -- the game, and the suite that renders the chain offline. */
+export function limiter(ctx) {
+  const lim = ctx.createDynamicsCompressor();
+  for (const k in LIMIT) lim[k].value = LIMIT[k];
+  return lim;
+}
+
 /* ---- the engine ----------------------------------------------------------- */
 class Engine {
   constructor() {
@@ -145,9 +154,7 @@ class Engine {
       const ctx = this.ctx = new AC({ latencyHint: 'interactive' });
       this.master = ctx.createGain();
       this.master.gain.value = this.muted ? 0 : MASTER;
-      const lim = ctx.createDynamicsCompressor();
-      lim.threshold.value = -14; lim.knee.value = 6; lim.ratio.value = 12;
-      lim.attack.value = 0.003; lim.release.value = 0.25;
+      const lim = limiter(ctx);
       this.master.connect(lim); lim.connect(ctx.destination);
       // One second of white noise, made once and shared by every burst.
       const n = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
@@ -286,6 +293,8 @@ export const sound = new Engine();
 // measure the caps with something whose limits it chose.
 sound.define = define;
 sound.recipes = RECIPES;
+sound.limiter = limiter;
+sound.MASTER = MASTER;
 
 /* ---- the one sound the engine needs itself ---------------------------------
  * Turning sound ON has to make a sound, or the player cannot tell it worked. A

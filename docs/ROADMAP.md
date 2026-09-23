@@ -56,7 +56,7 @@ Synthesised with Web Audio, no files. One small engine, one switch.
       death, extraction — and the quota, gear by rarity, a full bag, blasts,
       slams, a surge held and a corpse reclaimed
 - [x] Bosses: arrival, their big moves, their fall
-- [ ] Menus: taps, buying, forging
+- [x] Menus: taps, buying, building, equipping, discarding, descending
 - [ ] Ambience, then music — last, once the effects are right
 
 ## Polish, found on the way

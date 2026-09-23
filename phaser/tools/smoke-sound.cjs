@@ -95,29 +95,39 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     ck('one far across the map is not played at all', place.far === null);
 
     /* ---- every recipe makes a sound, and none clips ------------------------ */
-    // Rendered offline, one at a time and at full size, so this is the recipe
-    // itself and not the engine's caps or the limiter.
+    // Rendered offline, one at a time and at full size, through the chain the
+    // game uses: the recipe's own volume, the master and the limiter. A voice
+    // can run past 1.0 on its own -- Web Audio is floating point until the
+    // speaker -- so what has to stay under it is what reaches the speaker.
+    // Several renders each, because the noise is random and one render can
+    // miss the loud draw.
     const rend = await p.evaluate(async () => {
       const out = {};
       for (const name of Object.keys(__sound.recipes)) {
         if (name.startsWith('smoke-')) continue;
-        const sr = 44100, oc = new OfflineAudioContext(1, sr * 3, sr);
-        const n = oc.createBuffer(1, sr, sr), d = n.getChannelData(0);
-        for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-        const len = __sound.recipes[name].make(oc, oc.destination, 0, 1, n);
-        const buf = await oc.startRendering(), x = buf.getChannelData(0);
-        let peak = 0, last = 0;
-        for (let i = 0; i < x.length; i++) { const v = Math.abs(x[i]);
-          if (v > peak) peak = v; if (v > 0.003) last = i; }
-        out[name] = { peak: +peak.toFixed(3), len: +len.toFixed(3), ends: +(last / sr).toFixed(3) };
+        let peak = 0, last = 0, len = 0;
+        for (let k = 0; k < 4; k++) {
+          const sr = 22050, oc = new OfflineAudioContext(1, sr * 3, sr);
+          const n = oc.createBuffer(1, sr, sr), d = n.getChannelData(0);
+          for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+          const g = oc.createGain(), lim = __sound.limiter(oc);
+          g.gain.value = __sound.recipes[name].vol * __sound.MASTER;
+          g.connect(lim); lim.connect(oc.destination);
+          len = __sound.recipes[name].make(oc, g, 0, 1, n);
+          const x = (await oc.startRendering()).getChannelData(0);
+          for (let i = 0; i < x.length; i++) { const v = Math.abs(x[i]);
+            if (v > peak) peak = v; if (v > 0.002) last = Math.max(last, i / sr); }
+        }
+        out[name] = { peak: +peak.toFixed(3), len: +len.toFixed(3), ends: +last.toFixed(3) };
       }
       return out;
     });
     const names = Object.keys(rend);
-    ck('every recipe is heard', names.length >= 8 && names.every(n => rend[n].peak > 0.02),
+    ck('every recipe is heard', names.length >= 8 && names.every(n => rend[n].peak > 0.01),
        names.map(n => n + ' ' + rend[n].peak).join(', '));
-    ck('and none clips on its own', names.every(n => rend[n].peak < 1),
-       names.filter(n => rend[n].peak >= 1).join(', '));
+    ck('and none reaches the speaker clipped', names.every(n => rend[n].peak < 0.95),
+       names.filter(n => rend[n].peak >= 0.95).map(n => n + ' ' + rend[n].peak).join(', ') ||
+       'loudest ' + Math.max(...names.map(n => rend[n].peak)));
     ck('each says truthfully how long it lasts (so its voice is freed on time)',
        names.every(n => rend[n].ends <= rend[n].len + 0.08),
        names.filter(n => rend[n].ends > rend[n].len + 0.08).map(n => n + ' ' + JSON.stringify(rend[n])).join(', '));
@@ -382,6 +392,39 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     ck('the uninvited arriving is heard', inv.includes('arrive'), inv.join());
     const dw = await boss(() => { run.boss = run.invader; wipeRoom('test'); });
     ck('False Dawn is heard', dw.includes('dawn'), dw.join());
+
+    /* ---- the menus -------------------------------------------------------------- */
+    const G = 'http://localhost:' + PORT + '/';
+    await p.goto(G + '?norun');
+    await p.waitForFunction(() => typeof blankStash === 'function', null, { timeout: 30000 });
+    await p.evaluate(() => { stash = blankStash(); stash.coins = 99999; saveStash(); });
+    await p.goto(G);
+    await p.waitForSelector('#screens.up #descend', { timeout: 30000 });
+    await p.mouse.click(5, 5); await sleep(400);            // unlock, on nothing
+    const menu = async (sel, f) => { const n0 = await p.evaluate(() => __sound.played);
+      await sleep(250); if (sel) await p.click(sel); if (f) await f(); await sleep(250);
+      return p.evaluate(n0 => __sound.log.filter(l => l.n > n0).map(l => l.name), n0); };
+    const tb = await menu('#screens .tabs [data-tab="vendor"]');
+    ck('a tab tapped clicks', tb.includes('tap'), tb.join());
+    const by = await menu('#screens [data-buy="reliquary"]');
+    ck('buying is heard', by.includes('buy'), by.join());
+    await menu('#screens .tabs [data-tab="hall"]');
+    const bd = await menu('#screens [data-hall]:not([disabled])');
+    ck('building in the Hall is heard', bd.includes('build'), bd.join());
+    await menu('#screens .tabs [data-tab="gear"]');
+    const eq = await menu('#screens [data-on]');
+    ck('equipping is heard', eq.includes('equip'), eq.join());
+    const uq = await menu('#screens [data-off]:not([disabled])');
+    ck('taking a piece off is heard', uq.includes('unequip'), uq.join());
+    const d1 = await menu('#screens [data-drop]');
+    ck('a first tap on discard only arms it', !d1.includes('discard'), d1.join());
+    const d2 = await menu('#screens [data-drop].armed');
+    ck('the second throws it out, and is heard', d2.includes('discard'), d2.join());
+    await menu('#screens .tabs [data-tab="splash"]');
+    const ds = await menu('#descend');
+    ck('descending is heard', ds.includes('descend'), ds.join());
+    const hd = await menu('#hud .hold .bag');
+    ck('the HUD’s buttons click too', hd.includes('tap'), hd.join());
 
     /* ---- the rules page stays silent ---------------------------------------- */
     const t = await ctxB.newPage();

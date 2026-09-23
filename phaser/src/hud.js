@@ -479,6 +479,10 @@ export class Hud {
     this.bagCount = root.querySelector('.hold .bag i');
     this.bagSig = '';
     this.bagBtn.addEventListener('click', () => g.openGear('run'));
+    // The row's buttons click like every other button in the game.
+    root.querySelector('.hold').addEventListener('click', e => {
+      if (e.target.closest('button') && typeof g.sfx === 'function') g.sfx('tap');
+    });
     this.sndBtn = root.querySelector('.hold .snd');
     this.sndBtn.addEventListener('click', () => g.__sound && g.__sound.toggle());
     if (g.__sound) g.__sound.onMute(m => {

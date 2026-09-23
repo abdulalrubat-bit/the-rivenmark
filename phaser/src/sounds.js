@@ -224,8 +224,8 @@ define('gear', { max: 2, gap: 0.08, vol: 0.55, make(ctx, out, t, mag, noise) {
 
 // A barrel or a husk going off: the biggest noise the floor makes.
 define('blast', { max: 2, gap: 0.06, vol: 0.8, make(ctx, out, t, mag, noise) {
-  noiseBurst(ctx, out, t, noise, { f0: 2800, f1: 70, a: 0.003, d: 0.4 + 0.25 * mag, peak: 0.55 });
-  return tone(ctx, out, t, { f0: 64, f1: 28, a: 0.004, d: 0.5 + 0.2 * mag, peak: 0.45 + 0.2 * mag });
+  noiseBurst(ctx, out, t, noise, { f0: 2800, f1: 70, a: 0.003, d: 0.4 + 0.25 * mag, peak: 0.42 });
+  return tone(ctx, out, t, { f0: 64, f1: 28, a: 0.004, d: 0.5 + 0.2 * mag, peak: 0.4 + 0.15 * mag });
 } });
 
 // A pillar coming down: rubble, in several falls.
@@ -404,4 +404,58 @@ define('fall', { max: 1, gap: 1, vol: 0.85, far: 0.6, make(ctx, out, t, mag, noi
   tone(ctx, out, t, { f0: 70, f1: 26, a: 0.005, d: 1.6 * (0.6 + 0.4 * mag), peak: 0.55 });
   return 0.1 + ring(ctx, out, t + 0.1, { f: 98, d: 2.0 * (0.6 + 0.4 * mag), peak: 0.13, bend: 0.93,
                                          ratios: [1, 1.414, 2.0, 2.83] });
+} });
+
+/* ---- the menus ------------------------------------------------------------------
+ * Short and quiet: the menus are where a player reads, so nothing here should
+ * be louder than a page turning. The results of a tap (bought, built, worn)
+ * are a little fuller than the tap, so the ear knows the tap did something.
+ */
+
+// Any button: a soft wooden click.
+define('tap', { max: 2, gap: 0.04, vol: 0.4, make(ctx, out, t, mag, noise) {
+  noiseBurst(ctx, out, t, noise, { type: 'bandpass', q: 2.5, f0: 1300, f1: 700, a: 0.001, d: 0.025, peak: 0.12 });
+  return tone(ctx, out, t, { wave: 'triangle', f0: 240, f1: 180, a: 0.002, d: 0.04, peak: 0.08 });
+} });
+
+// Coin changing hands.
+define('buy', { max: 1, gap: 0.1, vol: 0.55, make(ctx, out, t) {
+  let len = 0;
+  [[0, 1900], [0.05, 2450], [0.1, 2150]].forEach(([dt, f]) => {
+    len = Math.max(len, dt + ring(ctx, out, t + dt, { f, d: 0.14, peak: 0.05, ratios: [1, 2.7] }));
+  });
+  return Math.max(len, tone(ctx, out, t, { f0: 130, f1: 110, a: 0.005, d: 0.18, peak: 0.12 }));
+} });
+
+// Stone set on stone: a Hall station raised.
+define('build', { max: 1, gap: 0.2, vol: 0.6, make(ctx, out, t, mag, noise) {
+  noiseBurst(ctx, out, t, noise, { f0: 1200, f1: 140, a: 0.003, d: 0.2, peak: 0.3 });
+  tone(ctx, out, t, { f0: 90, f1: 55, a: 0.004, d: 0.3, peak: 0.35 });
+  return 0.12 + ring(ctx, out, t + 0.12, { f: 196, d: 0.6, peak: 0.07, ratios: [1, 2.0, 3.0] });
+} });
+
+// A piece put on: metal settling into place.
+define('equip', { max: 1, gap: 0.08, vol: 0.55, make(ctx, out, t, mag, noise) {
+  noiseBurst(ctx, out, t, noise, { type: 'highpass', f0: 2500, f1: 1200, a: 0.002, d: 0.05, peak: 0.12 });
+  tone(ctx, out, t, { f0: 140, f1: 100, a: 0.003, d: 0.1, peak: 0.18 });
+  return ring(ctx, out, t + 0.02, { f: 520, d: 0.25, peak: 0.05, ratios: [1, 2.76] });
+} });
+
+// And taken off: the same, lower and duller.
+define('unequip', { max: 1, gap: 0.08, vol: 0.5, make(ctx, out, t, mag, noise) {
+  noiseBurst(ctx, out, t, noise, { f0: 1500, f1: 400, a: 0.002, d: 0.05, peak: 0.1 });
+  return tone(ctx, out, t, { f0: 120, f1: 85, a: 0.003, d: 0.12, peak: 0.16 });
+} });
+
+// A piece thrown out, for good: a falling scrape.
+define('discard', { max: 1, gap: 0.1, vol: 0.5, make(ctx, out, t, mag, noise) {
+  noiseBurst(ctx, out, t, noise, { type: 'bandpass', q: 1.5, f0: 1600, f1: 250, a: 0.005, d: 0.22, peak: 0.16 });
+  return tone(ctx, out, t, { wave: 'triangle', f0: 180, f1: 70, a: 0.004, d: 0.22, peak: 0.1 });
+} });
+
+// Descending: the gate-house door, and a long fall into the dark.
+define('descend', { max: 1, gap: 1, vol: 0.7, make(ctx, out, t, mag, noise) {
+  noiseBurst(ctx, out, t, noise, { f0: 900, f1: 90, a: 0.02, d: 0.9, peak: 0.25 });
+  tone(ctx, out, t, { f0: 110, f1: 41, a: 0.05, d: 1.1, peak: 0.35 });
+  return ring(ctx, out, t, { f: 147, d: 1.2, peak: 0.08, bend: 0.9, ratios: [1, 2.0] });
 } });
