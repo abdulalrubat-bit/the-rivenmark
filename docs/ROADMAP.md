@@ -12,10 +12,10 @@ grow past it later.
 ## Phase 1 — Fix what is broken
 
 - [x] Stick, minimap and gate arrow on high-DPR phones (`smoke:dpr`)
-- [ ] Hardcore can be escaped: *Abandon the delve*, or closing the app mid-fight,
-      skips the death wipe
-- [ ] Saves are loaded unchecked in the build that ships — move the canvas
-      build's validation (`loadStash`) into the core so both use it
+- [x] Hardcore can be escaped: *Abandon the delve*, or closing the app mid-fight,
+      skips the death wipe — both now count as death (`hardcore`, `smoke:boot`)
+- [x] Saves are loaded unchecked in the build that ships — the validation is
+      the core's `sanitizeStash` now, and both builds use it (`saves`)
 - [ ] Corpse loot vanishes if you pick it up and then abandon or close the app
 - [ ] WebView debugging is switched on in release builds
 - [ ] Release workflow pastes its inputs straight into shell (use `env:`)

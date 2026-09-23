@@ -426,6 +426,37 @@ const cardState = () => {
      after.walls > 10 && after.runTime === 0,
      'state ' + after.state + ', ' + after.walls + ' walls, run.time ' + after.runTime);
 
+  /* ---- 5c. and in Hardcore, walking out is dying -------------------------
+   * The rule is the core's and hardcore.js proves it in both builds. What
+   * only this build can get wrong is the card: the button has to say what it
+   * costs, and one tap must not be enough to spend a life. */
+  await p.evaluate(() => {
+    setHardcore(true);
+    __game.scene.getScene('delve').newRun('isaac', LEVELS[0].id);
+  });
+  await sleep(400);
+  await tap('#hud .hold button');
+  await sleep(300);
+  const hcLeave = await p.evaluate(() =>
+    document.querySelector('#screens .alt')?.textContent || '');
+  await tap('#screens .alt');
+  await sleep(300);
+  const hcArmed = await p.evaluate(() => ({ state,
+    alt: document.querySelector('#screens .alt')?.textContent || '' }));
+  await tap('#screens .alt');
+  await sleep(600);
+  const hcGone = await p.evaluate(() => ({ state,
+    h1: document.querySelector('#screens h1')?.textContent || '' }));
+  ck('in Hardcore the abandon button says it is death', /death/i.test(hcLeave), hcLeave);
+  ck('and one tap only arms it', hcArmed.state === 'pause' && /again/i.test(hcArmed.alt),
+     'state ' + hcArmed.state + ', ' + JSON.stringify(hcArmed.alt));
+  ck('the second tap ends the life, on the death card',
+     hcGone.state === 'over' && /Ended/i.test(hcGone.h1),
+     'state ' + hcGone.state + ', showing ' + JSON.stringify(hcGone.h1));
+  await tap('#screens .alt');                    // To the gate-house
+  await sleep(600);
+  await p.evaluate(() => setHardcore(false));
+
   /* ---- 6. the frame the whole thing was drawn into ----------------------- */
   const px = await p.evaluate(() => {
     const g = window.__game, c = g.canvas;

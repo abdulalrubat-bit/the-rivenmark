@@ -12,7 +12,7 @@
  * the game lives inside a function named draw, forge or paint, and those are
  * dropped here.
  *
- * 619 statements kept; 15 drawing functions and 52 page-bound statements dropped.
+ * 624 statements kept; 15 drawing functions and 52 page-bound statements dropped.
  * Re-run `npm run core` after changing ../index.html.
  */
 /* =============================================================================
@@ -6657,6 +6657,7 @@ function setHardcore(on) {
   rememberHardcore(hardcore);
   stash = loadStash();
   itemSeq = stash.seq || 0;
+  settleUnfinishedDelve();
 }
 
 /* The death hook. Everything goes: the gear, the vault, the coin, the ranks.
@@ -6671,6 +6672,45 @@ function wipeHardcore() {
   stash = blankStash();
   itemSeq = 0;
   saveStash();
+}
+
+/* LEAVING A HARDCORE DELVE IS DYING IN IT.
+ *
+ * One life only means something if there is no door out of a lost fight.
+ * There were two: "Abandon the delve", which threw the run away without ever
+ * reaching the death hook, and closing the app, which did the same thing
+ * more quietly. A Vanguard one blow from death kept everything either way.
+ *
+ * So a Hardcore delve marks the stash as it begins, and only the end of a run
+ * -- extraction or death, both through bankRun -- takes the mark off again.
+ * A stash that is still marked when it is next read is a delve that was
+ * walked out of, and it is settled as the death it was. Abandoning goes
+ * straight through endRun for the same reason: the death card, the wipe and
+ * the honours all come from the one place a death is supposed to.
+ *
+ * The ordinary game is untouched. Its stash is never marked, and abandoning
+ * there is still a retreat that costs the bag and nothing else. */
+let hcFellAway = false;          // the gate-house says so, once
+
+function markDelving() {
+  if (!hardcore) return;
+  hcFellAway = false;            // a new life has begun; the notice is spent
+  stash.delving = true;
+  saveStash();
+}
+
+function settleUnfinishedDelve() {
+  if (!hardcore || !stash.delving) return false;
+  wipeHardcore();
+  hcFellAway = true;
+  return true;
+}
+
+// true when the leaving was a death; the caller then has nothing left to do.
+function abandonDelve() {
+  if (!hardcore || (state !== 'play' && state !== 'pause')) return false;
+  endRun(false);
+  return true;
 }
 
 /* --- the gate-house -------------------------------------------------------
@@ -6757,7 +6797,80 @@ function blankStash() {
            // be taken once; `bountyArmed` is only whether it is picked up
            // right now, and is deliberately not persisted as an achievement.
            bounty: null, bountyArmed: false,
+           // A Hardcore delve in progress. See settleUnfinishedDelve.
+           delving: false,
            hall: { vault: 0, forge: 0, reliquary: 0, wardstone: 0 } };
+}
+
+/* WHAT A SAVE IS ALLOWED TO SAY, split from where it is read.
+ *
+ * loadStash touches localStorage, so the core extractor leaves it with the
+ * page -- and for a long time that meant the Phaser build, which is the one
+ * that ships, read saves back with a bare Object.assign and none of this:
+ * no item checked against today's affix table, no vault cap, a level taken
+ * from disk instead of worked out from the xp, a corpse from a rung that no
+ * longer exists. This half touches nothing but its argument, so it goes into
+ * the core and both builds' loadStash is one line of reading and a call. */
+function sanitizeStash(st) {
+  if (!st || typeof st !== 'object') return blankStash();
+  const out = blankStash();
+  // Anything on disk is last session's data and may predate a change to the
+  // slots or the affix table, so it is filtered rather than trusted.
+  if (st.gear) for (const sl of SLOTS) {
+    if (validItem(st.gear[sl.id], sl.id)) out.gear[sl.id] = st.gear[sl.id];
+  }
+  if (Array.isArray(st.vault)) {
+    out.vault = st.vault.filter(it => validItem(it)).slice(0, vaultCap());
+  }
+  if (HEROES[st.hero]) out.hero = st.hero;
+  out.seq = +st.seq || 0;
+  out.xp = Math.max(0, +st.xp || 0);
+  out.level = levelForXp(out.xp);            // derived, never trusted from disk
+  out.coins = Math.max(0, +st.coins || 0);
+  out.pity = clamp(+st.pity || 0, 0, 20);
+  if (REGION_BY_ID[st.region]) out.region = st.region;
+  // Only today's claim is worth keeping. Yesterday's is not a record of
+  // anything, and a stale one that outlived its day would lock out the daily.
+  if (st.bounty && typeof st.bounty === 'object' && +st.bounty.day === dayStamp())
+    out.bounty = { day: +st.bounty.day, done: !!st.bounty.done };
+  out.bountyArmed = !!st.bountyArmed;
+  out.delving = !!st.delving;
+  // Tiers are the only thing on disk that cannot be re-earned, so they are
+  // filtered as carefully as the gear: an id that no longer exists is dropped
+  // rather than carried, and a tier above the ceiling is clamped to it.
+  if (st.hall && typeof st.hall === 'object') {
+    for (const h of HALL) out.hall[h.id] = clamp(+st.hall[h.id] || 0, 0, HALL_MAX);
+  }
+  // Loadouts hold item ids, not items, so a preset can never resurrect a
+  // piece that has since been sold, tempered away or left in a delve.
+  if (Array.isArray(st.loadouts)) {
+    out.loadouts = st.loadouts.slice(0, loadoutCap()).map(L => ({
+      name: String(L && L.name || 'Kit').slice(0, 18),
+      hero: HEROES[L && L.hero] ? L.hero : 'isaac',
+      slots: (() => {
+        const o = {};
+        for (const sl of SLOTS) {
+          const v = L && L.slots && L.slots[sl.id];
+          o[sl.id] = typeof v === 'number' ? v : null;
+        }
+        return o;
+      })()
+    }));
+  }
+  // The corpse is filtered like everything else: a level id that no longer
+  // exists, or items that no longer validate, simply stop being owed to you.
+  const cp = st.corpse;
+  if (cp && typeof cp === 'object' && LEVEL_BY_ID[cp.level_id]) {
+    const items = Array.isArray(cp.items)
+      ? cp.items.filter(it => validItem(it)).slice(0, CORPSE_CARRY) : [];
+    const coins = Math.max(0, +cp.coins || 0);
+    if (items.length || coins) {
+      out.corpse = { level_id: cp.level_id,
+                     hero: HEROES[cp.hero] ? cp.hero : 'isaac',
+                     x: +cp.x || 0, y: +cp.y || 0, items, coins };
+    }
+  }
+  return out;
 }
 
 function validItem(it, slotId) {
@@ -6788,6 +6901,7 @@ function bankRun(extracted) {
     }
   }
   stash.hero = run.hero;
+  stash.delving = false;         // the run ended properly, whichever way
   saveStash();
 }
 
@@ -7487,6 +7601,7 @@ function resetRun(heroId, levelId, diffId) {
 function startRun(heroId, levelId, diffId) {
   resetRun(heroId, levelId, diffId);
   state = 'play';
+  markDelving();
   buildKit();
   syncHeroSkin();
   showScreen(null);
@@ -8278,7 +8393,7 @@ function endRun(won) {
    before the core is stepped; this list is generated, so it cannot drift out
    of date the way a hand-written one would.
 
-     saveStash            called from claimCorpse, wipeHardcore, hallBuy +6
+     saveStash            called from claimCorpse, wipeHardcore, markDelving +7
      showScreen           called from startRun, openGear, closeGear +5
      syncBagBadge         called from updateDrops, claimCorpse, resetRun +1
      loadHonours          called from update, endRun

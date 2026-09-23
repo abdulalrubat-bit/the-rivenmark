@@ -10,7 +10,7 @@
  * it survives the renderer.
  */
 
-/* global player, run, stash, state, LEVELS, LEVEL, LEVEL_BY_ID, HEROES,
+/* global hcFellAway, player, run, stash, state, LEVELS, LEVEL, LEVEL_BY_ID, HEROES,
           startRun, endRun, stepThrough, blankStash, el, stashPower, resumeRun,
           REGION_BY_ID, REGION_RELIC, hardcore, setHardcore, honoured, delveStanding,
           recommendedLevel,
@@ -180,20 +180,31 @@ export class Screens {
    * the two things a stopped run can do. Abandoning is deliberately the lesser
    * button and deliberately says what it costs: nothing is banked.
    */
-  renderPaused() {
+  /* In Hardcore, abandoning IS dying (see abandonDelve in the core), so the
+   * button says so and takes two taps -- the same two-tap confirm as taking up
+   * one life, for the same reason: it is the direction that cannot be undone.
+   */
+  renderPaused(armed) {
+    const hc = typeof hardcore !== 'undefined' && hardcore;
+    const leave = !hc ? 'Abandon the delve'
+      : armed ? 'Tap again \u2014 this ends your life'
+              : 'Abandon the delve \u2014 in Hardcore, this is death';
     this.root.innerHTML =
       '<div class="card">' +
         '<span class="seal">\u2620\ufe0e</span>' +   // FE0E: the glyph, not the emoji
         '<h1>Held</h1>' +
         '<p class="sub">The delve waits. It does not wait kindly.</p>' +
         '<button class="go" type="button">Press on</button>' +
-        '<button class="alt" type="button">Abandon the delve</button>' +
+        '<button class="alt" type="button">' + leave + '</button>' +
       '</div>';
     this.root.querySelector('.go').addEventListener('click', () => {
       if (typeof resumeRun === 'function') resumeRun();
       else this.show(null);
     });
-    this.root.querySelector('.alt').addEventListener('click', () => this.onAbandon());
+    this.root.querySelector('.alt').addEventListener('click', () => {
+      if (hc && !armed) return this.renderPaused(true);
+      this.onAbandon();
+    });
   }
 
   /* THE DAILY.
@@ -234,7 +245,9 @@ export class Screens {
     const arm = this.hcArmed && !on;
     return '<button class="row' + (on ? ' on' : '') + '" id="hcToggle" type="button">' +
       '<span>' + (on ? 'Hardcore' : 'One life') +
-        '<small>' + (arm
+        '<small>' + (on && typeof hcFellAway !== 'undefined' && hcFellAway
+          ? 'Your last life ended: its delve was left unfinished. Begin again.'
+          : arm
           ? 'Tap again. One death ends everything this Vanguard owns.'
           : on ? 'One death ends it. Loot and Regalia come half again as often.'
                : 'A separate stash, and a separate life. Tap to take it up.') +

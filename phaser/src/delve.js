@@ -105,7 +105,8 @@ const STANDING = { pillar: 26, barrel: 12, crate: 11, urn: 10, banner: 16,
           BOLT_WIND, CHANT_WIND, breathScale, deathPose, DIE_MS, flinchOffset,
           lowFx,
           WALK_STEP, WALK_PACE, update, startRun, resetRun, loadStash,
-          hardcore, loadHardcoreMode, ENEMY_TYPES */
+          hardcore, loadHardcoreMode, ENEMY_TYPES, settleUnfinishedDelve,
+          abandonDelve */
 
 /* A body drawn with another body's art, and how much bigger it is than the
  * thing it borrowed from. Derived from the two radii rather than typed in, so
@@ -199,6 +200,8 @@ export class Delve extends Phaser.Scene {
       // which mode they were in by dying in the wrong one.
       hardcore = loadHardcoreMode();
       stash = loadStash();
+      // A Hardcore delve the app was closed in the middle of is a death.
+      settleUnfinishedDelve();
       const t0 = performance.now();
       if (this.gated) {
         /* THE GAME OPENS AT THE GATE-HOUSE.
@@ -408,6 +411,10 @@ export class Delve extends Phaser.Scene {
    * the last one.
    */
   abandonRun() {
+    // In Hardcore, walking out is dying: the core ends the run and raises the
+    // death card, and the world stays under it exactly as it does for any
+    // other death. Its "To the gate-house" comes back here with the run over.
+    if (abandonDelve()) return;
     this.clearWorldArt();
     state = 'menu';
     resetRun();
