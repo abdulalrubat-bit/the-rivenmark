@@ -696,6 +696,7 @@ const REGIONS = [
     note:'Dead ash around the Weeping Keep of Tor-Varden.',
     landmark:'The Weeping Keep of Tor-Varden', build:'keep',
     layout:{ roomMin:6, roomMax:13, corridor:3, chambers:7 },
+    roomSets: true,                      // set-piece rooms (see ROOM_SETS)
     earth:[58,44,30], mottle:[[26,18,11],[84,64,41],[116,90,58]],
     moss:[84,96,50],
     flag:[56,26], stone:['#241d16','#16110b','#0b0805'], lamp:'#e5761f' },
@@ -2063,8 +2064,448 @@ let rooms = [];
    from each to the gate, and between the extra rooms and the extra channels
    the map stopped being rooms-and-corridors and became one connected cavern.
    The layout decides where the rooms are; this decides what is in them. */
+/* --- SET-PIECE ROOMS ------------------------------------------------------
+   Playtested: "it feels like a full game but hollow at the same time; the
+   delves need more stuff and proper layouts." A room that was an empty
+   rectangle with a sprinkle of rubble is a room nobody remembers. These are
+   rooms built for something -- a throne hall, a forge, an ossuary, a garrison,
+   the stores, a broken chapel -- laid out in wall blocks where the shape
+   matters and dressed densely with what that room would hold. Each has a
+   name, said when you walk in, so the delve becomes a string of places.
+
+   A region opts in with `sets` (the Slag-Moors first; the rest keep the
+   older archetypes until they get their own). A template is handed the
+   room's rectangle in cells and a small kit:
+
+     solid(x, y)       a wall block -- refused on the band a corridor enters
+                       by, so dressing a room can never seal it
+     prop(kind, x, y)  scenery at a cell centre (world units, jittered)
+     wall(kind, x, y)  a fitting on the wall beside an open rim cell
+     lamp(x, y, col)   a light
+
+   Props never block a body; only wall blocks do. So structure is walls and
+   character is props, and a room stays walkable however full it looks.
+   --------------------------------------------------------------------- */
+let roomDress = [];     // props and lamps the rooms laid down, applied with the scenery
+let roomLights = [];
+
+function setPieceKit(h) {
+  const C = CELL_W;
+  const x0 = h.x, y0 = h.y, x1 = h.x + h.w - 1, y1 = h.y + h.h - 1;
+  const at = (x, y) => ({ x: x * C + C / 2, y: y * C + C / 2 });
+  const open = (x, y) => cellAt(x, y) !== SOLID;
+  const kit = {
+    x0, y0, x1, y1, cx: h.cx, cy: h.cy, w: h.w, h: h.h, at, open,
+    wide: h.w >= h.h,
+    // Scenery at a cell centre -- never on a cell the shaping made rock.
+    prop(kind, x, y, jit = 8, q) {
+      if (!open(x, y)) return;
+      const p = at(x, y);
+      roomDress.push({ x: p.x + rand(-jit, jit), y: p.y + rand(-jit, jit),
+                       q: q === undefined ? (Math.random() * 4) | 0 : q, kind });
+    },
+    // A fitting on the wall beside an open cell, facing into the room. The
+    // side it hangs from has to actually be rock: after the room is shaped,
+    // a rim cell may be a buttress, or a cut corner, or open onto a bay.
+    wall(kind, x, y) {
+      if (!open(x, y)) return;
+      let nx = 0, ny = 0;
+      if (!open(x, y - 1)) ny = 1; else if (!open(x, y + 1)) ny = -1;
+      else if (!open(x - 1, y)) nx = 1; else if (!open(x + 1, y)) nx = -1;
+      else return;
+      const p = at(x, y);
+      const q = ((Math.round(Math.atan2(ny, nx) / (Math.PI / 2)) % 4) + 4) % 4;
+      roomDress.push({ x: p.x - nx * (C / 2 - 7), y: p.y - ny * (C / 2 - 7), q, kind });
+      if (kind === 'torch') roomLights.push({ x: p.x - nx * (C / 2 - 19), y: p.y - ny * (C / 2 - 19), color: PAL.ember });
+    },
+    lamp(x, y, color) { const p = at(x, y); roomLights.push({ x: p.x, y: p.y, color }); },
+    // Every rim cell of one side, for hanging a row of fittings.
+    side(which) {
+      const out = [];
+      if (which === 'top' || which === 'bottom') {
+        const y = which === 'top' ? y0 : y1;
+        for (let x = x0 + 1; x < x1; x++) out.push([x, y]);
+      } else {
+        const x = which === 'left' ? x0 : x1;
+        for (let y = y0 + 1; y < y1; y++) out.push([x, y]);
+      }
+      return out;
+    },
+    // (b, a) in the room's own frame: b runs along its long axis, a across.
+    // Every template is written once in this frame and fits either way round.
+    B0: h.w >= h.h ? x0 : y0, B1: h.w >= h.h ? x1 : y1,
+    A0: h.w >= h.h ? y0 : x0, A1: h.w >= h.h ? y1 : x1,
+    MA: h.w >= h.h ? h.cy : h.cx, MB: h.w >= h.h ? h.cx : h.cy,
+    xy(b, a) { return h.w >= h.h ? [b, a] : [a, b]; },
+    put(kind, b, a, j, q) { const [x, y] = kit.xy(b, a); kit.prop(kind, x, y, j, q); },
+    // A quarter turn that lays an along-x sprite (a carpet, a bedroll) along
+    // the room's long axis, or across it.
+    alongQ: h.w >= h.h ? 0 : 1, acrossQ: h.w >= h.h ? 1 : 0,
+    pick: arr => arr[(Math.random() * arr.length) | 0],
+    chance: p => Math.random() < p
+  };
+  return kit;
+}
+
+/* --- SHAPING A ROOM ------------------------------------------------------
+   Playtested: every room was a plain rectangle, and the blocks set inside
+   them read as random lumps of wall. So a room is shaped now, and nothing
+   stands free in it -- columns, anvils and biers are scenery, and the only
+   new stone is what grows out of a wall.
+
+   The important rooms are BUILT: cut corners, a cross, buttresses down the
+   long walls. The ordinary ones are RUINED: a broken rim, bays where the
+   rock gave way, collapsed corners. Every change is taken back if it cuts
+   any floor off from the spawn, so shaping can never break a delve.
+   --------------------------------------------------------------------- */
+function reachFrom(sc) {
+  const seen = new Uint8Array(GW * GH);
+  const k0 = gi(sc.x, sc.y);
+  if (grid[k0] === SOLID) return 0;
+  const stack = [k0]; seen[k0] = 1;
+  let n = 1;
+  while (stack.length) {
+    const k = stack.pop();
+    const cx = k % GW, cy = (k / GW) | 0;
+    for (let i = 0; i < 4; i++) {
+      const nx = cx + (i === 0 ? 1 : i === 1 ? -1 : 0);
+      const ny = cy + (i === 2 ? 1 : i === 3 ? -1 : 0);
+      if (!inGrid(nx, ny)) continue;
+      const nk = gi(nx, ny);
+      if (seen[nk] || grid[nk] === SOLID) continue;
+      seen[nk] = 1; n++; stack.push(nk);
+    }
+  }
+  return n;
+}
+
+// Fill these cells as rock -- unless doing so strands any floor that was
+// reachable, in which case none of it happens.
+function fillSafely(cells, sc) {
+  const before = reachFrom(sc);
+  const undo = [];
+  let wasOpenReach = 0;
+  for (const [x, y] of cells) {
+    if (!inGrid(x, y) || x < 1 || y < 1 || x > GW - 2 || y > GH - 2) continue;
+    const k = gi(x, y);
+    if (grid[k] === SOLID) continue;
+    undo.push(k); grid[k] = SOLID; wasOpenReach++;
+  }
+  if (!undo.length) return true;
+  if (reachFrom(sc) < before - wasOpenReach) {
+    for (const k of undo) grid[k] = OPEN;
+    return false;
+  }
+  return true;
+}
+
+// The bands a corridor enters a room by (joins are three cells wide, cut
+// along its centre row and column), which no shaping may narrow.
+const doorBand = (h, x, y) =>
+  Math.abs(x - h.cx) <= 1 || Math.abs(y - h.cy) <= 1;
+
+const ROOM_SHAPES = {
+  // Corners cut on the diagonal: an octagon.
+  octagon(h, sc) {
+    const c = Math.max(2, Math.round(Math.min(h.w, h.h) / 2.6));
+    const cells = [];
+    for (let dy = 0; dy < c; dy++)
+      for (let dx = 0; dx < c - dy; dx++)
+        for (const [x, y] of [[h.x + dx, h.y + dy], [h.x + h.w - 1 - dx, h.y + dy],
+                              [h.x + dx, h.y + h.h - 1 - dy], [h.x + h.w - 1 - dx, h.y + h.h - 1 - dy]])
+          if (!doorBand(h, x, y)) cells.push([x, y]);
+    fillSafely(cells, sc);
+  },
+  // Four corners taken out: a cross, its arms the room's doors.
+  cross(h, sc) {
+    // as deep as leaves each arm at least three cells wide
+    const cw = Math.max(2, Math.min(Math.round(h.w / 3.2), (h.w - 3) >> 1));
+    const ch = Math.max(2, Math.min(Math.round(h.h / 3.2), (h.h - 3) >> 1));
+    const cells = [];
+    for (let dy = 0; dy < ch; dy++)
+      for (let dx = 0; dx < cw; dx++)
+        for (const [x, y] of [[h.x + dx, h.y + dy], [h.x + h.w - 1 - dx, h.y + dy],
+                              [h.x + dx, h.y + h.h - 1 - dy], [h.x + h.w - 1 - dx, h.y + h.h - 1 - dy]])
+          if (!doorBand(h, x, y)) cells.push([x, y]);
+    fillSafely(cells, sc);
+  },
+  // Buttresses down both long walls, every third cell: the bays between them
+  // are where the fittings and the furniture go.
+  buttress(h, sc) {
+    const wide = h.w >= h.h, cells = [];
+    const b0 = wide ? h.x : h.y, b1 = wide ? h.x + h.w - 1 : h.y + h.h - 1;
+    const a0 = wide ? h.y : h.x, a1 = wide ? h.y + h.h - 1 : h.x + h.w - 1;
+    for (let b = b0 + 1; b <= b1 - 1; b += 3)
+      for (const a of [a0, a1]) {
+        const [x, y] = wide ? [b, a] : [a, b];
+        if (!doorBand(h, x, y)) cells.push([x, y]);
+      }
+    // and the four corners stepped in, so it reads as dressed stone
+    for (const [cx, cy, sx, sy] of [[h.x, h.y, 1, 1], [h.x + h.w - 1, h.y, -1, 1],
+                                    [h.x, h.y + h.h - 1, 1, -1], [h.x + h.w - 1, h.y + h.h - 1, -1, -1]])
+      for (const [dx, dy] of [[0, 0], [1, 0], [0, 1]]) cells.push([cx + dx * sx, cy + dy * sy]);
+    fillSafely(cells, sc);
+  },
+  // RUINED: the rim broken, rock slumped in at the corners, and here and
+  // there the wall given way into a shallow bay. Rubble where it fell.
+  ruin(h, sc) {
+    const cells = [];
+    const rim = [];
+    for (let x = h.x; x < h.x + h.w; x++) { rim.push([x, h.y, 0, -1]); rim.push([x, h.y + h.h - 1, 0, 1]); }
+    for (let y = h.y + 1; y < h.y + h.h - 1; y++) { rim.push([h.x, y, -1, 0]); rim.push([h.x + h.w - 1, y, 1, 0]); }
+    // slumped corners, a different size each
+    for (const [cx, cy, sx, sy] of [[h.x, h.y, 1, 1], [h.x + h.w - 1, h.y, -1, 1],
+                                    [h.x, h.y + h.h - 1, 1, -1], [h.x + h.w - 1, h.y + h.h - 1, -1, -1]]) {
+      const c = (Math.random() * 3) | 0;
+      for (let dy = 0; dy < c; dy++) for (let dx = 0; dx < c - dy; dx++) {
+        const x = cx + dx * sx, y = cy + dy * sy;
+        if (!doorBand(h, x, y)) cells.push([x, y]);
+      }
+    }
+    const bays = [];
+    for (const [x, y, ox, oy] of rim) {
+      if (doorBand(h, x, y)) continue;
+      const r = Math.random();
+      if (r < 0.22) cells.push([x, y]);                       // a lump of the wall come in
+      else if (r < 0.34) bays.push([x, y, ox, oy]);          // the wall gone back
+    }
+    fillSafely(cells, sc);
+    for (const [x, y, ox, oy] of bays) {
+      const d = 1 + ((Math.random() * 2) | 0);
+      for (let i = 1; i <= d; i++) {
+        const bx = x + ox * i, by = y + oy * i;
+        if (bx < 2 || by < 2 || bx > GW - 3 || by > GH - 3) break;
+        grid[gi(bx, by)] = OPEN;
+      }
+    }
+    // what fell, heaped against the broken rim
+    for (const [x, y] of rim) {
+      if (cellAt(x, y) === SOLID || Math.random() > 0.35) continue;
+      const p = { x: x * CELL_W + CELL_W / 2, y: y * CELL_W + CELL_W / 2 };
+      roomDress.push({ x: p.x + rand(-10, 10), y: p.y + rand(-10, 10), q: (Math.random() * 4) | 0, kind: 'rubble' });
+    }
+  }
+};
+
+/* The templates. `min` is the smallest room (in cells, short side and long
+   side) the layout reads right in; `shapes` the built forms it may take;
+   `trap` which of the older archetypes' hazards the room carries, if any;
+   `name` what the player is told. Everything inside is scenery. */
+const ROOM_SETS = {
+  /* A long hall: a colonnade either side, a carpet up the middle to a seat
+     of bone at the far end, braziers burning beside it. */
+  throne: { min: [8, 10], shapes: ['buttress', 'cross'],
+    clutter: ['bones', 'coins', 'shield', 'sword', 'crack'],
+    names: ['The Throne of Ash', 'The Ashen Seat', 'The Hall of the Burnt King'],
+    build(k) {
+      const lanes = [k.MA - Math.max(2, ((k.A1 - k.A0) / 4) | 0), k.MA + Math.max(2, ((k.A1 - k.A0) / 4) | 0)];
+      for (const a of lanes) for (let b = k.B0 + 2; b <= k.B1 - 2; b += 2) k.put('pillar', b, a, 2, 0);
+      const headFar = Math.random() < 0.5;
+      const hb = headFar ? k.B1 - 1 : k.B0 + 1;
+      for (let b = Math.min(hb, k.B1 - hb + k.B0) + 1; b <= Math.max(hb, k.B1 - hb + k.B0) - 1; b += 2)
+        k.put('carpet', b, k.MA, 0, k.alongQ);
+      k.put('boss', hb, k.MA, 1, 0);
+      k.put('hornskull', hb, k.MA - 1, 3); k.put('hornskull', hb, k.MA + 1, 3);
+      for (const a of [k.MA - 2, k.MA + 2]) {
+        k.put('brazier', hb, a, 0, 0);
+        const [x, y] = k.xy(hb, a); k.lamp(x, y, PAL.ember);
+      }
+      for (const [x, y] of k.side(k.wide ? 'top' : 'left').concat(k.side(k.wide ? 'bottom' : 'right')))
+        if ((k.wide ? x : y) % 2 === 0) k.wall('banner', x, y);
+    } },
+
+  /* Where the slag was worked: a grated hearth in the middle between two
+     braziers, anvils round it, racks of blades on the walls and stock stacked
+     against them. (Not the cistern's pool: that is green and it poisons, and
+     a forge that did that read as a bug.) */
+  forge: { min: [7, 8], shapes: ['octagon'],
+    clutter: ['rubble', 'crack', 'coins', 'sword'],
+    names: ['The Slag Forge', 'The Cinder Works', 'The Old Smithy'],
+    build(k) {
+      k.prop('grate', k.cx, k.cy, 0, 0);
+      k.lamp(k.cx, k.cy, PAL.ember); k.lamp(k.cx, k.cy, PAL.ember);
+      k.put('brazier', k.MB - 1, k.MA, 2, 0); k.put('brazier', k.MB + 1, k.MA, 2, 0);
+      for (const [db, da] of [[-3, -2], [3, -2], [-3, 2], [3, 2]]) k.put('anvil', k.MB + db, k.MA + da, 3, k.alongQ);
+      for (const [x, y] of k.side(k.wide ? 'left' : 'top').concat(k.side(k.wide ? 'right' : 'bottom'))) {
+        if (k.chance(0.5)) k.wall('rack', x, y); else if (k.chance(0.4)) k.wall('torch', x, y);
+      }
+      for (const [x, y] of k.side(k.wide ? 'top' : 'left').concat(k.side(k.wide ? 'bottom' : 'right')))
+        if (k.chance(0.55)) k.prop(k.pick(['crate', 'sacks', 'crate', 'urn']), x, y, 6);
+    } },
+
+  /* The dead on stone biers in two rows, candles guttering between them,
+     bones heaped in the corners, a cage hung over the middle. */
+  ossuary: { min: [7, 8], shapes: ['buttress', 'octagon'], trap: 'hall',
+    clutter: ['bones', 'bones', 'crack', 'hornskull'],
+    names: ['The Ossuary', 'The Bone Vault', 'The Crypt of the Clear-Sighted'],
+    build(k) {
+      const rows = [k.A0 + 2, k.A1 - 2];
+      for (const a of rows)
+        for (let b = k.B0 + 2; b <= k.B1 - 2; b += 2) {
+          k.put('tomb', b, a, 1, k.acrossQ);
+          if (b + 1 <= k.B1 - 2) k.put('candles', b + 1, a, 4);
+        }
+      k.put('cage', k.MB, k.MA, 2);
+      for (const [x, y] of [[k.x0 + 1, k.y0 + 1], [k.x1 - 1, k.y0 + 1], [k.x0 + 1, k.y1 - 1], [k.x1 - 1, k.y1 - 1]]) {
+        k.prop('bones', x, y, 8); k.prop('hornskull', x, y, 10); k.prop('urn', x, y, 12);
+      }
+      for (const [x, y] of k.side(k.wide ? 'top' : 'left')) if ((k.wide ? x : y) % 3 === 0) k.wall('sconce', x, y);
+      k.lamp(k.cx, k.cy, PAL.teal);
+    } },
+
+  /* Bedrolls in rows off both long walls, racks of arms above them, a table
+     of stores and dice in the middle. */
+  garrison: { min: [7, 8], shapes: ['buttress'],
+    clutter: ['bones', 'shield', 'scroll', 'coins'],
+    names: ['The Garrison', 'The Barracks of Tor-Varden', 'The Watch-House'],
+    build(k) {
+      for (let b = k.B0 + 1; b <= k.B1 - 1; b += 2)
+        for (const a of [k.A0 + 1, k.A1 - 1]) {
+          if (Math.abs(b - k.MB) <= 1) continue;
+          k.put('bedroll', b, a, 2, k.acrossQ);
+        }
+      for (const [x, y] of k.side(k.wide ? 'top' : 'left').concat(k.side(k.wide ? 'bottom' : 'right')))
+        if (k.chance(0.3)) k.wall('rack', x, y);
+      k.put('table', k.MB, k.MA, 2, k.alongQ);
+      k.put('table', k.MB + 2, k.MA, 2, k.alongQ);
+      k.put('crate', k.MB - 2, k.MA, 4); k.put('coins', k.MB, k.MA, 4); k.put('scroll', k.MB + 2, k.MA, 4);
+      k.lamp(k.cx, k.cy, PAL.ember);
+    } },
+
+  /* Aisles of stock, stacked to the walls: crates, urns, sacks, coin spilled
+     where one split. Somebody lived off this. */
+  stores: { min: [6, 7], shapes: ['buttress', 'octagon'],
+    clutter: ['coins', 'scroll', 'sacks'],
+    names: ['The Stores', 'The Granary', 'The Quartermaster’s Hold'],
+    build(k) {
+      for (let a = k.A0 + 1; a <= k.A1 - 1; a += 2) {
+        if (Math.abs(a - k.MA) <= 1) continue;                  // the main aisle stays clear
+        for (let b = k.B0 + 1; b <= k.B1 - 1; b++) {
+          if (!k.chance(0.85)) continue;
+          k.put(k.pick(['crate', 'crate', 'urn', 'sacks']), b, a, 5);
+          if (k.chance(0.5)) k.put(k.pick(['crate', 'sacks', 'urn']), b, a, 11);
+        }
+      }
+      for (const [x, y] of k.side(k.wide ? 'left' : 'top')) if (k.chance(0.3)) k.wall('chain', x, y);
+    } },
+
+  /* Two rows of columns, some of them down; a carpet up the nave to an altar
+     with its candles still lit; the roof in heaps on the floor. */
+  chapel: { min: [7, 9], shapes: ['cross', 'octagon'], trap: 'hall',
+    clutter: ['rubble', 'crack', 'scroll', 'rubble'],
+    names: ['The Broken Chapel', 'The Chapel of the Rift', 'The Fallen Nave'],
+    build(k) {
+      for (const a of [k.A0 + 2, k.A1 - 2])
+        for (let b = k.B0 + 2; b <= k.B1 - 2; b += 2)
+          if (k.chance(0.72)) k.put('pillar', b, a, 2, 0);
+          else { k.put('rubble', b, a, 6); k.put('rubble', b, a, 10); }
+      const head = Math.random() < 0.5 ? k.B1 - 1 : k.B0 + 1;
+      for (let b = Math.min(head, k.B1 - head + k.B0) + 1; b <= Math.max(head, k.B1 - head + k.B0) - 1; b += 2)
+        k.put('carpet', b, k.MA, 0, k.alongQ);
+      k.put('altar', head, k.MA, 0, k.acrossQ);
+      k.put('candles', head, k.MA - 1, 3); k.put('candles', head, k.MA + 1, 3);
+      const [lx, ly] = k.xy(head, k.MA); k.lamp(lx, ly, PAL.teal);
+      for (let i = 0; i < 4; i++) {
+        const x = k.x0 + 1 + ((Math.random() * (k.w - 2)) | 0), y = k.y0 + 1 + ((Math.random() * (k.h - 2)) | 0);
+        k.prop('rubble', x, y, 12); k.prop('rubble', x, y, 12);
+      }
+    } }
+};
+
+// The room kinds the older systems (traps, the stain layer) read, for a set piece.
+/* A cistern gone bad: the water in the middle is what the older rooms' pool
+   trap already is -- green, and it poisons whatever stands in it -- so this
+   one keeps it, and the Moors keep their pools. Grates, a ring of urns, moss
+   on everything, chains where the buckets hung. */
+ROOM_SETS.cistern = { min: [7, 7], shapes: ['octagon'], trap: 'pool',
+  clutter: ['moss', 'moss', 'crack', 'urn'],
+  names: ['The Drowned Cistern', 'The Green Well', 'The Sump of Tor-Varden'],
+  build(k) {
+    for (const [dx, dy] of [[-2, -2], [2, -2], [-2, 2], [2, 2]]) k.prop('grate', k.cx + dx, k.cy + dy, 2, 0);
+    for (let i = 0; i < 8; i++) {
+      const a = i / 8 * TAU, r = Math.min(k.w, k.h) / 2 - 1.5;
+      k.prop('urn', Math.round(k.cx + Math.cos(a) * r), Math.round(k.cy + Math.sin(a) * r), 5);
+    }
+    for (const [x, y] of k.side('top').concat(k.side('bottom'))) if (k.chance(0.3)) k.wall('chain', x, y);
+    k.lamp(k.cx, k.cy, PAL.teal);
+  } };
+const SET_TRAP = { hall: 'hall', pool: 'cistern' };
+
+function dressSetPieces(halls, sc, pc) {
+  const want = Math.min(halls.length, 5 + ((Math.random() * 3) | 0));
+  const order = halls.slice().sort(() => Math.random() - 0.5);
+  const used = {};
+  const chosen = new Set();
+  for (const h of order) {
+    if (rooms.length >= want) break;
+    const near = (a, b) => Math.abs(h.cx - a) + Math.abs(h.cy - b) < 10;
+    if (near(sc.x, sc.y) || near(pc.x, pc.y)) continue;
+    // Clear of the gate's landmark, which is built after and squares off a
+    // wide block round the gate: a room it overlapped lost floor to it.
+    if (h.x < pc.x + 10 && h.x + h.w > pc.x - 10 && h.y < pc.y + 10 && h.y + h.h > pc.y - 10) continue;
+    const short = Math.min(h.w, h.h), long = Math.max(h.w, h.h);
+    // Each template once before any repeats, the ones that fit this room.
+    const fits = Object.keys(ROOM_SETS).filter(id =>
+      short >= ROOM_SETS[id].min[0] && long >= ROOM_SETS[id].min[1]);
+    if (!fits.length) continue;
+    const fresh = fits.filter(id => !used[id]);
+    const pool = fresh.length ? fresh : fits;
+    const id = pool[(Math.random() * pool.length) | 0];
+    used[id] = (used[id] || 0) + 1;
+    chosen.add(h);
+    const T = ROOM_SETS[id];
+    ROOM_SHAPES[T.shapes[(Math.random() * T.shapes.length) | 0]](h, sc);
+    const kit = setPieceKit(h);
+    T.build(kit);
+    // And the floor between: what that room would have lying about, on about
+    // a third of what is left open, so it reads as used rather than as
+    // furniture on a swept floor.
+    for (let y = h.y + 1; y < h.y + h.h - 1; y++)
+      for (let x = h.x + 1; x < h.x + h.w - 1; x++)
+        if (Math.random() < 0.36) kit.prop(kit.pick(T.clutter), x, y, 14);
+    // How much floor the room was left with once shaped: what the whole
+    // delve must still be able to reach when it is finished (rooms.js).
+    let floor = 0;
+    for (let y = h.y; y < h.y + h.h; y++)
+      for (let x = h.x; x < h.x + h.w; x++) if (cellAt(x, y) !== SOLID) floor++;
+    const half = Math.max(h.w, h.h) >> 1;
+    rooms.push({ kind: SET_TRAP[T.trap] || id, set: id, floor,
+                 name: T.names[(Math.random() * T.names.length) | 0],
+                 cx: h.cx, cy: h.cy, half,
+                 x: h.cx * CELL_W + CELL_W / 2, y: h.cy * CELL_W + CELL_W / 2,
+                 r: half * CELL_W,
+                 box: { x0: h.x * CELL_W, y0: h.y * CELL_W,
+                        x1: (h.x + h.w) * CELL_W, y1: (h.y + h.h) * CELL_W },
+                 seen: false });
+  }
+  // Every other room is a ruin -- but not the ones the spawn or the gate
+  // stand in, which keep their clean ground.
+  for (const h of halls) {
+    if (chosen.has(h)) continue;
+    const near = (a, b) => Math.abs(h.cx - a) + Math.abs(h.cy - b) < 8;
+    if (near(sc.x, sc.y) || near(pc.x, pc.y)) continue;
+    ROOM_SHAPES.ruin(h, sc);
+  }
+}
+
+function updateRoomNames() {
+  if (!run || !rooms.length) return;
+  for (let i = 0; i < rooms.length; i++) {
+    const rm = rooms[i];
+    if (rm.seen || !rm.name || !rm.box) continue;
+    const b = rm.box;
+    if (player.x > b.x0 + 20 && player.x < b.x1 - 20 && player.y > b.y0 + 20 && player.y < b.y1 - 20) {
+      rm.seen = true;
+      toast(rm.name, '#d6b26e');
+      clog('room', rm.set, { name: rm.name });
+    }
+  }
+}
+
 function dressRooms(halls, sc, pc) {
   rooms = [];
+  roomDress = []; roomLights = [];
+  if (REGION.roomSets) return dressSetPieces(halls, sc, pc);
   const KINDS = ['hall', 'barracks', 'collapse', 'cistern'];
   const want = Math.min(halls.length, 3 + ((Math.random() * 3) | 0));
   const picked = [];
@@ -2267,6 +2708,10 @@ function cutChasms(sc, pc) {
     if (!ok) continue;
     if (Math.abs(cx - sc.x) + Math.abs(cy - sc.y) < 9) continue;
     if (Math.abs(cx - pc.x) + Math.abs(cy - pc.y) < 9) continue;
+    // Not through a set piece: the room was laid out and furnished, and a pit
+    // under its throne or its biers undoes the whole of that.
+    if (rooms.some(rm => rm.set && cx + w > rm.cx - rm.half - 1 && cx < rm.cx + rm.half + 1 &&
+                                   cy + h > rm.cy - rm.half - 1 && cy < rm.cy + rm.half + 1)) continue;
 
     // A hole that severs the delve is a broken delve, so cut it, check every
     // open cell is still reachable from the spawn, and put it back if not.
@@ -2396,13 +2841,19 @@ function buildScenery(spawn, portal) {
 
   // Torch count follows the edge count, so a fretted map can light itself into
   // a performance problem. Thin evenly rather than clipping a region dark.
+  // The set-piece rooms' own lights are kept whole -- they are what makes a
+  // room read as that room -- and the wall torches are thinned to fit round
+  // them.
   const LAMP_CAP = 46;
-  if (lamps.length > LAMP_CAP) {
+  const wallCap = Math.max(12, LAMP_CAP - roomLights.length);
+  if (lamps.length > wallCap) {
     const keep = [];
-    const step = lamps.length / LAMP_CAP;
-    for (let i = 0; i < LAMP_CAP; i++) keep.push(lamps[Math.floor(i * step)]);
+    const step = lamps.length / wallCap;
+    for (let i = 0; i < wallCap; i++) keep.push(lamps[Math.floor(i * step)]);
     lamps = keep;
   }
+  for (const l of roomLights) lamps.push(l);
+  for (const pr of roomDress) props.push(pr);
 
   // Floor scenery. Two rules keep it from reading as floating debris:
   // man-made decals snap to right angles (only rubble and stains rotate
@@ -2451,6 +2902,10 @@ function standPillars(spawn, portal) {
     const c = openCells[(Math.random() * openCells.length) | 0];
     if (dist2(c.x, c.y, spawn.x, spawn.y) < 170 * 170) continue;
     if (dist2(c.x, c.y, portal.x, portal.y) < 170 * 170) continue;
+    // A set piece places its own columns, in rows; a stray one dropped among
+    // them is exactly the untidiness the room was built to get rid of.
+    if (rooms.some(rm => rm.box && c.x > rm.box.x0 && c.x < rm.box.x1 &&
+                         c.y > rm.box.y0 && c.y < rm.box.y1)) continue;
     // needs room around it, or it blocks a corridor it has no business in
     let clear = true;
     for (let a = 0; a < 8 && clear; a++) {
@@ -2531,6 +2986,7 @@ function scatterKnots(spawn, portal) {
   // Rooms get dressed as what they were.
   for (let i = 0; i < rooms.length; i++) {
     const rm = rooms[i];
+    if (rm.set) continue;                 // a set piece dressed itself
     const set = rm.kind === 'barracks' ? 'store' :
                 rm.kind === 'cistern'  ? 'damp'  :
                 rm.kind === 'collapse' ? 'fallen' : 'spoil';
@@ -7293,6 +7749,7 @@ function update(dt) {
   updateSlams(dt);
   updateHazards(dt);
   updateTraps(dt);
+  updateRoomNames();
   updateBeams(dt);
   updateNulls(dt);
   updateTotems(dt);

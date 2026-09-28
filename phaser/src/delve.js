@@ -83,7 +83,13 @@ const FX_DROP = 13, FX_RAISE = 8, FX_SAMPLE = 45;
  * immediately, because the hero walks through a pillar.
  */
 const STANDING = { pillar: 26, barrel: 12, crate: 11, urn: 10, banner: 16,
-                   chain: 14, tomb: 22 };
+                   chain: 14, tomb: 22,
+                   // the set-piece rooms' furniture
+                   brazier: 12, table: 10, rack: 14, anvil: 9, cage: 14,
+                   altar: 12, sacks: 9 };
+// Laid on the floor under everything else, flat scenery included: a carpet
+// with rubble on it, not rubble under a carpet.
+const FLOOR = { carpet: true };
 
 /* The core's names are used bare, not through `window`.
  *
@@ -518,7 +524,7 @@ export class Delve extends Phaser.Scene {
       const sh = up ? this.shadowAt(p.x, p.y, up, 2) : null;
       if (sh) this.propImgs.push(sh);
       const img = this.add.image(p.x, p.y, 'art', key)
-        .setScale(this.artScale(key)).setDepth(up ? p.y : p.y - 1e4);
+        .setScale(this.artScale(key)).setDepth(up ? p.y : FLOOR[p.kind] ? p.y - 2e4 : p.y - 1e4);
       this.propImgs.push(img);
       // The ones a blow can break are watched; see syncBreakables.
       if (PROP_HP[p.kind]) this.breakables.push({ pr: p, img, sh });
