@@ -151,7 +151,7 @@ const cardState = () => {
     h1: document.querySelector('#screens h1')?.textContent,
     tabs: [...document.querySelectorAll('#screens .tabs button')].map(t => t.textContent),
     heroes: [...document.querySelectorAll('#screens [data-hero]')].map(h => h.dataset.hero),
-    rungs: [...document.querySelectorAll('#screens [data-level]')].map(r => r.dataset.level),
+    card: !!document.getElementById('delveCard'),
     descend: !!document.getElementById('descend'),
     runTime: run ? +(run.time || 0).toFixed(1) : null,
     /* NOT offsetParent: it is null for a position:fixed element whatever
@@ -166,32 +166,46 @@ const cardState = () => {
      'state ' + gate.state + ', showing ' + JSON.stringify(gate.h1));
   ck('and no run has been started behind it', gate.runTime === 0,
      'run.time ' + gate.runTime);
-  ck('and every station is on the rail',
-     ['Descend', 'Forge', 'Vendor', 'Hall'].every(t => gate.tabs.includes(t)),
+  ck('and every station is on the bar',
+     ['Home', 'Delves', 'Forge', 'Vendor', 'Hall'].every(t => gate.tabs.some(x => x.includes(t))),
      gate.tabs.join(' / '));
   ck('the HUD is not standing behind the menu for a run nobody started',
      gate.hudUp === false, 'HUD ' + (gate.hudUp ? 'VISIBLE at the gate-house' : 'down'));
-  ck('and there is a hero and a rung to choose',
-     gate.heroes.length >= 2 && gate.rungs.length >= 4,
-     gate.heroes.length + ' heroes, ' + gate.rungs.length + ' rungs');
+  ck('and a hero to choose, and the delve they will take',
+     gate.heroes.length >= 2 && gate.card && gate.descend,
+     gate.heroes.length + ' heroes, delve card ' + gate.card);
 
   /* ---- 2b. and its one button is where a thumb can reach it -------------
-   * The card is 1300-odd pixels of rungs, bounty, ground and Hardcore on an
-   * 844px phone, and Descend used to sit 470px below the fold: the main
-   * menu's primary action could not be seen without scrolling past all of
-   * it. The check would be vacuous on a card that happens to fit, so the
-   * overflow is asserted alongside it.
+   * Descend used to sit 470px below the fold of a 1300-pixel card. Home is
+   * short now, but the button is still pinned, and must sit above the bar
+   * along the bottom rather than under it.
    */
-  const reach = await p.evaluate(() => {
+  const reachOf = id => p.evaluate(id => {
     const r = document.getElementById('screens');
-    const g = document.getElementById('descend').getBoundingClientRect();
-    return { over: r.scrollHeight - r.clientHeight,
+    const g = document.getElementById(id).getBoundingClientRect();
+    const bar = document.querySelector('#screens nav.tabs').getBoundingClientRect();
+    return { over: r.scrollHeight - r.clientHeight, bar: Math.round(bar.top),
              top: Math.round(g.top), bottom: Math.round(g.bottom), h: innerHeight };
-  });
-  ck('Descend is on the screen without scrolling for it',
-     reach.over > 100 && reach.top >= 0 && reach.bottom <= reach.h + 1,
-     'button at ' + reach.top + '-' + reach.bottom + ' in ' + reach.h +
-     'px, with ' + reach.over + 'px of card below the fold');
+  }, id);
+  const reach = await reachOf('descend');
+  ck('Descend is on the screen, above the bar',
+     reach.top >= 0 && reach.bottom <= reach.bar + 1,
+     'button at ' + reach.top + '-' + reach.bottom + ', bar at ' + reach.bar);
+
+  /* ---- 2c. the Delves tab: the whole ladder -------------------------------
+   * A long card, so here the pinned button is the one thing between the
+   * ladder and a player who cannot find the way down. The overflow is
+   * asserted alongside it, or the check would be vacuous on a card that fits. */
+  await tap('#screens .tabs button[data-tab="delves"]');
+  await sleep(250);
+  const rungs = await p.evaluate(() => [...document.querySelectorAll('#screens [data-level]')].map(r => r.dataset.level));
+  ck('the Delves tab lists the whole ladder', rungs.length === await p.evaluate(() => LEVELS.length),
+     rungs.length + ' rungs');
+  const reach2 = await reachOf('descendHere');
+  ck('and its Descend is on screen without scrolling for it, above the bar',
+     reach2.over > 100 && reach2.top >= 0 && reach2.bottom <= reach2.bar + 1,
+     'button at ' + reach2.top + '-' + reach2.bottom + ', bar at ' + reach2.bar +
+     ', with ' + reach2.over + 'px of card below the fold');
 
   /* The verdict beside each rung comes from the core's delveStanding, which
    * has four bands and a colour for each -- not from a second copy in the
@@ -211,19 +225,24 @@ const cardState = () => {
    * HUD, where the same idea does nothing (see the note in hud.js). Checked
    * separately for exactly that reason: the two use different mechanisms and
    * one of them can break while the other holds. */
-  const menuFlat = await p.evaluate(() =>
-    Math.round(document.getElementById('descend').getBoundingClientRect().bottom));
-  const menuInset = await p.evaluate(() => {
+  await tap('#screens .tabs button[data-tab="splash"]');
+  await sleep(200);
+  // The bar is what sits against the bottom edge now (Home is short and
+  // centred), so it is the bar's buttons that must rise clear of the inset.
+  const barBtn = () => Math.round(document.querySelector('#screens nav.tabs [data-tab="splash"]')
+    .getBoundingClientRect().bottom);
+  const menuFlat = await p.evaluate(barBtn);
+  const menuInset = await p.evaluate(barBtn => {
     const st = document.createElement('style');
     st.id = 'faux-safe-area';
     st.textContent = ':root{--sa-t:44px;--sa-b:44px;--sa-l:44px;--sa-r:44px}';
     document.head.appendChild(st);
     return new Promise(done => requestAnimationFrame(() => requestAnimationFrame(() =>
-      done(Math.round(document.getElementById('descend').getBoundingClientRect().bottom)))));
-  });
+      done(new Function('return (' + barBtn + ')()')()))));
+  }, barBtn.toString());
   ck('and so does the gate-house',
      menuFlat - menuInset === 44,
-     'with a 44px inset: Descend ends at ' + menuFlat + ' -> ' + menuInset);
+     'with a 44px inset: the bar\u2019s buttons end at ' + menuFlat + ' -> ' + menuInset);
   await p.evaluate(() => document.getElementById('faux-safe-area')?.remove());
 
   /* ---- 3. the stations open --------------------------------------------- */
@@ -236,10 +255,15 @@ const cardState = () => {
   await station('gear', /Forge/i);
   await station('vendor', /Vendor|Ashen|Trader|Stall/i);
   await station('hall', /Hall/i);
+  await station('delves', /Delves/i);
   await station('splash', /Gate-House/i);
 
-  /* ---- 4. Descend, on a rung that is NOT the default --------------------- */
-  const want = gate.rungs[2];
+  /* ---- 4. Descend, on a rung that is NOT the default ---------------------
+   * Picked on the Delves tab; Home's card follows it; Descend from Home. */
+  const want = rungs[2];
+  const was = await p.evaluate(() => document.querySelector('#delveCard').textContent);
+  await tap('#screens .tabs button[data-tab="delves"]');
+  await sleep(200);
   await tap('#screens [data-level="' + want + '"]');
   await sleep(200);
   // And a difficulty that is not the default either, for the same reason: this
@@ -248,6 +272,11 @@ const cardState = () => {
     [...document.querySelectorAll('#screens [data-diff]')].map(b => b.dataset.diff));
   await tap('#screens [data-diff="sundered"]');
   await sleep(200);
+  await tap('#screens .tabs button[data-tab="splash"]');
+  await sleep(200);
+  const now = await p.evaluate(() => document.querySelector('#delveCard').textContent);
+  ck('Home\u2019s delve card follows the pick', now !== was &&
+     now.includes(await p.evaluate(w => LEVEL_BY_ID[w].name, want)) && /Sundered/.test(now), now.slice(0, 80));
   await tap('#descend');
   await sleep(1400);
   const delve = await p.evaluate(() => {
@@ -259,9 +288,9 @@ const cardState = () => {
              kit: document.querySelectorAll('#hud .kit button').length };
   });
   ck('Descend takes you into the rung you chose, not the one it defaulted to',
-     delve.state === 'play' && delve.level === want && want !== gate.rungs[0],
+     delve.state === 'play' && delve.level === want && want !== rungs[0],
      'asked for ' + want + ', got ' + delve.level +
-     ' (default was ' + gate.rungs[0] + ')');
+     ' (default was ' + rungs[0] + ')');
   ck('the gate-house offers every difficulty', diffs.join(' ') === 'harrowed riven sundered',
      diffs.join(' '));
   ck('and the delve is the one chosen, not Riven by default', delve.diff === 'sundered',

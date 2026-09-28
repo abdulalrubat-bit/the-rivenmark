@@ -163,15 +163,51 @@ const CSS = `
 #screens .alt:active{background:#241d15}
 #screens .seal{display:block;font-size:22px;color:#8c6830;margin:0 0 2px}
 #screens .purse{display:flex;justify-content:space-between;margin:0 0 10px;color:#a89878}
-#screens .tabs{display:flex;gap:6px;margin:0 0 12px}
-#screens .tabs button{flex:1;min-height:40px;border-radius:6px;background:#1a1712;
-  color:#a89878;border:1px solid #33291f;font:inherit}
-/* The station you are in wears the band; the others are plain, so the rail
-   reads as one object with a piece of it lit rather than as four boxes. */
-#screens .tabs button.on{color:#f0e2c2;border:2px solid transparent;
+/* THE BAR ALONG THE BOTTOM. Fixed to the glass, under the thumb, the way
+   every phone game the player knows does it: an icon and a word per station,
+   the one you are in lit with the band. The screens that carry it leave room
+   for it (.hasbar), and their pinned button rides just above it. */
+#screens{--bar:62px}
+/* The bar is its buttons plus 8px of padding and a 2px rule. */
+#screens.hasbar{padding-bottom:calc(var(--bar) + 10px + var(--sa-b));
+  /* and anything scrolled into view (a focused row, the last vault piece)
+     stops above the bar rather than under it */
+  scroll-padding-bottom:calc(var(--bar) + 18px + var(--sa-b))}
+#screens.hasbar .go.pinned{bottom:0}
+#screens .tabs{position:fixed;left:0;right:0;bottom:0;z-index:45;display:flex;
+  gap:2px;padding:4px calc(4px + var(--sa-r)) calc(4px + var(--sa-b)) calc(4px + var(--sa-l));
+  background:linear-gradient(#1c1813,#0f0d0a);border-top:2px solid #6d4d22;
+  box-shadow:0 -6px 18px rgba(0,0,0,.55)}
+#screens .tabs button{flex:1 1 0;min-width:0;height:var(--bar);padding:4px 0 2px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  border-radius:8px;background:none;color:#8c8168;border:2px solid transparent;font:inherit}
+#screens .tabs button i{font-style:normal;font-size:21px;line-height:1}
+#screens .tabs button span{font-size:10.5px;letter-spacing:.3px}
+#screens .tabs button.cog{flex:0 0 44px}
+/* The station you are in wears the band. */
+#screens .tabs button.on{color:#f0e2c2;
   background-image:linear-gradient(rgba(48,38,22,.95),rgba(26,20,12,.98)),
     linear-gradient(#e2b96a,#a67c3a 34%,#6d4d22 70%,#3a2610);
   background-origin:border-box;background-clip:padding-box,border-box}
+#screens .tabs button.on i{color:#f0cf86}
+/* HOME. What you need between delves and nothing more: who, where, and the
+   button -- the button big enough to be the obvious thing on the screen. */
+#screens .homestats{display:flex;justify-content:space-between;margin:0 0 12px;color:#a89878}
+#screens .homestats b{color:#eee0c0;font-size:15px}
+#screens .rows.heroes{grid-template-columns:1fr 1fr;max-height:none;
+  -webkit-mask-image:none;mask-image:none}
+#screens .row em, #screens .row.delve em{display:block;font-style:normal;font-size:10px;
+  letter-spacing:1.5px;text-transform:uppercase;color:#a67c3a;margin-bottom:2px}
+#screens .row.delve{width:100%;margin:0 0 14px;padding:14px 12px;min-height:96px;
+  font:15px Georgia,serif;color:#eee0c0;border-color:#6d4d22}
+#screens .row.delve small{font:12px ui-monospace,Menlo,monospace;margin-top:4px}
+#screens .row.delve .act{color:#d6b26e;font:12px ui-monospace,monospace;white-space:nowrap}
+#screens .go.big{min-height:64px;font:600 20px Cinzel,Georgia,serif;letter-spacing:2px}
+/* THE DELVES. The whole ladder, scrolling on its own; far beyond you is
+   dimmed, not hidden -- it was always yours to attempt. */
+#screens .rows.ladder{max-height:52vh}
+#screens .row.far{opacity:.55}
+#screens .row.far.on{opacity:1}
 #screens .item{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
 /* The name and its affixes are one column and must own the space they need,
    or the piece's power and the word for what tapping does drift left and land
@@ -207,6 +243,9 @@ const ICON = { blade: 0, offhand: 1, mail: 2, girdle: 3, boots: 4, amulet: 5,
                'Marching Boots': 26, 'Greaves': 27, 'Soft Treads': 28,
                'Bone Amulet': 29, 'Ley-Charm': 30, 'Sun Pendant': 31,
                'Iron Band': 32, 'Signet': 33, 'Twisted Ring': 34 };
+
+// A rung's short name, the same on Home and on the Delves list.
+const rungLabel = i => i === 0 ? 'Proving ground' : 'Delve ' + i;
 
 export class Screens {
   /* onDescend(hero, levelId, diffId) starts a delve; onAbandon() throws the current
@@ -255,7 +294,10 @@ export class Screens {
     else if (name === 'settings') this.renderSettings(false);
     else if (name === 'settings-pause') this.renderSettings(true);
     else if (name === 'hall') this.renderHall();
+    else if (name === 'delves') this.renderDelves();
     else this.renderGatehouse();
+    // Room at the bottom for the bar, on the screens that carry it.
+    this.root.classList.toggle('hasbar', !!this.root.querySelector('nav.tabs'));
   }
 
   /* Held. The delve is still standing behind this -- the scene keeps drawing
@@ -347,6 +389,10 @@ export class Screens {
           row('controls', 'Controls', controlScheme === 'classic' ? 'classic' : 'new',
               controlScheme === 'classic' ? 'Tap to strike, drag to aim, hold at the rim to gather'
                                           : 'Hold to strike, drag to aim, the heavy button to gather') +
+          (controlScheme === 'classic' ? '' :
+            row('autostrike', 'Auto-strike', settings.autostrike ? 'on' : 'off',
+                settings.autostrike ? 'The blade swings by itself at anything in reach; hold the Conduit to aim'
+                                    : 'The blade swings only while you hold the Conduit')) +
           (typeof window.__replayTutorial === 'function'
             ? row('tutorial', 'Teach the controls again', 'next delve') : '') +
         '</div>' +
@@ -361,6 +407,7 @@ export class Screens {
       if (k === 'mute' && eng) { eng.toggle(); setTimeout(again, 50); return; }
       if (k === 'vibrate') setSetting('vibrate', !settings.vibrate);
       if (k === 'flash') setSetting('flash', !settings.flash);
+      if (k === 'autostrike') setSetting('autostrike', !settings.autostrike);
       if (k === 'shake') {
         const i = SHAKES.findIndex(x => x[0] === settings.shake);
         setSetting('shake', SHAKES[(i + 1) % SHAKES.length][0]);
@@ -563,103 +610,143 @@ export class Screens {
     return out.length ? '<p class="sub warn">' + out.join('<br>') + '</p>' : '';
   }
 
-  renderGatehouse() {
-    // The hero last taken down, not Isaac for everybody: the stash remembers
-    // who that was, and the canvas gate-house opened on them. Once only -- a
-    // pick made here stands until the next session.
+  /* THE GATE-HOUSE IS TWO SCREENS NOW.
+   *
+   * It was one long scroll: the heroes, eight rungs, three difficulties, the
+   * bounty, the ground, one life, practice, and Descend at the bottom of all
+   * of it. Home is what you need between delves -- who goes down, where, and
+   * the button -- and the Delves tab is the ladder and everything that shapes
+   * a delve. Asked for by the playtest ("a home screen with tabs"), and it is
+   * also how every mobile game the player already knows is laid out.
+   */
+  // The pick, settled: the hero last taken down, and the rung the core
+  // recommends for this power. Shared by both screens.
+  settlePick() {
     if (!this.heroFromStash) {
       this.heroFromStash = true;
       if (stash && HEROES[stash.hero]) this.pick.hero = stash.hero;
     }
-    // stashPower(), not powerLevel(). powerLevel takes (gear, level) and
-    // called bare returns NaN -- which then compares false against every rung
-    // and quietly labelled the whole ladder "an even match".
+    // stashPower(), not powerLevel(): called bare that returns NaN.
     const power = typeof stashPower === 'function' ? stashPower() : 1;
-    /* Open where the core says to, not on rung 0 for everybody. This used to
-     * be `LEVELS[0].id` flat, so a hero geared deep enough for rung 47 was
-     * shown the first eight rungs -- all of them "well within you" -- and had
-     * to scroll past thirty-nine to reach anything worth doing. The canvas
-     * gate-house had always picked a rung; the two builds simply disagreed. */
     if (!this.pick.level) {
       this.pick.level = typeof recommendedLevel === 'function'
         ? recommendedLevel(power) : LEVELS[0].id;
     }
-    const here = LEVELS.findIndex(l => l.id === this.pick.level);
-    const from = Math.max(0, here - 3), to = Math.min(LEVELS.length, from + 8);
-    const rungs = LEVELS.slice(from, to);
+    return power;
+  }
 
-    // What the corpse is carrying, said only where there is something to say:
-    // "0 finds and 25 coin" is a sentence written by arithmetic rather than by
-    // anyone.
-    let corpse = '';
-    if (stash.corpse) {
-      const c = stash.corpse, bits = [];
-      if (c.items.length) bits.push(c.items.length + ' find' + (c.items.length === 1 ? '' : 's'));
-      if (c.coins) bits.push(c.coins + ' coin');
-      corpse = '<p class="sub">A corpse of yours lies in ' +
-        ((LEVEL_BY_ID[c.level_id] || {}).name || 'a delve') +
-        (bits.length ? ' with ' + bits.join(' and ') : '') +
-        '. Descend there and take it back.</p>';
-    }
+  // What the corpse is carrying, said only where there is something to say.
+  corpseLine() {
+    if (!stash.corpse) return '';
+    const c = stash.corpse, bits = [];
+    if (c.items.length) bits.push(c.items.length + ' find' + (c.items.length === 1 ? '' : 's'));
+    if (c.coins) bits.push(c.coins + ' coin');
+    return '<p class="sub">A corpse of yours lies in ' +
+      ((LEVEL_BY_ID[c.level_id] || {}).name || 'a delve') +
+      (bits.length ? ' with ' + bits.join(' and ') : '') +
+      '. Descend there and take it back.</p>';
+  }
+
+  renderGatehouse() {
+    const power = this.settlePick();
+    const L = LEVEL_BY_ID[this.pick.level] || LEVELS[0];
+    const idx = LEVELS.indexOf(L);
+    const v = delveStanding(L, power);
+    const D = DIFFICULTIES.find(d => d.id === this.pick.diff) || DIFFICULTIES[0];
+    const region = stash.region && REGION_BY_ID[stash.region];
+    const bits = [D.name];
+    if (region && L.regions && L.regions.includes(stash.region)) bits.push(region.name);
+    if (typeof hardcore !== 'undefined' && hardcore) bits.push('one life');
 
     this.root.innerHTML =
-      '<div class="card">' +
+      '<div class="card home">' +
         '<h1>The Gate-House</h1>' + this.saveNotice() +
-        this.tabs('splash') +
-        '<p class="sub">Choose a rung and one of the Clear-Sighted.</p>' +
-        this.purse() +
-        '<div class="purse"><span>Power</span><b>' + power + '</b></div>' +
-        corpse +
-        '<div class="rows" id="heroRows">' +
+        '<div class="homestats"><span>Power <b>' + power + '</b></span>' +
+          '<span><b>' + (stash.coins || 0) + '</b> coin</span></div>' +
+        this.corpseLine() +
+        '<div class="rows heroes" id="heroRows">' +
           Object.values(HEROES).map(h =>
             '<button class="row' + (this.pick.hero === h.id ? ' on' : '') +
             '" data-hero="' + h.id + '" type="button"><span>' + h.name +
             '<small>' + h.title + '</small></span></button>').join('') +
         '</div>' +
-        '<div class="rows" id="rungRows">' +
-          rungs.map(l =>
-            /* THE CORE'S VERDICT, NOT A SECOND ONE.
-             *
-             * This used to carry its own copy -- a flat plus-or-minus two
-             * around the rung's power -- while the core has had
-             * delveStanding all along, with four bands and a colour for
-             * each. Two verdict functions on the same pair of numbers is
-             * one that will disagree, and they did: the core calls a rung
-             * an even match up to fourteen points under you, this called it
-             * "well within you" at three. The gate-house is where the
-             * player decides what to attempt, and it was giving different
-             * advice from every other place the same question is asked.
-             */
-            ((v) =>
-            '<button class="row' + (this.pick.level === l.id ? ' on' : '') +
-            '" data-level="' + l.id + '" type="button"><span>' + l.name +
-            '<small>power ' + l.power + ' · ' + l.quota + ' slag</small>' +
-            // The teaching ramp: each of the first rungs adds one kind and
-            // says what it is. The canvas ladder carried the line; this one
-            // had dropped it, so the lesson was only ever the banner on the
-            // way in -- after the choice it was meant to inform.
-            (l.lesson ? '<span class="teach">' + l.lesson + '</span>' : '') +
-            '</span>' +
-            '<small class="verdict" style="color:' + v.colour + '">' + v.text +
-            '</small></button>')(delveStanding(l, power))).join('') +
-        '</div>' +
-        this.difficulty() +
+        // The delve you are about to take, as one card. Tapping it is the
+        // way to the ladder: the Delves tab is where it is changed.
+        '<button class="row delve" id="delveCard" data-tab="delves" type="button">' +
+          '<span><em>' + rungLabel(idx) + '</em>' + L.name +
+          '<small>power ' + L.power + ' · ' + L.quota + ' slag · ' + bits.join(' · ') + '</small>' +
+          (L.lesson ? '<span class="teach">' + L.lesson + '</span>' : '') +
+          '<small class="verdict" style="color:' + v.colour + '">' + v.text + '</small>' +
+          '</span><span class="act">change ›</span></button>' +
         this.daily() +
-        this.ground() +
-        this.oneLife() +
-        // The combat room: a place to try the controls against targets that
-        // stand still, walk a circle, raise a guard, and shoot back. Nothing
-        // is carried in or out of it.
         '<button class="alt" type="button" id="practice">Practice room</button>' +
-        '<button class="go pinned" type="button" id="descend">Descend</button>' +
-      '</div>';
+        '<button class="go pinned big" type="button" id="descend">Descend</button>' +
+      '</div>' + this.tabs('splash');
 
     this.root.querySelectorAll('[data-hero]').forEach(b =>
       b.addEventListener('click', () => { this.pick.hero = b.dataset.hero; this.renderGatehouse(); }));
+    this.wirePicks();
+    this.wireTabs();
+    this.root.querySelector('#practice').addEventListener('click', () => {
+      this.root.classList.remove('up');
+      snd('descend'); this.onPractice(this.pick.hero);
+    });
+  }
+
+  /* THE LADDER, all of it, in one list that scrolls on its own: the rung you
+   * have picked is scrolled into view, the one the core recommends wears a
+   * star, and the ones far beyond you are dimmed -- still yours to take, the
+   * way they always were, but no longer the same weight as the rest. Then
+   * everything else that shapes the delve. */
+  renderDelves() {
+    const power = this.settlePick();
+    const best = typeof recommendedLevel === 'function' ? recommendedLevel(power) : null;
+    this.root.innerHTML =
+      '<div class="card">' +
+        '<h1>The Delves</h1>' +
+        '<p class="sub">Power ' + power + '. ★ is where you stand; tap a rung to take it.</p>' +
+        '<div class="rows ladder" id="rungRows">' +
+          LEVELS.map((l, i) => {
+            /* THE CORE'S VERDICT, NOT A SECOND ONE (delveStanding): the
+             * gate-house is where the player decides what to attempt, and it
+             * must give the advice every other place gives. */
+            const v = delveStanding(l, power);
+            return '<button class="row' + (this.pick.level === l.id ? ' on' : '') +
+              (v.id === 'deadly' ? ' far' : '') +
+              '" data-level="' + l.id + '" type="button"><span>' +
+              '<em>' + rungLabel(i) + (l.id === best ? ' ★' : '') + '</em>' +
+              l.name +
+              '<small>power ' + l.power + ' · ' + l.quota + ' slag</small>' +
+              (l.lesson ? '<span class="teach">' + l.lesson + '</span>' : '') +
+              '</span><small class="verdict" style="color:' + v.colour + '">' + v.text + '</small></button>';
+          }).join('') +
+        '</div>' +
+        this.difficulty() +
+        this.ground() +
+        this.oneLife() +
+        '<button class="go pinned" type="button" id="descendHere">Descend</button>' +
+      '</div>' + this.tabs('delves');
+
+    const list = this.root.querySelector('#rungRows');
+    const on = list.querySelector('.on');
+    if (on) list.scrollTop = on.offsetTop - list.offsetTop - list.clientHeight / 2 + on.offsetHeight / 2;
     this.root.querySelectorAll('[data-level]').forEach(b =>
-      b.addEventListener('click', () => { this.pick.level = b.dataset.level; this.renderGatehouse(); }));
+      b.addEventListener('click', () => {
+        const keep = list.scrollTop;
+        this.pick.level = b.dataset.level;
+        this.renderDelves();
+        this.root.querySelector('#rungRows').scrollTop = keep;
+      }));
+    this.wirePicks();
+    this.wireTabs();
+  }
+
+  // The controls both screens share: difficulty, bounty, ground, one life,
+  // and Descend. Each redraws whichever of the two is showing.
+  wirePicks() {
+    const again = () => this.show(this.name || 'splash');
     this.root.querySelectorAll('[data-diff]').forEach(b =>
-      b.addEventListener('click', () => { this.pick.diff = b.dataset.diff; this.renderGatehouse(); }));
+      b.addEventListener('click', () => { this.pick.diff = b.dataset.diff; again(); }));
     const bt = this.root.querySelector('#bountyRow');
     if (bt) bt.addEventListener('click', () => {
       const b = todaysBounty();
@@ -669,43 +756,46 @@ export class Screens {
       // on the ladder is a daily half the people who took it never ran.
       if (stash.bountyArmed) this.pick.level = b.level_id;
       saveStash();
-      this.renderGatehouse();
+      again();
     });
     const hc = this.root.querySelector('#hcToggle');
     if (hc) hc.addEventListener('click', () => {
-      // Nothing is destroyed by switching: the two stashes are separate keys
-      // and the other one is simply put down. The confirmation is for turning
-      // Hardcore ON, where the next death is final, and not for coming back.
-      if (!hardcore && !this.hcArmed) { this.hcArmed = true; this.renderGatehouse(); return; }
+      // Nothing is destroyed by switching: the two stashes are separate keys.
+      // The confirmation is for turning Hardcore ON, where the next death is
+      // final, and not for coming back.
+      if (!hardcore && !this.hcArmed) { this.hcArmed = true; again(); return; }
       this.hcArmed = false;
       setHardcore(!hardcore);
       this.pick.hero = stash.hero || this.pick.hero;
-      this.renderGatehouse();
+      again();
     });
     this.root.querySelectorAll('[data-region]').forEach(b =>
       b.addEventListener('click', () => {
         const id = b.dataset.region;
         stash.region = id === 'any' ? null : id;
         saveStash();
-        this.renderGatehouse();
+        again();
       }));
-    this.wireTabs();
-    this.root.querySelector('#descend').addEventListener('click', () => {
-      this.root.classList.remove('up');
-      snd('descend'); this.onDescend(this.pick.hero, this.pick.level, this.pick.diff);
-    });
-    this.root.querySelector('#practice').addEventListener('click', () => {
-      this.root.classList.remove('up');
-      snd('descend'); this.onPractice(this.pick.hero);
-    });
+    for (const id of ['#descend', '#descendHere']) {
+      const d = this.root.querySelector(id);
+      if (d) d.addEventListener('click', () => {
+        this.root.classList.remove('up');
+        snd('descend'); this.onDescend(this.pick.hero, this.pick.level, this.pick.diff);
+      });
+    }
   }
 
+  /* The bar along the bottom, where a thumb already is. An icon and a word
+   * each; the station you are in is lit. Settings is the small one at the end. */
   tabs(on) {
-    const t = (id, label) =>
+    const t = (id, icon, label) =>
       '<button type="button" data-tab="' + id + '" class="' + (on === id ? 'on' : '') +
-      '">' + label + '</button>';
-    return '<div class="tabs">' + t('splash', 'Descend') + t('gear', 'Forge') +
-           t('vendor', 'Vendor') + t('hall', 'Hall') + t('settings', '\u2699') + '</div>';
+      (label ? '' : ' cog') + '"><i>' + icon + '</i>' + (label ? '<span>' + label + '</span>' : '') +
+      '</button>';
+    return '<nav class="tabs">' +
+      t('splash', '⌂︎', 'Home') + t('delves', '⇣︎', 'Delves') +
+      t('gear', '⚒︎', 'Forge') + t('vendor', '⚖︎', 'Vendor') +
+      t('hall', '♜︎', 'Hall') + t('settings', '⚙︎', '') + '</nav>';
   }
 
   // A line of coin, shown wherever coin is spent.

@@ -36,7 +36,8 @@
     "smoke:sound": "node tools/smoke-sound.cjs",
     "smoke:settings": "node tools/smoke-settings.cjs",
     "smoke:tutorial": "node tools/smoke-tutorial.cjs",
-    "smoke:savenotice": "node tools/smoke-savenotice.cjs"
+    "smoke:savenotice": "node tools/smoke-savenotice.cjs",
+    "smoke:thumbs": "node tools/smoke-thumbs.cjs"
   },
   "dependencies": {
     "phaser": "^4.2.1"

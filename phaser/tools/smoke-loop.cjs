@@ -192,14 +192,16 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
      walkedOut.props + ' scenery images');
 
   await p.screenshot({ path: path.join(__dirname, '..', 'gatehouse.png') });
-  const hall = await p.evaluate(() => ({
-    heroes: document.querySelectorAll('#screens [data-hero]').length,
-    rungs: document.querySelectorAll('#screens [data-level]').length,
-    purse: /Purse/.test(document.querySelector('#screens').textContent),
-    power: parseFloat((document.querySelectorAll('#screens .purse b')[1] || {}).textContent),
-    hints: new Set([...document.querySelectorAll('#screens [data-level] small')]
-                   .map(n => n.textContent).filter(t => /match|within|weight/.test(t))).size
-  }));
+  // Home: both heroes, the purse and the power. The Delves tab: the ladder.
+  const hall = await p.evaluate(() => {
+    const home = {
+      heroes: document.querySelectorAll('#screens [data-hero]').length,
+      purse: /\d+ coin/.test((document.querySelector('#screens .homestats') || {}).textContent || ''),
+      power: parseFloat((document.querySelector('#screens .homestats b') || {}).textContent) };
+    window.__game.scene.getScene('delve').screens.show('delves');
+    home.rungs = document.querySelectorAll('#screens [data-level]').length;
+    return home;
+  });
   ck('the gate-house offers both heroes and a ladder',
      hall.heroes === 2 && hall.rungs >= 4, hall.heroes + ' heroes, ' + hall.rungs + ' rungs');
   ck('and the purse is shown', hall.purse);
@@ -214,10 +216,10 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     const sc = window.__game.scene.getScene('delve');
     const deep = LEVELS.find(l => l.regions.length >= 3);
     const shallow = LEVELS.find(l => l.regions.length === 1);
-    sc.screens.pick.level = shallow.id; sc.screens.show('splash');
+    sc.screens.pick.level = shallow.id; sc.screens.show('delves');
     const onOne = { rows: document.querySelectorAll('#regionRows').length,
                     says: document.querySelector('#screens').textContent };
-    sc.screens.pick.level = deep.id; sc.screens.show('splash');
+    sc.screens.pick.level = deep.id; sc.screens.show('delves');
     const rows = [...document.querySelectorAll('[data-region]')];
     const before = stash.region;
     const wanted = deep.regions[deep.regions.length - 1];
@@ -260,7 +262,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     for (const sl of SLOTS) stash.gear[sl.id] = rollItem(0.5, sl.id);
     saveStash();
     sc.screens.hcArmed = false;
-    sc.screens.show('splash');
+    sc.screens.show('delves');
     const t = () => document.querySelector('#hcToggle');
     const said = () => (t() || {}).textContent || '';
     const off = said();
@@ -279,7 +281,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     // the switch does not touch it, and eight pieces of gear left lying around
     // sent the ladder check below "well within you" on every rung.
     stash = blankStash(); saveStash();
-    sc.screens.show('splash');
+    sc.screens.show('delves');
     return { off, armed, on, back };
   });
   ck('the gate-house offers one life, and asks twice before taking it',
@@ -303,12 +305,13 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   const judged = await p.evaluate(() => {
     const read = () => [...document.querySelectorAll('#screens [data-level] small')]
       .map(n => n.textContent).filter(t => /match|within|weight/.test(t)).join('|');
+    window.__game.scene.getScene('delve').screens.show('delves');
     const weak = read();
     stash.level = 45;                       // a hero far up the ladder
-    window.__game.scene.getScene('delve').screens.show('splash');
+    window.__game.scene.getScene('delve').screens.show('delves');
     const strong = read();
     stash.level = 1;
-    window.__game.scene.getScene('delve').screens.show('splash');
+    window.__game.scene.getScene('delve').screens.show('delves');
     return { weak, strong, power: stashPower() };
   });
   ck('power is a number', Number.isFinite(hall.power), 'power ' + hall.power);
@@ -322,6 +325,8 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     const other = rows.find(r => r.dataset.level !== LEVEL.id) || rows[0];
     other.click();
   });
+  await sleep(150);
+  await p.click('#screens [data-tab="splash"]');     // picked on Delves, descended from Home
   await sleep(150);
   await p.click('#screens #descend');
   await sleep(1600);

@@ -36,16 +36,19 @@ const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''
     await g.waitForSelector('#screens.up #descend', {timeout:30000}); await sleep(200); };
   await gate();
   ck('starts on the gate-house', /Gate-House/.test(await g.$eval('#screens h1',e=>e.textContent)));
+  // Heroes on Home; the ladder and the difficulty on the Delves tab.
   ck('hero rows render', (await g.$$('#screens [data-hero]')).length===2);
+  const heroOn = (await g.$$('#heroRows .on')).length===1;
+  await g.click('#screens [data-tab="delves"]'); await sleep(150);
   ck('rung rows render', (await g.$$('#screens [data-level]')).length>=1);
   ck('difficulty rows render', (await g.$$('#screens [data-diff]')).length===3);
-  ck('a default is preselected',
-     (await g.$$('#diffRows .on')).length===1 && (await g.$$('#heroRows .on')).length===1);
+  ck('a default is preselected', (await g.$$('#diffRows .on')).length===1 && heroOn);
   await g.click('#screens [data-diff="sundered"]'); await sleep(120);
+  const diffOn = (await g.$$('#diffRows .on[data-diff="sundered"]')).length===1;
+  await g.click('#screens [data-tab="splash"]'); await sleep(150);
   await g.click('#screens [data-hero="zayd"]'); await sleep(120);
   ck('selection is reflected',
-     (await g.$$('#heroRows .on[data-hero="zayd"]')).length===1 &&
-     (await g.$$('#diffRows .on[data-diff="sundered"]')).length===1);
+     (await g.$$('#heroRows .on[data-hero="zayd"]')).length===1 && diffOn);
   await g.click('#descend'); await sleep(800);
   const started = await g.evaluate(()=>({state, hero:run.hero, diff:run.diff_id,
                                          threat:DIFF.threat, loot:DIFF.lootRate}));

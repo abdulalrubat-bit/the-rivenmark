@@ -74,9 +74,9 @@ jobs:
         run: npm run atlas
       - name: The rules a release must not break
         run: NODE_PATH=$PWD/phaser/node_modules node tools/run-suites.js saves controls hardcore extract ladder stash
-      - name: It boots, and a save problem is never silent
+      - name: It boots, a save problem is never silent, and two thumbs work
         working-directory: phaser
-        run: npm run smoke:boot && npm run smoke:savenotice
+        run: npm run smoke:boot && npm run smoke:savenotice && npm run smoke:thumbs
 
   aab:
     needs: checks

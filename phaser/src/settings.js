@@ -12,7 +12,8 @@ const KEY = 'rivenmark.settings.v1';
 
 export const SHAKES = [['full', 1], ['reduced', 0.45], ['off', 0]];
 export const QUALITIES = ['auto', 'full', 'reduced'];
-const DEFAULTS = { vibrate: true, shake: 'full', flash: true, fx: 'auto', tutorialSeen: false };
+const DEFAULTS = { vibrate: true, shake: 'full', flash: true, fx: 'auto', tutorialSeen: false,
+                   autostrike: true };
 
 function load() {
   let o = {};
@@ -23,6 +24,7 @@ function load() {
   if (typeof o.flash === 'boolean') s.flash = o.flash;
   if (QUALITIES.includes(o.fx)) s.fx = o.fx;
   if (typeof o.tutorialSeen === 'boolean') s.tutorialSeen = o.tutorialSeen;
+  if (typeof o.autostrike === 'boolean') s.autostrike = o.autostrike;
   return s;
 }
 
@@ -39,6 +41,9 @@ function apply(k) {
   if (k === 'shake' || k === undefined) {
     const m = (SHAKES.find(x => x[0] === settings.shake) || SHAKES[0])[1];
     if (typeof setMotion === 'function') setMotion(m);
+  }
+  if (k === 'autostrike' || k === undefined) {
+    if (typeof setAutoStrike === 'function') setAutoStrike(settings.autostrike);
   }
 }
 

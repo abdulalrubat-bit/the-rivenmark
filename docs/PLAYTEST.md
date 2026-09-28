@@ -31,7 +31,10 @@ developer. That's expected.
 - **The first delve.** Start fresh. The tutorial should walk you through
   walking, striking, aiming, the heavy blow, an ability and getting out. Each
   step moves on only once you've done the thing.
-- **The practice room.** It's the *Practice room* button in the gate-house. Nothing
+- **Home and the tabs.** The bar along the bottom has Home, Delves, Forge,
+  Vendor, Hall and ⚙. Home is the big Descend button; the *Delves* tab is the
+  whole ladder, plus difficulty and region. Is anything hard to find?
+- **The practice room.** It's the *Practice room* button on Home. Nothing
   there is saved or lost, so use it to try the controls freely.
 - **The first ten or so delves.** This is where most people will spend their time, and where
   the difficulty was retuned.
@@ -46,9 +49,12 @@ developer. That's expected.
 The feedback that started this work was *"it's not fluid, it feels off and
 frustrating"*. So above everything else:
 
-1. **Does striking feel responsive now?** Holding the Conduit strikes for as
-   long as you hold it. Does a blow ever fail to come out when you expected
-   one? Does one come out when you didn't want it?
+1. **Can you walk and fight at the same time?** Auto-strike is on by default:
+   the blade swings by itself at anything in reach, so walking is enough.
+   Holding the Conduit still strikes at will, and dragging it aims. Does the
+   hero ever stop walking when you touch a button? If it does, send the
+   diagnostics (below) straight after, since they now record the walking
+   thumb. Auto-strike can be turned off in Settings.
 2. **The heavy button.** Is it where your thumb expects it? Is a full gather
    easy to tell apart from a half one?
 3. **Aim.** When you don't aim by hand, does it pick the enemy you meant?

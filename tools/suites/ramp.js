@@ -120,13 +120,13 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
      !!said.note && said.banner && !said.custom, said.note);
 
   /* And the ladder says it too, on the ramp rungs only -- asked of the
-   * gate-house that ships. It shows a window of rungs around the one picked,
-   * so a rung near the end of the ramp is picked to put ramp rungs and
-   * ordinary ones in the same window. */
+   * gate-house that ships, on its Delves tab, which lists the whole ladder:
+   * ramp rungs and ordinary ones side by side. */
   const g = await (await b.newContext({viewport:{width:390,height:844}})).newPage();
   g.on('pageerror',e=>errs.push(e.message));
   await g.goto(pages.game());
   await g.waitForSelector('#screens.up #descend', {timeout:30000});
+  await g.click('#screens [data-tab="delves"]'); await sleep(150);
   await g.click('#screens [data-level="'+(await g.evaluate(n=>LEVELS[n-2].id, N))+'"]');
   await sleep(200);
   const cards = await g.evaluate(()=>{
