@@ -4811,6 +4811,10 @@ function stickStart(id, x, y) {
   stick.ox = stick.x = x; stick.oy = stick.y = y;
   stick.dx = stick.dy = stick.mag = 0;
   stick.fade = 1;
+  // In the combat log, so a diagnostics dump from a phone says when the
+  // walking thumb was taken up and let go -- "the hero stopped walking" is
+  // otherwise a report nothing on this side can check.
+  clog('stick', 'start', { id });
 }
 
 function stickMove(x, y) {
@@ -4830,7 +4834,8 @@ function stickMove(x, y) {
   if (stick.mag > 0.12) breakChannel('move');
 }
 
-function stickEnd() {
+function stickEnd(why) {
+  if (stick.active) clog('stick', 'end', why ? { why } : undefined);
   stick.active = false; stick.id = null; stick.mag = 0;
 }
 
@@ -5553,12 +5558,29 @@ function updateAttack(dt) {
   if (q || player.atkHeld) {
     player.atkQ = null;
     lightStrike();
+  } else if (autoStrike && controlScheme !== 'classic' && !player.channel &&
+             assistTarget(player.range)) {
+    lightStrike('auto');
   }
 }
 
+/* AUTO-STRIKE. Playtested: steering with one thumb and holding the Conduit
+ * with the other was the wall at the very first delve. With this on (the
+ * default), the blade swings by itself on its own beat whenever something is
+ * in reach -- at whatever the assist would have aimed at -- so the left thumb
+ * is the whole of the fight and the right one is free for the heavy blow and
+ * the kit. Holding or dragging the Conduit still works exactly as before and
+ * wins: a held or aimed blow is never replaced by an automatic one.
+ *
+ * Off in the core, on in the game: the settings turn it on at boot (see
+ * settings.js), so every rules suite written before it still measures a hero
+ * who swings only when asked. */
+let autoStrike = false;
+function setAutoStrike(on) { autoStrike = !!on; return autoStrike; }
+
 /* One light blow. The same chain the tapped Conduit had -- three in rhythm
  * and the third goes wide -- because a held attack keeps the rhythm for you. */
-function lightStrike() {
+function lightStrike(why) {
   const manual = typeof player.atkAim === 'number';
   const last = player.combo || 0;
   const n = (player.comboT || 0) > 0 ? Math.min(COMBO_LEN, last + 1) : 1;
@@ -5570,7 +5592,8 @@ function lightStrike() {
   player.comboPop = finisher ? 1 : 0.6;
   if (finisher) ring(player.x, player.y, HEROES[player.hero].magic, 10, 54, 0.22);
   player.fireTimer = player.fireDelay;
-  clog('swing', manual ? 'manual' : 'assist', finisher ? { finisher: true } : undefined);
+  clog('swing', manual ? 'manual' : why === 'auto' ? 'auto' : 'assist',
+       finisher ? { finisher: true } : undefined);
 }
 
 /* HEAVY: the gathered blow, on its own button.

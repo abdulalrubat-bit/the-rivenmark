@@ -965,12 +965,40 @@ export class Delve extends Phaser.Scene {
    * and swallows its own events, so a thumb on an ability button can never
    * drag the hero as well.
    */
+  // The Phaser pointer that owns the stick, if Phaser still has it.
+  stickPointer() {
+    if (!stick.active) return null;
+    return this.input.manager.pointers.find(p => p.id === stick.id) || null;
+  }
+  // A stick whose finger is no longer down: a lift Phaser never reported (a
+  // cancelled touch, a slot taken over). Nothing is holding it.
+  stickLost() {
+    const p = this.stickPointer();
+    return !p || !p.isDown;
+  }
+
   wireInput() {
-    this.input.addPointer(2);          // a thumb to move, a thumb for the kit
+    /* Playtested: "the hero stops walking when I touch attack". Three guards.
+     *
+     * Phaser also listens on the WINDOW for touches, so a thumb on the HUD
+     * (DOM, above the canvas) -- the Conduit, the heavy button, the kit -- is a
+     * Phaser pointer too, and takes one of its slots. There are six now rather
+     * than three, and a pointer that went down on the HUD never owns the stick.
+     *
+     * And the stick used to belong to its first finger until Phaser said that
+     * finger had lifted. If the lift was never reported, the stick stayed
+     * owned by nothing and every later thumb was ignored until the delve
+     * ended. Now a thumb that lands on the canvas while the owner is not
+     * down -- or that lands in the owner's own slot, which Phaser only reuses
+     * once the old finger is gone -- takes the stick over. The combat log
+     * records every start and end, so a diagnostics dump shows which. */
+    this.input.addPointer(5);
     this.input.on('pointerdown', pt => {
       if (state !== 'play') return;
-      if (stick.active) return;        // one finger owns the stick at a time
+      if (pt.downElement && pt.downElement !== this.game.canvas) return;
+      if (stick.active && pt.id !== stick.id && !this.stickLost()) return;   // one finger owns it
       const p = cssPoint(this, pt);
+      stickEnd('takeover');
       stickStart(pt.id, p.x, p.y);
     });
     this.input.on('pointermove', pt => {
@@ -978,10 +1006,15 @@ export class Delve extends Phaser.Scene {
       const p = cssPoint(this, pt);
       stickMove(p.x, p.y);
     });
-    const release = pt => { if (stick.active && pt.id === stick.id) stickEnd(); };
+    const release = pt => { if (stick.active && pt.id === stick.id) stickEnd('lift'); };
     this.input.on('pointerup', release);
     this.input.on('pointerupoutside', release);
-    this.input.on('gameout', () => stickEnd());
+    // "Out of the game" is a mouse leaving the canvas. A phone can report one
+    // for a tap on the HUD, which is not the walking thumb letting go.
+    this.input.on('gameout', () => {
+      const p = this.stickPointer();
+      if (!p || !p.wasTouch) stickEnd('gameout');
+    });
 
     // Desktop: the same keys the canvas build takes, into the same Set.
     // The commands as well as the movement: Escape or P holds and releases

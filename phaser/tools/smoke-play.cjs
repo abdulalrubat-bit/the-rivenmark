@@ -23,6 +23,7 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   await sleep(800);
   const b=await chromium.launch();
   const p=await (await b.newContext({viewport:{width:390,height:844}})).newPage();
+  await require('./manual-blows.cjs')(p);    // the kit check stages its own blow
   const errs=[]; p.on('pageerror',e=>errs.push(e.message));
   p.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
   await p.goto('http://localhost:8215/?nogate'); await sleep(3500);

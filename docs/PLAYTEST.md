@@ -46,9 +46,12 @@ developer. That's expected.
 The feedback that started this work was *"it's not fluid, it feels off and
 frustrating"*. So above everything else:
 
-1. **Does striking feel responsive now?** Holding the Conduit strikes for as
-   long as you hold it. Does a blow ever fail to come out when you expected
-   one? Does one come out when you didn't want it?
+1. **Can you walk and fight at the same time?** Auto-strike is on by default:
+   the blade swings by itself at anything in reach, so walking is enough.
+   Holding the Conduit still strikes at will, and dragging it aims. Does the
+   hero ever stop walking when you touch a button? If it does, send the
+   diagnostics (below) straight after, since they now record the walking
+   thumb. Auto-strike can be turned off in Settings.
 2. **The heavy button.** Is it where your thumb expects it? Is a full gather
    easy to tell apart from a half one?
 3. **Aim.** When you don't aim by hand, does it pick the enemy you meant?

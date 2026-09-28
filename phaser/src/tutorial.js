@@ -41,6 +41,9 @@ const STEPS = [
     start: t => { t.from = { x: player.x, y: player.y }; },
     done: t => Math.hypot(player.x - t.from.x, player.y - t.from.y) > 140 },
   { say: c => c === 'classic' ? '<b>Tap the Conduit</b>, bottom right, to strike.'
+                              : settings.autostrike
+                              ? 'Your blade <b>swings by itself</b> at anything in reach, so you can just walk. ' +
+                                '<b>Hold the Conduit</b>, bottom right, to strike at will.'
                               : '<b>Hold the Conduit</b>, bottom right. You strike for as long as you hold.',
     point: '#hud .conduit',
     done: t => t.count(e => e.k === 'swing' || (e.k === 'release' && e.r === 'tap')) >= 3 },

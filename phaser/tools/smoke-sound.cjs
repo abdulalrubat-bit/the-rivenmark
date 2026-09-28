@@ -28,6 +28,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   await sleep(800);
   const b = await chromium.launch();
   const ctxB = await b.newContext({ viewport: { width: 390, height: 844 } });
+  await require('./manual-blows.cjs')(ctxB);  // each sound is heard off one staged event
   const p = await ctxB.newPage();
   const errs = [];
   p.on('pageerror', e => errs.push(e.message));

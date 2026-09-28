@@ -347,6 +347,10 @@ export class Screens {
           row('controls', 'Controls', controlScheme === 'classic' ? 'classic' : 'new',
               controlScheme === 'classic' ? 'Tap to strike, drag to aim, hold at the rim to gather'
                                           : 'Hold to strike, drag to aim, the heavy button to gather') +
+          (controlScheme === 'classic' ? '' :
+            row('autostrike', 'Auto-strike', settings.autostrike ? 'on' : 'off',
+                settings.autostrike ? 'The blade swings by itself at anything in reach; hold the Conduit to aim'
+                                    : 'The blade swings only while you hold the Conduit')) +
           (typeof window.__replayTutorial === 'function'
             ? row('tutorial', 'Teach the controls again', 'next delve') : '') +
         '</div>' +
@@ -361,6 +365,7 @@ export class Screens {
       if (k === 'mute' && eng) { eng.toggle(); setTimeout(again, 50); return; }
       if (k === 'vibrate') setSetting('vibrate', !settings.vibrate);
       if (k === 'flash') setSetting('flash', !settings.flash);
+      if (k === 'autostrike') setSetting('autostrike', !settings.autostrike);
       if (k === 'shake') {
         const i = SHAKES.findIndex(x => x[0] === settings.shake);
         setSetting('shake', SHAKES[(i + 1) % SHAKES.length][0]);
