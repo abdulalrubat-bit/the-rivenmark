@@ -1,8 +1,9 @@
 // The gate-house is the one place a silent CSS regression takes the whole game
-// away: the rung list is a scroll box, so if it is ever allowed to shrink it
-// collapses to nothing and there is no way to pick a delve at all. This
-// measures the screens that ship at the sizes a phone actually is -- the
-// gate-house, and the card a delve ends on -- from a small Android to a tablet.
+// away. This measures the screens that ship at the sizes a phone actually is --
+// Home, the Delves list (a scroll box, so if it is ever allowed to shrink it
+// collapses to nothing and there is no way to pick a delve at all), the bar
+// along the bottom, and the card a delve ends on -- from a small Android to a
+// tablet.
 //
 // It measured the canvas build's menus until that build was retired. One check
 // went with it: "the carved chrome is embedded" was about that UI's image-cut
@@ -28,29 +29,45 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
     await p.goto(pages.game());
     await p.waitForSelector('#screens.up #descend', {timeout:30000});
     await sleep(300);
+    // HOME: who goes down, the delve as a card, and Descend above the bar.
+    const home = await p.evaluate(()=>{
+      const hero=document.querySelector('#heroRows .row').getBoundingClientRect();
+      const d=document.getElementById('descend').getBoundingClientRect();
+      const bar=document.querySelector('#screens nav.tabs').getBoundingClientRect();
+      const card=document.querySelector('#screens .card').getBoundingClientRect();
+      return { heroTop:hero.top, dTop:d.top, dBottom:d.bottom, barTop:bar.top, barBottom:bar.bottom,
+               tabs:document.querySelectorAll('#screens nav.tabs button').length,
+               cardW:Math.round(card.width), vw:innerWidth, vh:innerHeight };
+    });
+    const tag=w+'x'+h;
+    ck(tag+': the hero rows start on screen', home.heroTop>=0, 'top '+Math.round(home.heroTop));
+    ck(tag+': the bar sits on the bottom of the glass', home.tabs===6 && home.barBottom<=home.vh+1 &&
+       home.barTop>home.vh-120, home.tabs+' tabs at '+Math.round(home.barTop)+'-'+Math.round(home.barBottom));
+    // Descend is pinned to the bottom of the scroller, just above the bar, so
+    // it is on screen however long the card is and never under the bar.
+    ck(tag+': Descend is on screen, above the bar', home.dTop>=0 && home.dBottom<=home.barTop+1,
+       Math.round(home.dBottom)+' against a bar at '+Math.round(home.barTop));
+    ck(tag+': the card fits the screen', home.cardW<=home.vw, home.cardW+' in '+home.vw);
+
+    // THE DELVES: the rung list is a scroll box, so if it is ever allowed to
+    // shrink it collapses to nothing and there is no way to pick a delve.
+    await p.click('#screens nav.tabs [data-tab="delves"]'); await sleep(250);
     const r = await p.evaluate(()=>{
       const lw=document.getElementById('rungRows');
       const sel=lw.querySelector('.row.on');
       const lr=lw.getBoundingClientRect();
-      const hero=document.querySelector('#heroRows .row').getBoundingClientRect();
-      const d=document.getElementById('descend').getBoundingClientRect();
+      const d=document.getElementById('descendHere').getBoundingClientRect();
+      const bar=document.querySelector('#screens nav.tabs').getBoundingClientRect();
       const sr=sel?sel.getBoundingClientRect():null;
-      const card=document.querySelector('#screens .card').getBoundingClientRect();
-      return { rungs:lw.querySelectorAll('[data-level]').length, ladderH:lw.clientHeight,
-               heroTop:hero.top, dTop:d.top, dBottom:d.bottom,
-               selIn: sr ? (sr.bottom>lr.top && sr.top<lr.bottom) : false,
-               cardW:Math.round(card.width), vw:innerWidth, vh:innerHeight };
+      return { rungs:lw.querySelectorAll('[data-level]').length, all:LEVELS.length, ladderH:lw.clientHeight,
+               dTop:d.top, dBottom:d.bottom, barTop:bar.top,
+               selIn: sr ? (sr.bottom>lr.top && sr.top<lr.bottom) : false };
     });
-    const tag=w+'x'+h;
-    ck(tag+': a full window of rungs is in the list', r.rungs>=8, r.rungs+' rungs');
+    ck(tag+': the whole ladder is in the list', r.rungs===r.all, r.rungs+' of '+r.all+' rungs');
     ck(tag+': the list has height', r.ladderH>140, r.ladderH+'px');
-    ck(tag+': the hero rows start on screen', r.heroTop>=0, 'top '+Math.round(r.heroTop));
-    ck(tag+': the chosen rung is visible in it', r.selIn);
-    // Descend is pinned to the bottom of the scroller, so it is on screen
-    // however long the card is.
-    ck(tag+': Descend is on screen', r.dTop>=0 && r.dBottom<=r.vh+1,
-       Math.round(r.dBottom)+' of '+r.vh);
-    ck(tag+': the card fits the screen', r.cardW<=r.vw, r.cardW+' in '+r.vw);
+    ck(tag+': the chosen rung is scrolled into view', r.selIn);
+    ck(tag+': its Descend is on screen, above the bar', r.dTop>=0 && r.dBottom<=r.barTop+1,
+       Math.round(r.dBottom)+' against a bar at '+Math.round(r.barTop));
 
     // The card a delve ends on. Died in, so the outcome text is the long one.
     const over = await p.evaluate(async ()=>{

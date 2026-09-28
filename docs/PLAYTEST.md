@@ -31,7 +31,10 @@ developer. That's expected.
 - **The first delve.** Start fresh. The tutorial should walk you through
   walking, striking, aiming, the heavy blow, an ability and getting out. Each
   step moves on only once you've done the thing.
-- **The practice room.** It's the *Practice room* button in the gate-house. Nothing
+- **Home and the tabs.** The bar along the bottom has Home, Delves, Forge,
+  Vendor, Hall and ⚙. Home is the big Descend button; the *Delves* tab is the
+  whole ladder, plus difficulty and region. Is anything hard to find?
+- **The practice room.** It's the *Practice room* button on Home. Nothing
   there is saved or lost, so use it to try the controls freely.
 - **The first ten or so delves.** This is where most people will spend their time, and where
   the difficulty was retuned.

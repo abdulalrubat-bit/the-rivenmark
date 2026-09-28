@@ -83,11 +83,10 @@ const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''
      'L1 kitted '+pw.lowLevelKitted+' vs L30 kitted '+pw.kitted);
 
   // ---- the ladder UI ------------------------------------------------------
-  /* Asked of the gate-house that ships. It shows a window of eight rungs
-   * around the one it opens on rather than all fifty-two (see renderGatehouse),
-   * so "every rung renders" is "a full window renders" here. Each case is a
-   * fresh load, because the rung it opens on is chosen when the gate-house is
-   * first raised -- which is when a returning player's power is read. */
+  /* Asked of the gate-house that ships: its Delves tab, which lists the whole
+   * ladder (see renderDelves). Each case is a fresh load, because the rung it
+   * opens on is chosen when the gate-house is first raised -- which is when a
+   * returning player's power is read. */
   const gate = async stashFor => {
     const g = await (await b.newContext({viewport:{width:390,height:844}})).newPage();
     g.on('pageerror',e=>errs.push(e.message));
@@ -96,6 +95,8 @@ const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''
     await g.evaluate(stashFor);
     await g.goto(pages.game());
     await g.waitForSelector('#screens.up #descend', {timeout:30000});
+    await g.click('#screens [data-tab="delves"]');
+    await g.waitForSelector('#rungRows', {timeout:5000});
     const r = await g.evaluate(()=>({
       rows: document.querySelectorAll('#screens [data-level]').length,
       on: [...document.querySelectorAll('#screens [data-level].on')].map(b=>b.dataset.level),
