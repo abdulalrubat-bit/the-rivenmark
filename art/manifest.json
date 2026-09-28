@@ -18,9 +18,10 @@
     "flayer",
     "shaman",
     "lieutenant",
-    "crucible"
+    "crucible",
+    "singer"
   ],
-  "sprite_count": 227,
+  "sprite_count": 278,
   "kinds": {
     "thrall": {
       "radius": 13,
@@ -140,6 +141,16 @@
       "slag": 30,
       "role": "press",
       "colour": "#ff5a24",
+      "introduced_at_depth": null
+    },
+    "singer": {
+      "radius": 17,
+      "life": 150,
+      "damage": 22,
+      "stride": 0,
+      "slag": 0,
+      "role": "press",
+      "colour": "#c8b8ff",
       "introduced_at_depth": null
     }
   },

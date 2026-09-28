@@ -2295,6 +2295,146 @@ function forgeProps() {
     }
   });
 
+  /* --- furniture for the set-piece rooms ----------------------------------
+     Playtested: the delves felt hollow. A throne hall wants a carpet up the
+     middle, a forge an anvil and braziers, a garrison bedrolls and a rack of
+     arms. Same hand as the rest: lit from the north-west, dark outline, one
+     highlight, nothing brighter than the bodies that will fight over it. */
+  P('brazier', 34, g => {
+    g.fillStyle = 'rgba(12,9,6,.9)';                                   // legs, seen from above
+    for (const a of [0.6, 2.7, 4.8]) {
+      g.beginPath(); g.arc(Math.cos(a) * 9, Math.sin(a) * 9, 2, 0, TAU); g.fill();
+    }
+    const bowl = g.createRadialGradient(-2, -2, 1, 0, 0, 9);
+    bowl.addColorStop(0, '#4a3a2a'); bowl.addColorStop(1, '#1a130c');
+    g.fillStyle = bowl;
+    g.beginPath(); g.arc(0, 0, 8.5, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(150,120,80,.55)'; g.lineWidth = 1.2; g.stroke();
+    g.shadowColor = PAL.ember; g.shadowBlur = 10;                      // the coals
+    const coal = g.createRadialGradient(0, 0, 0, 0, 0, 6);
+    coal.addColorStop(0, 'rgba(255,220,140,.95)'); coal.addColorStop(0.5, 'rgba(255,120,40,.9)');
+    coal.addColorStop(1, 'rgba(120,30,10,.8)');
+    g.fillStyle = coal;
+    g.beginPath(); g.arc(0, 0, 6, 0, TAU); g.fill();
+    g.shadowBlur = 0;
+    g.fillStyle = 'rgba(40,20,10,.7)';
+    for (const [x, y] of [[-2, -2], [2.5, -1], [-1, 2.8], [2, 2.5], [-3.2, 0.6]]) { g.beginPath(); g.arc(x, y, 1.1, 0, TAU); g.fill(); }
+  });
+  P('table', 44, g => {
+    g.fillStyle = '#3a2a19';
+    g.fillRect(-16, -9, 32, 18);
+    g.strokeStyle = 'rgba(14,10,6,.85)'; g.lineWidth = 1.4; g.strokeRect(-16, -9, 32, 18);
+    g.strokeStyle = 'rgba(120,92,58,.45)'; g.lineWidth = 1;          // the planks
+    for (const y of [-3, 3]) { g.beginPath(); g.moveTo(-16, y); g.lineTo(16, y); g.stroke(); }
+    g.fillStyle = 'rgba(180,150,100,.35)'; g.fillRect(-16, -9, 32, 1.5);
+    g.fillStyle = 'rgba(150,140,124,.85)';                            // a tankard and a plate
+    g.beginPath(); g.arc(-7, -2, 2.6, 0, TAU); g.fill();
+    g.fillStyle = 'rgba(200,188,160,.7)';
+    g.beginPath(); g.ellipse(6, 2, 4.4, 3.4, 0, 0, TAU); g.fill();
+    g.fillStyle = 'rgba(120,60,40,.8)';
+    g.beginPath(); g.arc(6, 2, 1.8, 0, TAU); g.fill();
+  });
+  P('carpet', 80, g => {                                              // a runner, laid along x
+    g.fillStyle = 'rgba(92,24,26,.82)';
+    g.fillRect(-38, -13, 76, 26);
+    g.strokeStyle = 'rgba(196,150,74,.55)'; g.lineWidth = 2;
+    g.strokeRect(-35, -10, 70, 20);
+    g.strokeStyle = 'rgba(196,150,74,.3)'; g.lineWidth = 1;
+    for (let x = -28; x <= 28; x += 14) {
+      g.beginPath(); g.moveTo(x, -5); g.lineTo(x + 5, 0); g.lineTo(x, 5); g.lineTo(x - 5, 0); g.closePath(); g.stroke();
+    }
+    g.fillStyle = 'rgba(20,10,8,.25)';                                // worn and scorched
+    for (const [x, y] of [[-22, 4], [-5, -5], [14, 3], [27, -4]]) { g.beginPath(); g.ellipse(x, y, 5, 3, 0, 0, TAU); g.fill(); }
+  });
+  P('rack', 44, g => {                                                // a rack of arms, against a wall, pointing +x
+    g.fillStyle = '#3a2a19';
+    g.fillRect(-4, -16, 5, 32);
+    g.strokeStyle = 'rgba(14,10,6,.85)'; g.lineWidth = 1.2; g.strokeRect(-4, -16, 5, 32);
+    g.lineCap = 'round';
+    for (const y of [-11, -3, 5, 12]) {
+      g.strokeStyle = 'rgba(176,188,196,.8)'; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(1, y); g.lineTo(15, y + 1.5); g.stroke();
+      g.strokeStyle = '#6a5334'; g.lineWidth = 2.6;
+      g.beginPath(); g.moveTo(-2, y - 0.5); g.lineTo(2, y); g.stroke();
+    }
+    g.lineCap = 'butt';
+  });
+  P('anvil', 36, g => {
+    const grd = g.createLinearGradient(0, -8, 0, 8);
+    grd.addColorStop(0, '#5a5c5e'); grd.addColorStop(1, '#23252a');
+    g.fillStyle = grd;
+    g.beginPath();
+    g.moveTo(-13, -5); g.lineTo(9, -5); g.quadraticCurveTo(15, -5, 14, 0);
+    g.lineTo(6, 0); g.lineTo(6, 7); g.lineTo(-8, 7); g.lineTo(-8, 0); g.lineTo(-13, 0); g.closePath();
+    g.fill();
+    g.strokeStyle = 'rgba(8,8,10,.9)'; g.lineWidth = 1.3; g.stroke();
+    g.fillStyle = 'rgba(210,214,220,.45)'; g.fillRect(-12, -5, 20, 1.4);
+    g.fillStyle = 'rgba(255,140,60,.65)';                              // a glowing bar left on it
+    g.fillRect(-6, -3.5, 9, 2);
+  });
+  P('candles', 30, g => {
+    for (const [x, y, h] of [[-5, -2, 1], [0, 3, 0.8], [4, -3, 1.2], [-1, -6, 0.7], [6, 3, 0.9]]) {
+      g.fillStyle = 'rgba(214,200,168,.9)';
+      g.beginPath(); g.arc(x, y, 1.9 * h, 0, TAU); g.fill();
+      g.shadowColor = '#ffcf7a'; g.shadowBlur = 6;
+      g.fillStyle = 'rgba(255,214,130,.95)';
+      g.beginPath(); g.arc(x, y, 0.9, 0, TAU); g.fill();
+      g.shadowBlur = 0;
+    }
+    g.fillStyle = 'rgba(214,200,168,.35)';                             // spilt wax
+    g.beginPath(); g.ellipse(0, 0, 9, 7, 0.3, 0, TAU); g.fill();
+  });
+  P('cage', 44, g => {
+    g.fillStyle = 'rgba(10,8,6,.55)';
+    g.beginPath(); g.arc(0, 0, 14, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(203,189,154,.55)'; g.lineWidth = 1.5; g.lineCap = 'round';   // what is left inside
+    g.beginPath(); g.moveTo(-5, -2); g.lineTo(3, 1); g.moveTo(-3, 3); g.lineTo(4, 4); g.stroke();
+    g.fillStyle = 'rgba(203,189,154,.6)'; g.beginPath(); g.arc(4, -4, 2.8, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(120,110,96,.85)'; g.lineWidth = 1.4;
+    g.beginPath(); g.arc(0, 0, 14, 0, TAU); g.stroke();
+    for (let i = 0; i < 10; i++) {
+      const a = i / 10 * TAU;
+      g.beginPath(); g.moveTo(Math.cos(a) * 14, Math.sin(a) * 14); g.lineTo(Math.cos(a) * 11, Math.sin(a) * 11); g.stroke();
+    }
+    g.beginPath(); g.moveTo(-14, 0); g.lineTo(14, 0); g.moveTo(0, -14); g.lineTo(0, 14); g.stroke();
+    g.lineCap = 'butt';
+  });
+  P('altar', 48, g => {
+    const grd = g.createLinearGradient(0, -12, 0, 12);
+    grd.addColorStop(0, '#6a6355'); grd.addColorStop(1, '#353027');
+    g.fillStyle = grd;
+    g.fillRect(-18, -11, 36, 22);
+    g.strokeStyle = 'rgba(0,0,0,.75)'; g.lineWidth = 1.6; g.strokeRect(-18, -11, 36, 22);
+    g.fillStyle = 'rgba(110,26,30,.85)';                               // the cloth
+    g.fillRect(-6, -11, 12, 22);
+    g.strokeStyle = 'rgba(196,150,74,.6)'; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(-6, -11); g.lineTo(-6, 11); g.moveTo(6, -11); g.lineTo(6, 11); g.stroke();
+    g.fillStyle = 'rgba(214,200,168,.85)';                             // and a book on it
+    g.fillRect(-4, -4, 8, 7);
+    g.fillStyle = 'rgba(226,208,166,.9)'; g.fillRect(-18, -11, 36, 1.6);
+  });
+  P('bedroll', 44, g => {
+    g.fillStyle = 'rgba(78,64,44,.9)';
+    g.beginPath(); g.roundRect ? g.roundRect(-16, -7, 32, 14, 4) : g.rect(-16, -7, 32, 14); g.fill();
+    g.strokeStyle = 'rgba(20,14,9,.8)'; g.lineWidth = 1.2; g.stroke();
+    g.fillStyle = 'rgba(110,94,66,.9)';                                // the rolled end
+    g.beginPath(); g.ellipse(-12, 0, 4.5, 6.5, 0, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(40,30,18,.6)'; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(-4, -7); g.lineTo(-4, 7); g.moveTo(6, -7); g.lineTo(6, 7); g.stroke();
+  });
+  P('sacks', 34, g => {
+    const sack = (x, y, r) => {
+      const grd = g.createRadialGradient(x - r * 0.3, y - r * 0.3, 1, x, y, r);
+      grd.addColorStop(0, '#8a7350'); grd.addColorStop(1, '#4a3a22');
+      g.fillStyle = grd;
+      g.beginPath(); g.ellipse(x, y, r, r * 0.86, 0, 0, TAU); g.fill();
+      g.strokeStyle = 'rgba(20,14,8,.75)'; g.lineWidth = 1; g.stroke();
+      g.strokeStyle = 'rgba(40,28,16,.8)';
+      g.beginPath(); g.moveTo(x - r * 0.3, y - r * 0.55); g.lineTo(x + r * 0.3, y - r * 0.55); g.stroke();
+    };
+    sack(-4, 2, 7); sack(5, -2, 6); sack(3, 6, 5);
+  });
+
   for (const k in SPR) {
     if (k.indexOf('p_') !== 0 || k.length > 2 && k.charAt(k.length - 2) === '_') continue;
     for (let q = 0; q < 4; q++) SPR[k + '_' + q] = rotateSprite(SPR[k], q);
