@@ -1656,6 +1656,12 @@ function recomputeStats() {
     if (k === 'r' || k === 'iframe') continue;
     p[k] = base[k];
   }
+  // A shrine's blessing, for as long as it lasts (see SHRINES).
+  const bl = run && run.blessing;
+  if (bl && bl.t > 0) {
+    if (bl.id === 'ember') p.damage *= SHRINES.ember.mult;
+    if (bl.id === 'wind') p.speed *= SHRINES.wind.mult;
+  }
   p.hp = Math.min(p.hp, p.maxHp);
   hudCache.hp = -1;
 }
@@ -2087,6 +2093,10 @@ let rooms = [];
    character is props, and a room stays walkable however full it looks.
    --------------------------------------------------------------------- */
 let roomDress = [];     // props and lamps the rooms laid down, applied with the scenery
+// Coffers a room asked for, where it asked for them (the throne hall's
+// treasury behind the seat, the stores' strongbox). placeChests seats these
+// first, out of the delve's own count rather than on top of it.
+let roomChests = [];
 let roomLights = [];
 
 function setPieceKit(h) {
@@ -2119,6 +2129,7 @@ function setPieceKit(h) {
       if (kind === 'torch') roomLights.push({ x: p.x - nx * (C / 2 - 19), y: p.y - ny * (C / 2 - 19), color: PAL.ember });
     },
     lamp(x, y, color) { const p = at(x, y); roomLights.push({ x: p.x, y: p.y, color }); },
+    chest(x, y, kind) { if (open(x, y)) roomChests.push({ ...at(x, y), kind }); },
     // Every rim cell of one side, for hanging a row of fittings.
     side(which) {
       const out = [];
@@ -2305,6 +2316,7 @@ const ROOM_SETS = {
       for (let b = Math.min(hb, k.B1 - hb + k.B0) + 1; b <= Math.max(hb, k.B1 - hb + k.B0) - 1; b += 2)
         k.put('carpet', b, k.MA, 0, k.alongQ);
       k.put('boss', hb, k.MA, 1, 0);
+      { const [x, y] = k.xy(hb === k.B1 - 1 ? k.B1 - 1 : k.B0 + 1, k.MA + 3); k.chest(x, y, 'warded'); }
       k.put('hornskull', hb, k.MA - 1, 3); k.put('hornskull', hb, k.MA + 1, 3);
       for (const a of [k.MA - 2, k.MA + 2]) {
         k.put('brazier', hb, a, 0, 0);
@@ -2369,6 +2381,7 @@ const ROOM_SETS = {
       k.put('table', k.MB, k.MA, 2, k.alongQ);
       k.put('table', k.MB + 2, k.MA, 2, k.alongQ);
       k.put('crate', k.MB - 2, k.MA, 4); k.put('coins', k.MB, k.MA, 4); k.put('scroll', k.MB + 2, k.MA, 4);
+      if (k.chance(0.5)) { const [x, y] = k.xy(k.MB - 3, k.MA); k.chest(x, y, 'coffer'); }
       k.lamp(k.cx, k.cy, PAL.ember);
     } },
 
@@ -2387,6 +2400,7 @@ const ROOM_SETS = {
         }
       }
       for (const [x, y] of k.side(k.wide ? 'left' : 'top')) if (k.chance(0.3)) k.wall('chain', x, y);
+      { const [x, y] = k.xy(k.chance(0.5) ? k.B0 + 1 : k.B1 - 1, k.MA); k.chest(x, y, 'coffer'); }
     } },
 
   /* Two rows of columns, some of them down; a carpet up the nave to an altar
@@ -2504,7 +2518,7 @@ function updateRoomNames() {
 
 function dressRooms(halls, sc, pc) {
   rooms = [];
-  roomDress = []; roomLights = [];
+  roomDress = []; roomLights = []; roomChests = [];
   if (REGION.roomSets) return dressSetPieces(halls, sc, pc);
   const KINDS = ['hall', 'barracks', 'collapse', 'cistern'];
   const want = Math.min(halls.length, 3 + ((Math.random() * 3) | 0));
@@ -4003,6 +4017,18 @@ function placeChests(spawn, portal) {
   pool.sort((a, b) => b.pen - a.pen);
 
   const total = want + warded;
+  // The rooms' own first: a coffer where a room would keep one, out of the
+  // same count, so the delve is not richer for having rooms in it.
+  let hadWarded = false;
+  for (const rc of roomChests) {
+    if (chests.length >= total) break;
+    if (dist2(rc.x, rc.y, spawn.x, spawn.y) < CHEST_SAFE * CHEST_SAFE) continue;
+    if (chests.some(c => dist2(c.x, c.y, rc.x, rc.y) < CHEST_APART * CHEST_APART)) continue;
+    const kind = rc.kind === 'warded' && warded && !hadWarded ? 'warded' : 'coffer';
+    if (kind === 'warded') hadWarded = true;
+    chests.push({ x: rc.x, y: rc.y, kind, open: false, room: true,
+                  q: (Math.random() * 4) | 0, pulse: Math.random() * TAU });
+  }
   for (let i = 0; i < pool.length && chests.length < total; i++) {
     const c = pool[i];
     let ok = true;
@@ -4010,7 +4036,8 @@ function placeChests(spawn, portal) {
       if (dist2(c.x, c.y, chests[k].x, chests[k].y) < CHEST_APART * CHEST_APART) ok = false;
     }
     if (!ok) continue;
-    const kind = (warded && chests.length === 0) ? 'warded' : 'coffer';
+    const kind = (warded && !hadWarded) ? 'warded' : 'coffer';
+    if (kind === 'warded') hadWarded = true;
     chests.push({ x: c.x, y: c.y, kind, open: false,
                   q: (Math.random() * 4) | 0, pulse: Math.random() * TAU });
   }
@@ -4092,6 +4119,154 @@ function updateChests(dt) {
 // How wide a coffer is drawn. The sheet cells are 32, so this is a 1.5x blit
 // with smoothing off -- the same deal the bag icons already take.
 const CHEST_DRAW = 48;
+
+/* --- SHRINES ---------------------------------------------------------------
+   Playtested: the delves were hollow -- nothing in them but the fight and the
+   gate. A shrine is a reason to go and look: walk onto one and it blesses you
+   for a while, then goes dark. Each delve holds one (two, deep), in a room
+   rather than a corridor, lit in its own colour so it can be seen across a
+   dark hall. What each gives is a small, plain thing that changes how the
+   next fight goes -- not a number you have to read to feel.
+   ------------------------------------------------------------------------ */
+const SHRINES = {
+  ember: { name: 'Shrine of Embers', say: 'Your blows burn hotter.', colour: '#ff8a3c',
+           last: 30, mult: 1.35 },
+  stone: { name: 'Shrine of Stone', say: 'Blows glance off you.', colour: '#b9b0a0',
+           last: 30, cut: 0.4 },
+  wind:  { name: 'Shrine of the Wind', say: 'Your stride quickens.', colour: '#8fd8ff',
+           last: 30, mult: 1.3 },
+  blood: { name: 'Shrine of Blood', say: 'Your wounds close.', colour: '#e0563f',
+           last: 0 }
+};
+const SHRINE_REACH = 32;
+let shrines = [];
+
+/* --- LORE ------------------------------------------------------------------
+   The world, a page at a time. A note lies in the delve, glowing; walking onto
+   it reads it out and keeps it -- in the honours, so it outlives a Hardcore
+   death and is shared by both kits, because what you have learned about the
+   Rivenmark is not something one life owns. The Hall lists what has been
+   found. A delve only holds a page you have not read yet.
+   ------------------------------------------------------------------------ */
+const LORE = [
+  ['The First Rift', 'Before the Rivenmark there was one realm and no seams in it. The Rift opened under Tor-Varden in a single night, and the keep went down into it standing.'],
+  ['The Clear-Sighted', 'Those who look into the Rift and do not go mad are called the Clear-Sighted. There are fewer of them every year, and the Vanguard is made of what is left.'],
+  ['On Slag', 'Slag is what the Rift leaves when it closes on a living thing. It is warm to the touch for a day, and the forges of the old realm burned nothing else.'],
+  ['The Deceiver', 'He wears the face of whoever you last trusted. The priests say he was a man once, the first to walk into the Rift and the first to walk back out wrong.'],
+  ['The Weeping Keep', 'Tor-Varden did not fall; it was taken down, stone by stone, into the dark. On still nights you can hear its bells, a long way under the ash.'],
+  ['The Lieutenants', 'He does not trust his own. Every one of his guard wears a chain he holds the other end of, and they fight hardest when he is watching.'],
+  ['The Crucible-Mass', 'Where enough slag gathers it begins to think. The Crucible-Mass is what the forges made by accident, and it has not forgiven them.'],
+  ['The Silent Choir', 'They sang the Rift shut once, and it cost them their voices. What sings now in the deep rungs is not them, only the shape of the song.'],
+  ['On the Regalia', 'Eight pieces, forged for the last king of the Clear-Sighted. When he fell they scattered through the regions, and each keeps to its own ground.'],
+  ['The Ley-Gates', 'The gates were built to let the old realm walk between its halls. Now they are the only doors out of the Rift, and the horde has learned to wait by them.'],
+  ['Hardcore', 'Some of the Vanguard go down with nothing kept above. The scribes do not write their names until they come back, and most of the page is blank.'],
+  ['The Drowned Cistern', 'The keep drew its water from under the Moors. When the Rift came the water turned, and the green in the cisterns is still alive, and still hungry.'],
+  ['The Hall', 'What you build above outlasts every delve. The masons ask no questions about where the coin came from, and that is the only kindness left in the realm.'],
+  ['The Ashen Seat', 'The throne of Tor-Varden was carved from one bone no one could name. It is still down there, still facing the door, as if the king only stepped out.'],
+  ['The Horde', 'They are not an army. They are what the Rift does to the lost: it keeps them walking, and it points them at whatever still has a heartbeat.'],
+  ['The Garrison\u2019s Last Order', 'Hold the stair until relieved. The garrison held it. No one was sent, and the order was never withdrawn.'],
+  ['On Shrines', 'Every shrine in the Rift was raised by someone who did not expect to come back. Their prayers are still in the stone, and they still answer.'],
+  ['The Rending Gorges', 'In Vaelk the ground came apart in straight lines, as if it had been cut. The Redoubt was built to hold the seam shut, and it is losing.'],
+  ['The Rot-Weald', 'The southern forest did not die when the Rift reached it. It kept growing, only wrong, and the paths through it move when no one is looking.'],
+  ['The Dead Firth', 'The sea drew back from the coast all at once. Ash came in where the water had been, and the tide still comes in twice a day, made of it.']
+];
+let lore = [];                 // the notes lying in this delve
+
+const loreFound = () => {
+  const h = honours();
+  return Array.isArray(h.lore) ? h.lore.filter(i => Number.isInteger(i) && i >= 0 && i < LORE.length) : [];
+};
+
+// A shrine and a page, where a player would find them: inside rooms, off the
+// straight line from the spawn to the gate, clear of the coffers.
+function placeFinds(spawn, portal) {
+  shrines = []; lore = [];
+  if (!openCells.length) return;
+  const depth = LEVEL.depth || 0;
+  const inRoom = c => rooms.some(rm => rm.box && c.x > rm.box.x0 + 40 && c.x < rm.box.x1 - 40 &&
+                                               c.y > rm.box.y0 + 40 && c.y < rm.box.y1 - 40);
+  const pool = openCells.filter(c =>
+    !pointInWalls(c.x, c.y, 22) &&
+    dist2(c.x, c.y, spawn.x, spawn.y) > 280 * 280 &&
+    dist2(c.x, c.y, portal.x, portal.y) > 220 * 220 &&
+    !chests.some(ch => dist2(ch.x, ch.y, c.x, c.y) < 140 * 140));
+  if (!pool.length) return;
+  const roomy = pool.filter(inRoom);
+  const pick = (from, keepFrom, apart) => {
+    for (let t = 0; t < 60; t++) {
+      const c = from[(Math.random() * from.length) | 0];
+      if (keepFrom.every(o => dist2(o.x, o.y, c.x, c.y) > apart * apart)) return c;
+    }
+    return null;
+  };
+  const ids = Object.keys(SHRINES);
+  const n = 1 + (depth > 0.4 && Math.random() < 0.5 ? 1 : 0);
+  for (let i = 0; i < n; i++) {
+    const c = pick(roomy.length ? roomy : pool, shrines, 500);
+    if (!c) break;
+    const id = ids[(Math.random() * ids.length) | 0];
+    shrines.push({ x: c.x, y: c.y, id, used: false, pulse: Math.random() * TAU });
+    lamps.push({ x: c.x, y: c.y - 6, color: SHRINES[id].colour });
+  }
+  // A page you have not read, most delves.
+  const found = new Set(loreFound());
+  const unread = LORE.map((_, i) => i).filter(i => !found.has(i));
+  if (unread.length && Math.random() < 0.75) {
+    const c = pick(pool, shrines.concat(chests), 260);
+    if (c) {
+      const id = unread[(Math.random() * unread.length) | 0];
+      lore.push({ x: c.x, y: c.y, id, taken: false, pulse: Math.random() * TAU });
+      lamps.push({ x: c.x, y: c.y, color: '#e8c878' });
+    }
+  }
+}
+
+function bless(sh) {
+  sh.used = true;
+  const S = SHRINES[sh.id];
+  if (sh.id === 'blood') {
+    player.hp = player.maxHp;
+  } else {
+    run.blessing = { id: sh.id, t: S.last, max: S.last };
+    recomputeStats();
+  }
+  run.shrines = (run.shrines || 0) + 1;
+  burst(sh.x, sh.y, S.colour, 22, 200);
+  ring(sh.x, sh.y, S.colour, 10, 70, 0.5);
+  sfx('surge', sh.x, sh.y);
+  toast(S.name + ' \u2014 ' + S.say + (S.last ? ' (' + S.last + 's)' : ''), S.colour);
+  clog('shrine', sh.id);
+}
+
+function readLore(n) {
+  n.taken = true;
+  const h = Object.assign({}, honours());
+  const had = loreFound();
+  if (!had.includes(n.id)) keepHonours(Object.assign(h, { lore: had.concat([n.id]) }));
+  const [title, text] = LORE[n.id];
+  run.banner = run.bannerMax = 7;
+  run.bannerLore = title;          // the panel is this page's, not whatever banner replaces it
+  run.bannerText = title;
+  run.bannerNote = text;
+  sfx('tap', n.x, n.y);
+  clog('lore', String(n.id));
+}
+
+function updateFinds(dt) {
+  const bl = run.blessing;
+  if (bl && bl.t > 0) {
+    bl.t -= dt;
+    if (bl.t <= 0) { bl.t = 0; recomputeStats(); toast('The blessing fades.', '#a89878'); }
+  }
+  for (const sh of shrines) {
+    sh.pulse += dt;
+    if (!sh.used && dist2(player.x, player.y, sh.x, sh.y) < SHRINE_REACH * SHRINE_REACH) bless(sh);
+  }
+  for (const n of lore) {
+    n.pulse += dt;
+    if (!n.taken && dist2(player.x, player.y, n.x, n.y) < SHRINE_REACH * SHRINE_REACH) readLore(n);
+  }
+}
 
 /* --- hazards --------------------------------------------------------------
    Ground you cannot stand on. A slam is a moment; a hazard is a place, and
@@ -5387,8 +5562,11 @@ function hurtPlayerBy(dmg, fx, fy, sized) {
   const mit = (player.mitigate || 0) > 0 ? 0.5 : 0;
   // Every note the Choir has landed makes the delve bite harder.
   const chord = run && run.choir ? 1 + CHOIR_BITE * run.choir.notes : 1;
+  // A Shrine of Stone's blessing takes its share off on top of the ward.
+  const stone = run && run.blessing && run.blessing.t > 0 && run.blessing.id === 'stone'
+    ? SHRINES.stone.cut : 0;
   const taken = dmg * (sized ? 1 : delveBite()) * chord *
-                (1 - (player.ward || 0)) * (1 - mit);
+                (1 - (player.ward || 0)) * (1 - mit) * (1 - stone);
   breakChannel('hurt');
   clog('hurt', '', { dmg: Math.round(taken), from: fx === undefined ? 'self' : Math.round(Math.atan2(fy - player.y, fx - player.x) * 57.3) });
   player.hp -= taken;
@@ -7736,6 +7914,7 @@ function updateSpawning(dt) {
 function update(dt) {
   run.time += dt;
   if (run.banner > 0) { run.banner -= dt;
+    if (run.banner <= 0) { run.bannerMax = 0; run.bannerLore = null; }
     if (run.banner <= 0) { run.bannerText = null; run.bannerNote = null; } }
   if (run.toast) { run.toast.life -= dt; if (run.toast.life <= 0) run.toast = null; }
   if (run.bagWarned > 0) run.bagWarned -= dt;
@@ -7765,6 +7944,7 @@ function update(dt) {
   updateFloaters(dt);
   updateBolts(dt);
   updateChests(dt);
+  updateFinds(dt);
   updateBleed(dt);
   updateGloom(dt);
   updateRings(dt);
@@ -8863,6 +9043,7 @@ function resetRun(heroId, levelId, diffId) {
   player.hp = player.maxHp;
   placePacks(spawn);
   placeChests(spawn, portal);
+  placeFinds(spawn, portal);
   placeTraps();
   flowFrom = -1;
   rebuildFlow();

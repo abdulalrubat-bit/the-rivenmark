@@ -33,9 +33,14 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
 
     // --- it is a property of the day -------------------------------------
     const DAY = 86400000;
-    const t0 = Date.now();
+    // Early and late on ONE calendar day. This used to be "now" and an hour
+    // after now, which is tomorrow for the last hour of every day -- so the
+    // suite failed every night between eleven and midnight, and the bounty
+    // was right to change.
+    const morning = new Date(); morning.setHours(1, 0, 0, 0);
+    const t0 = morning.getTime();
     o.same = todaysBounty(t0).id + '@' + todaysBounty(t0).level_id ===
-             todaysBounty(t0 + 3600000).id + '@' + todaysBounty(t0 + 3600000).level_id;
+             todaysBounty(t0 + 21 * 3600000).id + '@' + todaysBounty(t0 + 21 * 3600000).level_id;
     const month = [];
     for (let i = 0; i < 30; i++) {
       const b2 = todaysBounty(t0 + i * DAY);

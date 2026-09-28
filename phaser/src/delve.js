@@ -86,7 +86,7 @@ const STANDING = { pillar: 26, barrel: 12, crate: 11, urn: 10, banner: 16,
                    chain: 14, tomb: 22,
                    // the set-piece rooms' furniture
                    brazier: 12, table: 10, rack: 14, anvil: 9, cage: 14,
-                   altar: 12, sacks: 9 };
+                   altar: 12, sacks: 9, shrine: 18 };
 // Laid on the floor under everything else, flat scenery included: a carpet
 // with rubble on it, not rubble under a carpet.
 const FLOOR = { carpet: true };
@@ -106,7 +106,7 @@ const FLOOR = { carpet: true };
 /* global walls, props, enemies, player, run, cam, view, state, stash, stick,
           arcs, particles, rings, floaters, bolts, slams, hazards, nulls,
           totems, ruptures, HEROES, TAU, FLOAT_STYLE, FLOAT_LIFE, BOLT_R,
-          portal, stepThrough, LEVEL_BY_ID, blankStash, el, chests, loot,
+          portal, stepThrough, LEVEL_BY_ID, blankStash, el, chests, loot, shrines, lore, SHRINES,
           CHEST_KINDS, CHEST_OPEN, CHEST_DRAW, LIGHT,
           CELL_W, GW, GH, SOLID, cellAt, pitGrid, gi, edges,
           keys, stickStart, stickMove, stickEnd, STICK_MAX, castAbility,
@@ -438,6 +438,8 @@ export class Delve extends Phaser.Scene {
     this.breakables = [];
     for (const im of this.wallImgs || []) im.destroy();
     for (const c of this.chestImgs || []) { c.img.destroy(); c.sh.destroy(); }
+    for (const o of this.findImgs || []) { o.img.destroy(); if (o.sh) o.sh.destroy(); }
+    this.findImgs = [];
     for (const im of this.lootImgs || []) im.destroy();
     this.wallImgs = []; this.chestImgs = []; this.lootImgs = [];
     for (const sp of this.pool) sp.destroy();
@@ -542,6 +544,39 @@ export class Delve extends Phaser.Scene {
       const img = this.add.image(ch.x, ch.y, 'art', key)
         .setDisplaySize(CHEST_DRAW, CHEST_DRAW).setDepth(ch.y);
       this.chestImgs.push({ ch, img, sh });
+    }
+
+    // Shrines, tinted to the blessing they give; lore, a glowing page.
+    this.findImgs = [];
+    for (const sh of shrines) {
+      const key = this.pickProp('shrine', 0);
+      if (!key) continue;
+      const shadow = this.shadowAt(sh.x, sh.y, 14, 2);
+      const img = this.add.image(sh.x, sh.y - 8, 'art', key).setScale(this.artScale(key)).setDepth(sh.y)
+        .setTint(hex(SHRINES[sh.id].colour, 0xffffff));
+      this.findImgs.push({ f: sh, img, sh: shadow, shrine: true });
+    }
+    for (const n of lore) {
+      const key = this.pickProp('scroll', 0);
+      if (!key) continue;
+      const img = this.add.image(n.x, n.y, 'art', key).setScale(this.artScale(key) * 1.5)
+        .setDepth(n.y - 1e4 + 1).setTint(0xffe6a0);
+      this.findImgs.push({ f: n, img, sh: null, shrine: false });
+    }
+  }
+
+  /* A shrine goes dark once it has given its blessing; a page is gone once
+   * it has been read. Both breathe until then, to be seen across a room. */
+  syncFinds() {
+    for (const o of this.findImgs || []) {
+      const f = o.f, p = 0.5 + 0.5 * Math.sin(f.pulse * 2.2);
+      if (o.shrine) {
+        if (f.used) { o.img.setTint(0x55524c); o.img.setAlpha(0.85); continue; }
+        o.img.setAlpha(0.85 + 0.15 * p);
+      } else {
+        if (f.taken) { if (o.img.visible) o.img.setVisible(false); continue; }
+        o.img.setAlpha(0.7 + 0.3 * p);
+      }
     }
   }
 
@@ -1260,6 +1295,7 @@ export class Delve extends Phaser.Scene {
     this.placeCamera(dt);
     this.syncBreakables();
     this.syncChests(time);
+    this.syncFinds();
     this.syncLoot(time);
     this.cullDressing();
     const o = screenOrigin(this);

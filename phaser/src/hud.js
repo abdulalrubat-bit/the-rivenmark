@@ -12,7 +12,7 @@
 
 import { bossShown, bossBarDrop, minimapBox } from './overlay.js';
 
-/* global bagCap, player, run, state, enemies, view, LEVEL, REGION, HUD_H, ABILITIES,
+/* global SHRINES, bagCap, player, run, state, enemies, view, LEVEL, REGION, HUD_H, ABILITIES,
           ABILITY_BY_ID, CHARGE_MAX, TENSION_MAX, COMBO_LEN, CONDUIT_EDGE */
 
 /* Four roles, four colours, and the mapping lives beside the buttons because
@@ -331,6 +331,10 @@ const CSS = `
    that the red bar is their health should not have to learn a second red. */
 #hud .din.loud i{background:linear-gradient(90deg,#a67c3a,#ffbe8c 55%,#ffd18c)}
 #hud .din.loud{box-shadow:inset 0 1px 0 rgba(0,0,0,.6),0 0 8px rgba(255,190,140,.4)}
+/* A shrine's blessing and what is left of it, under the life bar. */
+#hud .bless{position:absolute;left:12px;top:calc(var(--sa-t,0px) + 122px);padding:3px 8px;
+     border-radius:10px;border:1px solid currentColor;background:rgba(12,10,8,.7);
+     font:600 11px/1.2 ui-monospace,monospace;letter-spacing:.3px;pointer-events:none}
 #hud .res{position:absolute;right:10px;bottom:148px;display:flex;gap:5px;
      align-items:center;justify-content:flex-end}
 #hud .pip{width:11px;height:11px;border-radius:50%;border:1px solid #6a5a42;background:#161310}
@@ -344,7 +348,12 @@ const CSS = `
    screen that is neither chrome nor the fight. See the note there. */
 #hud .banner{position:absolute;left:14px;right:14px;top:26%;text-align:center;font-size:19px;
      color:#eee0c0;text-shadow:0 2px 6px #000;font-family:Cinzel,Georgia,serif}
-#hud .banner small{display:block;font-size:12px;color:#a89878;margin-top:4px;font-style:italic}
+#hud .banner small{display:block;font:italic 12px/1.4 Georgia,serif;color:#a89878;margin-top:4px}
+/* A page of lore is read, not glanced at: a dark panel behind it, and the
+   text a size up, so it holds against the stone underneath. */
+#hud .banner.lore{background:rgba(12,10,8,.84);border:1px solid #6d5a36;border-radius:10px;
+     padding:10px 14px;left:18px;right:18px}
+#hud .banner.lore small{font:italic 13px/1.5 Georgia,serif;color:#dccdb0;margin-top:6px}
 /* When the boss bar is already carrying his name, the banner is only the line
    about what to do -- so that line IS the banner, not a subtitle under nothing. */
 #hud .banner b{display:block;font:400 italic 15px/1.4 Georgia,serif;color:#e2c48c}
@@ -435,6 +444,7 @@ export class Hud {
         '<div class="din"><i></i></div>' +
       '</div>' +
       '<div class="res"></div>' +
+      '<div class="bless" hidden></div>' +
       /* Built like a kit button, for the same reason a kit button is: the
        * whole point of the tag under an ability's mark is that a glyph is a
        * thing to memorise and a word is not. This was one bare arrow, and
@@ -471,6 +481,7 @@ export class Hud {
     this.lifeText = root.querySelector('.life b');
     this.slag = root.querySelector('.slag');
     this.res = root.querySelector('.res');
+    this.bless = root.querySelector('.bless');
     this.kit = root.querySelector('.kit');
     this.conduit = root.querySelector('.conduit');
     this.conRing = root.querySelector('.conduit .ring');
@@ -833,6 +844,7 @@ export class Hud {
                    (note ? (head ? '<small>' + note + '</small>'
                                  : '<b>' + note + '</b>') : '');
       if (this.bannerHtml !== html) { this.bannerHtml = html; this.banner.innerHTML = html; }
+      this.banner.classList.toggle('lore', !!run.bannerLore && run.bannerLore === run.bannerText);
       // Anchored under the map rather than at a percentage of the screen.
       // 38% put a two-line announcement just above the hero, so its second
       // line reached down into the pack he was fighting; and any percentage
@@ -849,7 +861,9 @@ export class Hud {
       }
       this.banner.hidden = false;
       // In, hold, out -- so the name does not simply appear and vanish.
-      const a = Math.min(1, run.banner / 1.1) * Math.min(1, (4.2 - run.banner) / 0.5);
+      // Fading in over the first half second of however long it was set for
+      // (a page of lore is given longer to read than a name is).
+      const a = Math.min(1, run.banner / 1.1) * Math.min(1, ((run.bannerMax || 4.2) - run.banner) / 0.5);
       this.banner.style.opacity = Math.max(0, a).toFixed(2);
     } else if (!this.banner.hidden) {
       this.banner.hidden = true;
@@ -858,6 +872,7 @@ export class Hud {
     this.syncBoss();
     this.refitBoss();
     this.syncToast();
+    this.syncBless();
   }
 
   /* The title is fitted, not cut. The Deceiver's epithets are rules -- each
@@ -947,6 +962,20 @@ export class Hud {
 
   /* What you just picked up, under the HUD bar and under the boss bar when
    * there is one -- bossBarDrop() is the same answer the map reads. */
+  syncBless() {
+    const bl = run && run.blessing;
+    const on = !!(bl && bl.t > 0 && (state === 'play' || state === 'pause'));
+    if (this.bless.hidden === on) this.bless.hidden = !on;
+    if (!on) return;
+    const S = SHRINES[bl.id];
+    const txt = S.name.replace('Shrine of ', '').replace('the ', '') + ' ' + Math.ceil(bl.t) + 's';
+    if (this.blessText !== txt) {
+      this.blessText = txt;
+      this.bless.textContent = txt;
+      this.bless.style.color = S.colour;
+    }
+  }
+
   syncToast() {
     const t = run.toast;
     if (!t || t.life <= 0) { if (!this.toast.hidden) this.toast.hidden = true; return; }
