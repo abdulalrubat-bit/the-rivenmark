@@ -293,7 +293,7 @@ const RIM_HUE = 'rgb(228,220,196)', RIM_W = 0.85, RIM_A = 0.5;
  * that would carry one: above the cloth, below anything already glowing. */
 const SHEEN_HUE = 'rgb(255,248,232)', SHEEN_W = 0.45, SHEEN_A = 0.5;
 const SHEEN_LO = 62, SHEEN_HI = 190, SHEEN_SAT = 0.65;
-const HUD_H           = 104;   // canvas UI clears the HUD panel by this much
+const HUD_H           = 130;   // canvas UI clears the HUD panel by this much
 // Holding the gate is the delve's second act, and the only part of a run that
 // can be stretched: a delve itself is bounded at roughly two minutes because a
 // player clears bodies as fast as a populated map can present them, and no
@@ -4619,6 +4619,28 @@ function updateCracks(dt) {
       toast('A cracked wall — strike it!', '#e8c878');
     }
   }
+}
+
+
+/* THE GOAL, IN ONE LINE. Playtested: "hard to tell what my goal is". The
+   delve has always had a plain order to it -- gather the slag, which calls
+   the avatar; put it down; reach the ley-gate and wind it open; step
+   through, or hold it for more -- but the only place that order was written
+   was a banner that came and went. This is the same order as a line the HUD
+   keeps up the whole time, read off the state the rest of the core already
+   keeps, so it cannot disagree with what is actually happening. */
+function objectiveLine() {
+  if (!run || !LEVEL || run.room) return null;
+  const pct = v => Math.round(clamp(v, 0, 1) * 100) + '%';
+  if (run.gateOpen) return { step: 4, icon: '⇧', text: 'Step out of the gate to escape',
+                             note: 'or stay in it: more slag, more of them' };
+  if (portal && portal.active) return portal.inside
+    ? { step: 3, icon: '◎', text: 'Wind the ley-gate open', note: pct(portal.channel / (LEVEL.channel || 1)) + ' — stay inside' }
+    : { step: 3, icon: '◎', text: 'Reach the ley-gate', note: 'follow the arrow' };
+  if (run.tech < LEVEL.quota) return { step: 1, icon: '◆', text: 'Gather slag',
+                                       note: run.tech + ' / ' + LEVEL.quota };
+  return { step: 2, icon: '☠', text: 'Defeat ' + ((run.boss && run.boss.title) || 'the avatar'),
+           note: 'the slag has called it' };
 }
 
 /* --- ROOM ENCOUNTERS -----------------------------------------------------

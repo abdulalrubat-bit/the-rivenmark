@@ -12,7 +12,7 @@
 
 import { bossShown, bossBarDrop, minimapBox } from './overlay.js';
 
-/* global SHRINES, encounterLine, bagCap, player, run, state, enemies, view, LEVEL, REGION, HUD_H, ABILITIES,
+/* global SHRINES, encounterLine, objectiveLine, bagCap, player, run, state, enemies, view, LEVEL, REGION, HUD_H, ABILITIES,
           ABILITY_BY_ID, CHARGE_MAX, TENSION_MAX, COMBO_LEN, CONDUIT_EDGE */
 
 /* Four roles, four colours, and the mapping lives beside the buttons because
@@ -451,6 +451,23 @@ const CSS = `
 #hud button .cd{font-size:11px}
 #hud button .cost b{font-size:9px}
 #hud .pip{width:13px;height:13px}
+
+/* The goal row, under the life and the din, inside the same frame. */
+#hud .goal{display:flex;align-items:center;gap:7px;padding:3px 4px 1px;min-height:22px;
+  font:600 14px/1.2 Georgia,serif;color:#f4ece4;white-space:nowrap;overflow:hidden}
+#hud .goal[hidden]{display:none}
+#hud .goal i{font-style:normal;color:#ff9a4a;width:16px;text-align:center;flex:none}
+#hud .goal b{font-weight:600;overflow:hidden;text-overflow:ellipsis}
+#hud .goal span{margin-left:auto;font:13px Georgia,serif;color:#a39a92;flex:none}
+#hud .goal[data-step="1"] span{color:#ffb070}
+#hud .goal[data-step="3"] i,#hud .goal[data-step="4"] i{color:#8fb9ff}
+#hud .goal[data-step="2"] i{color:#ff6a50}
+#hud .goal.new{animation:goalNew 1.4s ease-out}
+@keyframes goalNew{0%{background:rgba(255,122,42,.55)}100%{background:transparent}}
+@media (prefers-reduced-motion:reduce){#hud .goal.new{animation:none}}
+#hud .hold{top:82px}
+#hud .bless{top:calc(var(--sa-t,0px) + 136px)}
+#hud .enc{top:calc(var(--sa-t,0px) + 168px)}
 `;
 
 export class Hud {
@@ -480,6 +497,8 @@ export class Hud {
           '<div class="slag"></div>' +
         '</div>' +
         '<div class="din"><i></i></div>' +
+        // The goal, always: what to do now, and how far along (objectiveLine).
+        '<div class="goal"><i></i><b></b><span></span></div>' +
       '</div>' +
       '<div class="res"></div>' +
       '<div class="bless" hidden></div>' +
@@ -519,6 +538,7 @@ export class Hud {
     this.lifeFill = root.querySelector('.life i');
     this.lifeText = root.querySelector('.life b');
     this.slag = root.querySelector('.slag');
+    this.goal = root.querySelector('.goal');
     this.res = root.querySelector('.res');
     this.bless = root.querySelector('.bless');
     this.enc = root.querySelector('.enc');
@@ -776,8 +796,12 @@ export class Hud {
     this.lifeText.textContent = Math.ceil(Math.max(0, p.hp)) + ' / ' + Math.round(p.maxHp);
     const tech = run.tech | 0;
     this.lifeBox.classList.toggle('low', f <= 0.3);
-    if (this.slagSig !== tech) {
-      this.slagSig = tech;
+    // Keyed on the quota too: a new delve starts at 0 slag just like the
+    // last one did, and keyed on the count alone the counter kept showing
+    // the previous delve's quota until the first pickup.
+    const slagKey = tech + '/' + LEVEL.quota;
+    if (this.slagSig !== slagKey) {
+      this.slagSig = slagKey;
       // The icon marks it; the word still names it. An icon alone leaves a
       // number on screen that nobody new can read.
       this.slag.innerHTML = '<u></u>' + tech + ' / ' + LEVEL.quota + ' slag';
@@ -914,6 +938,7 @@ export class Hud {
     this.syncToast();
     this.syncBless();
     this.syncEnc();
+    this.syncGoal();
   }
 
   /* The title is fitted, not cut. The Deceiver's epithets are rules -- each
@@ -1031,6 +1056,24 @@ export class Hud {
       this.enc.textContent = txt;
       this.enc.classList.toggle('away', !!L.away);
     }
+  }
+
+  /* The goal line. Rewritten only when it changes; a new step flashes, so the
+   * moment the delve asks something new of you is a moment you notice. */
+  syncGoal() {
+    const G = typeof objectiveLine === 'function' ? objectiveLine() : null;
+    if (this.goal.hidden === !!G) this.goal.hidden = !G;
+    if (!G) return;
+    const key = G.step + '|' + G.text + '|' + G.note;
+    if (this.goalKey === key) return;
+    if (this.goalStep !== undefined && this.goalStep !== G.step) {
+      this.goal.classList.remove('new'); void this.goal.offsetWidth; this.goal.classList.add('new');
+    }
+    this.goalKey = key; this.goalStep = G.step;
+    this.goal.dataset.step = G.step;
+    this.goal.children[0].textContent = G.icon;
+    this.goal.children[1].textContent = G.text;
+    this.goal.children[2].textContent = G.note;
   }
 
   syncToast() {
