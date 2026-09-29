@@ -232,6 +232,135 @@ const CSS = `
   letter-spacing:.5px;padding:2px 6px;border:1px solid #4a3f30;border-radius:3px;
   background:rgba(20,17,14,.6)}
 #screens .empty{color:#6a6154;font-style:italic}
+
+/* ===================================================================
+   THE STATIONS, DRESSED. (Playtest: "too basic, hard to navigate,
+   cramped".) A tabbed screen is a place now, not a card floating over a
+   paused delve: an opaque hall of dressed stone behind it, a carved title
+   plate, gold-framed panels, larger type, and a bar of medallions along the
+   bottom. Everything below overrides the base rules above only on the
+   stations (#screens.station); Held and the death card keep their card.
+   =================================================================== */
+#screens{font:15px/1.4 Georgia,"Times New Roman",serif}
+#screens.station{z-index:52;
+  background:
+    radial-gradient(120% 50% at 50% -8%,rgba(226,185,106,.14),transparent 62%),
+    radial-gradient(140% 90% at 50% 120%,rgba(0,0,0,.75),transparent 60%),
+    repeating-linear-gradient(0deg,rgba(0,0,0,.22) 0 2px,transparent 2px 44px),
+    repeating-linear-gradient(90deg,rgba(0,0,0,.16) 0 2px,transparent 2px 88px),
+    linear-gradient(#1a1510,#0d0b08)}
+#screens.station.up{display:block}
+body.menus #diag{display:none}
+#screens.station .card{position:relative;width:auto;max-width:520px;
+  margin:14px auto 12px;margin-left:max(12px,calc((100% - 520px)/2));
+  margin-right:max(12px,calc((100% - 520px)/2));
+  padding:18px 16px 16px;border-width:2px;border-radius:12px;
+  background-image:
+    radial-gradient(90% 40% at 50% 0%,rgba(226,185,106,.08),transparent 70%),
+    linear-gradient(#211b14,#15110d 38%,#100d0a),
+    linear-gradient(135deg,#f0cf86,#a67c3a 30%,#5a3e1a 55%,#c9a45a 80%,#6d4d22);
+  background-origin:border-box;background-clip:padding-box,padding-box,border-box;
+  box-shadow:0 18px 50px rgba(0,0,0,.7),inset 0 0 0 1px rgba(0,0,0,.7),
+    inset 0 0 0 3px rgba(166,124,58,.28),inset 0 2px 0 3px rgba(240,207,134,.08)}
+/* Corner studs: a gold diamond at each top corner of the frame. */
+#screens.station .card:before,#screens.station .card:after{content:'';position:absolute;top:-7px;
+  width:12px;height:12px;transform:rotate(45deg);
+  background:linear-gradient(135deg,#ffe2a0,#a67c3a 60%,#4a3214);
+  box-shadow:0 0 8px rgba(226,185,106,.45),0 0 0 1px #2a1c0c}
+#screens.station .card:before{left:14px}
+#screens.station .card:after{right:14px}
+/* The title plate: carved, centred, gilt, with a flourish under it. */
+#screens.station h1{text-align:center;font:600 25px/1.2 Cinzel,Georgia,serif;letter-spacing:2px;
+  margin:2px 0 14px;padding:0 0 14px;border:0;box-shadow:none;
+  background:linear-gradient(#fff1cc,#e2b96a 55%,#a67c3a);-webkit-background-clip:text;
+  background-clip:text;color:transparent;text-shadow:0 2px 0 rgba(0,0,0,.35);position:relative}
+#screens.station h1:after{content:'◆';position:absolute;left:0;right:0;bottom:0;height:10px;
+  font:10px/10px Georgia,serif;letter-spacing:0;color:#e2b96a;-webkit-text-fill-color:#e2b96a;
+  background:linear-gradient(90deg,transparent,#6d4d22 20%,#c9a45a 46%,transparent 46%,
+    transparent 54%,#c9a45a 54%,#6d4d22 80%,transparent) center/100% 1px no-repeat}
+/* Section labels read as labels, not asides. */
+#screens.station .sub{font-size:14px;color:#b8a888}
+#screens.station .sec{font:600 13px Cinzel,Georgia,serif;font-style:normal;letter-spacing:1.5px;
+  text-transform:uppercase;color:#d6b26e;margin:18px 0 8px;padding:0 0 6px;
+  border-bottom:1px solid rgba(166,124,58,.3);scroll-margin-top:64px}
+/* The resources: pills, the way every phone game shows what you hold. */
+#screens.station .homestats,#screens.station .purse{display:flex;gap:8px;justify-content:center;
+  flex-wrap:wrap;margin:0 0 14px;color:#a89878}
+#screens.station .homestats>span,#screens.station .purse{padding:7px 14px;border-radius:20px;
+  background:linear-gradient(#1d1811,#120f0b);border:1px solid #6d4d22;
+  box-shadow:inset 0 1px 0 rgba(226,185,106,.15),0 2px 6px rgba(0,0,0,.4)}
+#screens.station .purse{width:max-content;margin-left:auto;margin-right:auto;gap:10px}
+#screens.station .homestats b,#screens.station .purse b{color:#f0d898;font-size:16px}
+/* Rows are panels: taller, with a lit edge, and they press. */
+#screens.station .rows{max-height:none;overflow:visible;gap:8px;
+  -webkit-mask-image:none;mask-image:none}
+#screens.station .rows.ladder{max-height:52vh;overflow:auto;
+  -webkit-mask-image:linear-gradient(#000 calc(100% - 22px),transparent);
+  mask-image:linear-gradient(#000 calc(100% - 22px),transparent)}
+#screens.station .row{min-height:56px;padding:12px 13px;border-radius:9px;border-color:#3d3123;
+  background:linear-gradient(#211b14,#17130e);
+  box-shadow:inset 0 1px 0 rgba(226,185,106,.08),0 2px 5px rgba(0,0,0,.35);
+  transition:transform 80ms ease,filter 80ms ease}
+#screens.station button.row:active:not(:disabled){transform:translateY(1px);filter:brightness(1.15)}
+#screens.station .row:disabled{opacity:.62}
+#screens.station .row small{font-size:12.5px;margin-top:2px}
+#screens.station .row.on{box-shadow:inset 0 1px 0 rgba(214,178,110,.25),0 0 14px rgba(226,185,106,.22)}
+#screens.station .row em,#screens.station .row.delve em{font:600 10.5px Cinzel,Georgia,serif;letter-spacing:1.5px}
+#screens.station .item .aff{font-size:12.5px}
+#screens.station .act{font:600 10.5px Cinzel,Georgia,serif;letter-spacing:.8px;text-transform:uppercase;
+  color:#d6b26e;border-color:#6d4d22}
+#screens.station .ico{width:36px;height:36px;background-size:1260px 36px;
+  background-position:calc(var(--i,0) * -36px) 0;border-radius:6px;
+  box-shadow:0 0 0 1px #3d3123,inset 0 0 8px rgba(0,0,0,.6);background-color:#0f0c09}
+#screens.station .chip{min-height:40px;font:13px Georgia,serif}
+#screens.station .drop{min-width:48px;border-radius:9px}
+#screens.station .alt{font:15px Georgia,serif;min-height:52px;border-radius:10px}
+/* THE JUMP BAR: a long station (the Forge) is three places in one; a
+   segmented control rides at the top of the scroll and takes you to each. */
+#screens .seg{position:sticky;top:0;z-index:3;display:flex;gap:4px;padding:5px;margin:0 -4px 12px;
+  border-radius:12px;background:rgba(14,11,8,.94);border:1px solid #4a3a26;
+  box-shadow:0 6px 14px rgba(0,0,0,.5);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+#screens .seg button{flex:1;min-height:40px;border-radius:8px;border:1px solid transparent;
+  background:none;color:#a89878;font:600 12px Cinzel,Georgia,serif;letter-spacing:1px;
+  text-transform:uppercase}
+#screens .seg button.on{color:#1a130a;background:linear-gradient(#f0cf86,#c9a45a 60%,#a67c3a);
+  border-color:#6d4d22;box-shadow:0 0 10px rgba(226,185,106,.35)}
+/* Descend: the brightest thing on the screen, and it breathes. */
+#screens.station .go{border-radius:10px;font:600 16px Cinzel,Georgia,serif;letter-spacing:1.5px}
+#screens.station .go.big{min-height:66px;font-size:22px;letter-spacing:4px;color:#fff1cc;
+  text-shadow:0 0 12px rgba(226,185,106,.55),0 2px 0 rgba(0,0,0,.5);
+  animation:goGlow 2.6s ease-in-out infinite}
+@keyframes goGlow{0%,100%{box-shadow:inset 0 1px 0 rgba(214,178,110,.3),0 0 0 rgba(226,185,106,0)}
+  50%{box-shadow:inset 0 1px 0 rgba(214,178,110,.4),0 0 22px rgba(226,185,106,.35)}}
+#screens.station .go.pinned{border-radius:0 0 10px 10px}
+/* THE BAR OF MEDALLIONS. A double gilt rule with a stone set in the middle,
+   and each station a round seal with its word under it; the one you are in
+   is struck in gold and stands proud. */
+#screens.station{--bar:70px}
+#screens.station .tabs{gap:0;padding-top:6px;
+  background:linear-gradient(#241d15,#110e0a 60%,#0b0907);
+  border-top:1px solid #e2b96a;box-shadow:0 -1px 0 #3a2610,0 -3px 0 rgba(226,185,106,.25),0 -10px 24px rgba(0,0,0,.65)}
+#screens.station .tabs:before{content:'';position:absolute;left:50%;top:-7px;width:12px;height:12px;
+  margin-left:-6px;transform:rotate(45deg);background:linear-gradient(135deg,#ffe2a0,#a67c3a 60%,#4a3214);
+  box-shadow:0 0 8px rgba(226,185,106,.5),0 0 0 1px #2a1c0c}
+#screens.station .tabs button{border:0;background:none!important;gap:3px;color:#8c7a5c}
+#screens.station .tabs button i{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;
+  font-size:18px;background:radial-gradient(circle at 40% 35%,#2a2219,#120e0a);
+  border:1px solid #5a4226;box-shadow:inset 0 1px 0 rgba(226,185,106,.15),0 2px 4px rgba(0,0,0,.5);
+  transition:transform 120ms ease}
+#screens.station .tabs button span{font:600 10px Cinzel,Georgia,serif;letter-spacing:1px;text-transform:uppercase}
+#screens.station .tabs button.on{color:#f0d898}
+#screens.station .tabs button.on i{color:#1a130a;transform:translateY(-4px) scale(1.1);
+  background:radial-gradient(circle at 40% 35%,#ffe7b0,#d6b26e 55%,#8a6428);border-color:#fff1cc;
+  box-shadow:0 0 14px rgba(226,185,106,.6),0 3px 6px rgba(0,0,0,.6)}
+#screens.station .tabs button.cog{flex:0 0 52px}
+@media (prefers-reduced-motion:reduce){#screens.station .go.big{animation:none}}
+#screens .row>.item{flex:1;min-width:0}
+#screens.station .row.delve{font:17px Georgia,serif}
+#screens.station .row.delve small,#screens.station .row.delve .verdict{font:13px Georgia,serif}
+#screens.station .row.delve .act{font:600 10.5px Cinzel,Georgia,serif;letter-spacing:.8px}
+#screens.station .row.slide{min-height:56px;padding-top:6px;padding-bottom:6px}
+#screens.station .row.slide input[type=range]{margin:0}
 `;
 
 /* Cells of icons.png (tools/build-art.py's strip, carried over from the
@@ -282,7 +411,7 @@ export class Screens {
 
   show(name) {
     this.name = name;
-    if (!name) { this.root.classList.remove('up'); return; }
+    if (!name) { this.root.classList.remove('up', 'station'); document.body.classList.remove('menus'); return; }
     this.root.classList.add('up');
     if (name === 'paused') this.renderPaused();
     else if (name === 'over') this.renderOver();
@@ -299,8 +428,12 @@ export class Screens {
     else if (name === 'hall') this.renderHall();
     else if (name === 'delves') this.renderDelves();
     else this.renderGatehouse();
-    // Room at the bottom for the bar, on the screens that carry it.
-    this.root.classList.toggle('hasbar', !!this.root.querySelector('nav.tabs'));
+    // Room at the bottom for the bar, on the screens that carry it -- and
+    // those are the stations, which are places rather than cards over a delve.
+    const bar = !!this.root.querySelector('nav.tabs');
+    this.root.classList.toggle('hasbar', bar);
+    this.root.classList.toggle('station', bar);
+    document.body.classList.toggle('menus', bar);
   }
 
   /* Held. The delve is still standing behind this -- the scene keeps drawing
@@ -691,7 +824,7 @@ export class Screens {
     this.wirePicks();
     this.wireTabs();
     this.root.querySelector('#practice').addEventListener('click', () => {
-      this.root.classList.remove('up');
+      this.root.classList.remove('up'); document.body.classList.remove('menus');
       snd('descend'); this.onPractice(this.pick.hero);
     });
   }
@@ -782,7 +915,7 @@ export class Screens {
     for (const id of ['#descend', '#descendHere']) {
       const d = this.root.querySelector(id);
       if (d) d.addEventListener('click', () => {
-        this.root.classList.remove('up');
+        this.root.classList.remove('up'); document.body.classList.remove('menus');
         snd('descend'); this.onDescend(this.pick.hero, this.pick.level, this.pick.diff);
       });
     }
@@ -989,7 +1122,13 @@ export class Screens {
         this.tabs('gear') +
         '<div class="purse"><span>Power</span><b>' + stashPower() + '</b></div>' +
         (this.note ? '<p class="sub">' + this.note + '</p>' : '') +
-        '<p class="sub">Worn</p>' +
+        // Three places in one station: a bar at the top of the scroll that
+        // goes to each, so the vault is not a long scroll past the kit.
+        '<div class="seg" id="forgeSeg">' +
+          '<button type="button" data-jump="worn" class="on">Worn</button>' +
+          '<button type="button" data-jump="presets">Presets</button>' +
+          '<button type="button" data-jump="vault">Vault</button></div>' +
+        '<p class="sub sec" id="sec-worn">Worn</p>' +
         '<div class="rows">' +
           SLOTS.map(sl => {
             const it = stash.gear[sl.id];
@@ -1002,7 +1141,7 @@ export class Screens {
           }).join('') +
         '</div>' +
         this.presets() +
-        '<p class="sub">The vault &mdash; ' + stash.vault.length + ' of ' + cap + '</p>' +
+        '<p class="sub sec" id="sec-vault">The vault &mdash; ' + stash.vault.length + ' of ' + cap + '</p>' +
         this.vaultBar() +
         '<div class="rows" id="vaultRows">' +
           (shown.length
@@ -1070,6 +1209,12 @@ export class Screens {
         bagFilter = bagFilter === f && f !== 'all' ? 'all' : f;
         done();
       }));
+    const seg = this.root.querySelectorAll('[data-jump]');
+    seg.forEach(b => b.addEventListener('click', () => {
+      seg.forEach(x => x.classList.toggle('on', x === b));
+      const at = this.root.querySelector('#sec-' + b.dataset.jump);
+      if (at) at.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }));
     const sv = this.root.querySelector('#saveKit');
     if (sv) sv.addEventListener('click', () => {
       const L = saveLoadout();
@@ -1108,7 +1253,7 @@ export class Screens {
   presets() {
     const cap = typeof loadoutCap === 'function' ? loadoutCap() : 0;
     const Ls = stash.loadouts || [];
-    return '<p class="sub">Kit presets &mdash; ' + Ls.length + ' of ' + cap + '</p>' +
+    return '<p class="sub sec" id="sec-presets">Kit presets &mdash; ' + Ls.length + ' of ' + cap + '</p>' +
       (Ls.length ? '<div class="rows">' + Ls.map((L, i) => {
         const worn = SLOTS.filter(sl => L.slots[sl.id] != null).length;
         return '<div class="pair"><button class="row" type="button" data-load="' + i + '">' +

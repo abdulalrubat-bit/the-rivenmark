@@ -106,7 +106,7 @@ const FLOOR = { carpet: true };
 /* global walls, props, enemies, player, run, cam, view, state, stash, stick,
           arcs, particles, rings, floaters, bolts, slams, hazards, nulls,
           totems, ruptures, HEROES, TAU, FLOAT_STYLE, FLOAT_LIFE, BOLT_R,
-          portal, stepThrough, LEVEL_BY_ID, blankStash, el, chests, loot, shrines, lore, SHRINES,
+          portal, stepThrough, LEVEL_BY_ID, blankStash, el, chests, loot, shrines, lore, SHRINES, cracks, wallRev,
           CHEST_KINDS, CHEST_OPEN, CHEST_DRAW, LIGHT,
           CELL_W, GW, GH, SOLID, cellAt, pitGrid, gi, edges,
           keys, stickStart, stickMove, stickEnd, STICK_MAX, castAbility,
@@ -434,6 +434,8 @@ export class Delve extends Phaser.Scene {
    * first. */
   clearWorldArt() {
     if (this.wallGfx) this.wallGfx.destroy();
+    if (this.crackGfx) this.crackGfx.destroy();
+    this.crackGfx = null;
     for (const im of this.propImgs || []) im.destroy();
     this.breakables = [];
     for (const im of this.wallImgs || []) im.destroy();
@@ -484,6 +486,19 @@ export class Delve extends Phaser.Scene {
    * alone -- and that is most of the reason for the move.
    */
   paintStatics() {
+    this.paintWalls();
+    this.crackGfx = this.add.graphics().setDepth(-1.3e5);
+
+    // Scenery. `q` is the variant the generator rolled; the exporter wrote
+    // four of each. Depth by y so a body passes in front of a barrel it is
+    // below and behind one it is above.
+    this.paintScenery();
+  }
+
+  /* The walls alone, so a hidden room's wall coming down can rebake them
+   * without touching anything else. */
+  paintWalls() {
+    this.wallRev = wallRev;
     const gfx = this.add.graphics().setDepth(-2e5);
     // The shadow the mass throws, then the mass, as two passes over every wall
     // so a neighbour's shadow never lands on finished stone.
@@ -511,10 +526,9 @@ export class Delve extends Phaser.Scene {
     this.wallGfx = gfx;
 
     if (!/nodress/.test(location.search)) this.dressWalls();
+  }
 
-    // Scenery. `q` is the variant the generator rolled; the exporter wrote
-    // four of each. Depth by y so a body passes in front of a barrel it is
-    // below and behind one it is above.
+  paintScenery() {
     this.propImgs = [];
     this.breakables = [];
     for (const p of props) {
@@ -570,6 +584,8 @@ export class Delve extends Phaser.Scene {
   syncFinds() {
     for (const o of this.findImgs || []) {
       const f = o.f, p = 0.5 + 0.5 * Math.sin(f.pulse * 2.2);
+      if (o.img.visible === !!f.sealed && !f.taken) { o.img.setVisible(!f.sealed); if (o.sh) o.sh.setVisible(!f.sealed); }
+      if (f.sealed) continue;
       if (o.shrine) {
         if (f.used) { o.img.setTint(0x55524c); o.img.setAlpha(0.85); continue; }
         o.img.setAlpha(0.85 + 0.15 * p);
@@ -577,6 +593,40 @@ export class Delve extends Phaser.Scene {
         if (f.taken) { if (o.img.visible) o.img.setVisible(false); continue; }
         o.img.setAlpha(0.7 + 0.3 * p);
       }
+    }
+  }
+
+  /* A cracked wall: dark fissures over the stone, with a thin warm light
+   * seeping through them, so it can be picked out from across a room. When
+   * one comes down the core bumps wallRev and the walls are baked again. */
+  syncCracks(time) {
+    if (this.wallRev !== wallRev) {
+      if (this.wallGfx) this.wallGfx.destroy();
+      for (const im of this.wallImgs || []) im.destroy();
+      this.paintWalls();
+      this.culledAt = null;
+    }
+    const g = this.crackGfx;
+    if (!g) return;
+    g.clear();
+    const glow = 0.45 + 0.3 * Math.sin((time || 0) / 380);
+    for (const cr of cracks || []) {
+      if (cr.open) continue;
+      const jig = cr.shake > 0 ? (Math.random() - 0.5) * 4 : 0;
+      const x = cr.cx * CELL_W + jig, y = cr.cy * CELL_W, C = CELL_W;
+      const lines = [[0.50, 0.02, 0.38, 0.30, 0.56, 0.52, 0.44, 0.98],
+                     [0.38, 0.30, 0.12, 0.40], [0.56, 0.52, 0.86, 0.64],
+                     [0.44, 0.78, 0.22, 0.90]];
+      const deep = Math.min(1, 0.4 + cr.blows * 0.25);
+      g.lineStyle(10, 0xffa040, glow * 0.4);
+      for (const l of lines) { g.beginPath(); g.moveTo(x + l[0] * C, y + l[1] * C);
+        for (let i = 2; i < l.length; i += 2) g.lineTo(x + l[i] * C, y + l[i + 1] * C); g.strokePath(); }
+      g.lineStyle(2 + cr.blows, 0x0a0705, deep);
+      for (const l of lines) { g.beginPath(); g.moveTo(x + l[0] * C, y + l[1] * C);
+        for (let i = 2; i < l.length; i += 2) g.lineTo(x + l[i] * C, y + l[i + 1] * C); g.strokePath(); }
+      g.lineStyle(1.5, 0xffe0a0, Math.min(1, glow + 0.3));
+      for (const l of lines) { g.beginPath(); g.moveTo(x + l[0] * C, y + l[1] * C);
+        for (let i = 2; i < l.length; i += 2) g.lineTo(x + l[i] * C, y + l[i + 1] * C); g.strokePath(); }
     }
   }
 
@@ -1116,6 +1166,9 @@ export class Delve extends Phaser.Scene {
    * placed, so it is the only thing looked at. */
   syncChests() {
     for (const c of this.chestImgs || []) {
+      // Behind a wall that has not come down yet.
+      if (c.img.visible === !!c.ch.sealed) { c.img.setVisible(!c.ch.sealed); c.sh.setVisible(!c.ch.sealed); }
+      if (c.ch.sealed) continue;
       const want = 'chests/' + c.ch.kind + (c.ch.open ? '-open' : '-shut');
       if (c.img.frame.name !== want && this.textures.getFrame('art', want)) {
         c.img.setFrame(want);
@@ -1296,6 +1349,7 @@ export class Delve extends Phaser.Scene {
     this.syncBreakables();
     this.syncChests(time);
     this.syncFinds();
+    this.syncCracks(time);
     this.syncLoot(time);
     this.cullDressing();
     const o = screenOrigin(this);

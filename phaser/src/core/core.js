@@ -4268,6 +4268,138 @@ function updateFinds(dt) {
   }
 }
 
+/* --- HIDDEN ROOMS ---------------------------------------------------------
+   A cracked wall with a draught through it. Three blows and it falls in, and
+   behind it is a small room nobody has walked into since it was sealed: a
+   coffer, and sometimes a shrine.
+
+   The room is cut into the rock but left SOLID until the wall falls, so it
+   draws as rock, blocks as rock and is not on the map -- nothing gives it
+   away but the crack. Breaking it opens the cells and rebuilds everything
+   read off the grid: the wall rects and their index, the edges, the open
+   cells and the flow field. `wallRev` counts that, for the renderer to
+   rebake its walls from.
+   -------------------------------------------------------------------- */
+const CRACK_BLOWS = 3;
+let cracks = [];
+let wallRev = 0;
+
+function placeCracks(spawn, portal) {
+  cracks = [];
+  if (!openCells.length || !(LEVEL.depth > 0)) return;
+  if (Math.random() > 0.7) return;
+  const solidAt = (x, y) => x >= 1 && y >= 1 && x < GW - 1 && y < GH - 1 &&
+                            cellAt(x, y) === SOLID && !(pitGrid && pitGrid[gi(x, y)]);
+  const openAt = (x, y) => cellAt(x, y) === OPEN;
+  const cells = openCells.slice();
+  for (let i = cells.length - 1; i > 0; i--) {
+    const j = (Math.random() * (i + 1)) | 0;
+    const t = cells[i]; cells[i] = cells[j]; cells[j] = t;
+  }
+  const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  for (const c of cells) {
+    if (dist2(c.x, c.y, spawn.x, spawn.y) < 400 * 400) continue;
+    if (dist2(c.x, c.y, portal.x, portal.y) < 300 * 300) continue;
+    const fx = Math.floor(c.x / CELL_W), fy = Math.floor(c.y / CELL_W);
+    for (const [dx, dy] of DIRS) {
+      const kx = fx + dx, ky = fy + dy;                 // the cracked cell
+      const px = dy, py = dx;                           // along the wall
+      // A flat face: the wall runs on either side of the crack, and the floor
+      // in front of it is open, so it reads as a wall and not a stub.
+      if (!solidAt(kx, ky) || !solidAt(kx + px, ky + py) || !solidAt(kx - px, ky - py)) continue;
+      if (!openAt(fx + px, fy + py) || !openAt(fx - px, fy - py)) continue;
+      // Nothing mounted on the face, or it would hang in the doorway after.
+      const faceX = (kx - dx * 0.5) * CELL_W + CELL_W / 2, faceY = (ky - dy * 0.5) * CELL_W + CELL_W / 2;
+      if (props.some(pr => dist2(pr.x, pr.y, faceX, faceY) < 50 * 50)) continue;
+      const deep = 4 + ((Math.random() * 2) | 0), half = 2;
+      // The room, and a cell of rock all round it, has to be solid rock.
+      let ok = true;
+      const room = [];
+      for (let a = 0; a <= deep + 1 && ok; a++) {       // a = 0 is the crack's own row
+        for (let b = -half - 1; b <= half + 1 && ok; b++) {
+          const x = kx + dx * a + px * b, y = ky + dy * a + py * b;
+          if (!solidAt(x, y)) ok = false;
+          else if (a >= 1 && a <= deep && Math.abs(b) <= half) room.push(gi(x, y));
+        }
+      }
+      if (!ok) continue;
+      // Its middle, for the coffer.
+      const mx = kx + dx * ((deep + 1) >> 1), my = ky + dy * ((deep + 1) >> 1);
+      const crack = { cx: kx, cy: ky, x: kx * CELL_W + CELL_W / 2, y: ky * CELL_W + CELL_W / 2,
+                      fx, fy, blows: 0, open: false, shake: 0, told: false, room,
+                      mid: { x: mx * CELL_W + CELL_W / 2, y: my * CELL_W + CELL_W / 2 } };
+      cracks.push(crack);
+      chests.push({ x: crack.mid.x, y: crack.mid.y, kind: 'coffer', open: false, sealed: true,
+                    q: (Math.random() * 4) | 0, pulse: Math.random() * TAU });
+      if (Math.random() < 0.5) {
+        const ids = Object.keys(SHRINES);
+        const sx = kx + dx * deep - px * 1, sy = ky + dy * deep - py * 1;
+        shrines.push({ x: sx * CELL_W + CELL_W / 2, y: sy * CELL_W + CELL_W / 2, sealed: true,
+                       id: ids[(Math.random() * ids.length) | 0], used: false, pulse: Math.random() * TAU });
+      }
+      return;
+    }
+  }
+}
+
+// Is a point within reach of a crack's face?
+function nearCrack(cr, x, y, r) {
+  const x0 = cr.cx * CELL_W, y0 = cr.cy * CELL_W;
+  const nx = clamp(x, x0, x0 + CELL_W), ny = clamp(y, y0, y0 + CELL_W);
+  return dist2(x, y, nx, ny) < r * r;
+}
+
+function hurtCrack(cr) {
+  if (cr.open) return;
+  cr.blows++;
+  cr.shake = 0.2;
+  burst(cr.x, cr.y, '#8a7a62', 6, 120);
+  shake(2);
+  if (cr.blows >= CRACK_BLOWS) openCrack(cr);
+}
+
+function openCrack(cr) {
+  cr.open = true;
+  grid[gi(cr.cx, cr.cy)] = OPEN;
+  for (const k of cr.room) grid[k] = OPEN;
+  // The rects are merged from the grid, and a chasm is its own rect laid
+  // over it -- so the pits step out of the merge and go back in after.
+  const pits = walls.filter(w => w.pit);
+  const pitCells = [];
+  if (pitGrid) for (let k = 0; k < pitGrid.length; k++) if (pitGrid[k]) { pitCells.push(k); grid[k] = OPEN; }
+  buildWallRects();
+  for (const k of pitCells) grid[k] = SOLID;
+  if (pits.length) { walls.push(...pits); rebuildWallGrid(); }
+  indexOpenCells({ x: cr.fx, y: cr.fy });
+  buildEdges();
+  flowFrom = -1;
+  rebuildFlow();
+  for (const ch of chests) if (ch.sealed && nearCrackRoom(cr, ch)) ch.sealed = false;
+  for (const sh of shrines) if (sh.sealed && nearCrackRoom(cr, sh)) sh.sealed = false;
+  wallRev++;
+  run.secrets = (run.secrets || 0) + 1;
+  burst(cr.x, cr.y, '#a89878', 26, 220);
+  ring(cr.x, cr.y, '#d8c8a0', 12, 90, 0.5);
+  shake(6);
+  sfx('fall', cr.x, cr.y);
+  toast('The wall gives way — a hidden room!', '#e8c878');
+  clog('secret', cr.cx + ',' + cr.cy);
+}
+
+function nearCrackRoom(cr, o) {
+  return cr.room.includes(gi(Math.floor(o.x / CELL_W), Math.floor(o.y / CELL_W)));
+}
+
+function updateCracks(dt) {
+  for (const cr of cracks) {
+    if (cr.shake > 0) cr.shake = Math.max(0, cr.shake - dt);
+    if (!cr.open && !cr.told && dist2(player.x, player.y, cr.x, cr.y) < 200 * 200) {
+      cr.told = true;
+      toast('A cracked wall — strike it!', '#e8c878');
+    }
+  }
+}
+
 /* --- hazards --------------------------------------------------------------
    Ground you cannot stand on. A slam is a moment; a hazard is a place, and
    the difference is what turns a room into terrain. The Riftborn leaves them
@@ -4565,6 +4697,11 @@ function hurtPropsNear(x, y, r, dmg) {
     if (pr.gone || !PROP_HP[pr.kind]) continue;
     if (dist2(pr.x, pr.y, x, y) > r * r) continue;
     hurtProp(pr, dmg);
+  }
+  // A blast brings a cracked wall down in one.
+  for (let i = 0; i < cracks.length; i++) {
+    const cr = cracks[i];
+    if (!cr.open && nearCrack(cr, x, y, r)) openCrack(cr);
   }
 }
 
@@ -7064,6 +7201,13 @@ function updateArcs(dt) {
             b.y > wl.y - 4 && b.y < wl.y + wl.h + 4) {
           b.dead = true;
           burst(b.x, b.y, HEROES[run.hero].magic, 5, 140);
+          // A cracked wall takes the blow that rock stops.
+          for (let c = 0; c < cracks.length; c++) {
+            const cr = cracks[c];
+            if (!cr.open && b.hit.indexOf(cr) === -1 && nearCrack(cr, b.x, b.y, 12)) {
+              b.hit.push(cr); hurtCrack(cr);
+            }
+          }
           break;
         }
       }
@@ -7945,6 +8089,7 @@ function update(dt) {
   updateBolts(dt);
   updateChests(dt);
   updateFinds(dt);
+  updateCracks(dt);
   updateBleed(dt);
   updateGloom(dt);
   updateRings(dt);
@@ -9044,6 +9189,7 @@ function resetRun(heroId, levelId, diffId) {
   placePacks(spawn);
   placeChests(spawn, portal);
   placeFinds(spawn, portal);
+  placeCracks(spawn, portal);
   placeTraps();
   flowFrom = -1;
   rebuildFlow();

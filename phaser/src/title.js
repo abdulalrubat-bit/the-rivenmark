@@ -26,8 +26,11 @@
  * the floor never binds. It exists for the other case. A title that flashes
  * past in 90ms on a warm cache is worse than no title at all -- it reads as a
  * glitch, and it teaches the player that something flickers at boot.
+ *
+ * 4.3s since the Fateful Games card: it holds the first 3.1s (index.html),
+ * and the title then gets its own beat before the menu.
  */
-const DWELL = 1500;
+const DWELL = 4300;
 const FADE  = 420;
 
 export class Title {
