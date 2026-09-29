@@ -56,43 +56,47 @@
   /* THE STUDIO CARD. Fateful Games, before the title: in, a held beat, out,
      all in CSS so it runs on the first frame with nothing loaded. The load
      carries on underneath it -- the title card and its bar are already there
-     and simply revealed. A tap skips it. brand/fateful-games.png is the logo;
-     until there is one (or if it fails) the drawn emblem and wordmark stand
-     in for it. */
+     and simply revealed. A tap skips it. The logo is drawn (SVG), not an
+     image, so it is sharp at every ratio and needs no download. */
   #boot .studio{position:absolute;inset:0;z-index:2;display:grid;place-items:center;
-        background:#050404;animation:studio 2.9s ease forwards}
+        background:#222328;animation:studio 3.1s ease forwards}
   #boot .studio.skip{animation:studioSkip .35s ease forwards}
-  #boot .studio .mark{text-align:center;opacity:0;transform:scale(.94);
-        animation:studioMark 2.9s ease forwards}
-  #boot .studio img{display:block;max-width:min(260px,64vw);max-height:40vh;margin:0 auto}
-  #boot .studio svg{width:92px;height:92px;display:block;margin:0 auto 18px;
-        filter:drop-shadow(0 0 14px rgba(226,185,106,.35))}
-  #boot .studio .name{font:400 22px/1.2 Georgia,serif;letter-spacing:10px;color:#e8d4a8;
-        padding-left:10px}
-  #boot .studio .name small{display:block;margin-top:8px;font-size:11px;letter-spacing:7px;
-        color:#8c7650}
-  @keyframes studio{0%,82%{opacity:1}100%{opacity:0;visibility:hidden}}
+  #boot .studio .mark{text-align:center;opacity:0;animation:studioMark 3.1s ease forwards;
+        font-family:"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+  #boot .studio .hex{width:124px;height:136px;display:block;margin:0 auto 34px;
+        filter:drop-shadow(0 10px 22px rgba(0,0,0,.55))}
+  #boot .studio .name{font-weight:800;font-size:44px;line-height:1;letter-spacing:5px;
+        color:#f1f1f3;padding-left:5px}
+  #boot .studio .games{margin-top:14px;font-weight:700;font-size:13px;letter-spacing:9px;
+        color:#8a8d96;padding-left:9px}
+  /* The hazard stripe fills as the card holds, like the bar it is. */
+  #boot .studio .hazard{width:188px;height:7px;margin:26px auto 0;border-radius:2px;
+        background:#141518;overflow:hidden}
+  #boot .studio .hazard>i{display:block;height:100%;width:0;
+        background:repeating-linear-gradient(-55deg,#d4e04a 0 9px,#141518 9px 16px);
+        animation:hazard 2.2s .3s cubic-bezier(.4,.1,.3,1) forwards}
+  #boot .studio .prod{margin-top:20px;font:11px ui-monospace,Menlo,monospace;letter-spacing:4px;
+        color:#8a8d96;padding-left:4px}
+  @keyframes studio{0%,84%{opacity:1}100%{opacity:0;visibility:hidden}}
   @keyframes studioSkip{to{opacity:0;visibility:hidden}}
-  @keyframes studioMark{0%{opacity:0;transform:scale(.94)}
-        22%,70%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1.03)}}
-  @media (prefers-reduced-motion:reduce){#boot .studio,#boot .studio .mark{animation-duration:1.2s}}
+  @keyframes studioMark{0%{opacity:0;transform:translateY(6px)}
+        16%,76%{opacity:1;transform:none}100%{opacity:0}}
+  @keyframes hazard{to{width:100%}}
+  @media (prefers-reduced-motion:reduce){#boot .studio,#boot .studio .mark{animation-duration:1.4s}
+        #boot .studio .hazard>i{animation-duration:.8s}}
 </style>
 <div id="boot">
   <div class="studio" id="studio">
     <div class="mark">
-      <!-- The logo goes here as <img src="brand/fateful-games.png"> once the
-           file is in public/brand/; until then the drawn emblem stands in.
-           Not requested speculatively: a 404 at boot is a console error. -->
-      <div class="fallback">
-        <svg viewBox="0 0 100 100" aria-hidden="true">
-          <circle cx="50" cy="50" r="44" fill="none" stroke="#a67c3a" stroke-width="2"/>
-          <circle cx="50" cy="50" r="36" fill="none" stroke="#6d4d22" stroke-width="1"/>
-          <path d="M50 10 L50 90 M22 22 L78 78 M78 22 L22 78" stroke="#6d4d22" stroke-width="1"/>
-          <path d="M50 20 C70 34 70 66 50 80 C30 66 30 34 50 20Z" fill="#1a130a" stroke="#e2b96a" stroke-width="2"/>
-          <circle cx="50" cy="50" r="7" fill="#e2b96a"/>
-        </svg>
-        <div class="name">FATEFUL<small>GAMES</small></div>
-      </div>
+      <svg class="hex" viewBox="0 0 120 132" aria-hidden="true">
+        <polygon points="60,2 116,34 116,98 60,130 4,98 4,34" fill="#2b2e35"/>
+        <polygon points="60,14 106,40 106,92 60,118 14,92 14,40" fill="#f26512"/>
+        <path d="M44 38 H80 V50 H57 V61 H76 V72 H57 V94 H44 Z" fill="#26282d"/>
+      </svg>
+      <div class="name">FATEFUL</div>
+      <div class="games">G A M E S</div>
+      <div class="hazard"><i></i></div>
+      <div class="prod">A FATEFUL GAMES PRODUCTION</div>
     </div>
   </div>
   <div class="wrap">

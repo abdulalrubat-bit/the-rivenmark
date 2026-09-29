@@ -27,7 +27,7 @@
  * past in 90ms on a warm cache is worse than no title at all -- it reads as a
  * glitch, and it teaches the player that something flickers at boot.
  *
- * 4.3s since the Fateful Games card: it holds the first 2.9s (index.html),
+ * 4.3s since the Fateful Games card: it holds the first 3.1s (index.html),
  * and the title then gets its own beat before the menu.
  */
 const DWELL = 4300;
