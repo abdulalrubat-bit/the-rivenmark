@@ -20,7 +20,7 @@ import { bossShown, bossBarDrop, minimapBox } from './overlay.js';
  * anything else that draws it reads the same word and is free to draw it
  * differently. */
 const ROLE_HUE = {
-  strike: '#d9a441',   // sun-gold: it hurts something
+  strike: '#f0732a',   // sun-gold: it hurts something
   ward:   '#8fb9d6',   // arcane:   it keeps you standing
   mend:   '#7fb08f',   // green:    it gives life back
   snare:  '#cbb6ff'    // brand:    it takes something from them
@@ -57,22 +57,22 @@ const CSS = `
 #hud[hidden]{display:none!important}
 #hud{position:fixed;pointer-events:none;font:12px ui-monospace,Menlo,monospace;
      inset:var(--sa-t) var(--sa-r) var(--sa-b) var(--sa-l);
-     color:#cebe9e;-webkit-user-select:none;user-select:none}
+     color:#bdb4af;-webkit-user-select:none;user-select:none}
 /* One band, not a red slab with text floating beside it. The frame, the inset
    and the stone colour are the boss bar's, so the two read as the same object
    in two sizes rather than as two different games' HUDs. */
 #hud .top{position:absolute;left:8px;right:8px;top:8px;display:flex;
      flex-direction:column;gap:3px;
-     background:rgba(16,13,10,.72);border:1px solid #4a3f30;border-radius:4px;padding:3px}
+     background:rgba(15,13,12,.72);border:1px solid #423c38;border-radius:4px;padding:3px}
 #hud .top .band{display:flex;gap:6px;align-items:stretch}
-#hud .life{flex:1;height:16px;background:#0d0b09;border:1px solid #3a3226;border-radius:2px;
+#hud .life{flex:1;height:16px;background:#0c0b0a;border:1px solid #362f2c;border-radius:2px;
      overflow:hidden;position:relative}
 #hud .life i{display:block;height:100%;background:linear-gradient(#d1503c,#7c2018);
      transition:width .12s linear}
 /* Quarter ticks, exactly as the boss bar has them: a bar that moves slowly
    still shows that it moved. */
 #hud .life:after{content:'';position:absolute;inset:0;pointer-events:none;
-     background:repeating-linear-gradient(90deg,transparent 0 24.6%,rgba(8,6,4,.5) 24.6% 25%)}
+     background:repeating-linear-gradient(90deg,transparent 0 24.6%,rgba(7,6,6,.5) 24.6% 25%)}
 #hud .life b{position:absolute;inset:0;display:grid;place-items:center;font-weight:600;
      font-size:11px;text-shadow:0 1px 2px #000;z-index:1}
 /* Low. The bar is the one number worth interrupting the player for, and a red
@@ -83,9 +83,9 @@ const CSS = `
      50%{box-shadow:0 0 7px rgba(255,106,77,.55)}}
 #hud .slag{min-width:86px;display:flex;align-items:center;justify-content:flex-end;gap:4px;
      padding-right:3px;font-size:11px;text-shadow:0 1px 2px #000;white-space:nowrap}
-#hud .slag u{width:7px;height:7px;background:#c99a3e;border:1px solid #7c5f24;
+#hud .slag u{width:7px;height:7px;background:#e06b27;border:1px solid #8b4015;
      transform:rotate(45deg);text-decoration:none;flex:none}
-#hud .slag.met{color:#e8c060}
+#hud .slag.met{color:#fb8d4d}
 /* The way out. Top-LEFT, under the strip: the top-right corner is the map and
    the bottom two are thumbs, and this is a button you must never press by
    accident in a fight -- so it goes in the one corner a hand does not visit.
@@ -94,24 +94,24 @@ const CSS = `
 /* Deliberately NOT the kit's plate. This is a control you find, not one you
    use, and giving it the same bronze would put a sixth big gold disc on the
    screen competing with the five that matter. */
-#hud .hold button{width:34px;height:34px;border-radius:50%;background:rgba(20,17,14,.55);
-     border:1px solid rgba(74,63,48,.8);color:#9a8f7c;font:12px/1 ui-monospace,monospace;
+#hud .hold button{width:34px;height:34px;border-radius:50%;background:rgba(19,17,16,.55);
+     border:1px solid rgba(66,60,56,.8);color:#958881;font:12px/1 ui-monospace,monospace;
      box-shadow:none}
 #hud .hold button:before{display:none}
-#hud .hold button:active{background:#2a2419;color:#e8dcc0}
+#hud .hold button:active{background:#26211f;color:#ead9cd}
 /* The bag, beside the pause and built the same way: a thing you look at
    between fights, not a control you reach for in one. The count is the only
    part that asks for attention, and only when the bag is full. */
 #hud .hold .bag{position:relative;font-size:14px}
 #hud .hold .bag i{position:absolute;right:-4px;bottom:-4px;min-width:15px;height:15px;
-     border-radius:8px;background:#1a1712;border:1px solid #4a3f30;color:#cebe9e;
+     border-radius:8px;background:#191614;border:1px solid #423c38;color:#bdb4af;
      font:9px/13px ui-monospace,monospace;font-style:normal;text-align:center;padding:0 2px;
      box-sizing:border-box}
-#hud .hold .bag.full i{border-color:#e8c060;color:#e8c060}
+#hud .hold .bag.full i{border-color:#fb8d4d;color:#fb8d4d}
 /* Sound, the third of the row. Off is the note struck through and dimmed,
    not a different glyph: the same shape in two states reads as a switch. */
 #hud .hold .snd{font-size:15px}
-#hud .hold .snd.off{color:#5a5244;text-decoration:line-through}
+#hud .hold .snd.off{color:#564d48;text-decoration:line-through}
 /* The kit sits bottom-right in two rows of three. Its own bottom edge, the
    swap beside it rather than above it, and the resource meter over it are all
    placed so nothing lands on anything else -- measured in the play test, not
@@ -146,11 +146,11 @@ const CSS = `
  */
 #hud .conduit{position:absolute;right:12px;bottom:14px;width:96px;height:96px;
      border-radius:50%;pointer-events:auto;touch-action:none;
-     background:linear-gradient(#e2b96a,#a67c3a 34%,#6d4d22 70%,#3a2610);
+     background:linear-gradient(#f49158,#b95c27 34%,#7a3a15 70%,#2a2422);
      box-shadow:0 3px 10px rgba(0,0,0,.6);display:grid;place-items:center;
      -webkit-user-select:none;user-select:none}
 #hud .conduit:before{content:'';position:absolute;inset:4px;border-radius:50%;
-     background:linear-gradient(rgba(44,54,70,.85),rgba(10,14,22,.96)),#161310;
+     background:linear-gradient(rgba(44,54,70,.85),rgba(10,14,22,.96)),#151311;
      box-shadow:inset 0 1px 0 rgba(150,172,200,.22),0 0 0 1px rgba(0,0,0,.85)}
 /* The rim, which is where a gather begins: it lights as the drag approaches
    it, so "hold it at the edge" is a thing the control tells you rather than a
@@ -160,7 +160,7 @@ const CSS = `
 /* The gather, as the cooldown wedge run backwards -- filling instead of
    draining, because this is a thing being built rather than spent. */
 #hud .conduit .chg{position:absolute;inset:8px;border-radius:50%;pointer-events:none;
-     background:conic-gradient(from -90deg,rgba(255,214,140,.55)
+     background:conic-gradient(from -90deg,rgba(255,182,140,.55)
      calc(var(--chg,0) * 360deg),transparent 0)}
 /* THE HEAVY. Its own button, beside the Conduit and below the kit, so the
    same right thumb reaches it -- and at 360px its left edge stays right of
@@ -169,35 +169,35 @@ const CSS = `
    is still at the Conduit's rim. */
 #hud .heavy{position:absolute;right:116px;bottom:24px;width:60px;height:60px;
      border-radius:50%;pointer-events:auto;touch-action:none;display:grid;place-items:center;
-     background:linear-gradient(#b98a4a,#6d4d22 60%,#3a2610);box-shadow:0 3px 8px rgba(0,0,0,.55);
-     -webkit-user-select:none;user-select:none;color:#f0dcae;font:600 10px/1 Georgia,serif;
+     background:linear-gradient(#ce6d35,#7a3a15 60%,#2a2422);box-shadow:0 3px 8px rgba(0,0,0,.55);
+     -webkit-user-select:none;user-select:none;color:#f0d2be;font:600 10px/1 Georgia,serif;
      letter-spacing:.06em}
 #hud .heavy:before{content:'';position:absolute;inset:3px;border-radius:50%;
      background:radial-gradient(circle at 50% 35%,#2a2230,#0e0b10)}
 #hud .heavy .chg{position:absolute;inset:6px;border-radius:50%;pointer-events:none;
-     background:conic-gradient(from -90deg,rgba(255,214,140,.6) calc(var(--chg,0) * 360deg),transparent 0)}
+     background:conic-gradient(from -90deg,rgba(255,182,140,.6) calc(var(--chg,0) * 360deg),transparent 0)}
 #hud .heavy .mark{position:relative;font-size:20px;line-height:1;margin-top:-6px}
 #hud .heavy .tag{position:absolute;bottom:9px;left:0;right:0;text-align:center;opacity:.8}
-#hud .heavy.full{box-shadow:0 0 14px rgba(255,214,140,.8)}
+#hud .heavy.full{box-shadow:0 0 14px rgba(255,182,140,.8)}
 #hud.classic .heavy{display:none}
 /* Where the thumb actually is. It is the only part that moves, so it is the
    part that says the aim is yours now. */
 #hud .conduit .knob{position:absolute;width:26px;height:26px;border-radius:50%;
-     background:radial-gradient(circle at 38% 32%,#ffe9bc,#c79a44 60%,#6d4d22);
+     background:radial-gradient(circle at 38% 32%,#fce0ce,#dd6e2e 60%,#7a3a15);
      box-shadow:0 1px 3px rgba(0,0,0,.7);pointer-events:none;
      transform:translate(var(--kx,0px),var(--ky,0px));
      opacity:var(--knob,0);transition:opacity .08s linear}
 #hud .conduit .glyph{position:relative;z-index:1;font:22px/1 ui-monospace,monospace;
-     color:#ffd870;text-shadow:0 1px 3px #000;opacity:var(--mark,1);
+     color:#ffa470;text-shadow:0 1px 3px #000;opacity:var(--mark,1);
      pointer-events:none}
 /* The chain, as pips round the bottom of the rim. Three of them, and the
    third is the one that comes round wider. */
 #hud .conduit .chain{position:absolute;bottom:9px;display:flex;gap:4px;
      pointer-events:none}
 #hud .conduit .chain i{width:5px;height:5px;border-radius:50%;
-     background:rgba(255,216,112,.2);box-shadow:0 0 0 1px rgba(0,0,0,.6)}
-#hud .conduit .chain i.on{background:#ffd870}
-#hud .conduit.gathering{box-shadow:0 0 16px rgba(255,214,140,.5),0 3px 10px rgba(0,0,0,.6)}
+     background:rgba(255,164,112,.2);box-shadow:0 0 0 1px rgba(0,0,0,.6)}
+#hud .conduit .chain i.on{background:#ffa470}
+#hud .conduit.gathering{box-shadow:0 0 16px rgba(255,182,140,.5),0 3px 10px rgba(0,0,0,.6)}
 /* CUT FROM THE SAME STONE.
  *
  * The kit was flat black discs with a hairline ring, and they are the largest
@@ -210,13 +210,13 @@ const CSS = `
  * border cannot carry a gradient. Everything above the face -- the sweep, the
  * mark, the seconds -- is inset by the band's width so nothing draws over it.
  */
-#hud button{width:56px;height:56px;border-radius:50%;color:#e8dcc0;border:0;
-     background:linear-gradient(#e2b96a,#a67c3a 34%,#6d4d22 70%,#3a2610);
+#hud button{width:56px;height:56px;border-radius:50%;color:#ead9cd;border:0;
+     background:linear-gradient(#f49158,#b95c27 34%,#7a3a15 70%,#2a2422);
      font:16px/1 ui-monospace,monospace;padding:0;
      display:grid;place-items:center;touch-action:manipulation;position:relative;
      overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.55)}
 #hud button:before{content:'';position:absolute;inset:3px;border-radius:50%;
-     background:linear-gradient(rgba(44,54,70,.85),rgba(10,14,22,.96)),#161310;
+     background:linear-gradient(rgba(44,54,70,.85),rgba(10,14,22,.96)),#151311;
      box-shadow:inset 0 1px 0 rgba(150,172,200,.22),0 0 0 1px rgba(0,0,0,.85)}
 /* THE SWEEP. A cooldown used to replace the ability's mark with a number,
    which took the one thing that says WHICH ability this is away at exactly the
@@ -225,7 +225,7 @@ const CSS = `
    in a fight has time for. The number stays too, small, under the mark, for
    when a second matters. */
 #hud button .sweep{position:absolute;inset:4px;border-radius:50%;pointer-events:none;
-     background:conic-gradient(from -90deg,rgba(6,5,3,.66) calc(var(--cd,0) * 360deg),
+     background:conic-gradient(from -90deg,rgba(5,4,4,.66) calc(var(--cd,0) * 360deg),
      transparent 0)}
 /* The seconds and the word cannot both have the bottom of the disc: they
  * overlapped, and a cooling button drew its remaining time through its own
@@ -233,7 +233,7 @@ const CSS = `
  * number is what you read in the middle of a fight, so when there is a
  * number the word stands down for it. */
 #hud button .cd{position:absolute;bottom:6px;font:600 9px/1 ui-monospace,monospace;
-     color:#ffd870;text-shadow:0 1px 2px #000;z-index:2}
+     color:#ffa470;text-shadow:0 1px 2px #000;z-index:2}
 #hud button.counting .tag{opacity:0}
 #hud button .mark{position:relative;z-index:1;line-height:1;margin-top:-3px}
 /* THE WORD, WHICH IS THE WHOLE POINT.
@@ -266,14 +266,14 @@ const CSS = `
 #hud button .tag{position:absolute;bottom:11px;left:5px;right:5px;z-index:1;
      font:600 var(--tagfs,7.5px)/1 'IBM Plex Mono',ui-monospace,monospace;
      letter-spacing:.06em;
-     color:var(--role,#d9a441);text-shadow:0 1px 2px #000;pointer-events:none;
+     color:var(--role,#f0732a);text-shadow:0 1px 2px #000;pointer-events:none;
      text-align:center;overflow:hidden;text-overflow:ellipsis;
      white-space:nowrap}
 /* THE ROLE, AS A COLOUR. Four of them, and four is learnable in one delve
    where nine glyphs are not: gold hurts something, blue keeps you standing,
    green gives life back, violet takes something from them. The mark carries it
    too, so the pair is legible to anyone who cannot separate the hues. */
-#hud button .mark{color:var(--role,#e8dcc0)}
+#hud button .mark{color:var(--role,#ead9cd)}
 /* WHAT IT COSTS, on the button rather than only in the shared meter. A button
    greyed for want of Charge and a button greyed for a cooldown were the same
    grey, and they are not the same problem: one is "wait" and the other is
@@ -281,9 +281,9 @@ const CSS = `
 #hud button .cost{position:absolute;top:6px;left:0;right:0;z-index:1;
      display:flex;gap:2px;justify-content:center;pointer-events:none}
 #hud button .cost i{width:4px;height:4px;border-radius:50%;
-     background:rgba(255,216,112,.25);box-shadow:0 0 0 1px rgba(0,0,0,.55)}
-#hud button .cost i.on{background:#ffd870}
-#hud button .cost b{font:600 7.5px/1 'IBM Plex Mono',monospace;color:#ffd870;
+     background:rgba(255,164,112,.25);box-shadow:0 0 0 1px rgba(0,0,0,.55)}
+#hud button .cost i.on{background:#ffa470}
+#hud button .cost b{font:600 7.5px/1 'IBM Plex Mono',monospace;color:#ffa470;
      text-shadow:0 1px 2px #000}
 /* Short of the price, rather than merely cooling: the ring goes amber and the
    word says so, because waiting will not fix it. */
@@ -292,24 +292,24 @@ const CSS = `
  * can see the floor through does not read as unavailable, it reads as a hole
  * in the HUD. Both of these states are said with colour, on a face that stays
  * opaque. */
-#hud button.broke{background:linear-gradient(#6d5a2c,#4a3c1e 40%,#332a14)}
+#hud button.broke{background:linear-gradient(#7a401f,#522c15 40%,#282321)}
 #hud button.aimless{opacity:.45;filter:saturate(.4)}
-#hud button.broke .tag{color:#c9a24a}
+#hud button.broke .tag{color:#de7335}
 /* Cooling and CANNOT are different states and used to look the same. Cooling
    keeps its colour and shows the wedge; blocked -- no charges, nothing in
    reach -- goes flat and grey, because no amount of waiting fixes it. */
 /* Blocked loses the bronze as well as the colour: no amount of waiting fixes
    it, so it should not look like a thing that is warming up. */
-#hud button:disabled{color:#6f665a;
-     background:linear-gradient(#4a443a,#332e27 40%,#241f1a)}
-#hud button:disabled .tag,#hud button:disabled .mark{color:#6f665a}
+#hud button:disabled{color:#6e625b;
+     background:linear-gradient(#48403c,#322c29 40%,#231f1c)}
+#hud button:disabled .tag,#hud button:disabled .mark{color:#6e625b}
 #hud button:disabled:before{background:linear-gradient(rgba(30,32,36,.9),
      rgba(10,11,13,.97)),#121110}
-#hud button.cooling{opacity:1;color:#e8dcc0}
-#hud button.ready{box-shadow:0 0 12px rgba(214,178,110,.45),0 2px 6px rgba(0,0,0,.55)}
-#hud button.ready:before{box-shadow:inset 0 1px 0 rgba(214,178,110,.4),
+#hud button.cooling{opacity:1;color:#ead9cd}
+#hud button.ready{box-shadow:0 0 12px rgba(231,144,93,.45),0 2px 6px rgba(0,0,0,.55)}
+#hud button.ready:before{box-shadow:inset 0 1px 0 rgba(231,144,93,.4),
      0 0 0 1px rgba(0,0,0,.85)}
-#hud button:active:before{background:linear-gradient(rgba(64,74,90,.9),rgba(26,32,44,.96)),#2a2419}
+#hud button:active:before{background:linear-gradient(rgba(64,74,90,.9),rgba(26,32,44,.96)),#26211f}
 /* Above the kit, on the right edge -- not beside the Conduit, where it used to
    be. There it sat in the left half of the glass, which belongs to the stick:
    a left thumb coming down anywhere there starts the stick, and one that came
@@ -318,51 +318,51 @@ const CSS = `
 #hud .swap{position:absolute;right:10px;bottom:190px;pointer-events:auto}
 /* The other hero is not an ability, so it does not take an ability's colour.
    Bone, which is what the rest of the frame is written in. */
-#hud .swap button{--role:#cebe9e}
+#hud .swap button{--role:#bdb4af}
 /* Deliberately quiet: at rest it is a dark groove that reads as part of the
    band's inner edge, and it only becomes a thing you notice when there is
    something to notice -- which is the behaviour the meter itself has. */
-#hud .din{height:3px;background:#0d0b09;border-radius:2px;overflow:hidden;
+#hud .din{height:3px;background:#0c0b0a;border-radius:2px;overflow:hidden;
      box-shadow:inset 0 1px 1px rgba(0,0,0,.8)}
 #hud .din i{display:block;height:100%;width:0;border-radius:2px;
-     background:linear-gradient(90deg,#6d4d22,#d6b26e 55%,#ffd870);
+     background:linear-gradient(90deg,#7a3a15,#e7905d 55%,#ffa470);
      transition:width .12s linear}
 /* Loud. Not red -- red in this HUD means life, and a player who has learned
    that the red bar is their health should not have to learn a second red. */
-#hud .din.loud i{background:linear-gradient(90deg,#a67c3a,#ffbe8c 55%,#ffd18c)}
-#hud .din.loud{box-shadow:inset 0 1px 0 rgba(0,0,0,.6),0 0 8px rgba(255,190,140,.4)}
+#hud .din.loud i{background:linear-gradient(90deg,#b95c27,#ffb68c 55%,#ffb68c)}
+#hud .din.loud{box-shadow:inset 0 1px 0 rgba(0,0,0,.6),0 0 8px rgba(255,182,140,.4)}
 /* A shrine's blessing and what is left of it, under the life bar. */
 #hud .enc{position:absolute;left:12px;top:calc(var(--sa-t,0px) + 148px);padding:4px 9px;
-     border-radius:10px;border:1px solid #c9863e;background:rgba(20,12,8,.78);color:#f0c890;
+     border-radius:10px;border:1px solid #e06b27;background:rgba(20,12,8,.78);color:#feb082;
      font:600 12px/1.2 Georgia,serif;letter-spacing:.3px;pointer-events:none;max-width:70vw}
 #hud .enc.away{color:#ffb4a0;border-color:#c0392b}
 #hud .bless{position:absolute;left:12px;top:calc(var(--sa-t,0px) + 122px);padding:3px 8px;
-     border-radius:10px;border:1px solid currentColor;background:rgba(12,10,8,.7);
+     border-radius:10px;border:1px solid currentColor;background:rgba(11,10,9,.7);
      font:600 11px/1.2 ui-monospace,monospace;letter-spacing:.3px;pointer-events:none}
 #hud .res{position:absolute;right:10px;bottom:148px;display:flex;gap:5px;
      align-items:center;justify-content:flex-end}
-#hud .pip{width:11px;height:11px;border-radius:50%;border:1px solid #6a5a42;background:#161310}
-#hud .pip.on{background:#ffd870;border-color:#ffd870}
+#hud .pip{width:11px;height:11px;border-radius:50%;border:1px solid #5e544e;background:#151311}
+#hud .pip.on{background:#ffa470;border-color:#ffa470}
 #hud .tension{width:74px;height:9px;border:1px solid #4a6a7a;background:#0e1418;border-radius:2px}
 #hud .tension i{display:block;height:100%;background:#5fd0ff}
 #hud .beat{position:absolute;left:8px;right:110px;bottom:16px;height:5px;
-     background:#12100d;border:1px solid #3a3226}
+     background:#110f0e;border:1px solid #362f2c}
 /* The banner announces a moment. The offset here is a fallback only -- sync()
    sets it from where the map ends, since that is the one band on a phone
    screen that is neither chrome nor the fight. See the note there. */
 #hud .banner{position:absolute;left:14px;right:14px;top:26%;text-align:center;font-size:19px;
-     color:#eee0c0;text-shadow:0 2px 6px #000;font-family:Cinzel,Georgia,serif}
-#hud .banner small{display:block;font:italic 12px/1.4 Georgia,serif;color:#a89878;margin-top:4px}
+     color:#efdbce;text-shadow:0 2px 6px #000;font-family:Cinzel,Georgia,serif}
+#hud .banner small{display:block;font:italic 12px/1.4 Georgia,serif;color:#9a8d86;margin-top:4px}
 /* A page of lore is read, not glanced at: a dark panel behind it, and the
    text a size up, so it holds against the stone underneath. */
-#hud .banner.lore{background:rgba(12,10,8,.84);border:1px solid #6d5a36;border-radius:10px;
+#hud .banner.lore{background:rgba(11,10,9,.84);border:1px solid #59504a;border-radius:10px;
      padding:10px 14px;left:18px;right:18px}
-#hud .banner.lore small{font:italic 13px/1.5 Georgia,serif;color:#dccdb0;margin-top:6px}
+#hud .banner.lore small{font:italic 13px/1.5 Georgia,serif;color:#e5bea7;margin-top:6px}
 /* When the boss bar is already carrying his name, the banner is only the line
    about what to do -- so that line IS the banner, not a subtitle under nothing. */
-#hud .banner b{display:block;font:400 italic 15px/1.4 Georgia,serif;color:#e2c48c}
+#hud .banner b{display:block;font:400 italic 15px/1.4 Georgia,serif;color:#f0a87e}
 #hud .banner em{display:block;font:600 9px ui-monospace,Menlo,monospace;letter-spacing:2px;
-     color:#968466;margin-bottom:6px;font-style:normal}
+     color:#897b73;margin-bottom:6px;font-style:normal}
 /* The boss bar. Fixed to the top strip under the life bar, and the map drops
    by its height so the two never stack -- bossBarDrop() is the one answer both
    read, which is how the canvas build stopped them drifting apart. */
@@ -372,38 +372,38 @@ const CSS = `
    it grows past what everything below it made room for: the toast landed two
    pixels inside it. */
 #hud .boss{position:absolute;left:12px;right:12px;top:86px;height:44px;
-     box-sizing:border-box;background:#2a2620;border:2px solid #8c6830;
+     box-sizing:border-box;background:#2a2422;border:2px solid #9c4d20;
      border-radius:3px;padding:2px 8px 0;overflow:hidden}
 #hud .boss .line{display:flex;align-items:baseline;gap:8px;height:16px}
-#hud .boss .name{flex:1;font:13px/16px Georgia,serif;color:#eee0c0;white-space:nowrap;
+#hud .boss .name{flex:1;font:13px/16px Georgia,serif;color:#efdbce;white-space:nowrap;
      overflow:hidden;text-overflow:ellipsis}
-#hud .boss .count{font:600 10px/16px ui-monospace,Menlo,monospace;color:#cebe9e}
-#hud .boss .bar{margin-top:1px;height:10px;background:#080b11;border:1px solid #d6b26e;
+#hud .boss .count{font:600 10px/16px ui-monospace,Menlo,monospace;color:#bdb4af}
+#hud .boss .bar{margin-top:1px;height:10px;background:#080b11;border:1px solid #e7905d;
      position:relative;overflow:hidden}
 #hud .boss .bar i{display:block;height:100%;
-     background:linear-gradient(#e8c060,#806a34);transition:width .12s linear}
+     background:linear-gradient(#fb8d4d,#8f4c25);transition:width .12s linear}
 /* Quarter ticks, so a bar that moves slowly still shows that it moved. */
 #hud .boss .bar u{position:absolute;inset:0;
-     background:repeating-linear-gradient(90deg,transparent 0 24.6%,rgba(10,7,4,.55) 24.6% 25%)}
-#hud .boss.invader .bar i{background:linear-gradient(#e2782c,#7c4118)}
+     background:repeating-linear-gradient(90deg,transparent 0 24.6%,rgba(8,7,6,.55) 24.6% 25%)}
+#hud .boss.invader .bar i{background:linear-gradient(#fc6812,#8b3909)}
 /* Held: while a Lieutenant stands the Deceiver takes fourteen per cent, and
    without saying so the bar simply looks broken and the player keeps hitting
    the wrong thing. */
 #hud .boss .bar.held i{background-image:repeating-linear-gradient(45deg,
-     rgba(20,14,8,.5) 0 3px,transparent 3px 8px),linear-gradient(#e8c060,#806a34)}
+     rgba(16,14,13,.5) 0 3px,transparent 3px 8px),linear-gradient(#fb8d4d,#8f4c25)}
 /* HELD sits in the name line beside the count. It used to be a strip across
    the bottom of the plate, which put a gold sentence on top of the bar's own
    gold hatching -- unreadable, and it is the one line that says why his health
    is not moving. A word and a pip for each Lieutenant standing says the same
    thing in the space a glance has; the banner explains it once on arrival. */
 #hud .boss .held{display:flex;align-items:center;gap:4px;flex:none;height:14px;
-     font:600 9px/12px ui-monospace,Menlo,monospace;color:#e8c060;
-     padding:0 5px;border:1px solid rgba(232,192,96,.5);border-radius:2px;
-     background:rgba(20,14,8,.55)}
+     font:600 9px/12px ui-monospace,Menlo,monospace;color:#fb8d4d;
+     padding:0 5px;border:1px solid rgba(251,141,77,.5);border-radius:2px;
+     background:rgba(16,14,13,.55)}
 #hud .boss .held[hidden]{display:none}
 #hud .boss .held s{text-decoration:none;letter-spacing:1px}
 #hud .boss .held span{width:6px;height:6px;border-radius:50%;background:#c2352a;
-     border:1px solid #e8c060;flex:none}
+     border:1px solid #fb8d4d;flex:none}
 /* The Crucible-Mass is held for the opposite reason and has to read that way:
    the Deceiver's bar will not fall, and this one climbs back up. Green, which
    is the totem's own colour, so the pips point at the thing to go and cut. */
@@ -415,7 +415,7 @@ const CSS = `
    rather than centred at its natural width: an item name is long enough that
    a centred box grew into the map, and it did. */
 #hud .toast{position:absolute;left:12px;height:24px;line-height:22px;padding:0 11px;
-     background:rgba(10,8,5,.82);border:1px solid #6a5a42;font:13px Georgia,serif;
+     background:rgba(8,7,7,.82);border:1px solid #5e544e;font:13px Georgia,serif;
      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:opacity .2s}
 `;
 
@@ -679,7 +679,7 @@ export class Hud {
       b.type = 'button';
       b.dataset.id = a.id;
       b.title = a.name + ' — ' + a.note;
-      b.style.setProperty('--role', ROLE_HUE[a.role] || '#d9a441');
+      b.style.setProperty('--role', ROLE_HUE[a.role] || '#f0732a');
       /* Set from the word's own length rather than typed per ability, so a
        * new one that happens to be long is legible the day it is added
        * instead of the day somebody notices it is not. 46px of visible chord

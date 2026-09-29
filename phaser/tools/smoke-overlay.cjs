@@ -254,7 +254,8 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     return { colour: sc.overlay.dawnPct.style.color, pct: sc.overlay.dawnPct.text };
   });
   ck('past four fifths it stops being trim and starts warning',
-     hot.colour.toLowerCase() === '#ffbe8c' && hot.pct === '96%',
+     hot.colour.toLowerCase() === '#ff8a70'   // red against the ember trim (Ember & Soot)
+     && hot.pct === '96%',
      'the readout turns ' + hot.colour + ' at ' + hot.pct);
   await p.evaluate(() => { run.dawn = 0; });
 
