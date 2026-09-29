@@ -448,7 +448,7 @@ export function mountButton(getReport, onProfile, profLabel) {
     // Top-right, out of the thumbs. It used to sit bottom-right, where it
     // landed squarely on the ability buttons -- a developer affordance is
     // not worth a control you cannot press.
-    '#diag{position:fixed;right:8px;top:34px;z-index:50;font:12px ui-monospace,monospace;' +
+    '#diag{position:fixed;right:8px;top:calc(env(safe-area-inset-top,0px) + 290px);z-index:50;font:12px ui-monospace,monospace;' +
       'display:flex;flex-direction:column;gap:6px;align-items:flex-end}' +
     // The dot: small, dim, and out of the way until it is wanted. Still a
     // 32px target -- under a thumb's 44px, deliberately, because pressing it

@@ -4643,6 +4643,27 @@ function objectiveLine() {
            note: 'the slag has called it' };
 }
 
+
+/* WHAT IS HITTING ME. Playtested: "hard to tell what's hitting me". A blow
+   from off-screen, or from behind the hero in a crowd, arrived as a red
+   flash on every edge at once -- it said you were hurt, and nothing about
+   where from. Each blow now leaves a mark pointing back at its source,
+   brighter for a bigger share of your life, fading over a second; the HUD
+   draws them at the edge of the screen on that side (hud.js). */
+const HIT_MARK = 1.1;
+function noteHit(fx, fy, taken) {
+  if (!run.hits) run.hits = [];
+  run.hits.push({ a: Math.atan2(fy - player.y, fx - player.x), t: HIT_MARK,
+                  w: clamp(taken / Math.max(1, player.maxHp) * 5, 0.35, 1) });
+  if (run.hits.length > 6) run.hits.shift();
+}
+function updateHits(dt) {
+  if (!run || !run.hits || !run.hits.length) return;
+  let w = 0;
+  for (const h of run.hits) { h.t -= dt; if (h.t > 0) run.hits[w++] = h; }
+  run.hits.length = w;
+}
+
 /* --- ROOM ENCOUNTERS -----------------------------------------------------
    Playtested: the set-piece rooms looked like places and played like floor.
    Now a few of them in each delve HAPPEN: the garrison's sleepers get up, the
@@ -6135,6 +6156,8 @@ function hurtPlayerBy(dmg, fx, fy, sized) {
         PAL.blood, 10, 180);
   floatDmg(player.x, player.y - player.r * 1.2, taken, 'taken');
   sfx('hurt', undefined, undefined, clamp(taken / Math.max(1, player.maxHp) * 4, 0, 1));
+  // Which way it came from, for the HUD's hit marker (see noteHit).
+  if (fx !== undefined && run) noteHit(fx, fy, taken);
   if (player.hp <= 0) { player.hp = 0; endRun(false); }
 }
 
@@ -8545,6 +8568,7 @@ function update(dt) {
   updateFinds(dt);
   updateCracks(dt);
   updateEncounters(dt);
+  updateHits(dt);
   updateBleed(dt);
   updateGloom(dt);
   updateRings(dt);
