@@ -1169,6 +1169,8 @@ export class Delve extends Phaser.Scene {
       // Behind a wall that has not come down yet.
       if (c.img.visible === !!c.ch.sealed) { c.img.setVisible(!c.ch.sealed); c.sh.setVisible(!c.ch.sealed); }
       if (c.ch.sealed) continue;
+      // Locked until its room is beaten: dark and blood-red, not breathing.
+      if (c.ch.locked && !c.ch.open) { if (c.img.tintTopLeft !== 0x7a3a30) c.img.setTint(0x7a3a30); continue; }
       const want = 'chests/' + c.ch.kind + (c.ch.open ? '-open' : '-shut');
       if (c.img.frame.name !== want && this.textures.getFrame('art', want)) {
         c.img.setFrame(want);

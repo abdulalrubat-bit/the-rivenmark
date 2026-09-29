@@ -1161,6 +1161,158 @@ function powerLevel(gear, level) {
 }
 const stashPower = () => powerLevel(stash.gear, stash.level || 1);
 
+/* --- TALENTS --------------------------------------------------------------
+   Asked for from a screenshot of a talent grid: three trees a hero, tiers
+   that open as points go in, ranks shown as 2/5, and an arrow where one
+   talent is built on another. Each hero has three of their own.
+
+   Points are the hero's level: one a level past the first, the same pool
+   for each hero, since each spends it in their own trees. Kept in the stash
+   (stash.talents[hero] = { id: rank }), so they last, and follow the kit
+   into Hardcore the same way the level does. Taking them back costs coin.
+
+   A talent is stat work and nothing else, on the same two piles the gear
+   uses (see recomputeStats): `mul` is a per-rank fraction, `add` per-rank
+   flat. So a talent can never be applied twice, or out of order with a
+   ring. Two things that are not on the sheet -- life on a kill, and a
+   longer blessing -- ride in as stats the core reads where those happen.
+
+   A tree is four tiers. Tier t opens once TALENT_TIER * t points are in
+   that tree; a talent with `req` needs that one maxed first, and it always
+   sits in the same column below it, so the arrow is straight down.
+   -------------------------------------------------------------------- */
+const TALENT_TIER = 4;
+const TL = (id, name, glyph, tier, col, max, per, text, req) =>
+  ({ id, name, glyph, tier, col, max, per, text, req: req || null });
+const TALENTS = {
+  isaac: [
+    { id: 'bulwark', name: 'Bulwark', hue: '#c9863e', talents: [
+      TL('ironhide', 'Ironhide', '❖', 0, 0, 5, { mul: { maxHp: 0.04 } }, '+4% life'),
+      TL('steadfast', 'Steadfast', '⛨', 0, 2, 5, { add: { ward: 0.015 } }, '+1.5% ward'),
+      TL('shieldwall', 'Shieldwall', '▣', 1, 0, 3, { mul: { maxHp: 0.03 } }, '+3% life', 'ironhide'),
+      TL('mending', 'Hearth-Mend', '✚', 1, 1, 3, { add: { regen: 0.4 } }, '+0.4 life each second'),
+      TL('lastlight', 'Last Light', '☀', 2, 1, 3, { add: { killHeal: 2 } }, '2 life back on every kill', 'mending'),
+      TL('oathward', 'Oath-Ward', '◈', 2, 2, 3, { add: { ward: 0.02 } }, '+2% ward', 'steadfast'),
+      TL('unbroken', 'Unbroken', '♕', 3, 1, 1, { mul: { maxHp: 0.08 }, add: { ward: 0.04 } },
+        '+8% life and +4% ward', 'lastlight')
+    ] },
+    { id: 'sunblade', name: 'Sunblade', hue: '#ffc24d', talents: [
+      TL('keen', 'Keen Edge', '✦', 0, 0, 5, { mul: { damage: 0.04 } }, '+4% damage'),
+      TL('quick', 'Quick Hand', '❧', 0, 2, 5, { mul: { fireDelay: -0.03 } }, 'the blade 3% faster'),
+      TL('sweep', 'Broad Sweep', '⌁', 1, 0, 3, { mul: { sweep: 0.06 } }, '+6% width of the arc'),
+      TL('reach', 'Long Reach', '◎', 1, 1, 3, { mul: { range: 0.05 } }, '+5% reach'),
+      TL('swift', 'Swift Edge', '➤', 2, 1, 2, { mul: { arcSpeed: 0.08 } }, 'crescents 8% faster', 'reach'),
+      TL('fury', "Sun's Fury", '☄', 2, 0, 3, { mul: { damage: 0.03 } }, '+3% damage', 'sweep'),
+      TL('twin', 'Twin Crescent', '⁂', 3, 2, 1, { add: { shots: 1 } }, 'a second crescent leaves the edge', 'quick')
+    ] },
+    { id: 'hearth', name: 'Hearth', hue: '#8fd08a', talents: [
+      TL('windstep', 'Windstep', '❯', 0, 0, 5, { mul: { speed: 0.03 } }, '+3% stride'),
+      TL('souldraw', 'Soul Draw', '❂', 0, 2, 3, { mul: { magnet: 0.12 } }, 'slag comes from 12% further'),
+      TL('shrinekept', 'Shrine-Kept', '⚘', 1, 1, 3, { add: { blessLast: 0.15 } }, 'blessings last 15% longer'),
+      TL('fieldmend', 'Field-Mend', '✤', 1, 2, 3, { add: { regen: 0.3 } }, '+0.3 life each second', 'souldraw'),
+      TL('pilgrim', "Pilgrim's Stride", '➫', 2, 0, 2, { mul: { speed: 0.04 } }, '+4% stride', 'windstep'),
+      TL('forage', 'Forager', '☘', 2, 1, 3, { add: { killHeal: 1 } }, '1 life back on every kill', 'shrinekept'),
+      TL('warden', 'Warden of the Hearth', '⌂', 3, 1, 1,
+        { mul: { damage: 0.05, maxHp: 0.05, speed: 0.05 } }, '+5% damage, life and stride', 'forage')
+    ] }
+  ],
+  zayd: [
+    { id: 'glaive', name: 'Glaive', hue: '#5fd0ff', talents: [
+      TL('honed', 'Honed Glaive', '✦', 0, 0, 5, { mul: { damage: 0.04 } }, '+4% damage'),
+      TL('quicksilver', 'Quicksilver', '❧', 0, 2, 5, { mul: { fireDelay: -0.03 } }, 'the glaive 3% faster'),
+      TL('longthrow', 'Long Throw', '◎', 1, 1, 3, { mul: { range: 0.05 } }, '+5% reach'),
+      TL('cleave', 'Cleaving Arc', '⌁', 1, 0, 3, { mul: { sweep: 0.06 } }, '+6% width of the arc', 'honed'),
+      TL('keenwind', 'Keen Wind', '➤', 2, 1, 3, { mul: { arcSpeed: 0.08 } }, 'crescents 8% faster', 'longthrow'),
+      TL('truth', 'Piercing Truth', '☄', 2, 0, 3, { mul: { damage: 0.03 } }, '+3% damage', 'cleave'),
+      TL('split', 'Split Glaive', '⁂', 3, 2, 1, { add: { shots: 1 } }, 'a second crescent leaves the edge', 'quicksilver')
+    ] },
+    { id: 'frost', name: 'Frost', hue: '#9fd8ff', talents: [
+      TL('rime', 'Rime Mail', '❖', 0, 0, 5, { mul: { maxHp: 0.04 } }, '+4% life'),
+      TL('frostward', 'Frost Ward', '❄', 0, 2, 5, { add: { ward: 0.015 } }, '+1.5% ward'),
+      TL('glacial', 'Glacial Poise', '▣', 1, 0, 3, { mul: { maxHp: 0.03 } }, '+3% life', 'rime'),
+      TL('coldmend', 'Cold Mend', '✚', 1, 1, 3, { add: { regen: 0.4 } }, '+0.4 life each second'),
+      TL('wintersdue', "Winter's Due", '✳', 2, 1, 3, { add: { killHeal: 2 } }, '2 life back on every kill', 'coldmend'),
+      TL('icewall', 'Ice-Wall', '◈', 2, 2, 3, { add: { ward: 0.02 } }, '+2% ward', 'frostward'),
+      TL('kael', 'Heart of Kael', '♕', 3, 1, 1, { mul: { maxHp: 0.08 }, add: { ward: 0.04 } },
+        '+8% life and +4% ward', 'wintersdue')
+    ] },
+    { id: 'tactics', name: 'Tactics', hue: '#b89cff', talents: [
+      TL('fleet', 'Fleetfoot', '❯', 0, 0, 5, { mul: { speed: 0.03 } }, '+3% stride'),
+      TL('leysense', 'Ley Sense', '❂', 0, 2, 3, { mul: { magnet: 0.12 } }, 'slag comes from 12% further'),
+      TL('scholar', "Scholar's Blessing", '⚘', 1, 1, 3, { add: { blessLast: 0.15 } }, 'blessings last 15% longer'),
+      TL('measured', 'Measured Pace', '✤', 1, 2, 3, { add: { regen: 0.3 } }, '+0.3 life each second', 'leysense'),
+      TL('outflank', 'Outflank', '➫', 2, 0, 2, { mul: { speed: 0.04 } }, '+4% stride', 'fleet'),
+      TL('harvest', "Tactician's Harvest", '☘', 2, 1, 3, { add: { killHeal: 1 } }, '1 life back on every kill', 'scholar'),
+      TL('master', 'Master of Kael', '⌂', 3, 1, 1,
+        { mul: { damage: 0.05, maxHp: 0.05, speed: 0.05 } }, '+5% damage, life and stride', 'harvest')
+    ] }
+  ]
+};
+
+function talentRanks(hero) {
+  if (!stash.talents) stash.talents = {};
+  return stash.talents[hero] || (stash.talents[hero] = {});
+}
+function talentTreeSpent(hero, tree) {
+  const R = talentRanks(hero);
+  return tree.talents.reduce((n, t) => n + (R[t.id] || 0), 0);
+}
+function talentPoints(hero) {
+  const total = Math.max(0, (stash.level || 1) - 1);
+  const spent = (TALENTS[hero] || []).reduce((n, tr) => n + talentTreeSpent(hero, tr), 0);
+  return { total, spent, free: Math.max(0, total - spent) };
+}
+function findTalent(hero, id) {
+  for (const tr of TALENTS[hero] || []) for (const t of tr.talents) if (t.id === id) return { tree: tr, t };
+  return null;
+}
+// Why a talent cannot take another rank now, or null if it can.
+function talentBlock(hero, id) {
+  const f = findTalent(hero, id);
+  if (!f) return 'no such talent';
+  const R = talentRanks(hero), t = f.t;
+  if ((R[t.id] || 0) >= t.max) return 'mastered';
+  if (talentTreeSpent(hero, f.tree) < TALENT_TIER * t.tier)
+    return TALENT_TIER * t.tier + ' points in ' + f.tree.name + ' first';
+  if (t.req) {
+    const q = findTalent(hero, t.req).t;
+    if ((R[q.id] || 0) < q.max) return 'master ' + q.name + ' first';
+  }
+  if (talentPoints(hero).free <= 0) return 'no points left — they come with levels';
+  return null;
+}
+function learnTalent(hero, id) {
+  const why = talentBlock(hero, id);
+  if (why) return why;
+  const R = talentRanks(hero);
+  R[id] = (R[id] || 0) + 1;
+  saveStash();
+  if (player && player.hero === hero) recomputeStats();
+  return null;
+}
+const talentResetCost = hero => 40 + 12 * talentPoints(hero).spent;
+function resetTalents(hero) {
+  const spent = talentPoints(hero).spent;
+  if (!spent) return 'nothing to take back';
+  const cost = talentResetCost(hero);
+  if ((stash.coins || 0) < cost) return 'it costs ' + cost + ' coin';
+  stash.coins -= cost;
+  stash.talents[hero] = {};
+  saveStash();
+  if (player && player.hero === hero) recomputeStats();
+  return null;
+}
+// The talents' share of the sheet, into the gear's two piles.
+function talentStats(hero, add, mul) {
+  const R = (stash.talents && stash.talents[hero]) || {};
+  for (const tr of TALENTS[hero] || []) for (const t of tr.talents) {
+    const r = R[t.id] || 0;
+    if (!r) continue;
+    for (const k in (t.per.add || {})) add[k] = (add[k] || 0) + t.per.add[k] * r;
+    for (const k in (t.per.mul || {})) mul[k] = (mul[k] === undefined ? 1 : mul[k]) * (1 + t.per.mul[k] * r);
+  }
+}
+
 const UPGRADES = [
   { id:'dmg',    glyph:'✦', name:'Keen Edge',   desc:'your ward bites a quarter deeper',   max:99, apply:p=>p.damage      *= 1.25 },
   { id:'rate',   glyph:'❧', name:'Quickening',  desc:'the blade answers faster',           max:8,  apply:p=>p.fireDelay   *= 0.85 },
@@ -1599,6 +1751,8 @@ function recomputeStats() {
   base.fireDelay = H.fireDelay; base.range = H.range;
   base.sweep = H.sweep; base.arcSpeed = H.arcSpeed;
   base.ward = 0;
+  // Talent-only stats: always present, so taking a talent back zeroes them.
+  base.killHeal = 0; base.blessLast = 0;
 
   // What the hero has earned. Applied before gear so the kit multiplies a
   // level's worth of strength rather than the other way round.
@@ -1645,6 +1799,9 @@ function recomputeStats() {
     if (b.add) for (const k in b.add) add[k] = (add[k] || 0) + b.add[k];
     if (b.mul) for (const k in b.mul) mul[k] = (mul[k] === undefined ? 1 : mul[k]) * (1 + b.mul[k]);
   }
+
+  // The talents, on the same two piles (see TALENTS).
+  talentStats(p.hero, add, mul);
 
   for (const k in add) base[k] = (base[k] || 0) + add[k];
   for (const k in mul) base[k] = (base[k] || 0) * mul[k];
@@ -4112,7 +4269,13 @@ function updateChests(dt) {
     const ch = chests[i];
     ch.pulse += dt;
     if (ch.open) { ch.t = Math.min(CHEST_OPEN, (ch.t || 0) + dt); continue; }
-    if (dist2(player.x, player.y, ch.x, ch.y) < CHEST_REACH * CHEST_REACH) openChest(ch);
+    if (dist2(player.x, player.y, ch.x, ch.y) >= CHEST_REACH * CHEST_REACH) continue;
+    // Sealed until its room is beaten (see ROOM ENCOUNTERS).
+    if (ch.locked) {
+      if (!ch.toldLock) { ch.toldLock = true; toast('Sealed — the room must be beaten first.', '#c08070'); }
+      continue;
+    }
+    openChest(ch);
   }
 }
 
@@ -4227,7 +4390,8 @@ function bless(sh) {
   if (sh.id === 'blood') {
     player.hp = player.maxHp;
   } else {
-    run.blessing = { id: sh.id, t: S.last, max: S.last };
+    const last = S.last * (1 + (player.blessLast || 0));   // Shrine-Kept
+    run.blessing = { id: sh.id, t: last, max: last };
     recomputeStats();
   }
   run.shrines = (run.shrines || 0) + 1;
@@ -4398,6 +4562,179 @@ function updateCracks(dt) {
       toast('A cracked wall — strike it!', '#e8c878');
     }
   }
+}
+
+/* --- ROOM ENCOUNTERS -----------------------------------------------------
+   Playtested: the set-piece rooms looked like places and played like floor.
+   Now a few of them in each delve HAPPEN: the garrison's sleepers get up, the
+   dead in the ossuary rise when you reach for their coffer, something sits on
+   the throne. Each room keeps a coffer, and the coffer is sealed until the
+   room is beaten -- so the reward is right there, and so is the reason.
+
+   The bodies are the rung's own (LEVEL.horde), placed at the rung's own
+   strength, so an encounter is harder or easier exactly as the delve is.
+     trigger  'enter'  when you walk into the room
+              'coffer' when you come near its coffer
+     hold     stand at the room's heart this long while it comes at you
+   -------------------------------------------------------------------- */
+const ENCOUNTERS = {
+  garrison: { trigger: 'enter', say: 'The garrison wakes!',
+    foes: dp => [['any', 4 + Math.round(dp * 3), 'room']] },
+  ossuary:  { trigger: 'coffer', say: 'The dead rise!',
+    foes: dp => [['any', 5 + Math.round(dp * 2), 'ring']] },
+  throne:   { trigger: 'enter', say: 'The seat is not empty.',
+    foes: dp => [['heavy', 1, 'heart', true], ['any', 2 + Math.round(dp * 2), 'room']] },
+  forge:    { trigger: 'enter', say: 'The forge-guard stirs.',
+    foes: dp => [['heavy', 1, 'heart', true], ['any', 2, 'room']] },
+  stores:   { trigger: 'coffer', say: 'Vermin burst from the sacks!',
+    foes: dp => [['fast', 5 + Math.round(dp * 3), 'room']] },
+  cistern:  { trigger: 'enter', say: 'Something stirs in the water.',
+    foes: dp => [['any', 5 + Math.round(dp * 2), 'ring']] },
+  chapel:   { trigger: 'enter', say: 'Hold the nave!', hold: 12,
+    foes: dp => [['any', 2, 'edge']], every: 2.6 }
+};
+const ENC_REACH = 130;          // how near a coffer wakes an 'coffer' room
+const ENC_HOLD_R = 130;         // how near the heart counts as holding it
+let encounters = [];
+
+function inBox(b, x, y, pad) {
+  return x > b.x0 + pad && x < b.x1 - pad && y > b.y0 + pad && y < b.y1 - pad;
+}
+
+function placeEncounters(spawn) {
+  encounters = [];
+  if (!rooms.length || !(LEVEL.depth > 0)) return;
+  const want = 2 + (LEVEL.depth > 0.4 ? 1 : 0);
+  const pool = rooms.filter(rm => rm.set && ENCOUNTERS[rm.set] && rm.box &&
+    dist2(rm.x, rm.y, spawn.x, spawn.y) > 520 * 520);
+  pool.sort(() => Math.random() - 0.5);
+  for (const rm of pool) {
+    if (encounters.length >= want) break;
+    // The room's own coffer if it has one, else one at its heart, on top of
+    // the delve's count: the room is the price of it.
+    let ch = chests.find(c => !c.sealed && inBox(rm.box, c.x, c.y, 0));
+    if (!ch) {
+      const spots = openCells.filter(c => inBox(rm.box, c.x, c.y, 50) && !pointInWalls(c.x, c.y, 22))
+        .sort((a, b) => dist2(a.x, a.y, rm.x, rm.y) - dist2(b.x, b.y, rm.x, rm.y));
+      if (!spots.length) continue;
+      const s = spots[Math.min(spots.length - 1, 2)];
+      ch = { x: s.x, y: s.y, kind: 'coffer', open: false, room: true, enc: true,
+             q: (Math.random() * 4) | 0, pulse: Math.random() * TAU };
+      chests.push(ch);
+    }
+    ch.locked = true;
+    encounters.push({ room: rm, id: rm.set, state: 'idle', foes: [], chest: ch,
+                      hold: 0, wave: 0, told: false });
+  }
+}
+
+// Which of the rung's bodies: 'fast' the quickest, 'heavy' the toughest,
+// 'any' by the horde's own weights. Never a boss-kind or an illusion.
+function encKind(pref) {
+  const kinds = (LEVEL.horde || []).filter(k => ENEMY_TYPES[k] && ENEMY_TYPES[k].speed > 0 &&
+    !['mirage', 'deceiver', 'lieutenant', 'crucible', 'singer'].includes(k));
+  if (!kinds.length) return 'thrall';
+  if (pref === 'fast') return kinds.reduce((a, b) => ENEMY_TYPES[b].speed > ENEMY_TYPES[a].speed ? b : a);
+  if (pref === 'heavy') return kinds.reduce((a, b) => ENEMY_TYPES[b].hp > ENEMY_TYPES[a].hp ? b : a);
+  let total = 0;
+  for (const k of kinds) total += ENEMY_TYPES[k].weight || 1;
+  let r = Math.random() * total;
+  for (const k of kinds) { r -= ENEMY_TYPES[k].weight || 1; if (r <= 0) return k; }
+  return kinds[0];
+}
+
+// Where one comes from: anywhere in the room but on top of you, in a ring
+// round the coffer or the heart, the room's middle, or its far edges.
+function encSpot(en, where) {
+  const rm = en.room, b = rm.box;
+  const ok = (x, y) => !pointInWalls(x, y, 18) && dist2(x, y, player.x, player.y) > 110 * 110;
+  if (where === 'ring' || where === 'heart') {
+    const c = where === 'ring' ? en.chest : rm;
+    for (let i = 0; i < 20; i++) {
+      const a = Math.random() * TAU, d = where === 'heart' ? rand(0, 40) : rand(70, 120);
+      const x = c.x + Math.cos(a) * d, y = c.y + Math.sin(a) * d;
+      if (ok(x, y)) return { x, y };
+    }
+  }
+  const cells = openCells.filter(c => inBox(b, c.x, c.y, 30) && ok(c.x, c.y));
+  if (where === 'edge') cells.sort((p, q) => dist2(q.x, q.y, rm.x, rm.y) - dist2(p.x, p.y, rm.x, rm.y));
+  if (!cells.length) return null;
+  return where === 'edge' ? cells[(Math.random() * Math.min(8, cells.length)) | 0]
+                          : cells[(Math.random() * cells.length) | 0];
+}
+
+function encRaise(en) {
+  const dp = clamp(0.4 + (LEVEL.depth || 0) * 0.6, 0, 1);
+  for (const [pref, n, where, elite] of ENCOUNTERS[en.id].foes(LEVEL.depth || 0)) {
+    for (let i = 0; i < n; i++) {
+      const at = encSpot(en, where);
+      if (!at) continue;
+      const e = placeEnemy(encKind(pref), at.x, at.y, dp);
+      if (!e) continue;
+      if (elite) makeElite(e);
+      e.awake = true; e.enc = true;
+      en.foes.push(e);
+      burst(at.x, at.y, '#a89878', 8, 120);
+    }
+  }
+}
+
+function updateEncounters(dt) {
+  for (const en of encounters) {
+    if (en.state === 'done') continue;
+    const E = ENCOUNTERS[en.id], rm = en.room;
+    if (en.state === 'idle') {
+      const near = E.trigger === 'coffer'
+        ? dist2(player.x, player.y, en.chest.x, en.chest.y) < ENC_REACH * ENC_REACH
+        : inBox(rm.box, player.x, player.y, 40);
+      if (!near) continue;
+      en.state = 'live';
+      // The banner, not a toast: the room has just said its own name in the
+      // toast, and this is the bigger moment of the two.
+      run.banner = run.bannerMax = 2.6;
+      run.bannerLore = null;
+      run.bannerText = E.say;
+      run.bannerNote = E.hold ? 'Stand at its heart until it is yours.' : 'Beat the room and its coffer unseals.';
+      sfx('summon', rm.x, rm.y);
+      shake(4);
+      clog('encounter', en.id);
+      encRaise(en);
+      continue;
+    }
+    // Live.
+    if (E.hold) {
+      if (dist2(player.x, player.y, rm.x, rm.y) < ENC_HOLD_R * ENC_HOLD_R) en.hold += dt;
+      en.wave -= dt;
+      if (en.wave <= 0 && en.hold < E.hold) { en.wave = E.every; encRaise(en); }
+      if (en.hold >= E.hold) encDone(en);
+    } else {
+      en.foes = en.foes.filter(e => e.hp > 0 && enemies.includes(e));
+      if (!en.foes.length) encDone(en);
+    }
+  }
+}
+
+function encDone(en) {
+  en.state = 'done';
+  en.chest.locked = false;
+  toast('The room is yours — its coffer unseals.', '#e8c878');
+  ring(en.chest.x, en.chest.y, '#e8c878', 12, 80, 0.5);
+  burst(en.chest.x, en.chest.y, '#e8c878', 16, 180);
+  sfx('surge', en.chest.x, en.chest.y);
+  run.encounters = (run.encounters || 0) + 1;
+  clog('encounter', en.id + ' done');
+}
+
+// What the HUD says while one is live: the goal, and how far along.
+function encounterLine() {
+  for (const en of encounters) {
+    if (en.state !== 'live') continue;
+    const E = ENCOUNTERS[en.id];
+    if (E.hold) return { text: 'Hold the ' + (en.room.name || 'room').replace(/^The /, '') + ' — ' +
+                          Math.max(0, Math.ceil(E.hold - en.hold)) + 's', away: dist2(player.x, player.y, en.room.x, en.room.y) >= ENC_HOLD_R * ENC_HOLD_R };
+    return { text: en.room.name + ' — ' + en.foes.length + ' left' };
+  }
+  return null;
 }
 
 /* --- hazards --------------------------------------------------------------
@@ -5869,6 +6206,8 @@ function damageEnemy(e, dmg, fx, fy) {
       }
     }
     run.kills++;
+    // Last Light and its kin: a little life back on every kill.
+    if (player.killHeal > 0 && player.hp > 0) player.hp = Math.min(player.maxHp, player.hp + player.killHeal);
     // The delve keeps its dead for a moment. An elite standing over one will
     // stop and take the slag out of it, which is the only time a champion is
     // holding still and not looking at you.
@@ -6329,9 +6668,9 @@ function updateAttack(dt) {
   if (q || player.atkHeld) {
     player.atkQ = null;
     lightStrike();
-  } else if (autoStrike && controlScheme !== 'classic' && !player.channel &&
-             assistTarget(player.range)) {
-    lightStrike('auto');
+  } else if (autoStrike && controlScheme !== 'classic' && !player.channel) {
+    const t = autoTarget(player.range);
+    if (t) lightStrike('auto', Math.atan2(t.y - player.y, t.x - player.x));
   }
 }
 
@@ -6349,14 +6688,45 @@ function updateAttack(dt) {
 let autoStrike = false;
 function setAutoStrike(on) { autoStrike = !!on; return autoStrike; }
 
+/* WHAT AUTO-STRIKE SWINGS AT. Playtested: "the enemy could be behind you and
+ * it keeps swinging forwards". Two causes, both fixed here:
+ *
+ *   - the assist leans hard toward where the stick points, which is right for
+ *     a swing you asked for (you are going that way) and wrong for one you did
+ *     not: running from something at your heels, the swing went on ahead at a
+ *     body three times as far away. Anything close enough to be hitting you
+ *     now comes first, nearest first, whichever way you face.
+ *   - a swing you once aimed by dragging left its angle behind (player.atkAim)
+ *     and the automatic blow took it for its own. It never reads that now.
+ */
+const AUTO_CLOSE = 0.55;            // of the reach: inside this, facing is ignored
+function autoTarget(R) {
+  enemyGrid.query(player.x, player.y, R * AUTO_CLOSE, _near);
+  const blind = player.hero === 'isaac';
+  let best = null, bestS = Infinity;
+  const close2 = (R * AUTO_CLOSE) * (R * AUTO_CLOSE);
+  for (let i = 0; i < _near.length; i++) {
+    const e = _near[i];
+    if (e.hp <= 0 || (blind && e.kind === 'mirage')) continue;
+    const d2 = dist2(player.x, player.y, e.x, e.y);
+    if (d2 > close2 || !clearShot(player.x, player.y, e.x, e.y)) continue;
+    const threat = ((e.tell || 0) > 0 || (e.casting || 0) > 0) ? 0.7 : 1;
+    const s = d2 * threat;
+    if (s < bestS) { bestS = s; best = e; }
+  }
+  if (best) { player.assistT = best; return best; }
+  return assistTarget(R);
+}
+
 /* One light blow. The same chain the tapped Conduit had -- three in rhythm
  * and the third goes wide -- because a held attack keeps the rhythm for you. */
-function lightStrike(why) {
-  const manual = typeof player.atkAim === 'number';
+function lightStrike(why, at) {
+  const manual = why !== 'auto' && typeof player.atkAim === 'number';
   const last = player.combo || 0;
   const n = (player.comboT || 0) > 0 ? Math.min(COMBO_LEN, last + 1) : 1;
   const finisher = n >= COMBO_LEN;
-  swingAt(manual ? player.atkAim : aimAngle(), { bite: 1, sweep: finisher ? COMBO_SWEEP : 1 });
+  swingAt(typeof at === 'number' ? at : manual ? player.atkAim : aimAngle(),
+          { bite: 1, sweep: finisher ? COMBO_SWEEP : 1 });
   clamour(CLAMOUR_SWING);
   player.combo = finisher ? 0 : n;
   player.comboT = finisher ? 0 : player.fireDelay * COMBO_WINDOW;
@@ -8090,6 +8460,7 @@ function update(dt) {
   updateChests(dt);
   updateFinds(dt);
   updateCracks(dt);
+  updateEncounters(dt);
   updateBleed(dt);
   updateGloom(dt);
   updateRings(dt);
@@ -8394,6 +8765,21 @@ function sanitizeStash(st) {
   // rather than carried, and a tier above the ceiling is clamped to it.
   if (st.hall && typeof st.hall === 'object') {
     for (const h of HALL) out.hall[h.id] = clamp(Math.floor(finite(st.hall[h.id], 0)), 0, HALL_MAX);
+  }
+  // Talents: a rank per known talent, clamped to its max; a hero whose ranks
+  // add up to more than their level gives (a save from before an XP change,
+  // or edited) has them all handed back rather than kept half-legal.
+  out.talents = {};
+  if (st.talents && typeof st.talents === 'object') for (const h in TALENTS) {
+    const src = st.talents[h];
+    if (!src || typeof src !== 'object') continue;
+    const r = {};
+    let n = 0;
+    for (const tr of TALENTS[h]) for (const t of tr.talents) {
+      const v = clamp(Math.floor(finite(src[t.id], 0)), 0, t.max);
+      if (v) { r[t.id] = v; n += v; }
+    }
+    out.talents[h] = n <= Math.max(0, out.level - 1) ? r : {};
   }
   // Loadouts hold item ids, not items, so a preset can never resurrect a
   // piece that has since been sold, tempered away or left in a delve.
@@ -9190,6 +9576,7 @@ function resetRun(heroId, levelId, diffId) {
   placeChests(spawn, portal);
   placeFinds(spawn, portal);
   placeCracks(spawn, portal);
+  placeEncounters(spawn);
   placeTraps();
   flowFrom = -1;
   rebuildFlow();
