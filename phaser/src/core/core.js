@@ -1161,6 +1161,158 @@ function powerLevel(gear, level) {
 }
 const stashPower = () => powerLevel(stash.gear, stash.level || 1);
 
+/* --- TALENTS --------------------------------------------------------------
+   Asked for from a screenshot of a talent grid: three trees a hero, tiers
+   that open as points go in, ranks shown as 2/5, and an arrow where one
+   talent is built on another. Each hero has three of their own.
+
+   Points are the hero's level: one a level past the first, the same pool
+   for each hero, since each spends it in their own trees. Kept in the stash
+   (stash.talents[hero] = { id: rank }), so they last, and follow the kit
+   into Hardcore the same way the level does. Taking them back costs coin.
+
+   A talent is stat work and nothing else, on the same two piles the gear
+   uses (see recomputeStats): `mul` is a per-rank fraction, `add` per-rank
+   flat. So a talent can never be applied twice, or out of order with a
+   ring. Two things that are not on the sheet -- life on a kill, and a
+   longer blessing -- ride in as stats the core reads where those happen.
+
+   A tree is four tiers. Tier t opens once TALENT_TIER * t points are in
+   that tree; a talent with `req` needs that one maxed first, and it always
+   sits in the same column below it, so the arrow is straight down.
+   -------------------------------------------------------------------- */
+const TALENT_TIER = 4;
+const TL = (id, name, glyph, tier, col, max, per, text, req) =>
+  ({ id, name, glyph, tier, col, max, per, text, req: req || null });
+const TALENTS = {
+  isaac: [
+    { id: 'bulwark', name: 'Bulwark', hue: '#c9863e', talents: [
+      TL('ironhide', 'Ironhide', '❖', 0, 0, 5, { mul: { maxHp: 0.04 } }, '+4% life'),
+      TL('steadfast', 'Steadfast', '⛨', 0, 2, 5, { add: { ward: 0.015 } }, '+1.5% ward'),
+      TL('shieldwall', 'Shieldwall', '▣', 1, 0, 3, { mul: { maxHp: 0.03 } }, '+3% life', 'ironhide'),
+      TL('mending', 'Hearth-Mend', '✚', 1, 1, 3, { add: { regen: 0.4 } }, '+0.4 life each second'),
+      TL('lastlight', 'Last Light', '☀', 2, 1, 3, { add: { killHeal: 2 } }, '2 life back on every kill', 'mending'),
+      TL('oathward', 'Oath-Ward', '◈', 2, 2, 3, { add: { ward: 0.02 } }, '+2% ward', 'steadfast'),
+      TL('unbroken', 'Unbroken', '♕', 3, 1, 1, { mul: { maxHp: 0.08 }, add: { ward: 0.04 } },
+        '+8% life and +4% ward', 'lastlight')
+    ] },
+    { id: 'sunblade', name: 'Sunblade', hue: '#ffc24d', talents: [
+      TL('keen', 'Keen Edge', '✦', 0, 0, 5, { mul: { damage: 0.04 } }, '+4% damage'),
+      TL('quick', 'Quick Hand', '❧', 0, 2, 5, { mul: { fireDelay: -0.03 } }, 'the blade 3% faster'),
+      TL('sweep', 'Broad Sweep', '⌁', 1, 0, 3, { mul: { sweep: 0.06 } }, '+6% width of the arc'),
+      TL('reach', 'Long Reach', '◎', 1, 1, 3, { mul: { range: 0.05 } }, '+5% reach'),
+      TL('swift', 'Swift Edge', '➤', 2, 1, 2, { mul: { arcSpeed: 0.08 } }, 'crescents 8% faster', 'reach'),
+      TL('fury', "Sun's Fury", '☄', 2, 0, 3, { mul: { damage: 0.03 } }, '+3% damage', 'sweep'),
+      TL('twin', 'Twin Crescent', '⁂', 3, 2, 1, { add: { shots: 1 } }, 'a second crescent leaves the edge', 'quick')
+    ] },
+    { id: 'hearth', name: 'Hearth', hue: '#8fd08a', talents: [
+      TL('windstep', 'Windstep', '❯', 0, 0, 5, { mul: { speed: 0.03 } }, '+3% stride'),
+      TL('souldraw', 'Soul Draw', '❂', 0, 2, 3, { mul: { magnet: 0.12 } }, 'slag comes from 12% further'),
+      TL('shrinekept', 'Shrine-Kept', '⚘', 1, 1, 3, { add: { blessLast: 0.15 } }, 'blessings last 15% longer'),
+      TL('fieldmend', 'Field-Mend', '✤', 1, 2, 3, { add: { regen: 0.3 } }, '+0.3 life each second', 'souldraw'),
+      TL('pilgrim', "Pilgrim's Stride", '➫', 2, 0, 2, { mul: { speed: 0.04 } }, '+4% stride', 'windstep'),
+      TL('forage', 'Forager', '☘', 2, 1, 3, { add: { killHeal: 1 } }, '1 life back on every kill', 'shrinekept'),
+      TL('warden', 'Warden of the Hearth', '⌂', 3, 1, 1,
+        { mul: { damage: 0.05, maxHp: 0.05, speed: 0.05 } }, '+5% damage, life and stride', 'forage')
+    ] }
+  ],
+  zayd: [
+    { id: 'glaive', name: 'Glaive', hue: '#5fd0ff', talents: [
+      TL('honed', 'Honed Glaive', '✦', 0, 0, 5, { mul: { damage: 0.04 } }, '+4% damage'),
+      TL('quicksilver', 'Quicksilver', '❧', 0, 2, 5, { mul: { fireDelay: -0.03 } }, 'the glaive 3% faster'),
+      TL('longthrow', 'Long Throw', '◎', 1, 1, 3, { mul: { range: 0.05 } }, '+5% reach'),
+      TL('cleave', 'Cleaving Arc', '⌁', 1, 0, 3, { mul: { sweep: 0.06 } }, '+6% width of the arc', 'honed'),
+      TL('keenwind', 'Keen Wind', '➤', 2, 1, 3, { mul: { arcSpeed: 0.08 } }, 'crescents 8% faster', 'longthrow'),
+      TL('truth', 'Piercing Truth', '☄', 2, 0, 3, { mul: { damage: 0.03 } }, '+3% damage', 'cleave'),
+      TL('split', 'Split Glaive', '⁂', 3, 2, 1, { add: { shots: 1 } }, 'a second crescent leaves the edge', 'quicksilver')
+    ] },
+    { id: 'frost', name: 'Frost', hue: '#9fd8ff', talents: [
+      TL('rime', 'Rime Mail', '❖', 0, 0, 5, { mul: { maxHp: 0.04 } }, '+4% life'),
+      TL('frostward', 'Frost Ward', '❄', 0, 2, 5, { add: { ward: 0.015 } }, '+1.5% ward'),
+      TL('glacial', 'Glacial Poise', '▣', 1, 0, 3, { mul: { maxHp: 0.03 } }, '+3% life', 'rime'),
+      TL('coldmend', 'Cold Mend', '✚', 1, 1, 3, { add: { regen: 0.4 } }, '+0.4 life each second'),
+      TL('wintersdue', "Winter's Due", '✳', 2, 1, 3, { add: { killHeal: 2 } }, '2 life back on every kill', 'coldmend'),
+      TL('icewall', 'Ice-Wall', '◈', 2, 2, 3, { add: { ward: 0.02 } }, '+2% ward', 'frostward'),
+      TL('kael', 'Heart of Kael', '♕', 3, 1, 1, { mul: { maxHp: 0.08 }, add: { ward: 0.04 } },
+        '+8% life and +4% ward', 'wintersdue')
+    ] },
+    { id: 'tactics', name: 'Tactics', hue: '#b89cff', talents: [
+      TL('fleet', 'Fleetfoot', '❯', 0, 0, 5, { mul: { speed: 0.03 } }, '+3% stride'),
+      TL('leysense', 'Ley Sense', '❂', 0, 2, 3, { mul: { magnet: 0.12 } }, 'slag comes from 12% further'),
+      TL('scholar', "Scholar's Blessing", '⚘', 1, 1, 3, { add: { blessLast: 0.15 } }, 'blessings last 15% longer'),
+      TL('measured', 'Measured Pace', '✤', 1, 2, 3, { add: { regen: 0.3 } }, '+0.3 life each second', 'leysense'),
+      TL('outflank', 'Outflank', '➫', 2, 0, 2, { mul: { speed: 0.04 } }, '+4% stride', 'fleet'),
+      TL('harvest', "Tactician's Harvest", '☘', 2, 1, 3, { add: { killHeal: 1 } }, '1 life back on every kill', 'scholar'),
+      TL('master', 'Master of Kael', '⌂', 3, 1, 1,
+        { mul: { damage: 0.05, maxHp: 0.05, speed: 0.05 } }, '+5% damage, life and stride', 'harvest')
+    ] }
+  ]
+};
+
+function talentRanks(hero) {
+  if (!stash.talents) stash.talents = {};
+  return stash.talents[hero] || (stash.talents[hero] = {});
+}
+function talentTreeSpent(hero, tree) {
+  const R = talentRanks(hero);
+  return tree.talents.reduce((n, t) => n + (R[t.id] || 0), 0);
+}
+function talentPoints(hero) {
+  const total = Math.max(0, (stash.level || 1) - 1);
+  const spent = (TALENTS[hero] || []).reduce((n, tr) => n + talentTreeSpent(hero, tr), 0);
+  return { total, spent, free: Math.max(0, total - spent) };
+}
+function findTalent(hero, id) {
+  for (const tr of TALENTS[hero] || []) for (const t of tr.talents) if (t.id === id) return { tree: tr, t };
+  return null;
+}
+// Why a talent cannot take another rank now, or null if it can.
+function talentBlock(hero, id) {
+  const f = findTalent(hero, id);
+  if (!f) return 'no such talent';
+  const R = talentRanks(hero), t = f.t;
+  if ((R[t.id] || 0) >= t.max) return 'mastered';
+  if (talentTreeSpent(hero, f.tree) < TALENT_TIER * t.tier)
+    return TALENT_TIER * t.tier + ' points in ' + f.tree.name + ' first';
+  if (t.req) {
+    const q = findTalent(hero, t.req).t;
+    if ((R[q.id] || 0) < q.max) return 'master ' + q.name + ' first';
+  }
+  if (talentPoints(hero).free <= 0) return 'no points left — they come with levels';
+  return null;
+}
+function learnTalent(hero, id) {
+  const why = talentBlock(hero, id);
+  if (why) return why;
+  const R = talentRanks(hero);
+  R[id] = (R[id] || 0) + 1;
+  saveStash();
+  if (player && player.hero === hero) recomputeStats();
+  return null;
+}
+const talentResetCost = hero => 40 + 12 * talentPoints(hero).spent;
+function resetTalents(hero) {
+  const spent = talentPoints(hero).spent;
+  if (!spent) return 'nothing to take back';
+  const cost = talentResetCost(hero);
+  if ((stash.coins || 0) < cost) return 'it costs ' + cost + ' coin';
+  stash.coins -= cost;
+  stash.talents[hero] = {};
+  saveStash();
+  if (player && player.hero === hero) recomputeStats();
+  return null;
+}
+// The talents' share of the sheet, into the gear's two piles.
+function talentStats(hero, add, mul) {
+  const R = (stash.talents && stash.talents[hero]) || {};
+  for (const tr of TALENTS[hero] || []) for (const t of tr.talents) {
+    const r = R[t.id] || 0;
+    if (!r) continue;
+    for (const k in (t.per.add || {})) add[k] = (add[k] || 0) + t.per.add[k] * r;
+    for (const k in (t.per.mul || {})) mul[k] = (mul[k] === undefined ? 1 : mul[k]) * (1 + t.per.mul[k] * r);
+  }
+}
+
 const UPGRADES = [
   { id:'dmg',    glyph:'✦', name:'Keen Edge',   desc:'your ward bites a quarter deeper',   max:99, apply:p=>p.damage      *= 1.25 },
   { id:'rate',   glyph:'❧', name:'Quickening',  desc:'the blade answers faster',           max:8,  apply:p=>p.fireDelay   *= 0.85 },
@@ -1599,6 +1751,8 @@ function recomputeStats() {
   base.fireDelay = H.fireDelay; base.range = H.range;
   base.sweep = H.sweep; base.arcSpeed = H.arcSpeed;
   base.ward = 0;
+  // Talent-only stats: always present, so taking a talent back zeroes them.
+  base.killHeal = 0; base.blessLast = 0;
 
   // What the hero has earned. Applied before gear so the kit multiplies a
   // level's worth of strength rather than the other way round.
@@ -1645,6 +1799,9 @@ function recomputeStats() {
     if (b.add) for (const k in b.add) add[k] = (add[k] || 0) + b.add[k];
     if (b.mul) for (const k in b.mul) mul[k] = (mul[k] === undefined ? 1 : mul[k]) * (1 + b.mul[k]);
   }
+
+  // The talents, on the same two piles (see TALENTS).
+  talentStats(p.hero, add, mul);
 
   for (const k in add) base[k] = (base[k] || 0) + add[k];
   for (const k in mul) base[k] = (base[k] || 0) * mul[k];
@@ -4233,7 +4390,8 @@ function bless(sh) {
   if (sh.id === 'blood') {
     player.hp = player.maxHp;
   } else {
-    run.blessing = { id: sh.id, t: S.last, max: S.last };
+    const last = S.last * (1 + (player.blessLast || 0));   // Shrine-Kept
+    run.blessing = { id: sh.id, t: last, max: last };
     recomputeStats();
   }
   run.shrines = (run.shrines || 0) + 1;
@@ -6048,6 +6206,8 @@ function damageEnemy(e, dmg, fx, fy) {
       }
     }
     run.kills++;
+    // Last Light and its kin: a little life back on every kill.
+    if (player.killHeal > 0 && player.hp > 0) player.hp = Math.min(player.maxHp, player.hp + player.killHeal);
     // The delve keeps its dead for a moment. An elite standing over one will
     // stop and take the slag out of it, which is the only time a champion is
     // holding still and not looking at you.
@@ -8605,6 +8765,21 @@ function sanitizeStash(st) {
   // rather than carried, and a tier above the ceiling is clamped to it.
   if (st.hall && typeof st.hall === 'object') {
     for (const h of HALL) out.hall[h.id] = clamp(Math.floor(finite(st.hall[h.id], 0)), 0, HALL_MAX);
+  }
+  // Talents: a rank per known talent, clamped to its max; a hero whose ranks
+  // add up to more than their level gives (a save from before an XP change,
+  // or edited) has them all handed back rather than kept half-legal.
+  out.talents = {};
+  if (st.talents && typeof st.talents === 'object') for (const h in TALENTS) {
+    const src = st.talents[h];
+    if (!src || typeof src !== 'object') continue;
+    const r = {};
+    let n = 0;
+    for (const tr of TALENTS[h]) for (const t of tr.talents) {
+      const v = clamp(Math.floor(finite(src[t.id], 0)), 0, t.max);
+      if (v) { r[t.id] = v; n += v; }
+    }
+    out.talents[h] = n <= Math.max(0, out.level - 1) ? r : {};
   }
   // Loadouts hold item ids, not items, so a preset can never resurrect a
   // piece that has since been sold, tempered away or left in a delve.

@@ -20,7 +20,8 @@
           HALL_MAX, hallBuy, vaultCap, loadoutCap, saveLoadout, applyLoadout,
           deleteLoadout, discardFromVault, gearCtx, closeGear, compareLines,
           bagCap, player, LOADOUT_MAX, stashCtx, sortBag, bagShown, isUpgrade,
-          BAG_SORTS, bagSort, bagFilter */
+          BAG_SORTS, bagSort, bagFilter, TALENTS, TALENT_TIER, talentRanks, talentTreeSpent,
+          talentPoints, talentBlock, learnTalent, talentResetCost, resetTalents, findTalent */
 
 // A sound, if the engine is there to make one (it is not on the test pages).
 import { settings, setSetting, setControlsSaved, SHAKES, QUALITIES } from './settings.js';
@@ -356,6 +357,56 @@ body.menus #diag{display:none}
 #screens.station .tabs button.cog{flex:0 0 52px}
 @media (prefers-reduced-motion:reduce){#screens.station .go.big{animation:none}}
 #screens .row>.item{flex:1;min-width:0}
+
+/* THE TALENT TREE. A gilt frame round a dark field washed in the tree's
+   colour; each talent a square seal with its rank on a tab at the corner,
+   the way the screenshot it was asked from draws them. Locked is grey and
+   flat, learnable glows, learned is struck in gold. */
+#screens .tabs button{position:relative}
+#screens .tabs .badge{position:absolute;top:2px;right:calc(50% - 26px);min-width:18px;height:18px;
+  padding:0 4px;border-radius:9px;background:#c0392b;color:#fff;font:700 11px/18px Georgia,serif;
+  box-shadow:0 0 0 2px #110e0a,0 0 8px rgba(192,57,43,.7)}
+#screens.station .tabs button span{letter-spacing:.3px;font-size:9.5px}
+#screens .seg button small{display:block;opacity:.7;font:12px Georgia,serif}
+#screens .tgrid{position:relative;margin:0 0 12px;border-radius:10px;border:2px solid #6d4d22;
+  background:radial-gradient(120% 70% at 50% 0%,color-mix(in srgb,var(--hue) 22%,transparent),transparent 70%),
+    radial-gradient(140% 100% at 50% 120%,rgba(0,0,0,.7),transparent 60%),
+    linear-gradient(#1b1611,#0e0b08);
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.8),inset 0 0 30px rgba(0,0,0,.6),0 4px 14px rgba(0,0,0,.5);overflow:hidden}
+#screens .tgrid .gate{position:absolute;left:0;right:0;height:1px;padding-left:8px;
+  font:600 10px Cinzel,Georgia,serif;letter-spacing:1px;color:#8c7650;
+  border-top:1px dashed rgba(166,124,58,.35);line-height:14px}
+#screens .tgrid .node{position:absolute;width:64px;height:64px;padding:0;border-radius:8px;
+  border:2px solid #4a3a26;background:radial-gradient(circle at 40% 35%,#2a2219,#0e0b08);
+  box-shadow:inset 0 0 12px rgba(0,0,0,.8),0 3px 6px rgba(0,0,0,.6);color:var(--hue);
+  display:grid;place-items:center}
+#screens .tgrid .node i{font-style:normal;font-size:28px;line-height:1;
+  text-shadow:0 0 10px color-mix(in srgb,var(--hue) 60%,transparent)}
+#screens .tgrid .node .rk{position:absolute;right:-8px;bottom:-8px;min-width:30px;padding:1px 4px;
+  border-radius:5px;background:#0d0b08;border:1px solid #6d4d22;font:700 12px/16px Georgia,serif;color:#8c8168}
+#screens .tgrid .node.locked{filter:grayscale(1) brightness(.55)}
+#screens .tgrid .node.open{border-color:#c9a45a;animation:talGlow 2.2s ease-in-out infinite}
+#screens .tgrid .node.has{border-color:#e2b96a}
+#screens .tgrid .node.has .rk,#screens .tgrid .node.open .rk{color:#8fd08a;border-color:#8fd08a}
+#screens .tgrid .node.max{border-color:#ffe2a0;background:radial-gradient(circle at 40% 35%,
+  color-mix(in srgb,var(--hue) 45%,#2a2219),#120e0a);box-shadow:0 0 16px rgba(226,185,106,.5),inset 0 0 10px rgba(0,0,0,.5)}
+#screens .tgrid .node.max .rk{color:#f0d898;border-color:#e2b96a}
+#screens .tgrid .node.sel{outline:2px solid #fff1cc;outline-offset:3px}
+@keyframes talGlow{0%,100%{box-shadow:0 0 0 rgba(226,185,106,0),inset 0 0 12px rgba(0,0,0,.8)}
+  50%{box-shadow:0 0 14px rgba(226,185,106,.55),inset 0 0 12px rgba(0,0,0,.8)}}
+#screens .tgrid .arrow{position:absolute;width:6px;border-radius:3px;background:#4a4238}
+#screens .tgrid .arrow:after{content:'';position:absolute;left:-5px;bottom:-8px;border:8px solid transparent;
+  border-top-color:#4a4238;border-bottom:0}
+#screens .tgrid .arrow.lit{background:linear-gradient(#f0cf86,#c9a45a)}
+#screens .tgrid .arrow.lit:after{border-top-color:#c9a45a}
+#screens .tdetail{padding:12px 14px;margin:0 0 12px;border-radius:10px;border:1px solid #6d4d22;
+  background:linear-gradient(#211b14,#15110d)}
+#screens .tdetail b{display:block;font:600 17px Cinzel,Georgia,serif;color:var(--hue)}
+#screens .tdetail em{display:block;font-style:normal;color:#a89878;font-size:13px;margin:2px 0 6px}
+#screens .tdetail p{margin:0 0 8px;color:#cebe9e}
+#screens .tdetail .why{color:#e8a060;font-style:italic;font-size:13.5px}
+#screens .tdetail .go:disabled{opacity:.55}
+@media (prefers-reduced-motion:reduce){#screens .tgrid .node.open{animation:none}}
 #screens.station .row.delve{font:17px Georgia,serif}
 #screens.station .row.delve small,#screens.station .row.delve .verdict{font:13px Georgia,serif}
 #screens.station .row.delve .act{font:600 10.5px Cinzel,Georgia,serif;letter-spacing:.8px}
@@ -426,6 +477,7 @@ export class Screens {
     else if (name === 'settings') this.renderSettings(false);
     else if (name === 'settings-pause') this.renderSettings(true);
     else if (name === 'hall') this.renderHall();
+    else if (name === 'talents') this.renderTalents();
     else if (name === 'delves') this.renderDelves();
     else this.renderGatehouse();
     // Room at the bottom for the bar, on the screens that carry it -- and
@@ -924,13 +976,16 @@ export class Screens {
   /* The bar along the bottom, where a thumb already is. An icon and a word
    * each; the station you are in is lit. Settings is the small one at the end. */
   tabs(on) {
+    // Unspent talent points wear a badge on their tab, or they are forgotten.
+    const free = typeof talentPoints === 'function' ? talentPoints(this.pick.hero || 'isaac').free : 0;
     const t = (id, icon, label) =>
       '<button type="button" data-tab="' + id + '" class="' + (on === id ? 'on' : '') +
       (label ? '' : ' cog') + '"><i>' + icon + '</i>' + (label ? '<span>' + label + '</span>' : '') +
+      (id === 'talents' && free > 0 ? '<b class="badge">' + free + '</b>' : '') +
       '</button>';
     return '<nav class="tabs">' +
       t('splash', '⌂︎', 'Home') + t('delves', '⇣︎', 'Delves') +
-      t('gear', '⚒︎', 'Forge') + t('vendor', '⚖︎', 'Vendor') +
+      t('gear', '⚒︎', 'Forge') + t('talents', '✧︎', 'Talents') + t('vendor', '⚖︎', 'Vendor') +
       t('hall', '♜︎', 'Hall') + t('settings', '⚙︎', '') + '</nav>';
   }
 
@@ -1014,6 +1069,92 @@ export class Screens {
 
   /* The hall. Four stations, three tiers each, and every tier says what it
    * changes rather than what it costs alone. */
+  /* TALENTS. Three trees a hero, four tiers each, ranks shown the way the
+   * screenshot they were asked for from shows them (2/5), and a straight
+   * arrow down from a talent to the one built on it. Tap a talent to read it;
+   * the panel under the tree says what a rank gives and learns it. All the
+   * rules are the core's (talentBlock, learnTalent, resetTalents). */
+  renderTalents() {
+    this.settlePick();
+    const hero = this.pick.hero;
+    const trees = TALENTS[hero];
+    this.talTree = Math.min(this.talTree || 0, trees.length - 1);
+    const tr = trees[this.talTree];
+    const R = talentRanks(hero), pts = talentPoints(hero);
+    const spent = talentTreeSpent(hero, tr);
+    if (!this.talSel || !tr.talents.some(t => t.id === this.talSel)) this.talSel = tr.talents[0].id;
+    const sel = tr.talents.find(t => t.id === this.talSel);
+    const ROW = 92;
+    const at = (tier, col) => 'left:calc(' + ((col + 0.5) * 100 / 3).toFixed(3) + '% - 32px);top:' + (tier * ROW + 14) + 'px';
+    const nodes = tr.talents.map(t => {
+      const r = R[t.id] || 0;
+      const why = talentBlock(hero, t.id);
+      const gated = spent < TALENT_TIER * t.tier || (t.req && (R[t.req] || 0) < findTalent(hero, t.req).t.max);
+      const cls = r >= t.max ? 'max' : r > 0 ? 'has' : gated ? 'locked' : !why ? 'open' : 'idle';
+      return '<button type="button" class="node ' + cls + (t.id === this.talSel ? ' sel' : '') +
+        '" data-tal="' + t.id + '" style="' + at(t.tier, t.col) + '" aria-label="' + t.name + '">' +
+        '<i>' + t.glyph + '</i><b class="rk">' + r + '/' + t.max + '</b></button>';
+    }).join('');
+    const arrows = tr.talents.filter(t => t.req).map(t => {
+      const q = findTalent(hero, t.req).t;
+      const lit = (R[q.id] || 0) >= q.max;
+      const top = q.tier * ROW + 14 + 64, h = (t.tier - q.tier) * ROW - 64;
+      return '<span class="arrow' + (lit ? ' lit' : '') + '" style="left:calc(' +
+        ((t.col + 0.5) * 100 / 3).toFixed(3) + '% - 3px);top:' + top + 'px;height:' + h + 'px"></span>';
+    }).join('');
+    const gates = [1, 2, 3].map(tier => spent < TALENT_TIER * tier
+      ? '<span class="gate" style="top:' + (tier * ROW + 4) + 'px">' + TALENT_TIER * tier + ' in ' + tr.name + '</span>' : '').join('');
+    const r = R[sel.id] || 0, why = talentBlock(hero, sel.id);
+    const cost = talentResetCost(hero);
+    this.root.innerHTML =
+      '<div class="card talents">' +
+        '<h1>Talents</h1>' +
+        '<div class="rows heroes">' + Object.values(HEROES).map(h =>
+          '<button class="row' + (hero === h.id ? ' on' : '') + '" data-thero="' + h.id + '" type="button"><span>' +
+          h.name + '<small>' + talentPoints(h.id).free + ' to spend</small></span></button>').join('') + '</div>' +
+        '<div class="purse"><span>Points</span><b>' + pts.free + '</b><span>of ' + pts.total + '</span></div>' +
+        '<div class="seg" id="treeSeg">' + trees.map((x, i) =>
+          '<button type="button" data-tree="' + i + '" class="' + (i === this.talTree ? 'on' : '') + '">' +
+          x.name + ' <small>' + talentTreeSpent(hero, x) + '</small></button>').join('') + '</div>' +
+        '<div class="tgrid" style="--hue:' + tr.hue + ';height:' + (4 * ROW + 8) + 'px">' + gates + arrows + nodes + '</div>' +
+        '<div class="tdetail" style="--hue:' + tr.hue + '">' +
+          '<b>' + sel.glyph + ' ' + sel.name + '</b><em>Rank ' + r + ' of ' + sel.max + '</em>' +
+          '<p>Each rank: ' + sel.text + '.</p>' +
+          (why && why !== 'mastered' ? '<p class="why">' + why.charAt(0).toUpperCase() + why.slice(1) + '.</p>' : '') +
+          '<button class="go" type="button" id="learnTal"' + (why ? ' disabled' : '') + '>' +
+            (why === 'mastered' ? 'Mastered' : 'Learn — 1 point') + '</button>' +
+        '</div>' +
+        (this.note ? '<p class="sub">' + this.note + '</p>' : '') +
+        (pts.spent ? '<button class="alt" type="button" id="resetTal">' +
+          (this.resetArmed ? 'Tap again — ' + cost + ' coin to take all back' : 'Take back every talent — ' + cost + ' coin') +
+          '</button>' : '') +
+      '</div>' + this.tabs('talents');
+
+    this.wireTabs();
+    const again = () => { this.renderTalents(); };
+    this.root.querySelectorAll('[data-thero]').forEach(b => b.addEventListener('click', () => {
+      this.pick.hero = b.dataset.thero; this.talSel = null; this.note = null; this.resetArmed = false; again(); }));
+    this.root.querySelectorAll('[data-tree]').forEach(b => b.addEventListener('click', () => {
+      this.talTree = +b.dataset.tree; this.talSel = null; this.note = null; again(); }));
+    this.root.querySelectorAll('[data-tal]').forEach(b => b.addEventListener('click', () => {
+      this.talSel = b.dataset.tal; this.note = null; again(); }));
+    const learn = this.root.querySelector('#learnTal');
+    if (learn) learn.addEventListener('click', () => {
+      const w = learnTalent(hero, sel.id);
+      snd(w ? 'deny' : 'build');
+      this.note = null; again();
+    });
+    const rs = this.root.querySelector('#resetTal');
+    if (rs) rs.addEventListener('click', () => {
+      if (!this.resetArmed) { this.resetArmed = true; again(); return; }
+      this.resetArmed = false;
+      const w = resetTalents(hero);
+      snd(w ? 'deny' : 'build');
+      this.note = w ? 'Not yet — ' + w + '.' : 'Every point is back to spend.';
+      again();
+    });
+  }
+
   renderHall() {
     const rows = HALL.map(h => {
       const t = hallTier(h.id);
