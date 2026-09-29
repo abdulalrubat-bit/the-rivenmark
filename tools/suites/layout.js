@@ -41,7 +41,8 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
     });
     const tag=w+'x'+h;
     ck(tag+': the hero rows start on screen', home.heroTop>=0, 'top '+Math.round(home.heroTop));
-    ck(tag+': the bar sits on the bottom of the glass', home.tabs===6 && home.barBottom<=home.vh+1 &&
+    ck(tag+': the bar sits on the bottom of the glass', home.tabs===7 &&   // Home, Delves, Forge, Talents, Vendor, Hall, settings
+       home.barBottom<=home.vh+1 &&
        home.barTop>home.vh-120, home.tabs+' tabs at '+Math.round(home.barTop)+'-'+Math.round(home.barBottom));
     // Descend is pinned to the bottom of the scroller, just above the bar, so
     // it is on screen however long the card is and never under the bar.

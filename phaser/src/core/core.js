@@ -2143,6 +2143,7 @@ function generateWorld(spawn, portal) {
   buildEdges();
   buildStains(spawn, portal);
   buildScenery(spawn, portal);
+  lightRooms();
 }
 
 // Flood from the spawn: every cell you can actually stand on, and how penned
@@ -2656,6 +2657,62 @@ function dressSetPieces(halls, sc, pc) {
     const near = (a, b) => Math.abs(h.cx - a) + Math.abs(h.cy - b) < 8;
     if (near(sc.x, sc.y) || near(pc.x, pc.y)) continue;
     ROOM_SHAPES.ruin(h, sc);
+  }
+}
+
+
+/* --- ROOM MOODS ------------------------------------------------------------
+   Playtested as "hollow": walk from a forge into an ossuary and the light did
+   not change. Now each kind of room has its own air, and the renderer blends
+   into it as you cross the threshold (see atmosphere.js):
+     grade   a colour the whole frame is multiplied toward, and how far
+     dark    how hard the edges close in
+     fog     the haze's own tint
+     motes   what hangs in the air, and which way it goes (rise, fall, float)
+     glow    a soft pool of the room's light at its heart, seen from the door
+   The corridors between keep the delve's own, so a room reads as a place you
+   have walked into.
+   ------------------------------------------------------------------------ */
+const ROOM_MOODS = {
+  throne:   { grade: '#ff9a5a', gradeA: 0.16, dark: 0.30, fog: '#8a4a2a', motes: '#ffb060', drift: 'rise',  glow: '#ff7a30' },
+  forge:    { grade: '#ff7a2a', gradeA: 0.22, dark: 0.12, fog: '#a0501a', motes: '#ffa040', drift: 'rise',  glow: '#ff6a1a' },
+  ossuary:  { grade: '#6fd0c0', gradeA: 0.20, dark: 0.50, fog: '#2a5a58', motes: '#d8f0e8', drift: 'fall',  glow: '#4fb0a0' },
+  garrison: { grade: '#e0a860', gradeA: 0.10, dark: 0.25, fog: '#6a5030', motes: '#e8d0a0', drift: 'fall',  glow: '#d08a40' },
+  stores:   { grade: '#d8c090', gradeA: 0.08, dark: 0.22, fog: '#6a5a3a', motes: '#f0e4c0', drift: 'fall',  glow: '#c8a060' },
+  chapel:   { grade: '#9a8cff', gradeA: 0.18, dark: 0.20, fog: '#4a4088', motes: '#e0d8ff', drift: 'float', glow: '#8a7cff' },
+  cistern:  { grade: '#7ad06a', gradeA: 0.18, dark: 0.38, fog: '#2a5a28', motes: '#b0f098', drift: 'float', glow: '#5ad04a' },
+  // The older rooms, in the regions that do not have set pieces yet.
+  hall:     { grade: '#8fb9d6', gradeA: 0.12, dark: 0.30, fog: '#3a4a5a', motes: '#d0e0f0', drift: 'fall',  glow: '#6a9ac0' },
+  barracks: { grade: '#e0a860', gradeA: 0.10, dark: 0.25, fog: '#6a5030', motes: '#e8d0a0', drift: 'fall',  glow: '#d08a40' },
+  collapse: { grade: '#c8b89a', gradeA: 0.10, dark: 0.35, fog: '#5a5040', motes: '#e8dcc0', drift: 'fall',  glow: '#a89878' }
+};
+const moodOf = rm => ROOM_MOODS[rm.set] || ROOM_MOODS[rm.kind] || null;
+
+// The room a point stands in, if any: a set piece by its box, an older room
+// by its reach from the middle.
+function roomAt(x, y) {
+  for (let i = 0; i < rooms.length; i++) {
+    const rm = rooms[i];
+    if (rm.box) {
+      const b = rm.box;
+      if (x > b.x0 && x < b.x1 && y > b.y0 && y < b.y1) return rm;
+    } else if (rm.r && dist2(x, y, rm.x, rm.y) < rm.r * rm.r * 0.8) return rm;
+  }
+  return null;
+}
+function moodAt(x, y) {
+  const rm = roomAt(x, y);
+  return rm ? moodOf(rm) : null;
+}
+
+// A soft pool of each room's own light at its heart, big and faint, so a
+// room glows in its colour from the corridor outside it.
+function lightRooms() {
+  for (const rm of rooms) {
+    const M = moodOf(rm);
+    if (!M) continue;
+    const span = Math.max(260, (rm.half || 5) * CELL_W * 2.2);
+    lamps.push({ x: rm.x, y: rm.y, color: M.glow, span, alpha: 0.2, room: true });
   }
 }
 
@@ -8017,12 +8074,17 @@ function spawnChoir() {
     // Rock on the ring pulls a singer to the nearest open ground, which can
     // be well inside it. Try the ring a little further out or in first, and
     // keep whichever lands nearest the ring's own radius.
+    // And if every radius on this bearing is rock, slide a little along
+    // the ring before settling: a singer dragged far inside it breaks the
+    // circle the whole fight is read from.
     let p = null, best = Infinity;
-    for (const r of [CHOIR_R, CHOIR_R + 45, CHOIR_R - 35, CHOIR_R + 90]) {
-      const q = openNear(cx + Math.cos(a) * r, cy + Math.sin(a) * r, d.r);
-      const off = Math.abs(Math.hypot(q.x - cx, q.y - cy) - CHOIR_R);
-      if (off < best) { best = off; p = q; }
-      if (off < 20) break;
+    search: for (const da of [0, 0.14, -0.14, 0.28, -0.28]) {
+      for (const r of [CHOIR_R, CHOIR_R + 45, CHOIR_R - 35, CHOIR_R + 90]) {
+        const q = openNear(cx + Math.cos(a + da) * r, cy + Math.sin(a + da) * r, d.r);
+        const off = Math.abs(Math.hypot(q.x - cx, q.y - cy) - CHOIR_R);
+        if (off < best) { best = off; p = q; }
+        if (off < 20) break search;
+      }
     }
     const e = newBody('singer', p.x, p.y, 0);
     e.hp = e.maxHp = d.hp * (1 + dep * 1.6) * DIFF.threat;

@@ -401,13 +401,19 @@ export class Delve extends Phaser.Scene {
      * than an unfinished one. Doing this any earlier shows the seams being
      * assembled.
      *
-     * The gate-house is raised only after the fade has finished, so the two
-     * do not cross-dissolve into each other. ?nogate skips the card outright:
-     * there is no menu to arrive at, and a debug entrance should be instant.
+     * The gate-house goes up BEFORE the card fades, underneath it (the card
+     * is z 60, the stations 52). It used to be raised after the fade, to
+     * keep the two from cross-dissolving -- which left the fade itself
+     * showing the bare world behind, hero and all: playtested as "it loads
+     * into Isaac for a second before the menu". The stations are opaque
+     * now, so the card simply lifts off the menu. ?nogate skips the card
+     * outright: there is no menu to arrive at, and a debug entrance should
+     * be instant.
      */
     if (this.gated) {
       this.title.note('the gate-house');
-      this.title.dismiss().then(() => this.screens.show('splash'));
+      this.screens.show('splash');
+      this.title.dismiss();
     } else {
       document.getElementById('boot')?.remove();
     }
