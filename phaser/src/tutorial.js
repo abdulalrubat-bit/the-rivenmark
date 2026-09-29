@@ -20,17 +20,17 @@ import { bossBarDrop } from './overlay.js';
 const CSS = `
 #tut{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 92px);
      width:min(340px,calc(100vw - 32px));z-index:30;pointer-events:auto;
-     background:rgba(16,13,10,.92);border:1px solid #6d5a36;border-radius:10px;
-     padding:12px 14px 10px;color:#e8dcc0;font:14px/1.4 Georgia,serif;
+     background:rgba(15,13,12,.92);border:1px solid #59504a;border-radius:10px;
+     padding:12px 14px 10px;color:#ead9cd;font:14px/1.4 Georgia,serif;
      box-shadow:0 6px 18px rgba(0,0,0,.55)}
-#tut b{color:#f0cf86;font-weight:600}
+#tut b{color:#ffa977;font-weight:600}
 #tut .row{display:flex;justify-content:space-between;align-items:center;margin-top:8px;
-     font:11px/1 ui-monospace,monospace;color:#8c8168}
-#tut button{background:none;border:1px solid #4a3f30;color:#cebe9e;border-radius:6px;
+     font:11px/1 ui-monospace,monospace;color:#85776f}
+#tut button{background:none;border:1px solid #423c38;color:#bdb4af;border-radius:6px;
      padding:5px 10px;font:12px/1 Georgia,serif}
-#tut button.go{border-color:#c9a45a;color:#f0dcae}
+#tut button.go{border-color:#dc7e47;color:#f0d2be}
 .tut-point{animation:tutpulse 1.2s ease-in-out infinite;outline-offset:4px}
-@keyframes tutpulse{0%,100%{outline:2px solid rgba(240,207,134,.25)}50%{outline:2px solid rgba(240,207,134,.95)}}
+@keyframes tutpulse{0%,100%{outline:2px solid rgba(255,169,119,.25)}50%{outline:2px solid rgba(255,169,119,.95)}}
 `;
 
 // Each step: what to say (by scheme), what to point at, and when it is done.

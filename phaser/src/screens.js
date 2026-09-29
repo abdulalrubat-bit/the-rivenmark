@@ -29,11 +29,11 @@ import { settings, setSetting, setControlsSaved, SHAKES, QUALITIES } from './set
 const snd = (name, mag) => { if (typeof window.sfx === 'function') window.sfx(name, undefined, undefined, mag); };
 
 const CSS = `
-#screens .sub.warn{color:#e8c060;border-left:2px solid #c9863e;padding-left:8px}
+#screens .sub.warn{color:#fb8d4d;border-left:2px solid #e06b27;padding-left:8px}
 
 /* Settings: a row that holds a slider instead of being a button. */
 #screens .row.slide{display:flex;align-items:center;gap:10px}
-#screens .row.slide input[type=range]{flex:1;min-width:0;accent-color:#c9a45a}
+#screens .row.slide input[type=range]{flex:1;min-width:0;accent-color:#dc7e47}
 
 /* The safe areas, same as the HUD -- see the note at the top of hud.js. The
    scrim wants the whole glass, so the padding is on the scroller and the
@@ -41,7 +41,7 @@ const CSS = `
    indicator's strip. */
 #screens{position:fixed;inset:0;z-index:40;display:none;place-items:center;
   padding:var(--sa-t) var(--sa-r) var(--sa-b) var(--sa-l);box-sizing:border-box;
-  background:rgba(8,7,6,.86);font:13px ui-monospace,Menlo,monospace;color:#cebe9e;
+  background:rgba(8,7,6,.86);font:13px ui-monospace,Menlo,monospace;color:#bdb4af;
   -webkit-user-select:none;user-select:none;overflow:auto}
 #screens.up{display:grid}
 /* CUT FROM THE SAME STONE AS THE DELVE.
@@ -66,8 +66,8 @@ const CSS = `
      straight through it -- the band is painted over the whole border box, and
      the face only clips WHERE it lands, not what is beneath -- so the top of
      the card came out bright bronze instead of dark stone. */
-  background-image:linear-gradient(#241f18,#15120e 40%,#100e0b),
-    linear-gradient(#e2b96a,#a67c3a 34%,#6d4d22 70%,#3a2610);
+  background-image:linear-gradient(#221e1c,#141110 40%,#0f0d0c),
+    linear-gradient(#f49158,#b95c27 34%,#7a3a15 70%,#2a2422);
   background-origin:border-box;background-clip:padding-box,border-box;
   padding:16px;box-shadow:0 12px 40px rgba(0,0,0,.6),inset 0 1px 0 rgba(150,172,200,.18);
   margin:16px 0}
@@ -77,16 +77,16 @@ const CSS = `
 @font-face{font-family:Cinzel;font-weight:400;font-display:swap;src:url(cinzel-400.woff2) format("woff2")}
 @font-face{font-family:Cinzel;font-weight:600;font-display:swap;src:url(cinzel-600.woff2) format("woff2")}
 /* The title takes the rule the gate-house plates have. */
-#screens h1{font:600 21px Cinzel,Georgia,"Times New Roman",serif;letter-spacing:.5px;color:#eee0c0;margin:0 0 10px;
-  padding-bottom:8px;border-bottom:1px solid rgba(166,124,58,.45);
+#screens h1{font:600 21px Cinzel,Georgia,"Times New Roman",serif;letter-spacing:.5px;color:#efdbce;margin:0 0 10px;
+  padding-bottom:8px;border-bottom:1px solid rgba(185,92,39,.45);
   box-shadow:0 1px 0 rgba(0,0,0,.6)}
-#screens h1 em{font-style:normal;color:#d6b26e}
+#screens h1 em{font-style:normal;color:#e7905d}
 #screens h1 span{color:#c0392b}
-#screens .sub{color:#a89878;font-style:italic;margin:0 0 12px;line-height:1.45}
+#screens .sub{color:#9a8d86;font-style:italic;margin:0 0 12px;line-height:1.45}
 #screens .stats{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:0 0 14px}
-#screens .stats div{background:#1a1712;border:1px solid #33291f;border-radius:5px;
+#screens .stats div{background:#191614;border:1px solid #2e2826;border-radius:5px;
   padding:6px 8px;display:flex;justify-content:space-between}
-#screens .stats b{color:#eee0c0}
+#screens .stats b{color:#efdbce}
 /* A scrolling list cut off mid-row reads as a bug rather than as more below,
    so the last few pixels fade out. Sticky rather than fixed: the fade belongs
    to the bottom of the viewport of this list, wherever that has scrolled to. */
@@ -95,15 +95,15 @@ const CSS = `
   -webkit-mask-image:linear-gradient(#000 calc(100% - 22px),transparent);
   mask-image:linear-gradient(#000 calc(100% - 22px),transparent)}
 #screens .row{display:flex;justify-content:space-between;align-items:center;gap:8px;
-  background:#1a1712;border:1px solid #33291f;border-radius:6px;padding:9px 10px;
+  background:#191614;border:1px solid #2e2826;border-radius:6px;padding:9px 10px;
   text-align:left;color:inherit;font:inherit;min-height:44px}
 #screens .row.on{border:2px solid transparent;
-  background-image:linear-gradient(rgba(44,36,22,.95),rgba(24,19,12,.98)),
-    linear-gradient(#e2b96a,#a67c3a 34%,#6d4d22 70%,#3a2610);
+  background-image:linear-gradient(rgba(37,33,30,.95),rgba(20,18,17,.98)),
+    linear-gradient(#f49158,#b95c27 34%,#7a3a15 70%,#2a2422);
   background-origin:border-box;background-clip:padding-box,border-box;
-  box-shadow:inset 0 1px 0 rgba(214,178,110,.22)}
-#screens .row small{color:#8c8168;display:block}
-#screens .row .teach{display:block;color:#c9a86a;font-style:italic;font-size:11px;
+  box-shadow:inset 0 1px 0 rgba(231,144,93,.22)}
+#screens .row small{color:#85776f;display:block}
+#screens .row .teach{display:block;color:#da8859;font-style:italic;font-size:11px;
   margin-top:3px;line-height:1.35}
 /* A row with a second, smaller control beside it: discard on a vault piece,
    let go on a preset. Kept apart from the row so the big target does the
@@ -111,14 +111,14 @@ const CSS = `
 #screens .pair{display:flex;gap:6px}
 #screens .pair>.row{flex:1;min-width:0}
 #screens .drop{flex:none;min-width:44px;min-height:44px;border-radius:6px;padding:0 6px;
-  background:#191510;border:1px solid #4a3f30;color:#8c8168;font:inherit}
+  background:#171413;border:1px solid #423c38;color:#85776f;font:inherit}
 #screens .drop.armed{border-color:#c0392b;color:#ffb4a0;background:#2a1612}
 /* The vault's order and filter. Chips rather than a menu: one tap each, and
    the one in force is the lit one. */
 #screens .chips{display:flex;flex-wrap:wrap;gap:5px;margin:0 0 8px}
 #screens .chip{min-height:40px;min-width:40px;padding:0 10px;border-radius:20px;
-  background:#191510;border:1px solid #4a3f30;color:#a89878;font:inherit;font-size:12px}
-#screens .chip.on{border-color:#d6b26e;color:#f0e2c2;background:#2a2015}
+  background:#171413;border:1px solid #423c38;color:#9a8d86;font:inherit;font-size:12px}
+#screens .chip.on{border-color:#e7905d;color:#f1ddd0;background:#231f1d}
 #screens .upmark{color:#8fd08a;margin-left:4px}
 /* What a carried piece would change against what is worn, per stat. */
 #screens .cmp{display:block;margin-top:3px;font-size:11px}
@@ -144,26 +144,26 @@ const CSS = `
   border-width:2px 0 0}
 #screens .go.pinned:before{content:'';position:absolute;left:0;right:0;
   bottom:100%;height:18px;pointer-events:none;
-  background:linear-gradient(transparent,#100e0b)}
+  background:linear-gradient(transparent,#0f0d0c)}
 /* The one button that does the thing, on the same plate as an ability. */
 #screens .go{width:100%;min-height:48px;border-radius:8px;
   border:2px solid transparent;
-  background-image:linear-gradient(rgba(58,44,24,.92),rgba(28,20,11,.96)),
-    linear-gradient(#e2b96a,#a67c3a 34%,#6d4d22 70%,#3a2610);
+  background-image:linear-gradient(rgba(46,40,38,.92),rgba(22,19,18,.96)),
+    linear-gradient(#f49158,#b95c27 34%,#7a3a15 70%,#2a2422);
   background-origin:border-box;background-clip:padding-box,border-box;
-  color:#f0e2c2;font:15px Georgia,serif;
-  box-shadow:inset 0 1px 0 rgba(214,178,110,.3)}
-#screens .go:active{background-image:linear-gradient(rgba(78,60,34,.95),rgba(44,32,18,.98)),
-    linear-gradient(#e2b96a,#a67c3a 34%,#6d4d22 70%,#3a2610)}
+  color:#f1ddd0;font:15px Georgia,serif;
+  box-shadow:inset 0 1px 0 rgba(231,144,93,.3)}
+#screens .go:active{background-image:linear-gradient(rgba(87,48,25,.95),rgba(35,31,28,.98)),
+    linear-gradient(#f49158,#b95c27 34%,#7a3a15 70%,#2a2422)}
 /* The second way out of a card. Same size and same target -- a 44px rule does
    not stop applying because a button is the lesser of two -- but it does not
    take the gold, so a glance still finds the one you probably want. */
-#screens .alt{width:100%;min-height:48px;border-radius:8px;background:#191510;
-  color:#a89878;border:1px solid #6d4d22;font:14px Georgia,serif;margin-top:8px;
+#screens .alt{width:100%;min-height:48px;border-radius:8px;background:#171413;
+  color:#9a8d86;border:1px solid #7a3a15;font:14px Georgia,serif;margin-top:8px;
   box-shadow:inset 0 1px 0 rgba(150,172,200,.1)}
-#screens .alt:active{background:#241d15}
-#screens .seal{display:block;font-size:22px;color:#8c6830;margin:0 0 2px}
-#screens .purse{display:flex;justify-content:space-between;margin:0 0 10px;color:#a89878}
+#screens .alt:active{background:#201c1a}
+#screens .seal{display:block;font-size:22px;color:#9c4d20;margin:0 0 2px}
+#screens .purse{display:flex;justify-content:space-between;margin:0 0 10px;color:#9a8d86}
 /* THE BAR ALONG THE BOTTOM. Fixed to the glass, under the thumb, the way
    every phone game the player knows does it: an icon and a word per station,
    the one you are in lit with the band. The screens that carry it leave room
@@ -177,40 +177,40 @@ const CSS = `
 #screens.hasbar .go.pinned{bottom:0}
 #screens .tabs{position:fixed;left:0;right:0;bottom:0;z-index:45;display:flex;
   gap:2px;padding:4px calc(4px + var(--sa-r)) calc(4px + var(--sa-b)) calc(4px + var(--sa-l));
-  background:linear-gradient(#1c1813,#0f0d0a);border-top:2px solid #6d4d22;
+  background:linear-gradient(#1a1716,#0e0c0b);border-top:2px solid #7a3a15;
   box-shadow:0 -6px 18px rgba(0,0,0,.55)}
 #screens .tabs button{flex:1 1 0;min-width:0;height:var(--bar);padding:4px 0 2px;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
-  border-radius:8px;background:none;color:#8c8168;border:2px solid transparent;font:inherit}
+  border-radius:8px;background:none;color:#85776f;border:2px solid transparent;font:inherit}
 #screens .tabs button i{font-style:normal;font-size:21px;line-height:1}
 #screens .tabs button span{font-size:10.5px;letter-spacing:.3px}
 #screens .tabs button.cog{flex:0 0 44px}
 /* The station you are in wears the band. */
-#screens .tabs button.on{color:#f0e2c2;
-  background-image:linear-gradient(rgba(48,38,22,.95),rgba(26,20,12,.98)),
-    linear-gradient(#e2b96a,#a67c3a 34%,#6d4d22 70%,#3a2610);
+#screens .tabs button.on{color:#f1ddd0;
+  background-image:linear-gradient(rgba(39,35,32,.95),rgba(21,19,17,.98)),
+    linear-gradient(#f49158,#b95c27 34%,#7a3a15 70%,#2a2422);
   background-origin:border-box;background-clip:padding-box,border-box}
-#screens .tabs button.on i{color:#f0cf86}
+#screens .tabs button.on i{color:#ffa977}
 /* HOME. What you need between delves and nothing more: who, where, and the
    button -- the button big enough to be the obvious thing on the screen. */
-#screens .homestats{display:flex;justify-content:space-between;margin:0 0 12px;color:#a89878}
-#screens .homestats b{color:#eee0c0;font-size:15px}
+#screens .homestats{display:flex;justify-content:space-between;margin:0 0 12px;color:#9a8d86}
+#screens .homestats b{color:#efdbce;font-size:15px}
 #screens .rows.heroes{grid-template-columns:1fr 1fr;max-height:none;
   -webkit-mask-image:none;mask-image:none}
 #screens .row em, #screens .row.delve em{display:block;font-style:normal;font-size:10px;
-  letter-spacing:1.5px;font-variant-caps:all-small-caps;color:#a67c3a;margin-bottom:2px}
+  letter-spacing:1.5px;font-variant-caps:all-small-caps;color:#b95c27;margin-bottom:2px}
 #screens .row.delve{width:100%;margin:0 0 14px;padding:14px 12px;min-height:96px;
-  font:15px Georgia,serif;color:#eee0c0;border-color:#6d4d22}
+  font:15px Georgia,serif;color:#efdbce;border-color:#7a3a15}
 #screens .row.delve small{font:12px ui-monospace,Menlo,monospace;margin-top:4px}
-#screens .row.delve .act{color:#d6b26e;font:12px ui-monospace,monospace;white-space:nowrap}
+#screens .row.delve .act{color:#e7905d;font:12px ui-monospace,monospace;white-space:nowrap}
 #screens .go.big{min-height:64px;font:600 20px Cinzel,Georgia,serif;letter-spacing:2px}
 /* THE DELVES. The whole ladder, scrolling on its own; far beyond you is
    dimmed, not hidden -- it was always yours to attempt. */
 #screens .rows.ladder{max-height:52vh}
 #screens .row.far{opacity:.55}
 #screens .row.lore{display:block;min-height:0}
-#screens .row.lore b{display:block;color:#e8c878;font:600 13px Georgia,serif;margin-bottom:3px}
-#screens .row.lore small{color:#b8a888;font:12px/1.45 Georgia,serif;white-space:normal}
+#screens .row.lore b{display:block;color:#f89d68;font:600 13px Georgia,serif;margin-bottom:3px}
+#screens .row.lore small{color:#a99e97;font:12px/1.45 Georgia,serif;white-space:normal}
 #screens .row.far.on{opacity:1}
 #screens .item{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
 /* The name and its affixes are one column and must own the space they need,
@@ -224,15 +224,15 @@ const CSS = `
   background-position:calc(var(--i,0) * -30px) 0;
   image-rendering:pixelated;image-rendering:crisp-edges}
 #screens .ico.none{opacity:.3;filter:grayscale(.8)}
-#screens .item .aff{color:#8c8168;font-size:11px;display:block;margin-top:2px;line-height:1.35}
-#screens .pw{color:#d6b26e;white-space:nowrap;text-align:right;flex:none}
+#screens .item .aff{color:#85776f;font-size:11px;display:block;margin-top:2px;line-height:1.35}
+#screens .pw{color:#e7905d;white-space:nowrap;text-align:right;flex:none}
 /* And the word is a tag, not more text. It is the only part of a row that
    says what happens if you touch it, so it is the part that must not look
    like the affixes it was sitting beside. */
-#screens .act{display:block;color:#a89878;font-size:10px;margin-top:4px;
-  letter-spacing:.5px;padding:2px 6px;border:1px solid #4a3f30;border-radius:3px;
-  background:rgba(20,17,14,.6)}
-#screens .empty{color:#6a6154;font-style:italic}
+#screens .act{display:block;color:#9a8d86;font-size:10px;margin-top:4px;
+  letter-spacing:.5px;padding:2px 6px;border:1px solid #423c38;border-radius:3px;
+  background:rgba(19,17,16,.6)}
+#screens .empty{color:#685d56;font-style:italic}
 
 /* ===================================================================
    THE STATIONS, DRESSED. (Playtest: "too basic, hard to navigate,
@@ -245,11 +245,11 @@ const CSS = `
 #screens{font:15px/1.4 Georgia,"Times New Roman",serif}
 #screens.station{z-index:52;
   background:
-    radial-gradient(120% 50% at 50% -8%,rgba(226,185,106,.14),transparent 62%),
+    radial-gradient(120% 50% at 50% -8%,rgba(244,145,88,.14),transparent 62%),
     radial-gradient(140% 90% at 50% 120%,rgba(0,0,0,.75),transparent 60%),
     repeating-linear-gradient(0deg,rgba(0,0,0,.22) 0 2px,transparent 2px 44px),
     repeating-linear-gradient(90deg,rgba(0,0,0,.16) 0 2px,transparent 2px 88px),
-    linear-gradient(#1a1510,#0d0b08)}
+    linear-gradient(#181513,#0c0a0a)}
 #screens.station.up{display:block}
 body.menus #diag{display:none}
 #screens.station .card{position:relative;width:auto;max-width:520px;
@@ -257,103 +257,103 @@ body.menus #diag{display:none}
   margin-right:max(12px,calc((100% - 520px)/2));
   padding:18px 16px 16px;border-width:2px;border-radius:12px;
   background-image:
-    radial-gradient(90% 40% at 50% 0%,rgba(226,185,106,.08),transparent 70%),
-    linear-gradient(#211b14,#15110d 38%,#100d0a),
-    linear-gradient(135deg,#f0cf86,#a67c3a 30%,#5a3e1a 55%,#c9a45a 80%,#6d4d22);
+    radial-gradient(90% 40% at 50% 0%,rgba(244,145,88,.08),transparent 70%),
+    linear-gradient(#1e1a18,#131110 38%,#0f0d0c),
+    linear-gradient(135deg,#ffa977,#b95c27 30%,#652f0f 55%,#dc7e47 80%,#7a3a15);
   background-origin:border-box;background-clip:padding-box,padding-box,border-box;
   box-shadow:0 18px 50px rgba(0,0,0,.7),inset 0 0 0 1px rgba(0,0,0,.7),
-    inset 0 0 0 3px rgba(166,124,58,.28),inset 0 2px 0 3px rgba(240,207,134,.08)}
+    inset 0 0 0 3px rgba(185,92,39,.28),inset 0 2px 0 3px rgba(255,169,119,.08)}
 /* Corner studs: a gold diamond at each top corner of the frame. */
 #screens.station .card:before,#screens.station .card:after{content:'';position:absolute;top:-7px;
   width:12px;height:12px;transform:rotate(45deg);
-  background:linear-gradient(135deg,#ffe2a0,#a67c3a 60%,#4a3214);
-  box-shadow:0 0 8px rgba(226,185,106,.45),0 0 0 1px #2a1c0c}
+  background:linear-gradient(135deg,#fbd0b3,#b95c27 60%,#352e2b);
+  box-shadow:0 0 8px rgba(244,145,88,.45),0 0 0 1px #1e1b19}
 #screens.station .card:before{left:14px}
 #screens.station .card:after{right:14px}
 /* The title plate: carved, centred, gilt, with a flourish under it. */
 #screens.station h1{text-align:center;font:600 25px/1.2 Cinzel,Georgia,serif;letter-spacing:2px;
   margin:2px 0 14px;padding:0 0 14px;border:0;box-shadow:none;
-  background:linear-gradient(#fff1cc,#e2b96a 55%,#a67c3a);-webkit-background-clip:text;
+  background:linear-gradient(#fdeadd,#f49158 55%,#b95c27);-webkit-background-clip:text;
   background-clip:text;color:transparent;text-shadow:0 2px 0 rgba(0,0,0,.35);position:relative}
 #screens.station h1:after{content:'◆';position:absolute;left:0;right:0;bottom:0;height:10px;
-  font:10px/10px Georgia,serif;letter-spacing:0;color:#e2b96a;-webkit-text-fill-color:#e2b96a;
-  background:linear-gradient(90deg,transparent,#6d4d22 20%,#c9a45a 46%,transparent 46%,
-    transparent 54%,#c9a45a 54%,#6d4d22 80%,transparent) center/100% 1px no-repeat}
+  font:10px/10px Georgia,serif;letter-spacing:0;color:#f49158;-webkit-text-fill-color:#f49158;
+  background:linear-gradient(90deg,transparent,#7a3a15 20%,#dc7e47 46%,transparent 46%,
+    transparent 54%,#dc7e47 54%,#7a3a15 80%,transparent) center/100% 1px no-repeat}
 /* Section labels read as labels, not asides. */
-#screens.station .sub{font-size:14px;color:#b8a888}
+#screens.station .sub{font-size:14px;color:#a99e97}
 #screens.station .sec{font:600 13px Cinzel,Georgia,serif;font-style:normal;letter-spacing:1.5px;
-  font-variant-caps:all-small-caps;color:#d6b26e;margin:18px 0 8px;padding:0 0 6px;
-  border-bottom:1px solid rgba(166,124,58,.3);scroll-margin-top:64px}
+  font-variant-caps:all-small-caps;color:#e7905d;margin:18px 0 8px;padding:0 0 6px;
+  border-bottom:1px solid rgba(185,92,39,.3);scroll-margin-top:64px}
 /* The resources: pills, the way every phone game shows what you hold. */
 #screens.station .homestats,#screens.station .purse{display:flex;gap:8px;justify-content:center;
-  flex-wrap:wrap;margin:0 0 14px;color:#a89878}
+  flex-wrap:wrap;margin:0 0 14px;color:#9a8d86}
 #screens.station .homestats>span,#screens.station .purse{padding:7px 14px;border-radius:20px;
-  background:linear-gradient(#1d1811,#120f0b);border:1px solid #6d4d22;
-  box-shadow:inset 0 1px 0 rgba(226,185,106,.15),0 2px 6px rgba(0,0,0,.4)}
+  background:linear-gradient(#1a1715,#100e0d);border:1px solid #7a3a15;
+  box-shadow:inset 0 1px 0 rgba(244,145,88,.15),0 2px 6px rgba(0,0,0,.4)}
 #screens.station .purse{width:max-content;margin-left:auto;margin-right:auto;gap:10px}
-#screens.station .homestats b,#screens.station .purse b{color:#f0d898;font-size:16px}
+#screens.station .homestats b,#screens.station .purse b{color:#fcb58c;font-size:16px}
 /* Rows are panels: taller, with a lit edge, and they press. */
 #screens.station .rows{max-height:none;overflow:visible;gap:8px;
   -webkit-mask-image:none;mask-image:none}
 #screens.station .rows.ladder{max-height:52vh;overflow:auto;
   -webkit-mask-image:linear-gradient(#000 calc(100% - 22px),transparent);
   mask-image:linear-gradient(#000 calc(100% - 22px),transparent)}
-#screens.station .row{min-height:56px;padding:12px 13px;border-radius:9px;border-color:#3d3123;
-  background:linear-gradient(#211b14,#17130e);
-  box-shadow:inset 0 1px 0 rgba(226,185,106,.08),0 2px 5px rgba(0,0,0,.35);
+#screens.station .row{min-height:56px;padding:12px 13px;border-radius:9px;border-color:#362f2c;
+  background:linear-gradient(#1e1a18,#151211);
+  box-shadow:inset 0 1px 0 rgba(244,145,88,.08),0 2px 5px rgba(0,0,0,.35);
   transition:transform 80ms ease,filter 80ms ease}
 #screens.station button.row:active:not(:disabled){transform:translateY(1px);filter:brightness(1.15)}
 #screens.station .row:disabled{opacity:.62}
 #screens.station .row small{font-size:12.5px;margin-top:2px}
-#screens.station .row.on{box-shadow:inset 0 1px 0 rgba(214,178,110,.25),0 0 14px rgba(226,185,106,.22)}
+#screens.station .row.on{box-shadow:inset 0 1px 0 rgba(231,144,93,.25),0 0 14px rgba(244,145,88,.22)}
 #screens.station .row em,#screens.station .row.delve em{font:600 10.5px Cinzel,Georgia,serif;letter-spacing:1.5px}
 #screens.station .item .aff{font-size:12.5px}
 #screens.station .act{font:600 10.5px Cinzel,Georgia,serif;letter-spacing:.8px;font-variant-caps:all-small-caps;
-  color:#d6b26e;border-color:#6d4d22}
+  color:#e7905d;border-color:#7a3a15}
 #screens.station .ico{width:36px;height:36px;background-size:1260px 36px;
   background-position:calc(var(--i,0) * -36px) 0;border-radius:6px;
-  box-shadow:0 0 0 1px #3d3123,inset 0 0 8px rgba(0,0,0,.6);background-color:#0f0c09}
+  box-shadow:0 0 0 1px #362f2c,inset 0 0 8px rgba(0,0,0,.6);background-color:#0d0c0b}
 #screens.station .chip{min-height:40px;font:13px Georgia,serif}
 #screens.station .drop{min-width:48px;border-radius:9px}
 #screens.station .alt{font:15px Georgia,serif;min-height:52px;border-radius:10px}
 /* THE JUMP BAR: a long station (the Forge) is three places in one; a
    segmented control rides at the top of the scroll and takes you to each. */
 #screens .seg{position:sticky;top:0;z-index:3;display:flex;gap:4px;padding:5px;margin:0 -4px 12px;
-  border-radius:12px;background:rgba(14,11,8,.94);border:1px solid #4a3a26;
+  border-radius:12px;background:rgba(12,11,10,.94);border:1px solid #3d3733;
   box-shadow:0 6px 14px rgba(0,0,0,.5);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
 #screens .seg button{flex:1;min-height:40px;border-radius:8px;border:1px solid transparent;
-  background:none;color:#a89878;font:600 12px Cinzel,Georgia,serif;letter-spacing:1px;
+  background:none;color:#9a8d86;font:600 12px Cinzel,Georgia,serif;letter-spacing:1px;
   font-variant-caps:all-small-caps}
-#screens .seg button.on{color:#1a130a;background:linear-gradient(#f0cf86,#c9a45a 60%,#a67c3a);
-  border-color:#6d4d22;box-shadow:0 0 10px rgba(226,185,106,.35)}
+#screens .seg button.on{color:#141211;background:linear-gradient(#ffa977,#dc7e47 60%,#b95c27);
+  border-color:#7a3a15;box-shadow:0 0 10px rgba(244,145,88,.35)}
 /* Descend: the brightest thing on the screen, and it breathes. */
 #screens.station .go{border-radius:10px;font:600 16px Cinzel,Georgia,serif;letter-spacing:1.5px}
-#screens.station .go.big{min-height:66px;font-size:22px;letter-spacing:4px;color:#fff1cc;
-  text-shadow:0 0 12px rgba(226,185,106,.55),0 2px 0 rgba(0,0,0,.5);
+#screens.station .go.big{min-height:66px;font-size:22px;letter-spacing:4px;color:#fdeadd;
+  text-shadow:0 0 12px rgba(244,145,88,.55),0 2px 0 rgba(0,0,0,.5);
   animation:goGlow 2.6s ease-in-out infinite}
-@keyframes goGlow{0%,100%{box-shadow:inset 0 1px 0 rgba(214,178,110,.3),0 0 0 rgba(226,185,106,0)}
-  50%{box-shadow:inset 0 1px 0 rgba(214,178,110,.4),0 0 22px rgba(226,185,106,.35)}}
+@keyframes goGlow{0%,100%{box-shadow:inset 0 1px 0 rgba(231,144,93,.3),0 0 0 rgba(244,145,88,0)}
+  50%{box-shadow:inset 0 1px 0 rgba(231,144,93,.4),0 0 22px rgba(244,145,88,.35)}}
 #screens.station .go.pinned{border-radius:0 0 10px 10px}
 /* THE BAR OF MEDALLIONS. A double gilt rule with a stone set in the middle,
    and each station a round seal with its word under it; the one you are in
    is struck in gold and stands proud. */
 #screens.station{--bar:70px}
 #screens.station .tabs{gap:0;padding-top:6px;
-  background:linear-gradient(#241d15,#110e0a 60%,#0b0907);
-  border-top:1px solid #e2b96a;box-shadow:0 -1px 0 #3a2610,0 -3px 0 rgba(226,185,106,.25),0 -10px 24px rgba(0,0,0,.65)}
+  background:linear-gradient(#201c1a,#0f0d0c 60%,#0a0908);
+  border-top:1px solid #f49158;box-shadow:0 -1px 0 #2a2422,0 -3px 0 rgba(244,145,88,.25),0 -10px 24px rgba(0,0,0,.65)}
 #screens.station .tabs:before{content:'';position:absolute;left:50%;top:-7px;width:12px;height:12px;
-  margin-left:-6px;transform:rotate(45deg);background:linear-gradient(135deg,#ffe2a0,#a67c3a 60%,#4a3214);
-  box-shadow:0 0 8px rgba(226,185,106,.5),0 0 0 1px #2a1c0c}
-#screens.station .tabs button{border:0;background:none!important;gap:3px;color:#8c7a5c}
+  margin-left:-6px;transform:rotate(45deg);background:linear-gradient(135deg,#fbd0b3,#b95c27 60%,#352e2b);
+  box-shadow:0 0 8px rgba(244,145,88,.5),0 0 0 1px #1e1b19}
+#screens.station .tabs button{border:0;background:none!important;gap:3px;color:#7e716a}
 #screens.station .tabs button i{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;
-  font-size:18px;background:radial-gradient(circle at 40% 35%,#2a2219,#120e0a);
-  border:1px solid #5a4226;box-shadow:inset 0 1px 0 rgba(226,185,106,.15),0 2px 4px rgba(0,0,0,.5);
+  font-size:18px;background:radial-gradient(circle at 40% 35%,#26211f,#100e0d);
+  border:1px solid #64361c;box-shadow:inset 0 1px 0 rgba(244,145,88,.15),0 2px 4px rgba(0,0,0,.5);
   transition:transform 120ms ease}
 #screens.station .tabs button span{font:600 10px Cinzel,Georgia,serif;letter-spacing:1px;font-variant-caps:all-small-caps}
-#screens.station .tabs button.on{color:#f0d898}
-#screens.station .tabs button.on i{color:#1a130a;transform:translateY(-4px) scale(1.1);
-  background:radial-gradient(circle at 40% 35%,#ffe7b0,#d6b26e 55%,#8a6428);border-color:#fff1cc;
-  box-shadow:0 0 14px rgba(226,185,106,.6),0 3px 6px rgba(0,0,0,.6)}
+#screens.station .tabs button.on{color:#fcb58c}
+#screens.station .tabs button.on i{color:#141211;transform:translateY(-4px) scale(1.1);
+  background:radial-gradient(circle at 40% 35%,#fcd9c2,#e7905d 55%,#9a4818);border-color:#fdeadd;
+  box-shadow:0 0 14px rgba(244,145,88,.6),0 3px 6px rgba(0,0,0,.6)}
 #screens.station .tabs button.cog{flex:0 0 52px}
 @media (prefers-reduced-motion:reduce){#screens.station .go.big{animation:none}}
 #screens .row>.item{flex:1;min-width:0}
@@ -365,46 +365,46 @@ body.menus #diag{display:none}
 #screens .tabs button{position:relative}
 #screens .tabs .badge{position:absolute;top:2px;right:calc(50% - 26px);min-width:18px;height:18px;
   padding:0 4px;border-radius:9px;background:#c0392b;color:#fff;font:700 11px/18px Georgia,serif;
-  box-shadow:0 0 0 2px #110e0a,0 0 8px rgba(192,57,43,.7)}
+  box-shadow:0 0 0 2px #0f0d0c,0 0 8px rgba(192,57,43,.7)}
 #screens.station .tabs button span{letter-spacing:.3px;font-size:9.5px}
 #screens .seg button small{display:block;opacity:.7;font:12px Georgia,serif}
-#screens .tgrid{position:relative;margin:0 0 12px;border-radius:10px;border:2px solid #6d4d22;
+#screens .tgrid{position:relative;margin:0 0 12px;border-radius:10px;border:2px solid #7a3a15;
   background:radial-gradient(120% 70% at 50% 0%,color-mix(in srgb,var(--hue) 22%,transparent),transparent 70%),
     radial-gradient(140% 100% at 50% 120%,rgba(0,0,0,.7),transparent 60%),
-    linear-gradient(#1b1611,#0e0b08);
+    linear-gradient(#191614,#0c0b0a);
   box-shadow:inset 0 0 0 1px rgba(0,0,0,.8),inset 0 0 30px rgba(0,0,0,.6),0 4px 14px rgba(0,0,0,.5);overflow:hidden}
 #screens .tgrid .gate{position:absolute;left:0;right:0;height:1px;padding-left:8px;
-  font:600 10px Cinzel,Georgia,serif;letter-spacing:1px;color:#8c7650;
-  border-top:1px dashed rgba(166,124,58,.35);line-height:14px}
+  font:600 10px Cinzel,Georgia,serif;letter-spacing:1px;color:#786b64;
+  border-top:1px dashed rgba(185,92,39,.35);line-height:14px}
 #screens .tgrid .node{position:absolute;width:64px;height:64px;padding:0;border-radius:8px;
-  border:2px solid #4a3a26;background:radial-gradient(circle at 40% 35%,#2a2219,#0e0b08);
+  border:2px solid #3d3733;background:radial-gradient(circle at 40% 35%,#26211f,#0c0b0a);
   box-shadow:inset 0 0 12px rgba(0,0,0,.8),0 3px 6px rgba(0,0,0,.6);color:var(--hue);
   display:grid;place-items:center}
 #screens .tgrid .node i{font-style:normal;font-size:28px;line-height:1;
   text-shadow:0 0 10px color-mix(in srgb,var(--hue) 60%,transparent)}
 #screens .tgrid .node .rk{position:absolute;right:-8px;bottom:-8px;min-width:30px;padding:1px 4px;
-  border-radius:5px;background:#0d0b08;border:1px solid #6d4d22;font:700 12px/16px Georgia,serif;color:#8c8168}
+  border-radius:5px;background:#0c0a0a;border:1px solid #7a3a15;font:700 12px/16px Georgia,serif;color:#85776f}
 #screens .tgrid .node.locked{filter:grayscale(1) brightness(.55)}
-#screens .tgrid .node.open{border-color:#c9a45a;animation:talGlow 2.2s ease-in-out infinite}
-#screens .tgrid .node.has{border-color:#e2b96a}
+#screens .tgrid .node.open{border-color:#dc7e47;animation:talGlow 2.2s ease-in-out infinite}
+#screens .tgrid .node.has{border-color:#f49158}
 #screens .tgrid .node.has .rk,#screens .tgrid .node.open .rk{color:#8fd08a;border-color:#8fd08a}
-#screens .tgrid .node.max{border-color:#ffe2a0;background:radial-gradient(circle at 40% 35%,
-  color-mix(in srgb,var(--hue) 45%,#2a2219),#120e0a);box-shadow:0 0 16px rgba(226,185,106,.5),inset 0 0 10px rgba(0,0,0,.5)}
-#screens .tgrid .node.max .rk{color:#f0d898;border-color:#e2b96a}
-#screens .tgrid .node.sel{outline:2px solid #fff1cc;outline-offset:3px}
-@keyframes talGlow{0%,100%{box-shadow:0 0 0 rgba(226,185,106,0),inset 0 0 12px rgba(0,0,0,.8)}
-  50%{box-shadow:0 0 14px rgba(226,185,106,.55),inset 0 0 12px rgba(0,0,0,.8)}}
-#screens .tgrid .arrow{position:absolute;width:6px;border-radius:3px;background:#4a4238}
+#screens .tgrid .node.max{border-color:#fbd0b3;background:radial-gradient(circle at 40% 35%,
+  color-mix(in srgb,var(--hue) 45%,#26211f),#100e0d);box-shadow:0 0 16px rgba(244,145,88,.5),inset 0 0 10px rgba(0,0,0,.5)}
+#screens .tgrid .node.max .rk{color:#fcb58c;border-color:#f49158}
+#screens .tgrid .node.sel{outline:2px solid #fdeadd;outline-offset:3px}
+@keyframes talGlow{0%,100%{box-shadow:0 0 0 rgba(244,145,88,0),inset 0 0 12px rgba(0,0,0,.8)}
+  50%{box-shadow:0 0 14px rgba(244,145,88,.55),inset 0 0 12px rgba(0,0,0,.8)}}
+#screens .tgrid .arrow{position:absolute;width:6px;border-radius:3px;background:#473f3b}
 #screens .tgrid .arrow:after{content:'';position:absolute;left:-5px;bottom:-8px;border:8px solid transparent;
-  border-top-color:#4a4238;border-bottom:0}
-#screens .tgrid .arrow.lit{background:linear-gradient(#f0cf86,#c9a45a)}
-#screens .tgrid .arrow.lit:after{border-top-color:#c9a45a}
-#screens .tdetail{padding:12px 14px;margin:0 0 12px;border-radius:10px;border:1px solid #6d4d22;
-  background:linear-gradient(#211b14,#15110d)}
+  border-top-color:#473f3b;border-bottom:0}
+#screens .tgrid .arrow.lit{background:linear-gradient(#ffa977,#dc7e47)}
+#screens .tgrid .arrow.lit:after{border-top-color:#dc7e47}
+#screens .tdetail{padding:12px 14px;margin:0 0 12px;border-radius:10px;border:1px solid #7a3a15;
+  background:linear-gradient(#1e1a18,#131110)}
 #screens .tdetail b{display:block;font:600 17px Cinzel,Georgia,serif;color:var(--hue)}
-#screens .tdetail em{display:block;font-style:normal;color:#a89878;font-size:13px;margin:2px 0 6px}
-#screens .tdetail p{margin:0 0 8px;color:#cebe9e}
-#screens .tdetail .why{color:#e8a060;font-style:italic;font-size:13.5px}
+#screens .tdetail em{display:block;font-style:normal;color:#9a8d86;font-size:13px;margin:2px 0 6px}
+#screens .tdetail p{margin:0 0 8px;color:#bdb4af}
+#screens .tdetail .why{color:#fb8d4d;font-style:italic;font-size:13.5px}
 #screens .tdetail .go:disabled{opacity:.55}
 @media (prefers-reduced-motion:reduce){#screens .tgrid .node.open{animation:none}}
 #screens.station .row.delve{font:17px Georgia,serif}

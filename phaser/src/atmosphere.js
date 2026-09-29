@@ -107,7 +107,7 @@ export class Atmosphere {
     // Where the mood is now, blended toward the room you stand in (see
     // moodPass): grade and fog as rgb 0..1 multipliers, how dark the edges,
     // the motes' colour and which way they go.
-    this.m = { g: [1, 1, 1], fog: [1, 1, 1], dark: 0, mote: [0.84, 0.78, 0.64], drift: 1 };
+    this.m = { g: [1, 0.93, 0.86], fog: [1, 1, 1], dark: 0, mote: [0.9, 0.72, 0.58], drift: 1 };
     this.lastT = 0;
 
     const fit = () => {
@@ -398,13 +398,16 @@ export class Atmosphere {
     const rgb = css => { const n = hex(css, 0xffffff); return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; };
     const mix = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
     const W = [1, 1, 1];
+    // The delve's own air outside any room: a faint ember cast over soot
+    // (the Ember & Soot scheme), not a neutral white.
+    const EMBER = [1, 0.93, 0.86];
     const want = M ? {
       g: mix(W, rgb(M.grade), Math.min(0.45, M.gradeA * 1.8)),
       fog: mix(W, rgb(M.fog), 0.7),
       dark: M.dark,
       mote: rgb(M.motes),
       drift: M.drift === 'rise' ? -1 : M.drift === 'float' ? 0.25 : 1
-    } : { g: W, fog: W, dark: 0, mote: [0.84, 0.78, 0.64], drift: 1 };
+    } : { g: EMBER, fog: W, dark: 0, mote: [0.9, 0.72, 0.58], drift: 1 };
     const k = dt ? 1 - Math.exp(-dt * 2.6) : 1;
     const m = this.m;
     m.g = mix(m.g, want.g, k);

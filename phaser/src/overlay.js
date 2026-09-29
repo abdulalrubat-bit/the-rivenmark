@@ -67,11 +67,11 @@ export class Overlay {
     this.g = scene.add.graphics().setScrollFactor(0).setDepth(8.8e5);
     this.compass = scene.add.text(0, 0, 'S', {
       fontFamily: 'ui-monospace, Menlo, monospace', fontStyle: '600',
-      fontSize: '9px', color: '#e2c48c'
+      fontSize: '9px', color: '#f0a87e'
     }).setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(8.81e5);
     const label = (x, y, txt, size, ox) => scene.add.text(x, y, txt, {
       fontFamily: 'ui-monospace, Menlo, monospace', fontStyle: '600',
-      fontSize: size, color: '#cebe9e'
+      fontSize: size, color: '#bdb4af'
     }).setOrigin(ox, 0.5).setScrollFactor(0).setDepth(8.81e5).setVisible(false);
     this.dawnLabel = label(0, 0, 'FALSE DAWN', '8px', 1);
     this.dawnPct = label(0, 0, '', '9px', 0.5);
@@ -149,8 +149,8 @@ export class Overlay {
       const q = (y0 - fy) / Math.max(1, r.h - (fy - r.y));   // 0 at the surface
       // Pale at the surface, gold in the body, dark at the base: the canvas
       // build's three gradient stops, banded.
-      const col = q < 0.45 ? mix(0xfff2c8, 0xe8c060, q / 0.45)
-                           : mix(0xe8c060, 0xa0681c, (q - 0.45) / 0.55);
+      const col = q < 0.45 ? mix(0xfde8d9, 0xfb8d4d, q / 0.45)
+                           : mix(0xfb8d4d, 0xb34709, (q - 0.45) / 0.55);
       const hw = halfAt(Math.max(0, Math.min(1, v))) * k;
       const [ax, ay] = P(cx, y0), [, by2] = P(cx, y1);
       g.fillStyle(col, 0.92);
@@ -160,21 +160,21 @@ export class Overlay {
     const sy = fy + Math.sin(t * 5) * 1.6;
     const shw = halfAt(Math.max(0, Math.min(1, (sy - r.y) / r.h))) * k;
     const [sx, syp] = P(cx, sy);
-    g.fillStyle(0xfff8dc, 0.75); g.fillRect(sx - shw, syp, shw * 2, 2);
+    g.fillStyle(0xfef3ec, 0.75); g.fillRect(sx - shw, syp, shw * 2, 2);
 
     const hot = f > 0.8;
     g.lineStyle(hot ? 2.4 : 1.6,
-                hot ? mix(0xff9670, 0xffd870, 0.5 + 0.5 * Math.sin(t * 12)) : 0xd6b26e,
+                hot ? mix(0xff5a4a, 0xff8a70, 0.5 + 0.5 * Math.sin(t * 12)) : 0xe7905d,
                 hot ? 0.95 : 0.85);
     trace(); g.strokePath();
 
     // Right-aligned to the crystal's own edge: centred on a 34px column the
     // words ran off the side of the phone.
     this.dawnLabel.setPosition(this.o.x + r.x + r.w, this.o.y + r.y - 9)
-                  .setColor(hot ? '#ffbe8c' : '#cebe9e').setVisible(true);
+                  .setColor(hot ? '#ff8a70' : '#bdb4af').setVisible(true);
     this.dawnPct.setPosition(this.o.x + r.x + r.w / 2, this.o.y + r.y + r.h + 9)
                 .setText(Math.round(run.dawn || 0) + '%')
-                .setColor(hot ? '#ffbe8c' : '#cebe9e').setVisible(true);
+                .setColor(hot ? '#ff8a70' : '#bdb4af').setVisible(true);
   }
 
   /* The stone plate everything on this layer is cut from: a slate face inside
@@ -182,11 +182,11 @@ export class Overlay {
    * the band and the two rules are what make it read as set into stone. */
   plate(g, x, y, w, h) {
     const o = 7;
-    g.fillStyle(0x2a2620, 1);
+    g.fillStyle(0x2a2422, 1);
     g.fillRect(x - o, y - o, w + o * 2, h + o * 2);
-    g.lineStyle(2, 0x8c6830, 0.85);
+    g.lineStyle(2, 0x9c4d20, 0.85);
     g.strokeRect(x - o + 1, y - o + 1, w + o * 2 - 2, h + o * 2 - 2);
-    g.lineStyle(1, 0x0a0805, 0.7);
+    g.lineStyle(1, 0x080707, 0.7);
     g.strokeRect(x - 1, y - 1, w + 2, h + 2);
   }
 
@@ -211,7 +211,7 @@ export class Overlay {
     g.fillRect(x, y, S, S);
 
     // Rock. Pale, because at the panel's own value a corridor was unreadable.
-    g.fillStyle(0x968462, 0.42);
+    g.fillStyle(0x877971, 0.42);
     for (let i = 4; i < walls.length; i++) {
       const w = walls[i];
       g.fillRect(x + w.x * k, y + w.y * k, Math.max(1, w.w * k), Math.max(1, w.h * k));
@@ -225,7 +225,7 @@ export class Overlay {
     }
 
     if (portal) {
-      g.fillStyle(portal.active ? hex(PAL.arcane, 0x5cb8ff) : 0x7a6e58, 1);
+      g.fillStyle(portal.active ? hex(PAL.arcane, 0x5cb8ff) : 0x726660, 1);
       g.fillCircle(x + portal.x * k, y + portal.y * k, 4 * mk);
     }
 
@@ -234,15 +234,15 @@ export class Overlay {
     const inv = run && run.invader;
     if (inv && inv.hp > 0) {
       const ix = x + inv.x * k, iy = y + inv.y * k;
-      g.fillStyle(0xe8c060, 0.95); g.fillCircle(ix, iy, 3.4 * mk);
-      g.lineStyle(1.4 * mk, 0xe2782c, 0.8); g.strokeCircle(ix, iy, 6.4 * mk);
+      g.fillStyle(0xfb8d4d, 0.95); g.fillCircle(ix, iy, 3.4 * mk);
+      g.lineStyle(1.4 * mk, 0xfc6812, 0.8); g.strokeCircle(ix, iy, 6.4 * mk);
     }
 
     for (const ch of chests) {
       if (ch.open || ch.sealed) continue;
       const K = CHEST_KINDS[ch.kind] || {};
       const bx = x + ch.x * k, by = y + ch.y * k, r = 2.6 * mk;
-      g.fillStyle(hex(K.colour, 0xc9a24a), 1);
+      g.fillStyle(hex(K.colour, 0xde7335), 1);
       g.fillRect(bx - r, by - r * 0.8, r * 2, r * 1.6);
       g.lineStyle(1, 0x000000, 0.7);
       g.strokeRect(bx - r, by - r * 0.8, r * 2, r * 1.6);
@@ -266,7 +266,7 @@ export class Overlay {
     // Compasses point south now. The needle is drawn as it reads, not as it
     // ought to -- one of the Final Signs, and a standing reminder of it.
     const nx = x + S - 15 * mk, ny = y + 15 * mk;
-    g.lineStyle(1, 0xe2c48c, 0.55); g.strokeCircle(nx, ny, 8.5 * mk);
+    g.lineStyle(1, 0xf0a87e, 0.55); g.strokeCircle(nx, ny, 8.5 * mk);
     g.fillStyle(0xe07850, 0.95);
     g.beginPath();
     g.moveTo(nx, ny + 8 * mk); g.lineTo(nx - 3 * mk, ny); g.lineTo(nx + 3 * mk, ny);
@@ -311,10 +311,10 @@ export class Overlay {
       if (px - bx0 < by1 - py) px = bx0; else py = by1;
     }
     this.arrowAt = { x: px, y: py };
-    const col = portal.active ? hex(PAL.arcane, 0x5cb8ff) : 0x7a6e58;
+    const col = portal.active ? hex(PAL.arcane, 0x5cb8ff) : 0x726660;
     const al = 0.55 + (portal.active ? 0.4 * Math.abs(Math.sin(t * 3)) : 0.1);
 
-    g.fillStyle(0x0e0a07, 0.8 * al); g.fillCircle(px, py, 15);
+    g.fillStyle(0x0c0a0a, 0.8 * al); g.fillCircle(px, py, 15);
     g.lineStyle(1.2, col, al); g.strokeCircle(px, py, 15);
     const P = (ox, oy) => [px + ox * dx - oy * dy, py + ox * dy + oy * dx];
     g.fillStyle(col, al);

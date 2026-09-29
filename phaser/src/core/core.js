@@ -666,7 +666,7 @@ const PAL = {
   // Lit flagstone underfoot, unlit rock above: the contrast the whole scene
   // hangs on. Walls are near-black inside and carry all their detail on the
   // bevelled edge, the way a raised ledge reads from overhead.
-  floor:'#2b2118',
+  floor:'#221e1b',              // soot, not brown (the Ember & Soot scheme)
   stoneTop:'#161a1c', stoneMid:'#0c0f11', stoneLow:'#050708',
   bone:'#c4b795', coin:'#c99a3e'
 };
