@@ -2435,6 +2435,27 @@ function forgeProps() {
     sack(-4, 2, 7); sack(5, -2, 6); sack(3, 6, 5);
   });
 
+  /* A shrine: a standing stone with a rune cut in it, drawn pale so the game
+     can tint it to the blessing it gives (embers, stone, wind, blood). */
+  P('shrine', 44, g => {
+    const grd = g.createLinearGradient(-9, -16, 9, 16);
+    grd.addColorStop(0, '#c9c2b2'); grd.addColorStop(1, '#6a6458');
+    g.fillStyle = grd;
+    g.beginPath();
+    g.moveTo(-9, 16); g.lineTo(-10, -8); g.quadraticCurveTo(0, -20, 10, -8); g.lineTo(9, 16); g.closePath();
+    g.fill();
+    g.strokeStyle = 'rgba(20,18,14,.85)'; g.lineWidth = 1.5; g.stroke();
+    g.shadowColor = '#ffffff'; g.shadowBlur = 8;
+    g.strokeStyle = 'rgba(255,255,255,.95)'; g.lineWidth = 1.8; g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(0, -9); g.lineTo(0, 9);
+    g.moveTo(-5, -3); g.lineTo(0, 1); g.lineTo(5, -3);
+    g.moveTo(-4, 6); g.lineTo(4, 6);
+    g.stroke();
+    g.shadowBlur = 0; g.lineCap = 'butt';
+    g.fillStyle = 'rgba(20,18,14,.35)'; g.fillRect(-11, 14, 22, 4);          // its footing
+  });
+
   for (const k in SPR) {
     if (k.indexOf('p_') !== 0 || k.length > 2 && k.charAt(k.length - 2) === '_') continue;
     for (let q = 0; q < 4; q++) SPR[k + '_' + q] = rotateSprite(SPR[k], q);

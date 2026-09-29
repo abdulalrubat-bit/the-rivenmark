@@ -207,6 +207,9 @@ const CSS = `
    dimmed, not hidden -- it was always yours to attempt. */
 #screens .rows.ladder{max-height:52vh}
 #screens .row.far{opacity:.55}
+#screens .row.lore{display:block;min-height:0}
+#screens .row.lore b{display:block;color:#e8c878;font:600 13px Georgia,serif;margin-bottom:3px}
+#screens .row.lore small{color:#b8a888;font:12px/1.45 Georgia,serif;white-space:normal}
 #screens .row.far.on{opacity:1}
 #screens .item{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
 /* The name and its affixes are one column and must own the space they need,
@@ -901,6 +904,7 @@ export class Screens {
         '<p class="sub">What you build here outlasts every delve.</p>' +
         this.silenced() +
         '<div class="rows">' + rows + '</div>' +
+        this.loreBook() +
       '</div>';
 
     this.wireTabs();
@@ -913,6 +917,19 @@ export class Screens {
         this.renderHall();
       }));
   }
+  /* THE LORE: every page found in the delves, in the order the world tells
+   * it, and how many are still down there. Kept in the honours, so it is the
+   * same book in either kit. */
+  loreBook() {
+    if (typeof LORE === 'undefined' || typeof loreFound !== 'function') return '';
+    const have = new Set(loreFound());
+    const pages = LORE.map((pg, i) => have.has(i)
+      ? '<div class="row lore"><span><b>' + pg[0] + '</b><small>' + pg[1] + '</small></span></div>' : '').join('');
+    return '<p class="sub">The lore of the Rivenmark \u2014 ' + have.size + ' of ' + LORE.length +
+      ' pages found' + (have.size ? '.' : '. Glowing pages lie in the delves.') + '</p>' +
+      (have.size ? '<div class="rows lorebook">' + pages + '</div>' : '');
+  }
+
   /* The ending, kept: once the whole Choir has been silenced and carried out
    * of, the Hall says so, and how many times. */
   silenced() {
