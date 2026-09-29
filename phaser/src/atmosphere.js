@@ -21,7 +21,7 @@ import Phaser from 'phaser';
 import { pinToScreen } from './screen.js';
 
 /* global lamps, player, portal, loot, run, cam, view, PAL, PORTAL_R, TAU,
-          lowFx, swapFlash, HEROES, GLOOM_TIME, GLOOM_DEPTH */
+          lowFx, swapFlash, HEROES, GLOOM_TIME, GLOOM_DEPTH, moodAt */
 
 const hex = (css, fallback) => {
   if (typeof css !== 'string') return fallback;
@@ -98,11 +98,23 @@ export class Atmosphere {
     // that is information rather than mood.
     this.hurt = scene.add.image(0, 0, 'hurtTex')
       .setOrigin(0, 0).setScrollFactor(0).setDepth(8.76e5).setVisible(false);
+    // The room's own colour: the frame multiplied toward it. A white 'flat'
+    // under MULTIPLY is a colour grade and nothing else -- it cannot lighten,
+    // so a room can be warmer or colder without its dark going grey.
+    this.grade = scene.add.image(0, 0, 'flat')
+      .setOrigin(0, 0).setScrollFactor(0).setDepth(8.735e5).setVisible(false);
+    this.grade.setBlendMode(Phaser.BlendModes.MULTIPLY);
+    // Where the mood is now, blended toward the room you stand in (see
+    // moodPass): grade and fog as rgb 0..1 multipliers, how dark the edges,
+    // the motes' colour and which way they go.
+    this.m = { g: [1, 1, 1], fog: [1, 1, 1], dark: 0, mote: [0.84, 0.78, 0.64], drift: 1 };
+    this.lastT = 0;
 
     const fit = () => {
       const w = scene.scale.displaySize.width, h = scene.scale.displaySize.height;
       this.fog.setSize(w, h);
       this.flash.setDisplaySize(w, h);
+      this.grade.setDisplaySize(w, h);
       if (this.vig.width !== w || this.vig.height !== h) {
         this.bakeScreen(w, h);
         this.vig.setTexture('vignette');
@@ -257,6 +269,7 @@ export class Atmosphere {
     this.vig.setVisible(false);
     this.gloom.setVisible(false);
     this.flash.setVisible(false);
+    this.grade.setVisible(false);
     for (const im of this.lights) im.setVisible(false);
   }
 
@@ -266,12 +279,18 @@ export class Atmosphere {
   draw(t, o) {
     if (!this.on) return;
     o = o || { x: 0, y: 0 };
-    for (const im of [this.fog, this.moteGfx, this.flash, this.vig, this.gloom, this.hurt])
+    for (const im of [this.fog, this.moteGfx, this.flash, this.vig, this.gloom, this.hurt, this.grade])
       pinToScreen(im, o);
+    const dt = this.lastT ? Math.min(0.1, Math.max(0, (t - this.lastT) / 1000)) : 0;
+    this.lastT = t;
+    this.moodPass(dt);
     // Before the mood is shed, not after it: a blow landing is not decoration,
     // and a phone that cannot afford the fog still has to be told it was hit.
     this.hurtPass();
     if (this.want.lights) this.lightPass(t);
+    // The room's colour stays even when the frame is under pressure: it is
+    // one quad, and it is most of what tells one room from the next.
+    this.gradePass();
     // Everything below this line is mood, and mood is the first thing to go
     // when the frame is under pressure. lowFx is the core's own answer to
     // "are we missing the budget", so it is not second-guessed here.
@@ -284,7 +303,7 @@ export class Atmosphere {
       return;
     }
     if (this.want.fog) this.fogPass(t); else this.fog.setVisible(false);
-    if (this.want.motes) this.motePass(t); else this.moteGfx.clear().setVisible(false);
+    if (this.want.motes) this.motePass(dt); else this.moteGfx.clear().setVisible(false);
     this.vig.setVisible(this.want.vig);
     this.gloomPass();
     this.swapPass();
@@ -324,7 +343,11 @@ export class Atmosphere {
     const vx1 = v.right + 80, vy1 = v.bottom + 80;
     const flick = 0.78 + 0.22 * Math.sin(t * 7.3) * Math.sin(t * 3.1);
     for (const L of lamps) {
-      if (L.x < vx0 || L.x > vx1 || L.y < vy0 || L.y > vy1) continue;
+      // A room's own glow is big and faint, and steady: it is the room's air,
+      // not a flame. Culled by its own reach, or it would pop at the edge.
+      const pad = L.span ? L.span / 2 : 0;
+      if (L.x < vx0 - pad || L.x > vx1 + pad || L.y < vy0 - pad || L.y > vy1 + pad) continue;
+      if (L.span) { take(L.x, L.y, L.span, hex(L.color, 0xffc24d), L.alpha || 0.2); continue; }
       const ember = L.color === PAL.ember;
       take(L.x, L.y, ember ? 138 : 112, hex(L.color, 0xffc24d),
            (ember ? 0.6 : 0.42) * flick);
@@ -344,25 +367,72 @@ export class Atmosphere {
     this.fog.tilePositionY = cam.y * 0.9 - t * 3;
   }
 
-  motePass(t) {
+  /* Ash in the air. Integrated rather than read off the clock, so a room
+   * can turn it round -- embers rising off a forge, dust settling in the
+   * stores -- without every mote jumping when it does. */
+  motePass(dt) {
     const g = this.moteGfx;
     g.clear().setVisible(true);
     const w = this.s.scale.displaySize.width, h = this.s.scale.displaySize.height;
+    const c = this.m.mote;
+    const col = (Math.round(c[0] * 255) << 16) | (Math.round(c[1] * 255) << 8) | Math.round(c[2] * 255);
     for (const m of this.motes) {
-      let x = m.x * w + m.vx * t - cam.x * (1 - m.z) * 0.25;
-      let y = m.y * h + m.vy * t - cam.y * (1 - m.z) * 0.25;
+      if (m.px === undefined) { m.px = m.x * w; m.py = m.y * h; }
+      m.px += m.vx * dt * (this.m.drift < 0.5 ? 0.6 : 1);
+      m.py += m.vy * dt * this.m.drift * (this.m.drift < 0 ? 2.2 : 1);
+      let x = m.px - cam.x * (1 - m.z) * 0.25;
+      let y = m.py - cam.y * (1 - m.z) * 0.25;
       x = ((x % w) + w) % w;
       y = ((y % h) + h) % h;
       const sz = m.s * m.z;
-      g.fillStyle(0xd6c6a4, m.a * m.z);
+      g.fillStyle(col, m.a * m.z);
       g.fillRect(x, y, sz, sz);
     }
+  }
+
+  /* THE ROOM'S MOOD. Read off the core (moodAt) at the hero, and eased toward
+   * over about a second, so crossing a threshold is a change of air rather
+   * than a cut. Outside any room everything eases back to the delve's own. */
+  moodPass(dt) {
+    const M = (typeof moodAt === 'function' && player) ? moodAt(player.x, player.y) : null;
+    const rgb = css => { const n = hex(css, 0xffffff); return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; };
+    const mix = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+    const W = [1, 1, 1];
+    const want = M ? {
+      g: mix(W, rgb(M.grade), Math.min(0.45, M.gradeA * 1.8)),
+      fog: mix(W, rgb(M.fog), 0.7),
+      dark: M.dark,
+      mote: rgb(M.motes),
+      drift: M.drift === 'rise' ? -1 : M.drift === 'float' ? 0.25 : 1
+    } : { g: W, fog: W, dark: 0, mote: [0.84, 0.78, 0.64], drift: 1 };
+    const k = dt ? 1 - Math.exp(-dt * 2.6) : 1;
+    const m = this.m;
+    m.g = mix(m.g, want.g, k);
+    m.fog = mix(m.fog, want.fog, k);
+    m.mote = mix(m.mote, want.mote, k);
+    m.dark += (want.dark - m.dark) * k;
+    m.drift += (want.drift - m.drift) * k;
+    const tint = c => (Math.round(c[0] * 255) << 16) | (Math.round(c[1] * 255) << 8) | Math.round(c[2] * 255);
+    this.fog.setTint(tint(m.fog));
+    this.gradeTint = tint(m.g);
+  }
+
+  gradePass() {
+    const g = this.m.g;
+    const on = g[0] < 0.995 || g[1] < 0.995 || g[2] < 0.995;
+    this.grade.setVisible(on);
+    if (on) this.grade.setTint(this.gradeTint);
   }
 
   /* The Riftborn closing the room down. In fast, hold, out -- and the hold is
    * the part that matters, because it is the only time you cannot see him. */
   gloomPass() {
-    if (!run || !(run.gloom > 0)) { this.gloom.setVisible(false); return; }
+    if (!run || !(run.gloom > 0)) {
+      // No Riftborn: the room's own darkness, if it has one.
+      const d = this.m.dark * 0.55;
+      if (d > 0.01) this.gloom.setVisible(true).setAlpha(d); else this.gloom.setVisible(false);
+      return;
+    }
     const f = run.gloom / GLOOM_TIME;
     const a = Math.min(1, f < 0.18 ? f / 0.18 : Math.min(1, (1 - f) / 0.22 + 0.35));
     this.gloom.setVisible(true).setAlpha(Math.max(0, GLOOM_DEPTH * a));
