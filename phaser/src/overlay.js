@@ -239,7 +239,7 @@ export class Overlay {
     }
 
     for (const ch of chests) {
-      if (ch.open) continue;
+      if (ch.open || ch.sealed) continue;
       const K = CHEST_KINDS[ch.kind] || {};
       const bx = x + ch.x * k, by = y + ch.y * k, r = 2.6 * mk;
       g.fillStyle(hex(K.colour, 0xc9a24a), 1);

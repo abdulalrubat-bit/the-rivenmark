@@ -221,14 +221,16 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
     let inRock=0, tooNear=0, tot=0, warded=0, tooClose=0, minN=99, maxN=0;
     for(let lv=0; lv<24; lv++){
       startRun('isaac', LEVELS[lv].id, 'riven');
-      tot+=chests.length; minN=Math.min(minN,chests.length); maxN=Math.max(maxN,chests.length);
-      warded+=chests.filter(c=>c.kind==='warded').length;
-      for(let i=0;i<chests.length;i++){
-        const c=chests[i];
+      // A hidden room's coffer is sealed in rock on purpose (see secrets.js).
+      const cs=chests.filter(c=>!c.sealed);
+      tot+=cs.length; minN=Math.min(minN,cs.length); maxN=Math.max(maxN,cs.length);
+      warded+=cs.filter(c=>c.kind==='warded').length;
+      for(let i=0;i<cs.length;i++){
+        const c=cs[i];
         if(pointInWalls(c.x,c.y,20)) inRock++;
         if(Math.hypot(c.x-player.x,c.y-player.y)<CHEST_SAFE-1) tooNear++;
-        for(let k=i+1;k<chests.length;k++)
-          if(Math.hypot(c.x-chests[k].x,c.y-chests[k].y)<CHEST_APART-1) tooClose++;
+        for(let k=i+1;k<cs.length;k++)
+          if(Math.hypot(c.x-cs[k].x,c.y-cs[k].y)<CHEST_APART-1) tooClose++;
       }
     }
     return {tot, per:+(tot/24).toFixed(1), warded, inRock, tooNear, tooClose, minN, maxN};

@@ -118,7 +118,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
       fresh(2 + (t % 6));
       const depth = LEVEL.depth || 0;
       const cap = Math.round((3 + Math.round(depth * 3)) * twist('chests')) + 1;
-      if (chests.length > cap) over++;
+      if (chests.filter(c => !c.sealed).length > cap) over++;
       roomOnes += chests.filter(c => c.room).length;
       checked++;
     }
