@@ -18,7 +18,7 @@ import { settings, setSetting } from './settings.js';
 import { bossBarDrop } from './overlay.js';
 
 const CSS = `
-#tut{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 92px);
+#tut{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 136px);
      width:min(340px,calc(100vw - 32px));z-index:30;pointer-events:auto;
      background:rgba(15,13,12,.92);border:1px solid #59504a;border-radius:10px;
      padding:12px 14px 10px;color:#ead9cd;font:14px/1.4 Georgia,serif;

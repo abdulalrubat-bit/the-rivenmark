@@ -458,6 +458,13 @@ body.menus #diag{display:none}
 #screens .tgrid .node .rk{font-size:14px;min-width:36px}
 #screens .row.lore b{font-size:16px}
 #screens .row.lore small{font-size:15px}
+/* The outcome card: what changed stands out. */
+#screens .stats div.up{border-color:#ff7a2a;box-shadow:0 0 12px rgba(255,122,42,.3)}
+#screens .stats div.up b{color:#ffb070}
+#screens .stats div.wide{grid-column:1/-1;flex-direction:column;gap:3px}
+#screens .stats div.wide b{font-weight:400;font-size:14px;color:#f0e6dc}
+#screens .stats{font-size:15px}
+#screens .stats b{font-size:17px}
 /* Bigger type must never push a station wider than the glass (a 320px
    phone): the card is capped to the screen, and the controls in it are
    allowed to shrink and wrap rather than set its width. */
@@ -537,7 +544,7 @@ export class Screens {
     const bar = !!this.root.querySelector('nav.tabs');
     this.root.classList.toggle('hasbar', bar);
     this.root.classList.toggle('station', bar);
-    document.body.classList.toggle('menus', bar);
+    document.body.classList.add('menus');       // any card up hides the diagnostics dot
   }
 
   /* Held. The delve is still standing behind this -- the scene keeps drawing

@@ -4467,6 +4467,7 @@ function readLore(n) {
   const [title, text] = LORE[n.id];
   run.banner = run.bannerMax = 7;
   run.bannerLore = title;          // the panel is this page's, not whatever banner replaces it
+  run.lorePages = (run.lorePages || 0) + 1;
   run.bannerText = title;
   run.bannerNote = text;
   sfx('tap', n.x, n.y);
@@ -5354,8 +5355,21 @@ function updateCorpse(dt) {
 }
 
 // A short line above the HUD: what you just picked up, in its rarity colour.
+/* One line at a time, each given long enough to be read. Playtested: "hard
+   to tell what just happened" -- two things landing together (a room's name
+   and its coffer sealing, a page and a blessing) used to replace each other
+   in the same frame, and the first was never seen. A new line now waits its
+   turn behind one that has been up less than a second. */
+const TOAST_LIFE = 2.4, TOAST_MIN = 1.0;
 function toast(text, colour) {
-  run.toast = { text, colour, life: 2.4 };
+  const t = run.toast;
+  if (t && t.text !== text && TOAST_LIFE - t.life < TOAST_MIN) {
+    if (!run.toastQ) run.toastQ = [];
+    if (!run.toastQ.some(q => q.text === text)) run.toastQ.push({ text, colour });
+    if (run.toastQ.length > 4) run.toastQ.shift();
+    return;
+  }
+  run.toast = { text, colour, life: TOAST_LIFE };
 }
 
 // Expanding shockwave ring — a few strokes, but it is what makes a kill read
@@ -8538,6 +8552,11 @@ function update(dt) {
     if (run.banner <= 0) { run.bannerMax = 0; run.bannerLore = null; }
     if (run.banner <= 0) { run.bannerText = null; run.bannerNote = null; } }
   if (run.toast) { run.toast.life -= dt; if (run.toast.life <= 0) run.toast = null; }
+  // The next in line, once the one up has had its second.
+  if (run.toastQ && run.toastQ.length && (!run.toast || TOAST_LIFE - run.toast.life >= TOAST_MIN)) {
+    const q = run.toastQ.shift();
+    run.toast = { text: q.text, colour: q.colour, life: TOAST_LIFE };
+  }
   if (run.bagWarned > 0) run.bagWarned -= dt;
   updatePlayer(dt);
   updateArcs(dt);
@@ -10598,7 +10617,9 @@ function endRun(won) {
     bounty = run.bountyPaid = 1;
     }
   }
+  const levelWas = stash.level || 1;
   bankRun(won);
+  const levelNow = stash.level || 1;
   // And one life means one. Everything the Vanguard owned goes with them --
   // after the banking, so the last delve is scored before it is taken away,
   // and after the trophy, which is the one thing death cannot reach.
@@ -10656,7 +10677,25 @@ function endRun(won) {
     '<div>Slain<b>' + run.kills + '</b></div>' +
     '<div>Slag<b>' + run.tech + '</b></div>' +
     '<div>' + (won ? 'Carried out' : 'Left behind') + '<b>' + carried + '</b></div>' +
-    '<div>' + (won ? 'Coin banked' : 'Coin left') + '<b>' + run.coins + '</b></div>';
+    '<div>' + (won ? 'Coin banked' : 'Coin left') + '<b>' + run.coins + '</b></div>' +
+    // What changed, said outright: the level the slag bought, the points it
+    // brought for the talents, and what was found down there.
+    (levelNow > levelWas
+      ? '<div class="up">Level<b>' + levelWas + ' \u2192 ' + levelNow + '</b></div>' +
+        '<div class="up">Talent points<b>+' + (levelNow - levelWas) + '</b></div>'
+      : '<div>Level<b>' + levelNow + '</b></div>') +
+    (() => {
+      const f = [];
+      const n = (k, one, many) => { if (k) f.push(k + ' ' + (k === 1 ? one : many)); };
+      n(run.shrines || 0, 'shrine', 'shrines');
+      n(run.lorePages || 0, 'lore page', 'lore pages');
+      n(run.secrets || 0, 'hidden room', 'hidden rooms');
+      n(run.encounters || 0, 'room beaten', 'rooms beaten');
+      return f.length ? '<div class="wide">Found<b>' + f.join(' \u00b7 ') + '</b></div>' : '';
+    })();
+  if (levelNow > levelWas && !run.ending)
+    el.overSub.textContent += ' Level ' + levelNow + ' \u2014 ' + (levelNow - levelWas) +
+      (levelNow - levelWas === 1 ? ' talent point' : ' talent points') + ' to spend.';
   showScreen('over');
   refreshBestLine();
 }
