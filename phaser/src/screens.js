@@ -412,6 +412,58 @@ body.menus #diag{display:none}
 #screens.station .row.delve .act{font:600 10.5px Cinzel,Georgia,serif;letter-spacing:.8px}
 #screens.station .row.slide{min-height:56px;padding-top:6px;padding-bottom:6px}
 #screens.station .row.slide input[type=range]{margin:0}
+
+/* ===================================================================
+   BIGGER. Playtested: "make it more readable, like it takes up space".
+   A size up everywhere a player reads or taps: body text, the rows and
+   what is in them, the pills, the item icons, the tags, the buttons and
+   the bar of medallions. Everything else (the frame, the colours, the
+   layout) stays as it was; this only makes it read from arm's length.
+   =================================================================== */
+#screens{font-size:17px;line-height:1.4}
+#screens.station h1{font-size:31px;margin-bottom:16px;padding-bottom:16px}
+#screens.station .sub{font-size:16px}
+#screens.station .sec{font-size:15px;margin:22px 0 10px}
+#screens.station .homestats>span,#screens.station .purse{padding:9px 18px;font-size:16px}
+#screens.station .homestats b,#screens.station .purse b{font-size:21px}
+#screens.station .row{min-height:66px;padding:14px 16px;gap:10px}
+#screens.station .row small{font-size:14.5px;margin-top:3px}
+#screens.station .row .teach{font-size:14px}
+#screens.station .row em,#screens.station .row.delve em{font-size:12px}
+#screens.station .row.delve{font-size:20px;min-height:110px;padding:16px}
+#screens.station .row.delve small,#screens.station .row.delve .verdict{font-size:15px}
+#screens.station .rows.heroes .row{font-size:19px}
+#screens.station .item .aff{font-size:14.5px}
+#screens.station .item b{font-size:17.5px}
+#screens.station .pw{font-size:17px}
+#screens.station .act,#screens.station .row.delve .act{font-size:12.5px;padding:4px 8px}
+#screens.station .ico{width:46px;height:46px;background-size:1610px 46px;
+  background-position:calc(var(--i,0) * -46px) 0}
+#screens.station .chip{min-height:46px;font-size:15px;padding:0 14px}
+#screens.station .drop{min-width:56px;font-size:16px}
+#screens.station .alt{font-size:18px;min-height:60px}
+#screens.station .go{font-size:19px;min-height:58px}
+#screens.station .go.big{min-height:80px;font-size:28px}
+#screens .seg button{min-height:48px;font-size:14px}
+#screens .seg button small{font-size:14px}
+#screens.station{--bar:86px}
+#screens.station .tabs button{gap:4px}
+#screens.station .tabs button i{width:46px;height:46px;font-size:22px}
+#screens.station .tabs button span{font-size:11.5px;letter-spacing:.4px}
+#screens.station .tabs button.cog{flex:0 0 58px}
+#screens .tabs .badge{min-width:22px;height:22px;font-size:13px;line-height:22px;right:calc(50% - 32px)}
+#screens .tdetail b{font-size:21px}
+#screens .tdetail em{font-size:15px}
+#screens .tdetail p{font-size:17px}
+#screens .tgrid .node .rk{font-size:14px;min-width:36px}
+#screens .row.lore b{font-size:16px}
+#screens .row.lore small{font-size:15px}
+/* Bigger type must never push a station wider than the glass (a 320px
+   phone): the card is capped to the screen, and the controls in it are
+   allowed to shrink and wrap rather than set its width. */
+#screens.station .card{box-sizing:border-box;max-width:min(520px,calc(100vw - 24px))}
+#screens .seg button{min-width:0;padding:0 4px;overflow-wrap:anywhere}
+#screens.station .row,#screens.station .item>span{min-width:0;overflow-wrap:anywhere}
 `;
 
 /* Cells of icons.png (tools/build-art.py's strip, carried over from the

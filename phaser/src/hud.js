@@ -417,6 +417,40 @@ const CSS = `
 #hud .toast{position:absolute;left:12px;height:24px;line-height:22px;padding:0 11px;
      background:rgba(8,7,7,.82);border:1px solid #5e544e;font:13px Georgia,serif;
      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:opacity .2s}
+
+/* ===================================================================
+   BIGGER. Playtested: "make it more readable, like it takes up space".
+   Every piece of the HUD a player reads is taken up a size or two -- the
+   life bar and its number, the slag count, the pause row, the chips, the
+   toast, the banner, the boss's name, the labels on the buttons -- and the
+   top of the screen is re-spaced to hold them (HUD_H in the core follows).
+   The buttons keep their size: they are placed so thumbs and each other
+   never collide, and that was measured, not guessed.
+   =================================================================== */
+#hud{font-size:14px}
+#hud .top{left:8px;right:8px;top:8px;padding:5px;gap:4px;border-radius:6px;border-width:1.5px}
+#hud .life{height:26px;border-radius:4px}
+#hud .life b{font-size:15px;letter-spacing:.3px}
+#hud .slag{min-width:118px;font-size:15px;gap:6px}
+#hud .slag u{width:10px;height:10px}
+#hud .hold{top:54px;gap:10px}
+#hud .hold button{width:44px;height:44px;font-size:17px}
+#hud .hold .bag{font-size:19px}
+#hud .hold .snd{font-size:19px}
+#hud .hold .bag i{min-width:19px;height:19px;border-radius:10px;font:11px/17px ui-monospace,monospace}
+#hud .bless{top:calc(var(--sa-t,0px) + 108px);font-size:14px;padding:5px 11px;border-radius:12px}
+#hud .enc{top:calc(var(--sa-t,0px) + 140px);font-size:15px;padding:6px 12px;border-radius:12px}
+#hud .toast{height:32px;line-height:30px;font-size:16px;padding:0 14px;border-radius:6px}
+#hud .banner{font-size:26px}
+#hud .banner small{font-size:15px}
+#hud .banner.lore small{font-size:16px}
+#hud .banner b{font-size:18px}
+#hud .banner em{font-size:11px}
+#hud .heavy{font-size:12.5px}
+#hud .heavy .mark{font-size:24px}
+#hud button .cd{font-size:11px}
+#hud button .cost b{font-size:9px}
+#hud .pip{width:13px;height:13px}
 `;
 
 export class Hud {
@@ -685,8 +719,8 @@ export class Hud {
        * instead of the day somebody notices it is not. 46px of visible chord
        * holds about eight characters at the standard size. */
       const tag = a.tag || a.name;
-      b.style.setProperty('--tagfs', tag.length > 8 ? '6.2px'
-                                   : tag.length > 6 ? '7px' : '7.5px');
+      b.style.setProperty('--tagfs', tag.length > 8 ? '6.6px'
+                                   : tag.length > 6 ? '8px' : '9.2px');
       b.innerHTML = '<span class="sweep"></span><span class="cost"></span>' +
                     '<span class="mark">' + a.mark + '</span>' +
                     '<span class="tag">' + tag + '</span>' +
@@ -1010,7 +1044,7 @@ export class Hud {
       // Clipped rather than allowed to grow: the map lives top-right.
       const box = (window.minimapBox && window.minimapBox()) || { s: 132, pad: 14 };
       this.toast.style.maxWidth =
-        Math.max(120, (view.w || 390) - box.s - box.pad - 40) + 'px';
+        Math.max(120, (view.w || 390) - box.s - box.pad - 64) + 'px';   // the bigger toast's padding and frame
     }
     this.toast.style.top = (HUD_H + 8 + (view.safeT || 0) + bossBarDrop()) + 'px';
     this.toast.style.opacity = Math.min(1, t.life / 0.5).toFixed(2);

@@ -293,7 +293,7 @@ const RIM_HUE = 'rgb(228,220,196)', RIM_W = 0.85, RIM_A = 0.5;
  * that would carry one: above the cloth, below anything already glowing. */
 const SHEEN_HUE = 'rgb(255,248,232)', SHEEN_W = 0.45, SHEEN_A = 0.5;
 const SHEEN_LO = 62, SHEEN_HI = 190, SHEEN_SAT = 0.65;
-const HUD_H           = 78;   // canvas UI clears the HUD panel by this much
+const HUD_H           = 104;   // canvas UI clears the HUD panel by this much
 // Holding the gate is the delve's second act, and the only part of a run that
 // can be stretched: a delve itself is bounded at roughly two minutes because a
 // player clears bodies as fast as a populated map can present them, and no
