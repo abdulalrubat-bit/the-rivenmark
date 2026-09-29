@@ -53,8 +53,48 @@
         background:linear-gradient(90deg,#6d4d22,#e2b96a);
         transition:width 220ms ease}
   #boot .say{margin:12px 0 0;color:#6a6154;font-size:11px;letter-spacing:.5px}
+  /* THE STUDIO CARD. Fateful Games, before the title: in, a held beat, out,
+     all in CSS so it runs on the first frame with nothing loaded. The load
+     carries on underneath it -- the title card and its bar are already there
+     and simply revealed. A tap skips it. brand/fateful-games.png is the logo;
+     until there is one (or if it fails) the drawn emblem and wordmark stand
+     in for it. */
+  #boot .studio{position:absolute;inset:0;z-index:2;display:grid;place-items:center;
+        background:#050404;animation:studio 2.9s ease forwards}
+  #boot .studio.skip{animation:studioSkip .35s ease forwards}
+  #boot .studio .mark{text-align:center;opacity:0;transform:scale(.94);
+        animation:studioMark 2.9s ease forwards}
+  #boot .studio img{display:block;max-width:min(260px,64vw);max-height:40vh;margin:0 auto}
+  #boot .studio svg{width:92px;height:92px;display:block;margin:0 auto 18px;
+        filter:drop-shadow(0 0 14px rgba(226,185,106,.35))}
+  #boot .studio .name{font:400 22px/1.2 Georgia,serif;letter-spacing:10px;color:#e8d4a8;
+        padding-left:10px}
+  #boot .studio .name small{display:block;margin-top:8px;font-size:11px;letter-spacing:7px;
+        color:#8c7650}
+  @keyframes studio{0%,82%{opacity:1}100%{opacity:0;visibility:hidden}}
+  @keyframes studioSkip{to{opacity:0;visibility:hidden}}
+  @keyframes studioMark{0%{opacity:0;transform:scale(.94)}
+        22%,70%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1.03)}}
+  @media (prefers-reduced-motion:reduce){#boot .studio,#boot .studio .mark{animation-duration:1.2s}}
 </style>
 <div id="boot">
+  <div class="studio" id="studio">
+    <div class="mark">
+      <!-- The logo goes here as <img src="brand/fateful-games.png"> once the
+           file is in public/brand/; until then the drawn emblem stands in.
+           Not requested speculatively: a 404 at boot is a console error. -->
+      <div class="fallback">
+        <svg viewBox="0 0 100 100" aria-hidden="true">
+          <circle cx="50" cy="50" r="44" fill="none" stroke="#a67c3a" stroke-width="2"/>
+          <circle cx="50" cy="50" r="36" fill="none" stroke="#6d4d22" stroke-width="1"/>
+          <path d="M50 10 L50 90 M22 22 L78 78 M78 22 L22 78" stroke="#6d4d22" stroke-width="1"/>
+          <path d="M50 20 C70 34 70 66 50 80 C30 66 30 34 50 20Z" fill="#1a130a" stroke="#e2b96a" stroke-width="2"/>
+          <circle cx="50" cy="50" r="7" fill="#e2b96a"/>
+        </svg>
+        <div class="name">FATEFUL<small>GAMES</small></div>
+      </div>
+    </div>
+  </div>
   <div class="wrap">
     <div class="rule"></div>
     <h1>THE
@@ -68,6 +108,16 @@
      keeps the flat global scope everything in it expects. The bundle reads it
      off `window`. Order matters: stubs, then the real host, then the core.
      See host-real.js. -->
+<script>
+  (function () {
+    var st = document.getElementById('studio');
+    var skip = function () { st.classList.add('skip'); };
+    st.addEventListener('pointerdown', skip);
+    st.addEventListener('animationend', function (e) {
+      if (e.target === st) st.style.pointerEvents = 'none';
+    });
+  })();
+</script>
 <script src="host-stubs.js"></script>
 <script src="host-real.js"></script>
 <script src="core.js"></script>
