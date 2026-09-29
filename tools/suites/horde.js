@@ -221,8 +221,9 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
     let inRock=0, tooNear=0, tot=0, warded=0, tooClose=0, minN=99, maxN=0;
     for(let lv=0; lv<24; lv++){
       startRun('isaac', LEVELS[lv].id, 'riven');
-      // A hidden room's coffer is sealed in rock on purpose (see secrets.js).
-      const cs=chests.filter(c=>!c.sealed);
+      // A hidden room's coffer is sealed in rock on purpose (secrets.js), and an
+      // encounter's own coffer sits on top of the count (encounters.js).
+      const cs=chests.filter(c=>!c.sealed && !c.enc);
       tot+=cs.length; minN=Math.min(minN,cs.length); maxN=Math.max(maxN,cs.length);
       warded+=cs.filter(c=>c.kind==='warded').length;
       for(let i=0;i<cs.length;i++){
@@ -245,7 +246,7 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
 
   const opened = await p.evaluate(()=>{
     startRun('isaac', LEVELS[18].id, 'riven');
-    const c=chests[0];
+    const c=chests.find(q=>!q.locked && !q.sealed);   // not one a room keeps sealed
     const coin0=run.coins, drops0=drops.length;
     // walking onto it opens it
     player.x=c.x; player.y=c.y;

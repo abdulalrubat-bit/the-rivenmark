@@ -12,7 +12,7 @@
 
 import { bossShown, bossBarDrop, minimapBox } from './overlay.js';
 
-/* global SHRINES, bagCap, player, run, state, enemies, view, LEVEL, REGION, HUD_H, ABILITIES,
+/* global SHRINES, encounterLine, bagCap, player, run, state, enemies, view, LEVEL, REGION, HUD_H, ABILITIES,
           ABILITY_BY_ID, CHARGE_MAX, TENSION_MAX, COMBO_LEN, CONDUIT_EDGE */
 
 /* Four roles, four colours, and the mapping lives beside the buttons because
@@ -332,6 +332,10 @@ const CSS = `
 #hud .din.loud i{background:linear-gradient(90deg,#a67c3a,#ffbe8c 55%,#ffd18c)}
 #hud .din.loud{box-shadow:inset 0 1px 0 rgba(0,0,0,.6),0 0 8px rgba(255,190,140,.4)}
 /* A shrine's blessing and what is left of it, under the life bar. */
+#hud .enc{position:absolute;left:12px;top:calc(var(--sa-t,0px) + 148px);padding:4px 9px;
+     border-radius:10px;border:1px solid #c9863e;background:rgba(20,12,8,.78);color:#f0c890;
+     font:600 12px/1.2 Georgia,serif;letter-spacing:.3px;pointer-events:none;max-width:70vw}
+#hud .enc.away{color:#ffb4a0;border-color:#c0392b}
 #hud .bless{position:absolute;left:12px;top:calc(var(--sa-t,0px) + 122px);padding:3px 8px;
      border-radius:10px;border:1px solid currentColor;background:rgba(12,10,8,.7);
      font:600 11px/1.2 ui-monospace,monospace;letter-spacing:.3px;pointer-events:none}
@@ -445,6 +449,7 @@ export class Hud {
       '</div>' +
       '<div class="res"></div>' +
       '<div class="bless" hidden></div>' +
+      '<div class="enc" hidden></div>' +
       /* Built like a kit button, for the same reason a kit button is: the
        * whole point of the tag under an ability's mark is that a glyph is a
        * thing to memorise and a word is not. This was one bare arrow, and
@@ -482,6 +487,7 @@ export class Hud {
     this.slag = root.querySelector('.slag');
     this.res = root.querySelector('.res');
     this.bless = root.querySelector('.bless');
+    this.enc = root.querySelector('.enc');
     this.kit = root.querySelector('.kit');
     this.conduit = root.querySelector('.conduit');
     this.conRing = root.querySelector('.conduit .ring');
@@ -873,6 +879,7 @@ export class Hud {
     this.refitBoss();
     this.syncToast();
     this.syncBless();
+    this.syncEnc();
   }
 
   /* The title is fitted, not cut. The Deceiver's epithets are rules -- each
@@ -973,6 +980,22 @@ export class Hud {
       this.blessText = txt;
       this.bless.textContent = txt;
       this.bless.style.color = S.colour;
+    }
+  }
+
+  /* A room encounter's goal while it is live: how many are left, or how
+   * long the nave still has to be held -- and a warning when you have
+   * stepped off the ground you are meant to hold. */
+  syncEnc() {
+    const L = (state === 'play' || state === 'pause') && typeof encounterLine === 'function'
+      ? encounterLine() : null;
+    if (this.enc.hidden === !!L) this.enc.hidden = !L;
+    if (!L) return;
+    const txt = L.text + (L.away ? ' — back to the heart!' : '');
+    if (this.encText !== txt) {
+      this.encText = txt;
+      this.enc.textContent = txt;
+      this.enc.classList.toggle('away', !!L.away);
     }
   }
 

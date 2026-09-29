@@ -197,7 +197,7 @@ const CSS = `
 #screens .rows.heroes{grid-template-columns:1fr 1fr;max-height:none;
   -webkit-mask-image:none;mask-image:none}
 #screens .row em, #screens .row.delve em{display:block;font-style:normal;font-size:10px;
-  letter-spacing:1.5px;text-transform:uppercase;color:#a67c3a;margin-bottom:2px}
+  letter-spacing:1.5px;font-variant-caps:all-small-caps;color:#a67c3a;margin-bottom:2px}
 #screens .row.delve{width:100%;margin:0 0 14px;padding:14px 12px;min-height:96px;
   font:15px Georgia,serif;color:#eee0c0;border-color:#6d4d22}
 #screens .row.delve small{font:12px ui-monospace,Menlo,monospace;margin-top:4px}
@@ -281,7 +281,7 @@ body.menus #diag{display:none}
 /* Section labels read as labels, not asides. */
 #screens.station .sub{font-size:14px;color:#b8a888}
 #screens.station .sec{font:600 13px Cinzel,Georgia,serif;font-style:normal;letter-spacing:1.5px;
-  text-transform:uppercase;color:#d6b26e;margin:18px 0 8px;padding:0 0 6px;
+  font-variant-caps:all-small-caps;color:#d6b26e;margin:18px 0 8px;padding:0 0 6px;
   border-bottom:1px solid rgba(166,124,58,.3);scroll-margin-top:64px}
 /* The resources: pills, the way every phone game shows what you hold. */
 #screens.station .homestats,#screens.station .purse{display:flex;gap:8px;justify-content:center;
@@ -307,7 +307,7 @@ body.menus #diag{display:none}
 #screens.station .row.on{box-shadow:inset 0 1px 0 rgba(214,178,110,.25),0 0 14px rgba(226,185,106,.22)}
 #screens.station .row em,#screens.station .row.delve em{font:600 10.5px Cinzel,Georgia,serif;letter-spacing:1.5px}
 #screens.station .item .aff{font-size:12.5px}
-#screens.station .act{font:600 10.5px Cinzel,Georgia,serif;letter-spacing:.8px;text-transform:uppercase;
+#screens.station .act{font:600 10.5px Cinzel,Georgia,serif;letter-spacing:.8px;font-variant-caps:all-small-caps;
   color:#d6b26e;border-color:#6d4d22}
 #screens.station .ico{width:36px;height:36px;background-size:1260px 36px;
   background-position:calc(var(--i,0) * -36px) 0;border-radius:6px;
@@ -322,7 +322,7 @@ body.menus #diag{display:none}
   box-shadow:0 6px 14px rgba(0,0,0,.5);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
 #screens .seg button{flex:1;min-height:40px;border-radius:8px;border:1px solid transparent;
   background:none;color:#a89878;font:600 12px Cinzel,Georgia,serif;letter-spacing:1px;
-  text-transform:uppercase}
+  font-variant-caps:all-small-caps}
 #screens .seg button.on{color:#1a130a;background:linear-gradient(#f0cf86,#c9a45a 60%,#a67c3a);
   border-color:#6d4d22;box-shadow:0 0 10px rgba(226,185,106,.35)}
 /* Descend: the brightest thing on the screen, and it breathes. */
@@ -348,7 +348,7 @@ body.menus #diag{display:none}
   font-size:18px;background:radial-gradient(circle at 40% 35%,#2a2219,#120e0a);
   border:1px solid #5a4226;box-shadow:inset 0 1px 0 rgba(226,185,106,.15),0 2px 4px rgba(0,0,0,.5);
   transition:transform 120ms ease}
-#screens.station .tabs button span{font:600 10px Cinzel,Georgia,serif;letter-spacing:1px;text-transform:uppercase}
+#screens.station .tabs button span{font:600 10px Cinzel,Georgia,serif;letter-spacing:1px;font-variant-caps:all-small-caps}
 #screens.station .tabs button.on{color:#f0d898}
 #screens.station .tabs button.on i{color:#1a130a;transform:translateY(-4px) scale(1.1);
   background:radial-gradient(circle at 40% 35%,#ffe7b0,#d6b26e 55%,#8a6428);border-color:#fff1cc;

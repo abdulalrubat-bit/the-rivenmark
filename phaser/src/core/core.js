@@ -4112,7 +4112,13 @@ function updateChests(dt) {
     const ch = chests[i];
     ch.pulse += dt;
     if (ch.open) { ch.t = Math.min(CHEST_OPEN, (ch.t || 0) + dt); continue; }
-    if (dist2(player.x, player.y, ch.x, ch.y) < CHEST_REACH * CHEST_REACH) openChest(ch);
+    if (dist2(player.x, player.y, ch.x, ch.y) >= CHEST_REACH * CHEST_REACH) continue;
+    // Sealed until its room is beaten (see ROOM ENCOUNTERS).
+    if (ch.locked) {
+      if (!ch.toldLock) { ch.toldLock = true; toast('Sealed — the room must be beaten first.', '#c08070'); }
+      continue;
+    }
+    openChest(ch);
   }
 }
 
@@ -4398,6 +4404,179 @@ function updateCracks(dt) {
       toast('A cracked wall — strike it!', '#e8c878');
     }
   }
+}
+
+/* --- ROOM ENCOUNTERS -----------------------------------------------------
+   Playtested: the set-piece rooms looked like places and played like floor.
+   Now a few of them in each delve HAPPEN: the garrison's sleepers get up, the
+   dead in the ossuary rise when you reach for their coffer, something sits on
+   the throne. Each room keeps a coffer, and the coffer is sealed until the
+   room is beaten -- so the reward is right there, and so is the reason.
+
+   The bodies are the rung's own (LEVEL.horde), placed at the rung's own
+   strength, so an encounter is harder or easier exactly as the delve is.
+     trigger  'enter'  when you walk into the room
+              'coffer' when you come near its coffer
+     hold     stand at the room's heart this long while it comes at you
+   -------------------------------------------------------------------- */
+const ENCOUNTERS = {
+  garrison: { trigger: 'enter', say: 'The garrison wakes!',
+    foes: dp => [['any', 4 + Math.round(dp * 3), 'room']] },
+  ossuary:  { trigger: 'coffer', say: 'The dead rise!',
+    foes: dp => [['any', 5 + Math.round(dp * 2), 'ring']] },
+  throne:   { trigger: 'enter', say: 'The seat is not empty.',
+    foes: dp => [['heavy', 1, 'heart', true], ['any', 2 + Math.round(dp * 2), 'room']] },
+  forge:    { trigger: 'enter', say: 'The forge-guard stirs.',
+    foes: dp => [['heavy', 1, 'heart', true], ['any', 2, 'room']] },
+  stores:   { trigger: 'coffer', say: 'Vermin burst from the sacks!',
+    foes: dp => [['fast', 5 + Math.round(dp * 3), 'room']] },
+  cistern:  { trigger: 'enter', say: 'Something stirs in the water.',
+    foes: dp => [['any', 5 + Math.round(dp * 2), 'ring']] },
+  chapel:   { trigger: 'enter', say: 'Hold the nave!', hold: 12,
+    foes: dp => [['any', 2, 'edge']], every: 2.6 }
+};
+const ENC_REACH = 130;          // how near a coffer wakes an 'coffer' room
+const ENC_HOLD_R = 130;         // how near the heart counts as holding it
+let encounters = [];
+
+function inBox(b, x, y, pad) {
+  return x > b.x0 + pad && x < b.x1 - pad && y > b.y0 + pad && y < b.y1 - pad;
+}
+
+function placeEncounters(spawn) {
+  encounters = [];
+  if (!rooms.length || !(LEVEL.depth > 0)) return;
+  const want = 2 + (LEVEL.depth > 0.4 ? 1 : 0);
+  const pool = rooms.filter(rm => rm.set && ENCOUNTERS[rm.set] && rm.box &&
+    dist2(rm.x, rm.y, spawn.x, spawn.y) > 520 * 520);
+  pool.sort(() => Math.random() - 0.5);
+  for (const rm of pool) {
+    if (encounters.length >= want) break;
+    // The room's own coffer if it has one, else one at its heart, on top of
+    // the delve's count: the room is the price of it.
+    let ch = chests.find(c => !c.sealed && inBox(rm.box, c.x, c.y, 0));
+    if (!ch) {
+      const spots = openCells.filter(c => inBox(rm.box, c.x, c.y, 50) && !pointInWalls(c.x, c.y, 22))
+        .sort((a, b) => dist2(a.x, a.y, rm.x, rm.y) - dist2(b.x, b.y, rm.x, rm.y));
+      if (!spots.length) continue;
+      const s = spots[Math.min(spots.length - 1, 2)];
+      ch = { x: s.x, y: s.y, kind: 'coffer', open: false, room: true, enc: true,
+             q: (Math.random() * 4) | 0, pulse: Math.random() * TAU };
+      chests.push(ch);
+    }
+    ch.locked = true;
+    encounters.push({ room: rm, id: rm.set, state: 'idle', foes: [], chest: ch,
+                      hold: 0, wave: 0, told: false });
+  }
+}
+
+// Which of the rung's bodies: 'fast' the quickest, 'heavy' the toughest,
+// 'any' by the horde's own weights. Never a boss-kind or an illusion.
+function encKind(pref) {
+  const kinds = (LEVEL.horde || []).filter(k => ENEMY_TYPES[k] && ENEMY_TYPES[k].speed > 0 &&
+    !['mirage', 'deceiver', 'lieutenant', 'crucible', 'singer'].includes(k));
+  if (!kinds.length) return 'thrall';
+  if (pref === 'fast') return kinds.reduce((a, b) => ENEMY_TYPES[b].speed > ENEMY_TYPES[a].speed ? b : a);
+  if (pref === 'heavy') return kinds.reduce((a, b) => ENEMY_TYPES[b].hp > ENEMY_TYPES[a].hp ? b : a);
+  let total = 0;
+  for (const k of kinds) total += ENEMY_TYPES[k].weight || 1;
+  let r = Math.random() * total;
+  for (const k of kinds) { r -= ENEMY_TYPES[k].weight || 1; if (r <= 0) return k; }
+  return kinds[0];
+}
+
+// Where one comes from: anywhere in the room but on top of you, in a ring
+// round the coffer or the heart, the room's middle, or its far edges.
+function encSpot(en, where) {
+  const rm = en.room, b = rm.box;
+  const ok = (x, y) => !pointInWalls(x, y, 18) && dist2(x, y, player.x, player.y) > 110 * 110;
+  if (where === 'ring' || where === 'heart') {
+    const c = where === 'ring' ? en.chest : rm;
+    for (let i = 0; i < 20; i++) {
+      const a = Math.random() * TAU, d = where === 'heart' ? rand(0, 40) : rand(70, 120);
+      const x = c.x + Math.cos(a) * d, y = c.y + Math.sin(a) * d;
+      if (ok(x, y)) return { x, y };
+    }
+  }
+  const cells = openCells.filter(c => inBox(b, c.x, c.y, 30) && ok(c.x, c.y));
+  if (where === 'edge') cells.sort((p, q) => dist2(q.x, q.y, rm.x, rm.y) - dist2(p.x, p.y, rm.x, rm.y));
+  if (!cells.length) return null;
+  return where === 'edge' ? cells[(Math.random() * Math.min(8, cells.length)) | 0]
+                          : cells[(Math.random() * cells.length) | 0];
+}
+
+function encRaise(en) {
+  const dp = clamp(0.4 + (LEVEL.depth || 0) * 0.6, 0, 1);
+  for (const [pref, n, where, elite] of ENCOUNTERS[en.id].foes(LEVEL.depth || 0)) {
+    for (let i = 0; i < n; i++) {
+      const at = encSpot(en, where);
+      if (!at) continue;
+      const e = placeEnemy(encKind(pref), at.x, at.y, dp);
+      if (!e) continue;
+      if (elite) makeElite(e);
+      e.awake = true; e.enc = true;
+      en.foes.push(e);
+      burst(at.x, at.y, '#a89878', 8, 120);
+    }
+  }
+}
+
+function updateEncounters(dt) {
+  for (const en of encounters) {
+    if (en.state === 'done') continue;
+    const E = ENCOUNTERS[en.id], rm = en.room;
+    if (en.state === 'idle') {
+      const near = E.trigger === 'coffer'
+        ? dist2(player.x, player.y, en.chest.x, en.chest.y) < ENC_REACH * ENC_REACH
+        : inBox(rm.box, player.x, player.y, 40);
+      if (!near) continue;
+      en.state = 'live';
+      // The banner, not a toast: the room has just said its own name in the
+      // toast, and this is the bigger moment of the two.
+      run.banner = run.bannerMax = 2.6;
+      run.bannerLore = null;
+      run.bannerText = E.say;
+      run.bannerNote = E.hold ? 'Stand at its heart until it is yours.' : 'Beat the room and its coffer unseals.';
+      sfx('summon', rm.x, rm.y);
+      shake(4);
+      clog('encounter', en.id);
+      encRaise(en);
+      continue;
+    }
+    // Live.
+    if (E.hold) {
+      if (dist2(player.x, player.y, rm.x, rm.y) < ENC_HOLD_R * ENC_HOLD_R) en.hold += dt;
+      en.wave -= dt;
+      if (en.wave <= 0 && en.hold < E.hold) { en.wave = E.every; encRaise(en); }
+      if (en.hold >= E.hold) encDone(en);
+    } else {
+      en.foes = en.foes.filter(e => e.hp > 0 && enemies.includes(e));
+      if (!en.foes.length) encDone(en);
+    }
+  }
+}
+
+function encDone(en) {
+  en.state = 'done';
+  en.chest.locked = false;
+  toast('The room is yours — its coffer unseals.', '#e8c878');
+  ring(en.chest.x, en.chest.y, '#e8c878', 12, 80, 0.5);
+  burst(en.chest.x, en.chest.y, '#e8c878', 16, 180);
+  sfx('surge', en.chest.x, en.chest.y);
+  run.encounters = (run.encounters || 0) + 1;
+  clog('encounter', en.id + ' done');
+}
+
+// What the HUD says while one is live: the goal, and how far along.
+function encounterLine() {
+  for (const en of encounters) {
+    if (en.state !== 'live') continue;
+    const E = ENCOUNTERS[en.id];
+    if (E.hold) return { text: 'Hold the ' + (en.room.name || 'room').replace(/^The /, '') + ' — ' +
+                          Math.max(0, Math.ceil(E.hold - en.hold)) + 's', away: dist2(player.x, player.y, en.room.x, en.room.y) >= ENC_HOLD_R * ENC_HOLD_R };
+    return { text: en.room.name + ' — ' + en.foes.length + ' left' };
+  }
+  return null;
 }
 
 /* --- hazards --------------------------------------------------------------
@@ -8121,6 +8300,7 @@ function update(dt) {
   updateChests(dt);
   updateFinds(dt);
   updateCracks(dt);
+  updateEncounters(dt);
   updateBleed(dt);
   updateGloom(dt);
   updateRings(dt);
@@ -9221,6 +9401,7 @@ function resetRun(heroId, levelId, diffId) {
   placeChests(spawn, portal);
   placeFinds(spawn, portal);
   placeCracks(spawn, portal);
+  placeEncounters(spawn);
   placeTraps();
   flowFrom = -1;
   rebuildFlow();

@@ -68,7 +68,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     // The count: the sealed coffer is on top of it, not in it.
     const depth = LEVEL.depth || 0;
     const cap = Math.round((3 + Math.round(depth * 3)) * twist('chests')) + 1;
-    o.count = { unsealed: chests.filter(c => !c.sealed).length, cap };
+    o.count = { unsealed: chests.filter(c => !c.sealed && !c.enc).length, cap };
 
     // Real blows. Stand on the floor in front of it and swing at it.
     const fx = cr.fx * CELL_W + CELL_W / 2, fy = cr.fy * CELL_W + CELL_W / 2;
