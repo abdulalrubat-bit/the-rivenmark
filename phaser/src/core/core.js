@@ -6329,9 +6329,9 @@ function updateAttack(dt) {
   if (q || player.atkHeld) {
     player.atkQ = null;
     lightStrike();
-  } else if (autoStrike && controlScheme !== 'classic' && !player.channel &&
-             assistTarget(player.range)) {
-    lightStrike('auto');
+  } else if (autoStrike && controlScheme !== 'classic' && !player.channel) {
+    const t = autoTarget(player.range);
+    if (t) lightStrike('auto', Math.atan2(t.y - player.y, t.x - player.x));
   }
 }
 
@@ -6349,14 +6349,45 @@ function updateAttack(dt) {
 let autoStrike = false;
 function setAutoStrike(on) { autoStrike = !!on; return autoStrike; }
 
+/* WHAT AUTO-STRIKE SWINGS AT. Playtested: "the enemy could be behind you and
+ * it keeps swinging forwards". Two causes, both fixed here:
+ *
+ *   - the assist leans hard toward where the stick points, which is right for
+ *     a swing you asked for (you are going that way) and wrong for one you did
+ *     not: running from something at your heels, the swing went on ahead at a
+ *     body three times as far away. Anything close enough to be hitting you
+ *     now comes first, nearest first, whichever way you face.
+ *   - a swing you once aimed by dragging left its angle behind (player.atkAim)
+ *     and the automatic blow took it for its own. It never reads that now.
+ */
+const AUTO_CLOSE = 0.55;            // of the reach: inside this, facing is ignored
+function autoTarget(R) {
+  enemyGrid.query(player.x, player.y, R * AUTO_CLOSE, _near);
+  const blind = player.hero === 'isaac';
+  let best = null, bestS = Infinity;
+  const close2 = (R * AUTO_CLOSE) * (R * AUTO_CLOSE);
+  for (let i = 0; i < _near.length; i++) {
+    const e = _near[i];
+    if (e.hp <= 0 || (blind && e.kind === 'mirage')) continue;
+    const d2 = dist2(player.x, player.y, e.x, e.y);
+    if (d2 > close2 || !clearShot(player.x, player.y, e.x, e.y)) continue;
+    const threat = ((e.tell || 0) > 0 || (e.casting || 0) > 0) ? 0.7 : 1;
+    const s = d2 * threat;
+    if (s < bestS) { bestS = s; best = e; }
+  }
+  if (best) { player.assistT = best; return best; }
+  return assistTarget(R);
+}
+
 /* One light blow. The same chain the tapped Conduit had -- three in rhythm
  * and the third goes wide -- because a held attack keeps the rhythm for you. */
-function lightStrike(why) {
-  const manual = typeof player.atkAim === 'number';
+function lightStrike(why, at) {
+  const manual = why !== 'auto' && typeof player.atkAim === 'number';
   const last = player.combo || 0;
   const n = (player.comboT || 0) > 0 ? Math.min(COMBO_LEN, last + 1) : 1;
   const finisher = n >= COMBO_LEN;
-  swingAt(manual ? player.atkAim : aimAngle(), { bite: 1, sweep: finisher ? COMBO_SWEEP : 1 });
+  swingAt(typeof at === 'number' ? at : manual ? player.atkAim : aimAngle(),
+          { bite: 1, sweep: finisher ? COMBO_SWEEP : 1 });
   clamour(CLAMOUR_SWING);
   player.combo = finisher ? 0 : n;
   player.comboT = finisher ? 0 : player.fireDelay * COMBO_WINDOW;
