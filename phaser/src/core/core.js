@@ -2508,12 +2508,15 @@ let roomLights = [];
 // Cells a room asked to be holes (the Gorges' span): floor until the rock is
 // merged, then cut as chasm by cutRoomPits. Kept out of every prop.
 let roomPits = new Set();
+// Cells a room laid a lava fissure along (Kraggen-Tor's rift): floor you can
+// walk, which erupts on a beat (updateTraps, 'lava'). Kept out of every prop.
+let roomLava = new Set();
 
 function setPieceKit(h) {
   const C = CELL_W;
   const x0 = h.x, y0 = h.y, x1 = h.x + h.w - 1, y1 = h.y + h.h - 1;
   const at = (x, y) => ({ x: x * C + C / 2, y: y * C + C / 2 });
-  const open = (x, y) => cellAt(x, y) !== SOLID && !roomPits.has(gi(x, y));
+  const open = (x, y) => cellAt(x, y) !== SOLID && !roomPits.has(gi(x, y)) && !roomLava.has(gi(x, y));
   const kit = {
     x0, y0, x1, y1, cx: h.cx, cy: h.cy, w: h.w, h: h.h, at, open,
     wide: h.w >= h.h,
@@ -2541,6 +2544,12 @@ function setPieceKit(h) {
     lamp(x, y, color) { const p = at(x, y); roomLights.push({ x: p.x, y: p.y, color }); },
     // A hole in the floor, cut after the rock is merged (cutRoomPits).
     pit(x, y) { if (open(x, y)) roomPits.add(gi(x, y)); },
+    // A cell of lava fissure: still floor, remembered by the room.
+    lava(x, y) {
+      if (!open(x, y)) return;
+      roomLava.add(gi(x, y));
+      (kit.meta.lava = kit.meta.lava || []).push([x, y]);
+    },
     // Anything the room wants to remember about itself (the span's bridge).
     meta: {},
     chest(x, y, kind) { if (open(x, y)) roomChests.push({ ...at(x, y), kind }); },
@@ -2857,7 +2866,7 @@ ROOM_SETS.cistern = { min: [7, 7], shapes: ['octagon'], trap: 'pool',
     for (const [x, y] of k.side('top').concat(k.side('bottom'))) if (k.chance(0.3)) k.wall('chain', x, y);
     k.lamp(k.cx, k.cy, PAL.teal);
   } };
-const SET_TRAP = { hall: 'hall', pool: 'cistern', gust: 'span' };
+const SET_TRAP = { hall: 'hall', pool: 'cistern', gust: 'span', lava: 'rift' };
 
 /* --- THE RENDING GORGES ---------------------------------------------------
    The Kael-Dorm Redoubt is a fort of the Frost-Scholars hung over split
@@ -2965,8 +2974,130 @@ const GORGE_SETS = {
     { names: ['The Redoubt Barracks', 'The Kael-Dorm Watch', 'The Frost-Guard Billet'] })
 };
 
+/* --- KRAGGEN-TOR, THE IRON-TEETH -------------------------------------------
+   The volcanic west, holding the Shatter-Gate of Ghor: foundries, quarries,
+   the pits they chained their labour in, and an altar of black glass. Where
+   the Gorges are cold, this is all fire.
+
+   Its own hazard is the RIFT: a lava fissure run crooked across a room. It is
+   floor -- you walk over it -- and on a beat it glows (the tell) and then
+   erupts, burning whatever stands on it. Both ways: the horde does not know
+   where the crack is, and you can pull a pack across it (updateTraps, 'lava'). */
+const KRAG_LAMP = '#ff5f28';
+const KRAG_SETS = {
+  /* A fissure from one end of the room to the other, wandering a cell either
+     side of the middle; obsidian and slag heaped along its lips, and the
+     glow of it the room's only light. */
+  rift: { min: [6, 8], shapes: ['octagon', 'buttress'], trap: 'lava',
+    clutter: ['rubble', 'crack', 'bones', 'obsidian'],
+    names: ['The Magma Rift', 'The Burning Seam', 'The Split Hearth of Ghor'],
+    build(k) {
+      let a = k.MA;
+      for (let b = k.B0; b <= k.B1; b++) {
+        const [x, y] = k.xy(b, a); k.lava(x, y);
+        if (b % 3 === 0) k.lamp(x, y, KRAG_LAMP);
+        // A step sideways now and then, never more than one off the middle,
+        // and the step is lava too so the crack stays joined.
+        if (b < k.B1 - 1 && k.chance(0.35)) {
+          const na = clamp(a + (k.chance(0.5) ? 1 : -1), k.MA - 1, k.MA + 1);
+          if (na !== a) { const [x2, y2] = k.xy(b, na); k.lava(x2, y2); a = na; }
+        }
+      }
+      for (const b of [k.B0 + 2, k.MB, k.B1 - 2])
+        for (const da of [-3, 3]) k.put('obsidian', b, k.MA + da, 6);
+      // A cell the room's shaping had made rock is refused, and can leave one
+      // stranded past it: a lone square of lava reads as a stain, not a
+      // crack, so any cell with no lava beside it is taken back.
+      if (k.meta.lava) {
+        const S = new Set(k.meta.lava.map(([x, y]) => x + ',' + y));
+        k.meta.lava = k.meta.lava.filter(([x, y]) => {
+          const joined = k.meta.lava.length > 1 && [[1, 0], [-1, 0], [0, 1], [0, -1]]
+            .some(([dx, dy]) => S.has((x + dx) + ',' + (y + dy)));
+          if (!joined) roomLava.delete(gi(x, y));
+          return joined;
+        });
+      }
+      // What the crack threw up, heaped along both its lips.
+      for (let b = k.B0; b <= k.B1; b++)
+        for (const da of [-2, 2])
+          if (k.chance(0.55)) k.put(k.pick(['rubble', 'obsidian', 'crack', 'rubble']), b, k.MA + da, 10);
+      if (k.chance(0.6)) { const [x, y] = k.xy(k.B1 - 1, k.chance(0.5) ? k.A0 + 1 : k.A1 - 1); k.chest(x, y, 'coffer'); }
+    } },
+
+  /* Where Ghor's iron was poured: two great cauldrons of it in the middle,
+     anvils round them, racks and chains on the walls. */
+  foundry: { min: [5, 7], shapes: ['octagon', 'cross'],
+    clutter: ['rubble', 'coins', 'sword', 'crack'],
+    names: ['The Ghor Foundry', 'The Pouring Hall', 'The Iron Crucible'],
+    build(k) {
+      for (const db of [-1, 1]) {
+        k.put('cauldron', k.MB + db * 2, k.MA, 0, 0);
+        const [x, y] = k.xy(k.MB + db * 2, k.MA); k.lamp(x, y, KRAG_LAMP);
+      }
+      for (const [db, da] of [[-3, -2], [3, -2], [-3, 2], [3, 2], [0, -2], [0, 2]]) k.put('anvil', k.MB + db, k.MA + da, 3, k.alongQ);
+      for (const [x, y] of k.side(k.wide ? 'top' : 'left').concat(k.side(k.wide ? 'bottom' : 'right'))) {
+        if (k.chance(0.45)) k.wall('rack', x, y); else if (k.chance(0.5)) k.wall('chain', x, y);
+      }
+      // Ingots and ore stacked against the short walls, waiting for the pour.
+      for (const [x, y] of k.side(k.wide ? 'left' : 'top').concat(k.side(k.wide ? 'right' : 'bottom')))
+        if (k.chance(0.6)) k.prop(k.pick(['crate', 'sacks', 'rubble']), x, y, 6);
+    } },
+
+  /* An altar of black glass: shards stood in a ring round it, candles at
+     its foot, and a violet light that is not fire. It has to be held. */
+  altar: { min: [5, 6], shapes: ['octagon'],
+    clutter: ['obsidian', 'bones', 'crack', 'candles'],
+    names: ['The Obsidian Altar', 'The Black-Glass Shrine', 'The Altar of the Iron-Teeth'],
+    build(k) {
+      k.prop('altar', k.cx, k.cy, 0, k.acrossQ);
+      k.put('candles', k.MB - 1, k.MA, 3); k.put('candles', k.MB + 1, k.MA, 3);
+      for (let i = 0; i < 8; i++) {
+        const t = i / 8 * TAU, r = Math.min(k.w, k.h) / 2 - 1.6;
+        k.prop('obsidian', Math.round(k.cx + Math.cos(t) * r), Math.round(k.cy + Math.sin(t) * r), 3);
+      }
+      k.lamp(k.cx, k.cy, '#a050e0'); k.lamp(k.cx, k.cy, '#a050e0');
+    } },
+
+  /* Where the labour was kept: cages in rows down both sides, chains on
+     every wall, bones in the corners, and a coffer the gaolers never
+     emptied. Open it and what was held is loose. */
+  chainpits: { min: [5, 6], shapes: ['buttress'],
+    clutter: ['bones', 'bones', 'crack', 'hornskull'],
+    names: ['The Chain-Pits of Ghor', 'The Holding Cells', 'The Gaol of the Iron-Teeth'],
+    build(k) {
+      for (const a of [k.A0 + 1, k.A1 - 1])
+        for (let b = k.B0 + 2; b <= k.B1 - 2; b += 2) k.put('cage', b, a, 2);
+      for (const s of ['top', 'bottom', 'left', 'right'])
+        for (const [x, y] of k.side(s)) if (k.chance(0.35)) k.wall('chain', x, y);
+      { const [x, y] = k.xy(k.chance(0.5) ? k.B0 + 1 : k.B1 - 1, k.MA); k.chest(x, y, 'coffer'); }
+      k.lamp(k.cx, k.cy, PAL.ember);
+    } },
+
+  /* The quarry face: carts of ore on a track down the middle, spoil heaped
+     against the walls, crates and sacks of what it bought. */
+  quarry: { min: [6, 7], shapes: ['buttress', 'cross'],
+    clutter: ['rubble', 'rubble', 'crate', 'coins'],
+    names: ['The Iron Quarry', 'The Ore-Cut', 'The Deep Workings'],
+    build(k) {
+      for (let b = k.B0 + 1; b <= k.B1 - 1; b++) k.put('planks', b, k.MA, 0, k.alongQ);
+      for (let b = k.B0 + 2; b <= k.B1 - 2; b += 3) k.put('minecart', b, k.MA, 1, k.alongQ);
+      for (const [x, y] of k.side(k.wide ? 'top' : 'left').concat(k.side(k.wide ? 'bottom' : 'right'))) {
+        if (k.chance(0.5)) k.prop('rubble', x, y, 8);
+        else if (k.chance(0.4)) k.prop(k.pick(['crate', 'sacks']), x, y, 6);
+      }
+      k.lamp(k.cx, k.cy, PAL.ember);
+    } },
+
+  // The Iron-Teeth's own barracks: the Moors' garrison, by its own names --
+  // and smaller, because the rooms under the Iron-Teeth are. (Kraggen's
+  // layout cuts rooms of five to eleven cells; at the Moors' sizes most of
+  // its delves had one set piece or none.)
+  garrison: Object.assign({}, ROOM_SETS.garrison, { min: [5, 6],
+    names: ['The Iron-Teeth Barracks', 'The Shatter-Gate Guardhouse', 'The Ghor Muster'] })
+};
+
 // Which regions are built of set pieces, and from which table.
-const REGION_SETS = { slag: ROOM_SETS, vaelk: GORGE_SETS };
+const REGION_SETS = { slag: ROOM_SETS, vaelk: GORGE_SETS, kraggen: KRAG_SETS };
 
 // Cut the holes the rooms asked for, now the rock is merged. A cell whose
 // hole would strand floor is left as ground: a corridor that entered the
@@ -3070,6 +3201,12 @@ const ROOM_MOODS = {
   archive:  { grade: '#a8a0e8', gradeA: 0.16, dark: 0.36, fog: '#3a3a68', motes: '#e0dcff', drift: 'float', glow: '#8a88e0' },
   cairn:    { grade: '#5fd0ff', gradeA: 0.22, dark: 0.18, fog: '#2a5a78', motes: '#bff0ff', drift: 'rise',  glow: '#5fd0ff' },
   rimevault:{ grade: '#9ae8ff', gradeA: 0.24, dark: 0.45, fog: '#305a6a', motes: '#ffffff', drift: 'fall',  glow: '#6ad8f0' },
+  // Kraggen-Tor: fire everywhere but the altar, which burns violet.
+  rift:     { grade: '#ff6a2a', gradeA: 0.24, dark: 0.20, fog: '#7a2a10', motes: '#ffb060', drift: 'rise',  glow: '#ff5a1a' },
+  foundry:  { grade: '#ff8a3a', gradeA: 0.20, dark: 0.15, fog: '#8a4a1a', motes: '#ffc070', drift: 'rise',  glow: '#ff7a2a' },
+  altar:    { grade: '#c070ff', gradeA: 0.16, dark: 0.40, fog: '#3a1a4a', motes: '#e0b0ff', drift: 'float', glow: '#a050e0' },
+  chainpits:{ grade: '#c85a3a', gradeA: 0.14, dark: 0.45, fog: '#4a2018', motes: '#d8a080', drift: 'fall',  glow: '#b04a2a' },
+  quarry:   { grade: '#d8a060', gradeA: 0.12, dark: 0.30, fog: '#5a4028', motes: '#e8c890', drift: 'fall',  glow: '#c8803a' },
   // The older rooms, in the regions that do not have set pieces yet.
   hall:     { grade: '#8fb9d6', gradeA: 0.12, dark: 0.30, fog: '#3a4a5a', motes: '#d0e0f0', drift: 'fall',  glow: '#6a9ac0' },
   barracks: { grade: '#e0a860', gradeA: 0.10, dark: 0.25, fog: '#6a5030', motes: '#e8d0a0', drift: 'fall',  glow: '#d08a40' },
@@ -3121,7 +3258,7 @@ function updateRoomNames() {
 
 function dressRooms(halls, sc, pc) {
   rooms = [];
-  roomDress = []; roomLights = []; roomChests = []; roomPits = new Set();
+  roomDress = []; roomLights = []; roomChests = []; roomPits = new Set(); roomLava = new Set();
   const SETS = REGION_SETS[REGION.id];
   if (SETS) return dressSetPieces(halls, sc, pc, SETS);
   const KINDS = ['hall', 'barracks', 'collapse', 'cistern'];
@@ -3509,6 +3646,10 @@ function buildScenery(spawn, portal) {
 
   scatterKnots(spawn, portal);
   standPillars(spawn, portal);
+  // Nothing lies on a lava fissure: the crack has to read as a crack, and a
+  // barrel standing in it would be a thing to break that burns you for it.
+  if (roomLava.size)
+    props = props.filter(pr => !roomLava.has(gi(Math.floor(pr.x / C), Math.floor(pr.y / C))));
   indexBreakables();
 }
 
@@ -3960,6 +4101,7 @@ function placePacks(spawn) {
     for (let k = 0; k < n; k++) {
       const pos = scatterNear(st.x, st.y, 74, 16, spawn);
       if (!pos) continue;
+      if (roomLava.has(gi(Math.floor(pos.x / CELL_W), Math.floor(pos.y / CELL_W)))) continue;   // not in the rift
       props.push({ x: pos.x, y: pos.y, q: (Math.random() * 4) | 0, kind: 'barrel' });
     }
   }
@@ -5095,7 +5237,18 @@ const ENCOUNTERS = {
   cairn:    { trigger: 'enter', say: 'Keep the cairn lit!', hold: 12,
     foes: dp => [['any', 2, 'edge']], every: 2.4 },
   rimevault:{ trigger: 'coffer', say: 'The ice gives up what it kept.',
-    foes: dp => [['heavy', 1, 'ring', true], ['any', 3 + Math.round(dp * 2), 'ring']] }
+    foes: dp => [['heavy', 1, 'ring', true], ['any', 3 + Math.round(dp * 2), 'ring']] },
+  // Kraggen-Tor.
+  rift:     { trigger: 'enter', say: 'The rift spits them out!',
+    foes: dp => [['any', 4 + Math.round(dp * 3), 'edge']] },
+  foundry:  { trigger: 'enter', say: 'The forge-masters take up their hammers.',
+    foes: dp => [['heavy', 1, 'heart', true], ['any', 2 + Math.round(dp * 2), 'room']] },
+  altar:    { trigger: 'enter', say: 'Hold the obsidian altar!', hold: 12,
+    foes: dp => [['any', 2, 'edge']], every: 2.5 },
+  chainpits:{ trigger: 'coffer', say: 'The chains break — the prisoners are loose!',
+    foes: dp => [['fast', 6 + Math.round(dp * 3), 'ring']] },
+  quarry:   { trigger: 'enter', say: 'The quarry wakes.',
+    foes: dp => [['heavy', 1, 'room', true], ['any', 3 + Math.round(dp * 2), 'room']] }
 };
 const ENC_REACH = 130;          // how near a coffer wakes an 'coffer' room
 const ENC_HOLD_R = 130;         // how near the heart counts as holding it
@@ -5300,6 +5453,23 @@ function gustPhase(t) {
   if (u < GUST_CYCLE - GUST_OUT) return { phase: 'tell', f: (u - (GUST_CYCLE - GUST_OUT - GUST_TELL)) / GUST_TELL };
   return { phase: 'out', f: (u - (GUST_CYCLE - GUST_OUT)) / GUST_OUT };
 }
+/* The rift's fissure. Quiet most of the beat, a glow for most of a second
+ * (the tell -- the crack brightens from dull red to white-orange), then it
+ * erupts for a second. Burns once an eruption, whoever it is. */
+const LAVA_CYCLE = 4.6;
+const LAVA_TELL  = 0.9;
+const LAVA_OUT   = 1.0;
+const LAVA_TOLL  = 0.13;    // share of the hero's life
+const LAVA_BITE  = 0.4;     // share of a body of the horde
+function lavaPhase(t) {
+  const u = t % LAVA_CYCLE;
+  if (u < LAVA_CYCLE - LAVA_OUT - LAVA_TELL) return { phase: 'down', f: 0 };
+  if (u < LAVA_CYCLE - LAVA_OUT) return { phase: 'tell', f: (u - (LAVA_CYCLE - LAVA_OUT - LAVA_TELL)) / LAVA_TELL };
+  return { phase: 'out', f: (u - (LAVA_CYCLE - LAVA_OUT)) / LAVA_OUT };
+}
+// Is a body standing on a cell of this fissure? Its centre, against the set.
+const onLava = (tr, x, y) => tr.cells.has(gi(Math.floor(x / CELL_W), Math.floor(y / CELL_W)));
+
 // A hole at a point: the chasm, not masonry.
 const pitAt = (x, y) => !!pitGrid && inGrid(Math.floor(x / CELL_W), Math.floor(y / CELL_W)) &&
                         pitGrid[gi(Math.floor(x / CELL_W), Math.floor(y / CELL_W))] === 1;
@@ -5364,6 +5534,10 @@ function placeTraps() {
       traps.push({ kind: 'spike', x: rm.x, y: rm.y, r: rm.r, cycle: cycle,
                    // Offset so two halls in one delve are not in lockstep.
                    t: Math.random() * cycle, was: 'down', bit: [] });
+    } else if (rm.kind === 'rift' && rm.meta && rm.meta.lava) {
+      traps.push({ kind: 'lava', x: rm.x, y: rm.y, r: rm.r, box: rm.box,
+                   cells: new Set(rm.meta.lava.map(([x, y]) => gi(x, y))), list: rm.meta.lava,
+                   t: Math.random() * LAVA_CYCLE, was: 'down', hit: [] });
     } else if (rm.kind === 'span' && rm.meta && rm.meta.gust) {
       const ax = rm.meta.gust.axis;
       traps.push({ kind: 'gust', x: rm.x, y: rm.y, r: rm.r, box: rm.box, axis: ax,
@@ -5408,6 +5582,8 @@ function updateTraps(dt) {
       tr.was = ph;
     } else if (tr.kind === 'gust') {
       updateGust(tr, dt);
+    } else if (tr.kind === 'lava') {
+      updateLava(tr);
     } else {
       tr.tick -= dt;
       if (tr.tick > 0) continue;
@@ -5425,6 +5601,34 @@ function updateTraps(dt) {
         damageEnemy(e, e.maxHp * POOL_DPS * TRAP_TICK, e.x, e.y);
       }
     }
+  }
+}
+
+function updateLava(tr) {
+  const ph = lavaPhase(tr.t).phase;
+  if (ph === 'tell' && tr.was === 'down' && inBox(tr.box, player.x, player.y, -80)) sfx('fall', tr.x, tr.y, 0.35);
+  if (ph === 'out' && tr.was !== 'out') {
+    tr.hit = [];
+    shake(inBox(tr.box, player.x, player.y, 0) ? 3 : 0);
+  }
+  tr.was = ph;
+  if (ph !== 'out') return;
+  // Once an eruption, whoever it is -- and a step onto it while it burns
+  // still costs you, so the eruption is a place to stay off, not a moment.
+  if (player.hp > 0 && onLava(tr, player.x, player.y) && !tr.hit.includes(player)) {
+    tr.hit.push(player);
+    const was = player.invuln; player.invuln = 0;
+    hurtPlayerBy(player.maxHp * LAVA_TOLL, player.x, player.y + 1, true);
+    player.invuln = Math.max(player.invuln, was);
+    if (!run.lavaTold) { run.lavaTold = true; toast('The rift erupts — stay off the glowing crack!', '#ffb060'); }
+  }
+  enemyGrid.query(tr.x, tr.y, tr.r * 1.5, _near);
+  for (let k = 0; k < _near.length; k++) {
+    const e = _near[k];
+    if (!trapBites(e) || tr.hit.includes(e) || !onLava(tr, e.x, e.y)) continue;
+    tr.hit.push(e);
+    damageEnemy(e, e.maxHp * LAVA_BITE, e.x, e.y + 1);
+    burst(e.x, e.y, '#ff8a3a', 8, 140);
   }
 }
 

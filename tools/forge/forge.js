@@ -2550,6 +2550,50 @@ function forgeProps() {
     g.shadowBlur = 0;
   });
 
+  /* --- Kraggen-Tor's furniture ----------------------------------------------
+     The Shatter-Gate of Ghor: iron poured, ore dug, black glass. */
+  P('cauldron', 44, g => {                                            // iron pot of molten metal
+    g.fillStyle = 'rgba(12,9,6,.9)';
+    for (const a of [0.8, 2.9, 5.0]) { g.beginPath(); g.arc(Math.cos(a) * 14, Math.sin(a) * 14, 2.4, 0, TAU); g.fill(); }
+    const pot = g.createRadialGradient(-4, -4, 2, 0, 0, 15);
+    pot.addColorStop(0, '#4a4644'); pot.addColorStop(1, '#16130f');
+    g.fillStyle = pot; g.beginPath(); g.arc(0, 0, 14, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(160,140,120,.5)'; g.lineWidth = 1.4; g.stroke();
+    g.shadowColor = '#ff7a2a'; g.shadowBlur = 12;
+    const melt = g.createRadialGradient(0, 0, 0, 0, 0, 10);
+    melt.addColorStop(0, 'rgba(255,236,170,.98)'); melt.addColorStop(0.55, 'rgba(255,130,40,.95)');
+    melt.addColorStop(1, 'rgba(150,40,10,.9)');
+    g.fillStyle = melt; g.beginPath(); g.arc(0, 0, 10, 0, TAU); g.fill();
+    g.shadowBlur = 0;
+    g.fillStyle = 'rgba(60,20,8,.55)';                                 // slag skinning over
+    for (const [x, y, r] of [[-4, -2, 2.2], [3, 3, 1.8], [4, -4, 1.4]]) { g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); }
+  });
+  P('obsidian', 36, g => {                                            // shards of black glass
+    const shard = (x, y, a, len, w) => {
+      g.save(); g.translate(x, y); g.rotate(a);
+      const grd = g.createLinearGradient(0, -w, 0, w);
+      grd.addColorStop(0, '#5a4a6a'); grd.addColorStop(0.5, '#1a1420'); grd.addColorStop(1, '#0a080c');
+      g.fillStyle = grd;
+      g.beginPath(); g.moveTo(0, -w); g.lineTo(len, 0); g.lineTo(0, w); g.lineTo(-2, 0); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(190,150,230,.45)'; g.lineWidth = 0.9; g.stroke();
+      g.restore();
+    };
+    shard(-2, 3, -2.0, 13, 3.6); shard(2, 1, -0.7, 15, 4); shard(0, 4, 0.7, 10, 3); shard(-1, 0, -1.4, 9, 2.8);
+    g.fillStyle = 'rgba(210,180,255,.6)'; g.fillRect(1, -3, 1.2, 4);  // one highlight
+  });
+  P('minecart', 40, g => {                                            // an ore cart, along x
+    g.fillStyle = 'rgba(12,9,6,.9)';
+    for (const [x, y] of [[-10, -9], [10, -9], [-10, 9], [10, 9]]) { g.beginPath(); g.arc(x, y, 3, 0, TAU); g.fill(); }
+    g.fillStyle = '#3a3230'; g.fillRect(-15, -9, 30, 18);
+    g.strokeStyle = 'rgba(8,6,4,.9)'; g.lineWidth = 1.4; g.strokeRect(-15, -9, 30, 18);
+    g.strokeStyle = 'rgba(150,130,110,.5)'; g.lineWidth = 1;
+    for (const x of [-7, 0, 7]) { g.beginPath(); g.moveTo(x, -9); g.lineTo(x, 9); g.stroke(); }
+    g.fillStyle = '#5a4a3e';                                            // the ore heaped in it
+    for (const [x, y, r] of [[-8, -2, 4], [-1, 1, 5], [7, -1, 4], [3, -4, 3]]) { g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); }
+    g.fillStyle = 'rgba(220,140,70,.8)';                                // a vein of it glinting
+    for (const [x, y] of [[-6, -3], [1, 0], [8, -2]]) g.fillRect(x, y, 2, 1.4);
+  });
+
   for (const k in SPR) {
     if (k.indexOf('p_') !== 0 || k.length > 2 && k.charAt(k.length - 2) === '_') continue;
     for (let q = 0; q < 4; q++) SPR[k + '_' + q] = rotateSprite(SPR[k], q);

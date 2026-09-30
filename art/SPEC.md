@@ -70,7 +70,7 @@ Everything that fights you. `-rest` plus an 8-frame `-run-N` per kind.
 | `bestiary/thrall-rest` | 1 | 88x88 | 44×44 |
 | `bestiary/thrall-run-N` | 8 | 88x88 | 44×44 |
 
-### `props/` — 185 frames
+### `props/` — 200 frames
 
 Scenery. `-N` variants are rolled per placement, so they should differ visibly.
 
@@ -100,6 +100,8 @@ Scenery. `-N` variants are rolled per placement, so they should differ visibly.
 | `props/candles-N` | 4 | 60x60 | 30×30 |
 | `props/carpet` | 1 | 160x160 | 80×80 |
 | `props/carpet-N` | 4 | 160x160 | 80×80 |
+| `props/cauldron` | 1 | 88x88 | 44×44 |
+| `props/cauldron-N` | 4 | 88x88 | 44×44 |
 | `props/chain` | 1 | 60x60 | 30×30 |
 | `props/chain-N` | 4 | 60x60 | 30×30 |
 | `props/coins` | 1 | 60x60 | 30×30 |
@@ -118,8 +120,12 @@ Scenery. `-N` variants are rolled per placement, so they should differ visibly.
 | `props/lectern-N` | 4 | 60x60 | 30×30 |
 | `props/maptable` | 1 | 104x104 | 52×52 |
 | `props/maptable-N` | 4 | 104x104 | 52×52 |
+| `props/minecart` | 1 | 80x80 | 40×40 |
+| `props/minecart-N` | 4 | 80x80 | 40×40 |
 | `props/moss` | 1 | 80x80 | 40×40 |
 | `props/moss-N` | 4 | 80x80 | 40×40 |
+| `props/obsidian` | 1 | 72x72 | 36×36 |
+| `props/obsidian-N` | 4 | 72x72 | 36×36 |
 | `props/pillar` | 1 | 192x192 | 96×96 |
 | `props/pillar-N` | 4 | 192x192 | 96×96 |
 | `props/planks` | 1 | 80x80 | 40×40 |
@@ -217,4 +223,4 @@ per kind, for looking at rather than loading.
 
 ---
 
-331 frames total, from tools/forge/forge.js.
+346 frames total, from tools/forge/forge.js.

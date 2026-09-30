@@ -14,7 +14,7 @@
 
 import Phaser from 'phaser';
 
-/* global crescentHue, traps, spikePhase, gustPhase, CELL_W, view,
+/* global crescentHue, traps, spikePhase, gustPhase, lavaPhase, CELL_W, view,
           arcs, particles, rings, floaters, bolts, slams, hazards, nulls,
           totems, ruptures, player, cam, FLOAT_STYLE, FLOAT_LIFE, BOLT_R,
           TAU, HEROES, run, portal, drops, PORTAL_R, PAL, LEVEL, rarityOf,
@@ -108,6 +108,7 @@ export class Effects {
         continue;
       }
       if (tr.kind === 'gust') { this.gust(g, tr); continue; }
+      if (tr.kind === 'lava') { this.lava(g, tr, t); continue; }
       // The beat comes off the trap: it is compressed by the delve's depth,
       // and a renderer reading the constant would draw one rhythm over the
       // damage of another.
@@ -143,6 +144,40 @@ export class Effects {
             g.strokeRect(px - half, py - half, half * 2, half * 2);
           }
         }
+      }
+    }
+  }
+
+  /* The rift. A crack is always visible -- dark rock split over a dull red
+   * seam -- so the room can be read before it ever goes off. The tell heats
+   * it to orange and then near white; the eruption fills the cell with fire
+   * that flickers and dies back as the second runs out. */
+  lava(g, tr, t) {
+    const ph = lavaPhase(tr.t);
+    const C = CELL_W, h = C / 2;
+    for (let i = 0; i < tr.list.length; i++) {
+      const [cx, cy] = tr.list[i];
+      const x = cx * C + h, y = cy * C + h;
+      g.fillStyle(0x140806, 0.85);
+      g.fillRect(x - h + 3, y - h + 3, C - 6, C - 6);
+      if (ph.phase === 'out') {
+        const k = 1 - ph.f * 0.6, fl = 0.85 + 0.15 * Math.sin(t * 40 + i * 1.7);
+        g.fillStyle(0xff5a1a, 0.85 * k * fl);
+        g.fillRect(x - h + 2, y - h + 2, C - 4, C - 4);
+        g.fillStyle(0xffd070, 0.7 * k * fl);
+        g.fillRect(x - h * 0.45, y - h * 0.45, h * 0.9, h * 0.9);
+      } else {
+        const heat = ph.phase === 'tell' ? ph.f : 0;
+        const col = heat > 0.66 ? 0xffe0a0 : heat > 0.2 ? 0xff8a2a : 0xa8321a;
+        g.lineStyle(3 + heat * 3, col, 0.55 + heat * 0.45);
+        // The seam, zigzagged through the cell the same way every frame.
+        const j = ((cx * 7 + cy * 13) % 5) - 2;
+        g.beginPath();
+        g.moveTo(x - h + 4, y + j * 2);
+        g.lineTo(x - 4, y - 5 + j);
+        g.lineTo(x + 5, y + 5 - j);
+        g.lineTo(x + h - 4, y - j * 2);
+        g.strokePath();
       }
     }
   }

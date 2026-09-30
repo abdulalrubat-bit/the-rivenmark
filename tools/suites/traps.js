@@ -38,12 +38,23 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     // --- which rooms get what ---------------------------------------------
     const seen = { hall: 0, cistern: 0, barracks: 0, collapse: 0 };
     let mismatched = 0, spikeDelves = 0, poolDelves = 0, n = 0;
+    // Half the delves on ground that still has the older rooms: the regions
+    // with a set-piece table (REGION_SETS) no longer cut barracks or
+    // collapses, so a fixture left to the dice might never meet one.
+    const plain = REGIONS.map(r => r.id).filter(id => !REGION_SETS[id]);
+    const plainRungs = LEVELS.map((L, i) => i).filter(i => i > 0 && LEVELS[i].regions.some(r => plain.includes(r)));
     for (let i = 0; i < 16; i++) {
-      startRun('isaac', LEVELS[[6, 18, 30, 42][i % 4]].id, 'riven'); n++;
+      stash = blankStash();
+      if (i % 2 && plain.length && plainRungs.length) {
+        const idx = plainRungs[(i >> 1) % plainRungs.length];
+        stash.region = LEVELS[idx].regions.find(r => plain.includes(r));
+        startRun('isaac', LEVELS[idx].id, 'riven');
+      } else startRun('isaac', LEVELS[[6, 18, 30, 42][i % 4]].id, 'riven');
+      n++;
       for (const rm of rooms) {
         seen[rm.kind] = (seen[rm.kind] || 0) + 1;
         const near = traps.filter(t => Math.hypot(t.x - rm.x, t.y - rm.y) < 4);
-        const want = rm.kind === 'hall' ? 'spike' : rm.kind === 'cistern' ? 'pool' : rm.kind === 'span' ? 'gust' : null;
+        const want = rm.kind === 'hall' ? 'spike' : rm.kind === 'cistern' ? 'pool' : rm.kind === 'span' ? 'gust' : rm.kind === 'rift' ? 'lava' : null;
         if (want ? !near.some(t => t.kind === want) : near.length) mismatched++;
       }
       if (traps.some(t => t.kind === 'spike')) spikeDelves++;
