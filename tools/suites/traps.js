@@ -36,32 +36,31 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     localStorage.clear(); hardcore = false; stash = blankStash(); saveStash();
 
     // --- which rooms get what ---------------------------------------------
-    const seen = { hall: 0, cistern: 0, barracks: 0, collapse: 0 };
-    let mismatched = 0, spikeDelves = 0, poolDelves = 0, n = 0;
-    // Half the delves on ground that still has the older rooms: the regions
-    // with a set-piece table (REGION_SETS) no longer cut barracks or
-    // collapses, so a fixture left to the dice might never meet one.
-    const plain = REGIONS.map(r => r.id).filter(id => !REGION_SETS[id]);
-    const plainRungs = LEVELS.map((L, i) => i).filter(i => i > 0 && LEVELS[i].regions.some(r => plain.includes(r)));
-    for (let i = 0; i < 16; i++) {
+    const seen = { hall: 0, cistern: 0, span: 0, rift: 0, grove: 0, shoals: 0 };
+    let mismatched = 0, spikeDelves = 0, poolDelves = 0, anyDelves = 0, n = 0;
+    // Round every region in turn: each keeps its own trapped room, and a
+    // fixture left to the dice might never meet one of them. (No region cuts
+    // the older barracks or collapses any more -- all five have set pieces.)
+    const regions = REGIONS.map(r => r.id);
+    for (let i = 0; i < 30; i++) {
       stash = blankStash();
-      if (i % 2 && plain.length && plainRungs.length) {
-        const idx = plainRungs[(i >> 1) % plainRungs.length];
-        stash.region = LEVELS[idx].regions.find(r => plain.includes(r));
-        startRun('isaac', LEVELS[idx].id, 'riven');
-      } else startRun('isaac', LEVELS[[6, 18, 30, 42][i % 4]].id, 'riven');
+      const reg = regions[i % regions.length];
+      const idxs = LEVELS.map((L, j) => j).filter(j => j > 0 && LEVELS[j].regions.includes(reg));
+      stash.region = reg;
+      startRun('isaac', LEVELS[idxs[((i / regions.length) | 0) % idxs.length]].id, 'riven');
       n++;
       for (const rm of rooms) {
         seen[rm.kind] = (seen[rm.kind] || 0) + 1;
         const near = traps.filter(t => Math.hypot(t.x - rm.x, t.y - rm.y) < 4);
-        const want = rm.kind === 'hall' ? 'spike' : rm.kind === 'cistern' ? 'pool' : rm.kind === 'span' ? 'gust' : rm.kind === 'rift' ? 'lava' : rm.kind === 'grove' ? 'spore' : null;
+        const want = rm.kind === 'hall' ? 'spike' : rm.kind === 'cistern' ? 'pool' : rm.kind === 'span' ? 'gust' : rm.kind === 'rift' ? 'lava' : rm.kind === 'grove' ? 'spore' : rm.kind === 'shoals' ? 'ash' : null;
         if (want ? !near.some(t => t.kind === want) : near.length) mismatched++;
       }
+      if (traps.length) anyDelves++;
       if (traps.some(t => t.kind === 'spike')) spikeDelves++;
       if (traps.some(t => t.kind === 'pool')) poolDelves++;
     }
     o.rooms = seen; o.mismatched = mismatched; o.delves = n;
-    o.spikeDelves = spikeDelves; o.poolDelves = poolDelves;
+    o.spikeDelves = spikeDelves; o.poolDelves = poolDelves; o.anyDelves = anyDelves;
 
     // --- the beat ----------------------------------------------------------
     // Sampled across two whole cycles: every phase must appear, and `out` must
@@ -96,8 +95,10 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     o.beatDeep = beatAt(1);
     // What the delve itself actually builds, at both ends -- the constant
     // being right proves nothing if placeTraps hands the field another one.
+    // On the Moors: the pillared halls that carry spikes are theirs alone now.
     const cycleIn = idx => {
       for (let i = 0; i < 40; i++) {
+        stash = blankStash(); stash.region = 'slag';
         startRun('isaac', LEVELS[idx].id, 'riven');
         const t = traps.find(t => t.kind === 'spike');
         if (t) return +t.cycle.toFixed(3);
@@ -227,17 +228,18 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   });
 
   ck('the fixture cut rooms of every kind to check',
-     R.rooms.hall > 0 && R.rooms.cistern > 0 &&
-     R.rooms.barracks > 0 && R.rooms.collapse > 0,
+     ['hall', 'cistern', 'span', 'rift', 'grove', 'shoals'].every(k => R.rooms[k] > 0),
      JSON.stringify(R.rooms));
   ck('spikes go in the pillared halls and pools in the cisterns, and nothing else is trapped',
      R.mismatched === 0, R.mismatched + ' rooms carried the wrong trap or none');
   // Not "most": a delve dresses three to five rooms out of four kinds, so a
   // hall is likely rather than certain, and asserting otherwise would be
   // asserting a coin lands heads. Often enough to be part of the game.
-  ck('and a good share of delves have one', R.spikeDelves > R.delves * 0.3 &&
-     R.poolDelves > R.delves * 0.3,
-     R.spikeDelves + ' with spikes and ' + R.poolDelves + ' with a pool, of ' + R.delves);
+  // Every region has its own trapped room now (spikes and pools are the
+  // Moors' and the Weald's; the Gorges blow, Kraggen burns, the Firth holds),
+  // so it is asked of the traps together, not of spikes and pools alone.
+  ck('and a good share of delves have one', R.anyDelves > R.delves * 0.6,
+     R.anyDelves + ' of ' + R.delves + ' carry a trap (' + R.spikeDelves + ' spikes, ' + R.poolDelves + ' a pool)');
 
   ck('the spikes have all three phases', R.phases === 'down,out,tell', R.phases);
   ck('and never come up without telling first', R.unwarned === 0,

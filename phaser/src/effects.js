@@ -110,6 +110,7 @@ export class Effects {
       if (tr.kind === 'gust') { this.gust(g, tr); continue; }
       if (tr.kind === 'lava') { this.lava(g, tr, t); continue; }
       if (tr.kind === 'spore') { this.spores(g, tr, t); continue; }
+      if (tr.kind === 'ash') { this.ash(g, tr, t); continue; }
       // The beat comes off the trap: it is compressed by the delve's depth,
       // and a renderer reading the constant would draw one rhythm over the
       // damage of another.
@@ -146,6 +147,23 @@ export class Effects {
           }
         }
       }
+    }
+  }
+
+  /* The Firth's drifts: deep ash, paler than the floor, heaped soft at the
+   * edges and slowly shifting on its surface, so a bank reads as ground you
+   * would wade rather than a stain on the flags. */
+  ash(g, tr, t) {
+    const C = CELL_W, h = C / 2;
+    for (let i = 0; i < tr.list.length; i++) {
+      const [cx, cy] = tr.list[i];
+      const x = cx * C + h, y = cy * C + h;
+      g.fillStyle(0x8a8c92, 0.5);
+      g.fillRect(x - h, y - h, C, C);
+      g.fillStyle(0xb8bcc4, 0.35);
+      g.fillCircle(x + Math.sin(t * 0.4 + i) * 4, y + Math.cos(t * 0.3 + i * 1.7) * 3, h * 0.8);
+      g.fillStyle(0xd8dce4, 0.18);                          // a ripple drifting across it
+      g.fillRect(x - h, y - 3 + ((t * 9 + i * 13) % C) - h, C, 3);
     }
   }
 
