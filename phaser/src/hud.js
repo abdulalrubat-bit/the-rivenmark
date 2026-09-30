@@ -12,7 +12,7 @@
 
 import { bossShown, bossBarDrop, minimapBox } from './overlay.js';
 
-/* global SHRINES, encounterLine, bagCap, player, run, state, enemies, view, LEVEL, REGION, HUD_H, ABILITIES,
+/* global SHRINES, encounterLine, objectiveLine, cam, HIT_MARK, bagCap, player, run, state, enemies, view, LEVEL, REGION, HUD_H, ABILITIES,
           ABILITY_BY_ID, CHARGE_MAX, TENSION_MAX, COMBO_LEN, CONDUIT_EDGE */
 
 /* Four roles, four colours, and the mapping lives beside the buttons because
@@ -417,6 +417,73 @@ const CSS = `
 #hud .toast{position:absolute;left:12px;height:24px;line-height:22px;padding:0 11px;
      background:rgba(8,7,7,.82);border:1px solid #5e544e;font:13px Georgia,serif;
      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:opacity .2s}
+
+/* ===================================================================
+   BIGGER. Playtested: "make it more readable, like it takes up space".
+   Every piece of the HUD a player reads is taken up a size or two -- the
+   life bar and its number, the slag count, the pause row, the chips, the
+   toast, the banner, the boss's name, the labels on the buttons -- and the
+   top of the screen is re-spaced to hold them (HUD_H in the core follows).
+   The buttons keep their size: they are placed so thumbs and each other
+   never collide, and that was measured, not guessed.
+   =================================================================== */
+#hud{font-size:14px}
+#hud .top{left:8px;right:8px;top:8px;padding:5px;gap:4px;border-radius:6px;border-width:1.5px}
+#hud .life{height:26px;border-radius:4px}
+#hud .life b{font-size:15px;letter-spacing:.3px}
+#hud .slag{min-width:118px;font-size:15px;gap:6px}
+#hud .slag u{width:10px;height:10px}
+#hud .hold{top:54px;gap:10px}
+#hud .hold button{width:44px;height:44px;font-size:17px}
+#hud .hold .bag{font-size:19px}
+#hud .hold .snd{font-size:19px}
+#hud .hold .bag i{min-width:19px;height:19px;border-radius:10px;font:11px/17px ui-monospace,monospace}
+#hud .bless{top:calc(var(--sa-t,0px) + 108px);font-size:14px;padding:5px 11px;border-radius:12px}
+#hud .enc{top:calc(var(--sa-t,0px) + 140px);font-size:15px;padding:6px 12px;border-radius:12px}
+#hud .toast{height:32px;line-height:30px;font-size:16px;padding:0 14px;border-radius:6px}
+#hud .banner{font-size:26px}
+#hud .banner small{font-size:15px}
+#hud .banner.lore small{font-size:16px}
+#hud .banner b{font-size:18px}
+#hud .banner em{font-size:11px}
+#hud .heavy{font-size:12.5px}
+#hud .heavy .mark{font-size:24px}
+#hud button .cd{font-size:11px}
+#hud button .cost b{font-size:9px}
+#hud .pip{width:13px;height:13px}
+
+/* The goal row, under the life and the din, inside the same frame. */
+#hud .goal{display:flex;align-items:center;gap:7px;padding:3px 4px 1px;min-height:22px;
+  font:600 14px/1.2 Georgia,serif;color:#f4ece4;white-space:nowrap;overflow:hidden}
+#hud .goal[hidden]{display:none}
+#hud .goal i{font-style:normal;color:#ff9a4a;width:16px;text-align:center;flex:none}
+#hud .goal b{font-weight:600;overflow:hidden;text-overflow:ellipsis}
+#hud .goal span{margin-left:auto;font:13px Georgia,serif;color:#a39a92;flex:none}
+#hud .goal[data-step="1"] span{color:#ffb070}
+#hud .goal[data-step="3"] i,#hud .goal[data-step="4"] i{color:#8fb9ff}
+#hud .goal[data-step="2"] i{color:#ff6a50}
+#hud .goal.new{animation:goalNew 1.4s ease-out}
+@keyframes goalNew{0%{background:rgba(255,122,42,.55)}100%{background:transparent}}
+@media (prefers-reduced-motion:reduce){#hud .goal.new{animation:none}}
+#hud .hold{top:82px}
+#hud .bless{top:calc(var(--sa-t,0px) + 136px)}
+#hud .enc{top:calc(var(--sa-t,0px) + 168px)}
+
+/* What is hitting me (syncThreats). A layer over the whole glass. */
+#hud .threats{position:fixed;inset:0;pointer-events:none;z-index:2;overflow:hidden}
+#hud .threats i{position:absolute;left:0;top:0;display:block;will-change:transform}
+/* A blow: a red crescent, its bow facing the way the hit came from. */
+#hud .threats .hit{width:22px;height:92px;margin:-46px 0 0 -11px;border-radius:50%;
+  border-right:7px solid #ff3b2a;filter:drop-shadow(0 0 8px rgba(255,59,42,.9))}
+/* A body coming, off screen: a red arrow on the edge. */
+#hud .threats .foe{width:0;height:0;margin:-9px 0 0 -6px;border:9px solid transparent;
+  border-left:14px solid #ff5a3c;border-right:0;filter:drop-shadow(0 0 3px #000)}
+#hud .threats .foe.big{border-left-color:#ffb04a}
+/* Winding up: a "!" over it. */
+#hud .threats .tell{width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;
+  background:#ff3b2a;box-shadow:0 0 0 2px #1a0808,0 0 10px rgba(255,59,42,.8)}
+#hud .threats .tell:after{content:'!';position:absolute;inset:0;display:grid;place-items:center;
+  font:900 16px/1 Georgia,serif;color:#fff}
 `;
 
 export class Hud {
@@ -446,10 +513,13 @@ export class Hud {
           '<div class="slag"></div>' +
         '</div>' +
         '<div class="din"><i></i></div>' +
+        // The goal, always: what to do now, and how far along (objectiveLine).
+        '<div class="goal"><i></i><b></b><span></span></div>' +
       '</div>' +
       '<div class="res"></div>' +
       '<div class="bless" hidden></div>' +
       '<div class="enc" hidden></div>' +
+      '<div class="threats"></div>' +
       /* Built like a kit button, for the same reason a kit button is: the
        * whole point of the tag under an ability's mark is that a glyph is a
        * thing to memorise and a word is not. This was one bare arrow, and
@@ -485,6 +555,9 @@ export class Hud {
     this.lifeFill = root.querySelector('.life i');
     this.lifeText = root.querySelector('.life b');
     this.slag = root.querySelector('.slag');
+    this.goal = root.querySelector('.goal');
+    this.threats = root.querySelector('.threats');
+    this.threatPool = { hit: [], foe: [], tell: [] };
     this.res = root.querySelector('.res');
     this.bless = root.querySelector('.bless');
     this.enc = root.querySelector('.enc');
@@ -685,8 +758,8 @@ export class Hud {
        * instead of the day somebody notices it is not. 46px of visible chord
        * holds about eight characters at the standard size. */
       const tag = a.tag || a.name;
-      b.style.setProperty('--tagfs', tag.length > 8 ? '6.2px'
-                                   : tag.length > 6 ? '7px' : '7.5px');
+      b.style.setProperty('--tagfs', tag.length > 8 ? '6.6px'
+                                   : tag.length > 6 ? '8px' : '9.2px');
       b.innerHTML = '<span class="sweep"></span><span class="cost"></span>' +
                     '<span class="mark">' + a.mark + '</span>' +
                     '<span class="tag">' + tag + '</span>' +
@@ -742,8 +815,12 @@ export class Hud {
     this.lifeText.textContent = Math.ceil(Math.max(0, p.hp)) + ' / ' + Math.round(p.maxHp);
     const tech = run.tech | 0;
     this.lifeBox.classList.toggle('low', f <= 0.3);
-    if (this.slagSig !== tech) {
-      this.slagSig = tech;
+    // Keyed on the quota too: a new delve starts at 0 slag just like the
+    // last one did, and keyed on the count alone the counter kept showing
+    // the previous delve's quota until the first pickup.
+    const slagKey = tech + '/' + LEVEL.quota;
+    if (this.slagSig !== slagKey) {
+      this.slagSig = slagKey;
       // The icon marks it; the word still names it. An icon alone leaves a
       // number on screen that nobody new can read.
       this.slag.innerHTML = '<u></u>' + tech + ' / ' + LEVEL.quota + ' slag';
@@ -880,6 +957,8 @@ export class Hud {
     this.syncToast();
     this.syncBless();
     this.syncEnc();
+    this.syncGoal();
+    this.syncThreats();
   }
 
   /* The title is fitted, not cut. The Deceiver's epithets are rules -- each
@@ -999,6 +1078,98 @@ export class Hud {
     }
   }
 
+  /* The goal line. Rewritten only when it changes; a new step flashes, so the
+   * moment the delve asks something new of you is a moment you notice. */
+  syncGoal() {
+    const G = typeof objectiveLine === 'function' ? objectiveLine() : null;
+    if (this.goal.hidden === !!G) this.goal.hidden = !G;
+    if (!G) return;
+    const key = G.step + '|' + G.text + '|' + G.note;
+    if (this.goalKey === key) return;
+    if (this.goalStep !== undefined && this.goalStep !== G.step) {
+      this.goal.classList.remove('new'); void this.goal.offsetWidth; this.goal.classList.add('new');
+    }
+    this.goalKey = key; this.goalStep = G.step;
+    this.goal.dataset.step = G.step;
+    this.goal.children[0].textContent = G.icon;
+    this.goal.children[1].textContent = G.text;
+    this.goal.children[2].textContent = G.note;
+  }
+
+  /* WHAT IS HITTING ME, drawn. Three kinds of mark on a layer over the
+   * whole glass, each pooled and only moved, never rebuilt:
+   *   hit   a red crescent on the screen's edge, on the side a blow came from
+   *   foe   a small red arrow on the edge for a body that is awake and coming
+   *         but not yet on screen, bigger the closer it is
+   *   tell  a "!" over anything on screen that is winding up to strike
+   * World to screen is the core's own camera: a point is at (x - cam.x,
+   * y - cam.y) in CSS pixels. */
+  syncThreats() {
+    const on = (state === 'play') && run && player && typeof cam !== 'undefined';
+    const P = this.threatPool;
+    const take = (kind, i) => {
+      let el = P[kind][i];
+      if (!el) { el = document.createElement('i'); el.className = kind; this.threats.appendChild(el); P[kind].push(el); }
+      return el;
+    };
+    const hideFrom = (kind, n) => { for (let i = n; i < P[kind].length; i++) if (P[kind][i].style.display !== 'none') P[kind][i].style.display = 'none'; };
+    if (!on) { hideFrom('hit', 0); hideFrom('foe', 0); hideFrom('tell', 0); return; }
+    const W = view.w || innerWidth, H = view.h || innerHeight;
+    const px = player.x - cam.x, py = player.y - cam.y;
+    const top = HUD_H + 10, pad = 26;
+    // Where a ray from the hero at angle a leaves the usable screen.
+    const edge = a => {
+      const dx = Math.cos(a), dy = Math.sin(a);
+      const tx = dx > 0 ? (W - pad - px) / dx : dx < 0 ? (pad - px) / dx : Infinity;
+      const ty = dy > 0 ? (H - pad - py) / dy : dy < 0 ? (top - py) / dy : Infinity;
+      const t = Math.max(0, Math.min(tx, ty));
+      return [px + dx * t, py + dy * t];
+    };
+    let n = 0;
+    for (const h of (run.hits || [])) {
+      const el = take('hit', n++);
+      const [x, y] = edge(h.a);
+      el.style.display = '';
+      el.style.transform = 'translate(' + x.toFixed(0) + 'px,' + y.toFixed(0) + 'px) rotate(' + (h.a * 57.3).toFixed(0) + 'deg)';
+      el.style.opacity = (Math.min(1, h.t / (HIT_MARK * 0.6)) * h.w).toFixed(2);
+    }
+    hideFrom('hit', n);
+    // Off-screen and coming: awake, not an illusion, within reach of the fight.
+    const foes = [];
+    for (const e of enemies) {
+      if (e.hp <= 0 || !e.awake || e.kind === 'mirage' || e.dummy) continue;
+      const sx = e.x - cam.x, sy = e.y - cam.y;
+      if (sx > -8 && sx < W + 8 && sy > top - 40 && sy < H + 8) continue;
+      const d = Math.hypot(e.x - player.x, e.y - player.y);
+      if (d > 900) continue;
+      foes.push([d, e]);
+    }
+    foes.sort((a, b) => a[0] - b[0]);
+    n = 0;
+    for (const [d, e] of foes.slice(0, 8)) {
+      const a = Math.atan2(e.y - player.y, e.x - player.x);
+      const [x, y] = edge(a);
+      const el = take('foe', n++);
+      const k = 1.35 - Math.min(1, d / 900) * 0.6;
+      el.style.display = '';
+      el.style.transform = 'translate(' + x.toFixed(0) + 'px,' + y.toFixed(0) + 'px) rotate(' + (a * 57.3).toFixed(0) + 'deg) scale(' + k.toFixed(2) + ')';
+      el.classList.toggle('big', !!(e.elite || e.role === 'boss' || e.r >= 22));
+    }
+    hideFrom('foe', n);
+    // Winding up, on screen.
+    n = 0;
+    for (const e of enemies) {
+      if (n >= 10) break;
+      if (e.hp <= 0 || !(e.tell > 0)) continue;
+      const sx = e.x - cam.x, sy = e.y - cam.y - (e.r || 14) - 20;
+      if (sx < 0 || sx > W || sy < top || sy > H) continue;
+      const el = take('tell', n++);
+      el.style.display = '';
+      el.style.transform = 'translate(' + sx.toFixed(0) + 'px,' + sy.toFixed(0) + 'px)';
+    }
+    hideFrom('tell', n);
+  }
+
   syncToast() {
     const t = run.toast;
     if (!t || t.life <= 0) { if (!this.toast.hidden) this.toast.hidden = true; return; }
@@ -1010,7 +1181,7 @@ export class Hud {
       // Clipped rather than allowed to grow: the map lives top-right.
       const box = (window.minimapBox && window.minimapBox()) || { s: 132, pad: 14 };
       this.toast.style.maxWidth =
-        Math.max(120, (view.w || 390) - box.s - box.pad - 40) + 'px';
+        Math.max(120, (view.w || 390) - box.s - box.pad - 64) + 'px';   // the bigger toast's padding and frame
     }
     this.toast.style.top = (HUD_H + 8 + (view.safeT || 0) + bossBarDrop()) + 'px';
     this.toast.style.opacity = Math.min(1, t.life / 0.5).toFixed(2);

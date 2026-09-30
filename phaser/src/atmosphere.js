@@ -407,7 +407,10 @@ export class Atmosphere {
       dark: M.dark,
       mote: rgb(M.motes),
       drift: M.drift === 'rise' ? -1 : M.drift === 'float' ? 0.25 : 1
-    } : { g: EMBER, fog: W, dark: 0, mote: [0.9, 0.72, 0.58], drift: 1 };
+    } : { g: lowFx ? W : EMBER, fog: W, dark: 0, mote: [0.9, 0.72, 0.58], drift: 1 };
+    // The corridor's ember cast is decoration -- a full-screen blend on every
+    // frame -- so it is the first thing a struggling device sheds (lowFx).
+    // A room's own colour stays: that one tells you where you are.
     const k = dt ? 1 - Math.exp(-dt * 2.6) : 1;
     const m = this.m;
     m.g = mix(m.g, want.g, k);

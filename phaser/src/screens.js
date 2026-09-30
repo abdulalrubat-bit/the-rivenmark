@@ -412,6 +412,84 @@ body.menus #diag{display:none}
 #screens.station .row.delve .act{font:600 10.5px Cinzel,Georgia,serif;letter-spacing:.8px}
 #screens.station .row.slide{min-height:56px;padding-top:6px;padding-bottom:6px}
 #screens.station .row.slide input[type=range]{margin:0}
+
+/* ===================================================================
+   BIGGER. Playtested: "make it more readable, like it takes up space".
+   A size up everywhere a player reads or taps: body text, the rows and
+   what is in them, the pills, the item icons, the tags, the buttons and
+   the bar of medallions. Everything else (the frame, the colours, the
+   layout) stays as it was; this only makes it read from arm's length.
+   =================================================================== */
+#screens{font-size:17px;line-height:1.4}
+#screens.station h1{font-size:31px;margin-bottom:16px;padding-bottom:16px}
+#screens.station .sub{font-size:16px}
+#screens.station .sec{font-size:15px;margin:22px 0 10px}
+#screens.station .homestats>span,#screens.station .purse{padding:9px 18px;font-size:16px}
+#screens.station .homestats b,#screens.station .purse b{font-size:21px}
+#screens.station .row{min-height:66px;padding:14px 16px;gap:10px}
+#screens.station .row small{font-size:14.5px;margin-top:3px}
+#screens.station .row .teach{font-size:14px}
+#screens.station .row em,#screens.station .row.delve em{font-size:12px}
+#screens.station .row.delve{font-size:20px;min-height:110px;padding:16px}
+#screens.station .row.delve small,#screens.station .row.delve .verdict{font-size:15px}
+#screens.station .rows.heroes .row{font-size:19px}
+#screens.station .item .aff{font-size:14.5px}
+#screens.station .item b{font-size:17.5px}
+#screens.station .pw{font-size:17px}
+#screens.station .act,#screens.station .row.delve .act{font-size:12.5px;padding:4px 8px}
+#screens.station .ico{width:46px;height:46px;background-size:1610px 46px;
+  background-position:calc(var(--i,0) * -46px) 0}
+#screens.station .chip{min-height:46px;font-size:15px;padding:0 14px}
+#screens.station .drop{min-width:56px;font-size:16px}
+#screens.station .alt{font-size:18px;min-height:60px}
+#screens.station .go{font-size:19px;min-height:58px}
+#screens.station .go.big{min-height:80px;font-size:28px}
+#screens .seg button{min-height:48px;font-size:14px}
+#screens .seg button small{font-size:14px}
+#screens.station{--bar:86px}
+#screens.station .tabs button{gap:4px}
+#screens.station .tabs button i{width:46px;height:46px;font-size:22px}
+#screens.station .tabs button span{font-size:11.5px;letter-spacing:.4px}
+#screens.station .tabs button.cog{flex:0 0 58px}
+#screens .tabs .badge{min-width:22px;height:22px;font-size:13px;line-height:22px;right:calc(50% - 32px)}
+#screens .tdetail b{font-size:21px}
+#screens .tdetail em{font-size:15px}
+#screens .tdetail p{font-size:17px}
+#screens .tgrid .node .rk{font-size:14px;min-width:36px}
+#screens .row.lore b{font-size:16px}
+#screens .row.lore small{font-size:15px}
+
+/* The "?" in a station's corner, and its hint. */
+#screens.station .card>h1{padding-left:46px;padding-right:46px}
+#screens .card .help{position:absolute;top:14px;right:14px;width:40px;height:40px;border-radius:50%;
+  border:1.5px solid #7a3a14;background:#171514;color:#ffb070;font:700 20px Georgia,serif;cursor:pointer}
+#screens .hint{margin:0 0 16px;padding:14px 16px;border-radius:10px;border:1.5px solid #ff7a2a;
+  background:linear-gradient(#2a1a10,#1a1210);box-shadow:0 0 16px rgba(255,122,42,.18)}
+#screens .hint p{margin:0 0 10px;font-size:16px;line-height:1.45;color:#f4ece4}
+#screens .hint .hintOk{min-height:44px;padding:0 18px;border-radius:8px;border:1px solid #ff7a2a;
+  background:#3a1e0e;color:#fff0e0;font:600 15px Georgia,serif}
+/* Next step, on Home. */
+#screens.station .row.next{border:1.5px solid #ff7a2a;background:linear-gradient(#2a1a10,#1a1210);
+  width:100%;margin:0 0 14px;color:#fff0e0}
+#screens.station .row.next em{color:#ff9a4a}
+/* The verdict on a vault piece. */
+#screens .verdict{display:block;margin-top:5px;font:600 14px Georgia,serif;color:#bdb4af}
+#screens .verdict.up{color:#8fd08a}
+#screens .verdict.down{color:#e08a7a}
+#screens.station .cmp{font-size:14px;line-height:1.5}
+/* The outcome card: what changed stands out. */
+#screens .stats div.up{border-color:#ff7a2a;box-shadow:0 0 12px rgba(255,122,42,.3)}
+#screens .stats div.up b{color:#ffb070}
+#screens .stats div.wide{grid-column:1/-1;flex-direction:column;gap:3px}
+#screens .stats div.wide b{font-weight:400;font-size:14px;color:#f0e6dc}
+#screens .stats{font-size:15px}
+#screens .stats b{font-size:17px}
+/* Bigger type must never push a station wider than the glass (a 320px
+   phone): the card is capped to the screen, and the controls in it are
+   allowed to shrink and wrap rather than set its width. */
+#screens.station .card{box-sizing:border-box;max-width:min(520px,calc(100vw - 24px))}
+#screens .seg button{min-width:0;padding:0 4px;overflow-wrap:anywhere}
+#screens.station .row,#screens.station .item>span{min-width:0;overflow-wrap:anywhere}
 `;
 
 /* Cells of icons.png (tools/build-art.py's strip, carried over from the
@@ -429,6 +507,24 @@ const ICON = { blade: 0, offhand: 1, mail: 2, girdle: 3, boots: 4, amulet: 5,
 
 // A rung's short name, the same on Home and on the Delves list.
 const rungLabel = i => i === 0 ? 'Proving ground' : 'Delve ' + i;
+
+
+/* EXPLAIN AS I GO. Playtested: "hard to understand what's happening". Each
+ * station says what it is for, in two sentences, the first time you open it;
+ * a "?" in its corner brings that back whenever. Seen-ness is kept per
+ * station in the browser (a convenience, not progress), so a new player
+ * reads each once and a returning one is not nagged. */
+const HINTS = {
+  splash: 'Pick a hero and a delve, then Descend. Gather slag down there, beat what it calls, and escape through the ley-gate: slag you carry out levels you up, and coin buys upgrades here.',
+  delves: 'Every rung of the ladder. ★ marks the one that suits your power; harder rungs hit harder but pay more. Tap a rung, then Descend.',
+  gear: 'What you wear, and what you have kept. Tap a vault piece to wear it: ▲ means it beats what you have on, and the green and red lines show exactly what changes.',
+  talents: 'One point for every level. Tap a talent to read it, then Learn. Deeper rows open as you spend in that tree, and an arrow means one talent needs the one above it.',
+  vendor: 'Spend coin here. Commission a new piece for a slot you choose, or temper one you are wearing to reroll its stats.',
+  hall: 'Upgrades that last for ever, bought with coin: a bigger vault, cheaper forging, better drops, more life. Every delve after benefits.'
+};
+const HINT_KEY = 'rivenmark.hints.v1';
+const hintsSeen = () => { try { return JSON.parse(localStorage.getItem(HINT_KEY)) || {}; } catch (e) { return {}; } };
+const markHint = n => { try { const h = hintsSeen(); h[n] = 1; localStorage.setItem(HINT_KEY, JSON.stringify(h)); } catch (e) {} };
 
 export class Screens {
   /* onDescend(hero, levelId, diffId) starts a delve; onAbandon() throws the current
@@ -480,12 +576,13 @@ export class Screens {
     else if (name === 'talents') this.renderTalents();
     else if (name === 'delves') this.renderDelves();
     else this.renderGatehouse();
+    this.explain(name);
     // Room at the bottom for the bar, on the screens that carry it -- and
     // those are the stations, which are places rather than cards over a delve.
     const bar = !!this.root.querySelector('nav.tabs');
     this.root.classList.toggle('hasbar', bar);
     this.root.classList.toggle('station', bar);
-    document.body.classList.toggle('menus', bar);
+    document.body.classList.add('menus');       // any card up hides the diagnostics dot
   }
 
   /* Held. The delve is still standing behind this -- the scene keeps drawing
@@ -835,6 +932,49 @@ export class Screens {
       '. Descend there and take it back.</p>';
   }
 
+
+  /* The "?" in a station's corner, and its hint the first time (HINTS). */
+  explain(name) {
+    const key = name === 'gear' && !(state === 'gear' && gearCtx && gearCtx.live) ? 'gear' : name;
+    const text = HINTS[key];
+    const card = this.root.querySelector('.card');
+    if (!text || !card || !this.root.querySelector('nav.tabs')) return;
+    const help = document.createElement('button');
+    help.type = 'button'; help.className = 'help'; help.setAttribute('aria-label', 'what is this screen');
+    help.textContent = '?';
+    card.appendChild(help);
+    const show = () => {
+      if (card.querySelector('.hint')) return;
+      const h = document.createElement('div');
+      h.className = 'hint';
+      h.innerHTML = '<p>' + text + '</p><button type="button" class="hintOk">Got it</button>';
+      const title = card.querySelector('h1');
+      if (title) title.after(h); else card.prepend(h);
+      h.querySelector('.hintOk').addEventListener('click', () => { markHint(key); h.remove(); });
+    };
+    help.addEventListener('click', () => { const h = card.querySelector('.hint'); if (h) h.remove(); else show(); });
+    if (!hintsSeen()[key]) show();
+  }
+
+  /* WHAT TO DO NEXT, on Home: the one most useful thing, as a row you can tap
+   * to go and do it. In order: points waiting in the talents, a stronger
+   * piece sitting in the vault, something the Hall can build now, and a
+   * delve better suited than the one picked. Nothing when there is nothing. */
+  nextStep(power) {
+    const hero = this.pick.hero;
+    const free = typeof talentPoints === 'function' ? talentPoints(hero).free : 0;
+    if (free > 0) return { tab: 'talents', text: 'You have ' + free + ' talent point' + (free === 1 ? '' : 's') + ' to spend' };
+    const up = (stash.vault || []).find(it => isUpgrade(it, stash.gear));
+    if (up) return { tab: 'gear', text: 'A stronger ' + ((SLOT_BY_ID[up.slot] || {}).name || 'piece').toLowerCase() + ' is in your vault' };
+    const hall = HALL.find(h => { const t = hallTier(h.id); return t < HALL_MAX && (stash.coins || 0) >= h.tiers[t].cost; });
+    if (hall) return { tab: 'hall', text: 'You can build ' + hall.name + ' in the Hall' };
+    const best = typeof recommendedLevel === 'function' ? recommendedLevel(power) : null;
+    const L = LEVEL_BY_ID[this.pick.level];
+    if (best && L && best !== L.id && delveStanding(L, power).id === 'deadly')
+      return { tab: 'delves', level: best, text: 'This delve is far beyond you — try ' + rungLabel(LEVELS.indexOf(LEVEL_BY_ID[best])) };
+    return null;
+  }
+
   renderGatehouse() {
     const power = this.settlePick();
     const L = LEVEL_BY_ID[this.pick.level] || LEVELS[0];
@@ -852,6 +992,10 @@ export class Screens {
         '<div class="homestats"><span>Power <b>' + power + '</b></span>' +
           '<span><b>' + (stash.coins || 0) + '</b> coin</span></div>' +
         this.corpseLine() +
+        (() => { const n = this.nextStep(power); return n
+          ? '<button class="row next" type="button" id="nextStep" data-tab="' + n.tab + '"' +
+            (n.level ? ' data-level-to="' + n.level + '"' : '') + '><span><em>Next step</em>' + n.text +
+            '</span><span class="act">go ›</span></button>' : ''; })() +
         '<div class="rows heroes" id="heroRows">' +
           Object.values(HEROES).map(h =>
             '<button class="row' + (this.pick.hero === h.id ? ' on' : '') +
@@ -873,6 +1017,8 @@ export class Screens {
 
     this.root.querySelectorAll('[data-hero]').forEach(b =>
       b.addEventListener('click', () => { this.pick.hero = b.dataset.hero; this.renderGatehouse(); }));
+    const nx = this.root.querySelector('#nextStep[data-level-to]');
+    if (nx) nx.addEventListener('click', () => { this.pick.level = nx.dataset.levelTo; }, true);
     this.wirePicks();
     this.wireTabs();
     this.root.querySelector('#practice').addEventListener('click', () => {
@@ -1420,10 +1566,20 @@ export class Screens {
    * the core's compareLines, which reads gearCtx for "what is worn". */
   compareHtml(it) {
     const c = typeof compareLines === 'function' ? compareLines(it) : [];
-    if (!c.length) return '<span class="cmp">no change against what you wear</span>';
-    return '<span class="cmp">' + c.map(x =>
-      '<span class="' + (x.good ? 'up' : 'down') + '">' + x.txt + ' ' + x.name +
-      '</span>').join(' \u00b7 ') + '</span>';
+    // The verdict first, in one word and a number: better or weaker than what
+    // is worn in that slot (the weaker ring, for a ring), by how much power.
+    const g = (gearCtx && gearCtx.gear) || stash.gear;
+    const worn = it.slot === 'ring1' || it.slot === 'ring2'
+      ? [g.ring1, g.ring2].sort((a, b) => itemPower(a) - itemPower(b))[0] : g[it.slot];
+    const d = Math.round(itemPower(it) - itemPower(worn));
+    const verdict = !worn ? '<span class="verdict up">\u25b2 fills an empty slot</span>'
+      : d > 0 ? '<span class="verdict up">\u25b2 stronger, +' + d + ' power</span>'
+      : d < 0 ? '<span class="verdict down">\u25bc weaker, ' + d + ' power</span>'
+      : '<span class="verdict">= as strong as what you wear</span>';
+    if (!c.length) return verdict + '<span class="cmp">no change to your stats</span>';
+    return verdict + '<span class="cmp">' + c.map(x =>
+      '<span class="' + (x.good ? 'up' : 'down') + '">' + (x.good ? '\u25b2 ' : '\u25bc ') + x.txt + ' ' + x.name +
+      '</span>').join('<br>') + '</span>';
   }
 
   renderBag() {

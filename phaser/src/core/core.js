@@ -293,7 +293,7 @@ const RIM_HUE = 'rgb(228,220,196)', RIM_W = 0.85, RIM_A = 0.5;
  * that would carry one: above the cloth, below anything already glowing. */
 const SHEEN_HUE = 'rgb(255,248,232)', SHEEN_W = 0.45, SHEEN_A = 0.5;
 const SHEEN_LO = 62, SHEEN_HI = 190, SHEEN_SAT = 0.65;
-const HUD_H           = 78;   // canvas UI clears the HUD panel by this much
+const HUD_H           = 130;   // canvas UI clears the HUD panel by this much
 // Holding the gate is the delve's second act, and the only part of a run that
 // can be stretched: a delve itself is bounded at roughly two minutes because a
 // player clears bodies as fast as a populated map can present them, and no
@@ -4467,6 +4467,7 @@ function readLore(n) {
   const [title, text] = LORE[n.id];
   run.banner = run.bannerMax = 7;
   run.bannerLore = title;          // the panel is this page's, not whatever banner replaces it
+  run.lorePages = (run.lorePages || 0) + 1;
   run.bannerText = title;
   run.bannerNote = text;
   sfx('tap', n.x, n.y);
@@ -4619,6 +4620,49 @@ function updateCracks(dt) {
       toast('A cracked wall — strike it!', '#e8c878');
     }
   }
+}
+
+
+/* THE GOAL, IN ONE LINE. Playtested: "hard to tell what my goal is". The
+   delve has always had a plain order to it -- gather the slag, which calls
+   the avatar; put it down; reach the ley-gate and wind it open; step
+   through, or hold it for more -- but the only place that order was written
+   was a banner that came and went. This is the same order as a line the HUD
+   keeps up the whole time, read off the state the rest of the core already
+   keeps, so it cannot disagree with what is actually happening. */
+function objectiveLine() {
+  if (!run || !LEVEL || run.room) return null;
+  const pct = v => Math.round(clamp(v, 0, 1) * 100) + '%';
+  if (run.gateOpen) return { step: 4, icon: '⇧', text: 'Step out of the gate to escape',
+                             note: 'or stay in it: more slag, more of them' };
+  if (portal && portal.active) return portal.inside
+    ? { step: 3, icon: '◎', text: 'Wind the ley-gate open', note: pct(portal.channel / (LEVEL.channel || 1)) + ' — stay inside' }
+    : { step: 3, icon: '◎', text: 'Reach the ley-gate', note: 'follow the arrow' };
+  if (run.tech < LEVEL.quota) return { step: 1, icon: '◆', text: 'Gather slag',
+                                       note: run.tech + ' / ' + LEVEL.quota };
+  return { step: 2, icon: '☠', text: 'Defeat ' + ((run.boss && run.boss.title) || 'the avatar'),
+           note: 'the slag has called it' };
+}
+
+
+/* WHAT IS HITTING ME. Playtested: "hard to tell what's hitting me". A blow
+   from off-screen, or from behind the hero in a crowd, arrived as a red
+   flash on every edge at once -- it said you were hurt, and nothing about
+   where from. Each blow now leaves a mark pointing back at its source,
+   brighter for a bigger share of your life, fading over a second; the HUD
+   draws them at the edge of the screen on that side (hud.js). */
+const HIT_MARK = 1.1;
+function noteHit(fx, fy, taken) {
+  if (!run.hits) run.hits = [];
+  run.hits.push({ a: Math.atan2(fy - player.y, fx - player.x), t: HIT_MARK,
+                  w: clamp(taken / Math.max(1, player.maxHp) * 5, 0.35, 1) });
+  if (run.hits.length > 6) run.hits.shift();
+}
+function updateHits(dt) {
+  if (!run || !run.hits || !run.hits.length) return;
+  let w = 0;
+  for (const h of run.hits) { h.t -= dt; if (h.t > 0) run.hits[w++] = h; }
+  run.hits.length = w;
 }
 
 /* --- ROOM ENCOUNTERS -----------------------------------------------------
@@ -5311,8 +5355,21 @@ function updateCorpse(dt) {
 }
 
 // A short line above the HUD: what you just picked up, in its rarity colour.
+/* One line at a time, each given long enough to be read. Playtested: "hard
+   to tell what just happened" -- two things landing together (a room's name
+   and its coffer sealing, a page and a blessing) used to replace each other
+   in the same frame, and the first was never seen. A new line now waits its
+   turn behind one that has been up less than a second. */
+const TOAST_LIFE = 2.4, TOAST_MIN = 1.0;
 function toast(text, colour) {
-  run.toast = { text, colour, life: 2.4 };
+  const t = run.toast;
+  if (t && t.text !== text && TOAST_LIFE - t.life < TOAST_MIN) {
+    if (!run.toastQ) run.toastQ = [];
+    if (!run.toastQ.some(q => q.text === text)) run.toastQ.push({ text, colour });
+    if (run.toastQ.length > 4) run.toastQ.shift();
+    return;
+  }
+  run.toast = { text, colour, life: TOAST_LIFE };
 }
 
 // Expanding shockwave ring — a few strokes, but it is what makes a kill read
@@ -6113,6 +6170,8 @@ function hurtPlayerBy(dmg, fx, fy, sized) {
         PAL.blood, 10, 180);
   floatDmg(player.x, player.y - player.r * 1.2, taken, 'taken');
   sfx('hurt', undefined, undefined, clamp(taken / Math.max(1, player.maxHp) * 4, 0, 1));
+  // Which way it came from, for the HUD's hit marker (see noteHit).
+  if (fx !== undefined && run) noteHit(fx, fy, taken);
   if (player.hp <= 0) { player.hp = 0; endRun(false); }
 }
 
@@ -8493,6 +8552,11 @@ function update(dt) {
     if (run.banner <= 0) { run.bannerMax = 0; run.bannerLore = null; }
     if (run.banner <= 0) { run.bannerText = null; run.bannerNote = null; } }
   if (run.toast) { run.toast.life -= dt; if (run.toast.life <= 0) run.toast = null; }
+  // The next in line, once the one up has had its second.
+  if (run.toastQ && run.toastQ.length && (!run.toast || TOAST_LIFE - run.toast.life >= TOAST_MIN)) {
+    const q = run.toastQ.shift();
+    run.toast = { text: q.text, colour: q.colour, life: TOAST_LIFE };
+  }
   if (run.bagWarned > 0) run.bagWarned -= dt;
   updatePlayer(dt);
   updateArcs(dt);
@@ -8523,6 +8587,7 @@ function update(dt) {
   updateFinds(dt);
   updateCracks(dt);
   updateEncounters(dt);
+  updateHits(dt);
   updateBleed(dt);
   updateGloom(dt);
   updateRings(dt);
@@ -10552,7 +10617,9 @@ function endRun(won) {
     bounty = run.bountyPaid = 1;
     }
   }
+  const levelWas = stash.level || 1;
   bankRun(won);
+  const levelNow = stash.level || 1;
   // And one life means one. Everything the Vanguard owned goes with them --
   // after the banking, so the last delve is scored before it is taken away,
   // and after the trophy, which is the one thing death cannot reach.
@@ -10610,7 +10677,25 @@ function endRun(won) {
     '<div>Slain<b>' + run.kills + '</b></div>' +
     '<div>Slag<b>' + run.tech + '</b></div>' +
     '<div>' + (won ? 'Carried out' : 'Left behind') + '<b>' + carried + '</b></div>' +
-    '<div>' + (won ? 'Coin banked' : 'Coin left') + '<b>' + run.coins + '</b></div>';
+    '<div>' + (won ? 'Coin banked' : 'Coin left') + '<b>' + run.coins + '</b></div>' +
+    // What changed, said outright: the level the slag bought, the points it
+    // brought for the talents, and what was found down there.
+    (levelNow > levelWas
+      ? '<div class="up">Level<b>' + levelWas + ' \u2192 ' + levelNow + '</b></div>' +
+        '<div class="up">Talent points<b>+' + (levelNow - levelWas) + '</b></div>'
+      : '<div>Level<b>' + levelNow + '</b></div>') +
+    (() => {
+      const f = [];
+      const n = (k, one, many) => { if (k) f.push(k + ' ' + (k === 1 ? one : many)); };
+      n(run.shrines || 0, 'shrine', 'shrines');
+      n(run.lorePages || 0, 'lore page', 'lore pages');
+      n(run.secrets || 0, 'hidden room', 'hidden rooms');
+      n(run.encounters || 0, 'room beaten', 'rooms beaten');
+      return f.length ? '<div class="wide">Found<b>' + f.join(' \u00b7 ') + '</b></div>' : '';
+    })();
+  if (levelNow > levelWas && !run.ending)
+    el.overSub.textContent += ' Level ' + levelNow + ' \u2014 ' + (levelNow - levelWas) +
+      (levelNow - levelWas === 1 ? ' talent point' : ' talent points') + ' to spend.';
   showScreen('over');
   refreshBestLine();
 }
