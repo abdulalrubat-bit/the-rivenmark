@@ -2565,6 +2565,12 @@ function setPieceKit(h) {
       roomBare.add(gi(x, y));
       (kit.meta.lava = kit.meta.lava || []).push([x, y]);
     },
+    // A cell of deep ash (the Firth's shoals): kept bare, remembered by the room.
+    ash(x, y) {
+      if (!open(x, y)) return;
+      roomBare.add(gi(x, y));
+      (kit.meta.ash = kit.meta.ash || []).push([x, y]);
+    },
     // A spore pod at a cell centre: kept bare, remembered by the room.
     pod(x, y) {
       if (!open(x, y)) return;
@@ -2887,7 +2893,7 @@ ROOM_SETS.cistern = { min: [7, 7], shapes: ['octagon'], trap: 'pool',
     for (const [x, y] of k.side('top').concat(k.side('bottom'))) if (k.chance(0.3)) k.wall('chain', x, y);
     k.lamp(k.cx, k.cy, PAL.teal);
   } };
-const SET_TRAP = { hall: 'hall', pool: 'cistern', gust: 'span', lava: 'rift', spore: 'grove' };
+const SET_TRAP = { hall: 'hall', pool: 'cistern', gust: 'span', lava: 'rift', spore: 'grove', ash: 'shoals' };
 
 /* --- THE RENDING GORGES ---------------------------------------------------
    The Kael-Dorm Redoubt is a fort of the Frost-Scholars hung over split
@@ -3225,8 +3231,106 @@ const WEALD_SETS = {
     names: ['The Warden\u2019s Camp', 'The Weald-Watch', 'The Rangers\u2019 Billet'] })
 };
 
+/* --- THE DEAD FIRTH --------------------------------------------------------
+   A blackened ocean, drained and refilled with drifting ash: the shoals, the
+   bones of what swam there, a wreck the ash beached, a lighthouse with no
+   sea, salt-pans, and the caves the smugglers kept.
+
+   Its own hazard is the ASH: deep drifts lying in banks across the shoals.
+   They do not hurt -- they HOLD. Wading one costs nearly half your stride,
+   and the horde's (updateEnemies, the stride) -- so the shoals are a room of
+   ground you choose: pull a pack through the drifts and fight it from the
+   hard floor while it wades. */
+const FIRTH_LAMP = '#b9c4cf';
+const FIRTH_SETS = {
+  /* Drifts in banks across the room, the ribs of something vast half-sunk
+     in them, driftwood thrown up where the tide once was. */
+  shoals: { min: [8, 9], shapes: ['octagon', 'buttress'], trap: 'ash',
+    clutter: ['bones', 'rubble', 'driftwood', 'bones'],
+    names: ['The Ash-Shoals', 'The Grey Banks', 'The Drowned Flats'],
+    build(k) {
+      // Two or three banks across the long axis, each a few cells wide and
+      // wandering, with firm ground between them.
+      const banks = k.B1 - k.B0 > 11 ? 3 : 2;
+      for (let i = 0; i < banks; i++) {
+        const b0 = k.B0 + 1 + Math.round((i + 0.5) * (k.B1 - k.B0 - 2) / banks) - 1;
+        let off = 0;
+        for (let a = k.A0; a <= k.A1; a++) {
+          if (k.chance(0.3)) off = clamp(off + (k.chance(0.5) ? 1 : -1), -1, 1);
+          for (let d = 0; d < 2; d++) { const [x, y] = k.xy(b0 + off + d, a); k.ash(x, y); }
+        }
+      }
+      k.put('ribcage', k.MB, k.A0 + 1, 2, k.alongQ);
+      for (let i = 0; i < 4; i++) {
+        const x = k.x0 + 1 + ((Math.random() * (k.w - 2)) | 0), y = k.y0 + 1 + ((Math.random() * (k.h - 2)) | 0);
+        k.prop(k.pick(['driftwood', 'bones', 'driftwood']), x, y, 8);
+      }
+      k.lamp(k.cx, k.cy, FIRTH_LAMP);
+    } },
+
+  /* A ship the ash beached: its deck in planks down the middle, the mast
+     fallen across it, casks and chains everywhere, and a strongbox the crew
+     would not leave. */
+  wreck: { min: [7, 9], shapes: ['buttress'],
+    clutter: ['barrel', 'crate', 'rubble', 'driftwood'],
+    names: ['The Beached Wreck', 'The Hulk of the Last Tide', 'The Ash-Bound Galley'],
+    build(k) {
+      for (let b = k.B0 + 1; b <= k.B1 - 1; b++)
+        for (const a of [k.MA - 1, k.MA, k.MA + 1]) k.put('planks', b, a, 0, k.alongQ);
+      k.put('mast', k.MB, k.MA, 0, k.acrossQ);
+      for (const [x, y] of k.side(k.wide ? 'top' : 'left').concat(k.side(k.wide ? 'bottom' : 'right')))
+        if (k.chance(0.35)) k.wall('chain', x, y); else if (k.chance(0.35)) k.prop(k.pick(['barrel', 'crate', 'sacks']), x, y, 6);
+      { const [x, y] = k.xy(k.chance(0.5) ? k.B0 + 1 : k.B1 - 1, k.MA); k.chest(x, y, 'coffer'); }
+      k.lamp(k.cx, k.cy, PAL.ember);
+    } },
+
+  /* A lighthouse with no sea to light: its lamp still burning white at the
+     middle, the stair's rubble round it. It has to be held. */
+  lighthouse: { min: [7, 7], shapes: ['octagon'],
+    clutter: ['rubble', 'rubble', 'driftwood', 'crack'],
+    names: ['The Drowned Lighthouse', 'The Lamp of the Firth', 'The Dead Beacon'],
+    build(k) {
+      k.prop('brazier', k.cx, k.cy, 0, 0);
+      k.lamp(k.cx, k.cy, '#f0f4ff'); k.lamp(k.cx, k.cy, FIRTH_LAMP);
+      for (let i = 0; i < 8; i++) {
+        const t = i / 8 * TAU, r = Math.min(k.w, k.h) / 2 - 1.8;
+        k.prop(i % 2 ? 'pillar' : 'rubble', Math.round(k.cx + Math.cos(t) * r), Math.round(k.cy + Math.sin(t) * r), 2, 0);
+      }
+    } },
+
+  /* Where the sea left its salt: pans of it cracked white, crystal grown
+     in the corners, sacks of it waiting for a buyer who never came. */
+  saltpans: { min: [7, 8], shapes: ['octagon', 'buttress'],
+    clutter: ['saltcrystal', 'crack', 'sacks', 'bones'],
+    names: ['The Salt-Pans', 'The White Flats', 'The Brine-Works'],
+    build(k) {
+      for (let b = k.B0 + 2; b <= k.B1 - 2; b += 3)
+        for (const a of [k.MA - 2, k.MA + 2]) k.put('saltcrystal', b, a, 4);
+      for (const [x, y] of k.side(k.wide ? 'top' : 'left')) if (k.chance(0.4)) k.prop('sacks', x, y, 6);
+      k.lamp(k.cx, k.cy, '#e8eef4');
+    } },
+
+  /* The smugglers' cave: stock stacked to the walls, coin spilled, and a
+     coffer at the back that was never theirs to keep. */
+  smugglers: { min: [6, 7], shapes: ['buttress', 'octagon'],
+    clutter: ['coins', 'crate', 'barrel', 'sacks'],
+    names: ['The Smugglers\u2019 Cave', 'The Wreckers\u2019 Hoard', 'The Contraband Hold'],
+    build(k) {
+      for (const s of ['top', 'bottom', 'left', 'right'])
+        for (const [x, y] of k.side(s)) if (k.chance(0.5)) k.prop(k.pick(['crate', 'barrel', 'sacks', 'crate']), x, y, 6);
+      k.put('table', k.MB, k.MA, 2, k.alongQ);
+      k.put('coins', k.MB, k.MA, 4);
+      { const [x, y] = k.xy(k.chance(0.5) ? k.B0 + 1 : k.B1 - 1, k.MA); k.chest(x, y, 'coffer'); }
+      k.lamp(k.cx, k.cy, PAL.ember);
+    } },
+
+  // The tide-watch: the Moors' garrison, by the Firth's own names.
+  garrison: Object.assign({}, ROOM_SETS.garrison, {
+    names: ['The Tide-Watch', 'The Shore-Guard\u2019s Post', 'The Firth Barracks'] })
+};
+
 // Which regions are built of set pieces, and from which table.
-const REGION_SETS = { slag: ROOM_SETS, vaelk: GORGE_SETS, kraggen: KRAG_SETS, weald: WEALD_SETS };
+const REGION_SETS = { slag: ROOM_SETS, vaelk: GORGE_SETS, kraggen: KRAG_SETS, weald: WEALD_SETS, firth: FIRTH_SETS };
 
 // Cut the holes the rooms asked for, now the rock is merged. A cell whose
 // hole would strand floor is left as ground: a corridor that entered the
@@ -3342,6 +3446,12 @@ const ROOM_MOODS = {
   heart:    { grade: '#c8e060', gradeA: 0.24, dark: 0.35, fog: '#4a5a18', motes: '#e8f890', drift: 'rise',  glow: '#b8d040' },
   spawnpool:{ grade: '#6ad07a', gradeA: 0.20, dark: 0.40, fog: '#1a4a28', motes: '#a0f0b0', drift: 'float', glow: '#4ac05a' },
   shrine:   { grade: '#b0c890', gradeA: 0.14, dark: 0.32, fog: '#3a4a30', motes: '#e0f0c8', drift: 'fall',  glow: '#9dbb5a' },
+  // The Dead Firth: grey, and ash falling through all of it.
+  shoals:   { grade: '#b0b4bc', gradeA: 0.16, dark: 0.30, fog: '#4a4c52', motes: '#d8dce4', drift: 'fall',  glow: '#9aa4b0' },
+  wreck:    { grade: '#c8a878', gradeA: 0.12, dark: 0.32, fog: '#4a4030', motes: '#e0d4bc', drift: 'fall',  glow: '#c8904a' },
+  lighthouse:{ grade: '#e8eeff', gradeA: 0.18, dark: 0.15, fog: '#5a6070', motes: '#ffffff', drift: 'float', glow: '#f0f4ff' },
+  saltpans: { grade: '#e0e4ea', gradeA: 0.14, dark: 0.22, fog: '#6a6e74', motes: '#f4f6fa', drift: 'fall',  glow: '#dce2ea' },
+  smugglers:{ grade: '#d8a860', gradeA: 0.12, dark: 0.38, fog: '#3a3024', motes: '#e8d4a8', drift: 'fall',  glow: '#c8883a' },
   // The older rooms, in the regions that do not have set pieces yet.
   hall:     { grade: '#8fb9d6', gradeA: 0.12, dark: 0.30, fog: '#3a4a5a', motes: '#d0e0f0', drift: 'fall',  glow: '#6a9ac0' },
   barracks: { grade: '#e0a860', gradeA: 0.10, dark: 0.25, fog: '#6a5030', motes: '#e8d0a0', drift: 'fall',  glow: '#d08a40' },
@@ -5394,7 +5504,18 @@ const ENCOUNTERS = {
   spawnpool:{ trigger: 'enter', say: 'Something crawls out of the water.',
     foes: dp => [['any', 5 + Math.round(dp * 2), 'ring']] },
   shrine:   { trigger: 'coffer', say: 'The shrine\u2019s keeper stirs.',
-    foes: dp => [['heavy', 1, 'ring', true], ['any', 2 + Math.round(dp * 2), 'room']] }
+    foes: dp => [['heavy', 1, 'ring', true], ['any', 2 + Math.round(dp * 2), 'room']] },
+  // The Dead Firth.
+  shoals:   { trigger: 'enter', say: 'They rise out of the ash!',
+    foes: dp => [['any', 5 + Math.round(dp * 3), 'room']] },
+  wreck:    { trigger: 'coffer', say: 'The crew never left.',
+    foes: dp => [['heavy', 1, 'ring', true], ['any', 3 + Math.round(dp * 2), 'room']] },
+  lighthouse:{ trigger: 'enter', say: 'Keep the lamp burning!', hold: 12,
+    foes: dp => [['any', 2, 'edge']], every: 2.4 },
+  saltpans: { trigger: 'enter', say: 'Shapes run across the salt.',
+    foes: dp => [['fast', 5 + Math.round(dp * 3), 'edge']] },
+  smugglers:{ trigger: 'coffer', say: 'The smugglers want their hoard back.',
+    foes: dp => [['any', 5 + Math.round(dp * 2), 'ring']] }
 };
 const ENC_REACH = 130;          // how near a coffer wakes an 'coffer' room
 const ENC_HOLD_R = 130;         // how near the heart counts as holding it
@@ -5633,6 +5754,14 @@ function sporePhase(t) {
   return { phase: 'cloud', f: (u - (SPORE_CYCLE - SPORE_CLOUD)) / SPORE_CLOUD };
 }
 
+/* The Firth's ash drifts: they do not hurt, they hold. Wading one is a bit
+ * over half your stride, and the horde's the same -- so where you fight is
+ * the choice, and pulling a pack through the drifts to meet it on the hard
+ * ground is the move. */
+const ASH_STRIDE = 0.55;
+let ashCells = new Set();
+const onAsh = (x, y) => ashCells.size > 0 && ashCells.has(gi(Math.floor(x / CELL_W), Math.floor(y / CELL_W)));
+
 // A hole at a point: the chasm, not masonry.
 const pitAt = (x, y) => !!pitGrid && inGrid(Math.floor(x / CELL_W), Math.floor(y / CELL_W)) &&
                         pitGrid[gi(Math.floor(x / CELL_W), Math.floor(y / CELL_W))] === 1;
@@ -5691,12 +5820,16 @@ const trapBites = e => e.hp > 0 && e.awake &&
 
 function placeTraps() {
   traps = [];
+  ashCells = new Set();
   for (const rm of rooms) {
     if (rm.kind === 'hall') {
       const cycle = spikeBeat(LEVEL.depth || 0);
       traps.push({ kind: 'spike', x: rm.x, y: rm.y, r: rm.r, cycle: cycle,
                    // Offset so two halls in one delve are not in lockstep.
                    t: Math.random() * cycle, was: 'down', bit: [] });
+    } else if (rm.kind === 'shoals' && rm.meta && rm.meta.ash) {
+      for (const [x, y] of rm.meta.ash) ashCells.add(gi(x, y));
+      traps.push({ kind: 'ash', x: rm.x, y: rm.y, r: rm.r, box: rm.box, list: rm.meta.ash, t: 0 });
     } else if (rm.kind === 'grove' && rm.meta && rm.meta.pods) {
       traps.push({ kind: 'spore', x: rm.x, y: rm.y, r: rm.r, box: rm.box, tick: 0,
                    // Each pod on its own clock, so the grove is never all
@@ -5755,6 +5888,14 @@ function updateTraps(dt) {
       updateLava(tr);
     } else if (tr.kind === 'spore') {
       updateSpores(tr, dt);
+    } else if (tr.kind === 'ash') {
+      // Nothing to strike: the drift is in the stride (onAsh). It only says
+      // so, the first time you wade one -- and after the room has said its
+      // own name, which is the bigger news and would be pushed back by it.
+      if (!run.ashTold && onAsh(player.x, player.y)) {
+        const here = roomAt(player.x, player.y);
+        if (!here || here.seen) { run.ashTold = true; toast('Deep ash — it slows everything that wades it.', '#d8dce4'); }
+      }
     } else {
       tr.tick -= dt;
       if (tr.tick > 0) continue;
@@ -7354,7 +7495,8 @@ function updatePlayer(dt) {
     // reach, spent up front, before you know whether it will land.
     if (!player.channel) {
       const stride = ((player.cleave || 0) > 0 ? CLEAVE_STRIDE : 1) *
-                     ((player.rush || 0) > 0 ? UNIQUE_POWER.stormstride.stride : 1);
+                     ((player.rush || 0) > 0 ? UNIQUE_POWER.stormstride.stride : 1) *
+                     (onAsh(player.x, player.y) ? ASH_STRIDE : 1);
       moveEntity(player, mv.x * player.speed * stride * dt,
                          mv.y * player.speed * stride * dt);
     }
@@ -8575,7 +8717,8 @@ function updateEnemies(dt) {
     // Slowed by a Null-Zone. The pool does not kill anything; it decides how
     // fast the ground in front of you can be crossed.
     const spd = e.speed * ((e.slowed || 0) > 0 ? 0.3 : 1) *
-                ((e.chill || 0) > 0 ? 1 - UNIQUE_POWER.rimebite.slow : 1);
+                ((e.chill || 0) > 0 ? 1 - UNIQUE_POWER.rimebite.slow : 1) *
+                (onAsh(e.x, e.y) ? ASH_STRIDE : 1);
     moveEntity(e, (sx + rx * 0.8) * spd * dt, (sy + ry * 0.8) * spd * dt);
     advanceGait(e, mx0, my0, dt);
   }

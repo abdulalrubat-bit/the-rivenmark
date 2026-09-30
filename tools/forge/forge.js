@@ -2647,6 +2647,57 @@ function forgeProps() {
     g.shadowBlur = 0;
   });
 
+  /* --- the Dead Firth's furniture ------------------------------------------
+     A drained sea: bone, salt, and what the ash beached. Grey where the other
+     regions have colour, so the lamps are what carries the eye. */
+  P('ribcage', 64, g => {                                             // the ribs of something vast, along x
+    g.lineCap = 'round';
+    g.strokeStyle = 'rgba(30,28,24,.8)'; g.lineWidth = 6;              // the spine
+    g.beginPath(); g.moveTo(-28, 0); g.lineTo(28, 0); g.stroke();
+    g.strokeStyle = '#cfc6b0'; g.lineWidth = 4;
+    g.beginPath(); g.moveTo(-28, 0); g.lineTo(28, 0); g.stroke();
+    for (let x = -22; x <= 22; x += 8) {
+      for (const sy of [-1, 1]) {
+        g.strokeStyle = 'rgba(30,28,24,.8)'; g.lineWidth = 4.5;
+        g.beginPath(); g.moveTo(x, 0); g.quadraticCurveTo(x + 6, sy * 12, x + 2, sy * 24); g.stroke();
+        g.strokeStyle = '#d8d0bc'; g.lineWidth = 2.6;
+        g.beginPath(); g.moveTo(x, 0); g.quadraticCurveTo(x + 6, sy * 12, x + 2, sy * 24); g.stroke();
+      }
+    }
+    g.lineCap = 'butt';
+  });
+  P('driftwood', 40, g => {                                           // a bleached log, along x
+    g.fillStyle = 'rgba(20,18,16,.5)'; g.beginPath(); g.ellipse(2, 3, 17, 5, 0.1, 0, TAU); g.fill();
+    const grd = g.createLinearGradient(0, -5, 0, 5);
+    grd.addColorStop(0, '#b8ac98'); grd.addColorStop(1, '#6a6050');
+    g.fillStyle = grd; g.beginPath(); g.ellipse(0, 0, 17, 4.5, 0.1, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(30,26,20,.7)'; g.lineWidth = 1; g.stroke();
+    g.strokeStyle = 'rgba(60,52,40,.6)';
+    for (const x of [-9, -2, 6]) { g.beginPath(); g.moveTo(x, -3); g.lineTo(x + 5, 2); g.stroke(); }
+    g.strokeStyle = '#8a7e6a'; g.lineWidth = 2; g.lineCap = 'round';   // a snapped branch
+    g.beginPath(); g.moveTo(8, -2); g.lineTo(13, -9); g.stroke(); g.lineCap = 'butt';
+  });
+  P('mast', 80, g => {                                                // a fallen mast with its spar, along x
+    g.fillStyle = 'rgba(12,10,8,.5)'; g.fillRect(-36, -2, 74, 9);
+    g.fillStyle = '#5a4630'; g.fillRect(-37, -4, 74, 8);
+    g.strokeStyle = 'rgba(14,10,6,.85)'; g.lineWidth = 1.2; g.strokeRect(-37, -4, 74, 8);
+    g.fillStyle = 'rgba(170,140,100,.35)'; g.fillRect(-37, -4, 74, 1.5);
+    g.fillStyle = '#4a3a26'; g.fillRect(-4, -20, 6, 40);                // the spar across it
+    g.strokeRect(-4, -20, 6, 40);
+    g.strokeStyle = 'rgba(190,176,150,.6)'; g.lineWidth = 1;          // rope and a rag of sail
+    g.beginPath(); g.moveTo(-1, -20); g.lineTo(-20, -4); g.moveTo(-1, 20); g.lineTo(-24, 4); g.stroke();
+    g.fillStyle = 'rgba(200,190,170,.4)';
+    g.beginPath(); g.moveTo(2, -18); g.lineTo(16, -12); g.lineTo(12, 2); g.lineTo(2, 0); g.closePath(); g.fill();
+  });
+  P('saltcrystal', 34, g => {                                         // salt grown in white cubes
+    const cube = (x, y, s) => {
+      g.fillStyle = '#eef2f6'; g.fillRect(x - s, y - s, s * 2, s * 2);
+      g.fillStyle = 'rgba(160,170,184,.8)'; g.fillRect(x - s, y + s * 0.3, s * 2, s * 0.7);
+      g.strokeStyle = 'rgba(40,44,52,.8)'; g.lineWidth = 1; g.strokeRect(x - s, y - s, s * 2, s * 2);
+    };
+    cube(-4, 2, 5); cube(4, -2, 6); cube(1, 7, 3.5); cube(-6, -6, 3);
+  });
+
   for (const k in SPR) {
     if (k.indexOf('p_') !== 0 || k.length > 2 && k.charAt(k.length - 2) === '_') continue;
     for (let q = 0; q < 4; q++) SPR[k + '_' + q] = rotateSprite(SPR[k], q);

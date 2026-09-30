@@ -70,7 +70,7 @@ Everything that fights you. `-rest` plus an 8-frame `-run-N` per kind.
 | `bestiary/thrall-rest` | 1 | 88x88 | 44×44 |
 | `bestiary/thrall-run-N` | 8 | 88x88 | 44×44 |
 
-### `props/` — 220 frames
+### `props/` — 240 frames
 
 Scenery. `-N` variants are rolled per placement, so they should differ visibly.
 
@@ -110,6 +110,8 @@ Scenery. `-N` variants are rolled per placement, so they should differ visibly.
 | `props/crack-N` | 4 | 84x84 | 42×42 |
 | `props/crate` | 1 | 64x64 | 32×32 |
 | `props/crate-N` | 4 | 64x64 | 32×32 |
+| `props/driftwood` | 1 | 80x80 | 40×40 |
+| `props/driftwood-N` | 4 | 80x80 | 40×40 |
 | `props/grate` | 1 | 68x68 | 34×34 |
 | `props/grate-N` | 4 | 68x68 | 34×34 |
 | `props/hornskull` | 1 | 76x76 | 38×38 |
@@ -120,6 +122,8 @@ Scenery. `-N` variants are rolled per placement, so they should differ visibly.
 | `props/lectern-N` | 4 | 60x60 | 30×30 |
 | `props/maptable` | 1 | 104x104 | 52×52 |
 | `props/maptable-N` | 4 | 104x104 | 52×52 |
+| `props/mast` | 1 | 160x160 | 80×80 |
+| `props/mast-N` | 4 | 160x160 | 80×80 |
 | `props/minecart` | 1 | 80x80 | 40×40 |
 | `props/minecart-N` | 4 | 80x80 | 40×40 |
 | `props/moss` | 1 | 80x80 | 40×40 |
@@ -136,6 +140,8 @@ Scenery. `-N` variants are rolled per placement, so they should differ visibly.
 | `props/planks-N` | 4 | 80x80 | 40×40 |
 | `props/rack` | 1 | 88x88 | 44×44 |
 | `props/rack-N` | 4 | 88x88 | 44×44 |
+| `props/ribcage` | 1 | 128x128 | 64×64 |
+| `props/ribcage-N` | 4 | 128x128 | 64×64 |
 | `props/rootheart` | 1 | 112x112 | 56×56 |
 | `props/rootheart-N` | 4 | 112x112 | 56×56 |
 | `props/roots` | 1 | 80x80 | 40×40 |
@@ -144,6 +150,8 @@ Scenery. `-N` variants are rolled per placement, so they should differ visibly.
 | `props/rubble-N` | 4 | 60x60 | 30×30 |
 | `props/sacks` | 1 | 68x68 | 34×34 |
 | `props/sacks-N` | 4 | 68x68 | 34×34 |
+| `props/saltcrystal` | 1 | 68x68 | 34×34 |
+| `props/saltcrystal-N` | 4 | 68x68 | 34×34 |
 | `props/sconce` | 1 | 52x52 | 26×26 |
 | `props/sconce-N` | 4 | 52x52 | 26×26 |
 | `props/scroll` | 1 | 68x68 | 34×34 |
@@ -231,4 +239,4 @@ per kind, for looking at rather than loading.
 
 ---
 
-366 frames total, from tools/forge/forge.js.
+386 frames total, from tools/forge/forge.js.
