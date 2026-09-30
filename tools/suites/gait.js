@@ -33,6 +33,9 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
     // they are actually drawn in, so that check stays above the skip.
     const still = [];
     for (const k in ENEMY_TYPES){
+      // Borrowed: drawn from another body's frames, so it is THAT body's
+      // frames that must be forged, and none of its own.
+      if(ENEMY_TYPES[k].borrowed){ if(!SPR[ENEMY_TYPES[k].look]) miss.push(k+'->'+ENEMY_TYPES[k].look); continue; }
       if(!SPR[k]) miss.push(k);
       if(k==='deceiver'||k==='mirage'||ENEMY_TYPES[k].anchored){ still.push(k); continue; }
       for(let i=0;i<GAIT_N;i++) if(!SPR[k+'r'+i]) miss.push(k+'r'+i);
