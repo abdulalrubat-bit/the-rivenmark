@@ -98,7 +98,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     ck('a preset saves the kit being worn', saved.n === 1 && saved.worn.every(Boolean),
        saved.n + ' preset(s)');
     // Strip everything through the buttons, so the preset has work to do.
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 10; i++) {
       const off = await p.$('#screens [data-off]:not([disabled])');
       if (!off) break;
       await off.click(); await sleep(80);
@@ -111,7 +111,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
       note: document.querySelector('#screens .sub')?.textContent || '' }));
     ck('wearing it puts every piece back', stripped === 0 &&
        back.worn.join() === saved.worn.join(), stripped + ' worn after stripping');
-    ck('and says what it did', /8 equipped/.test(back.note), back.note.slice(0, 60));
+    ck('and says what it did', /10 equipped/.test(back.note), back.note.slice(0, 60));
 
     // Let go: two taps, and it does not touch the kit.
     await tap('#screens [data-unload="0"]');
@@ -122,7 +122,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     const gone = await p.evaluate(() => ({ n: stash.loadouts.length,
       worn: SLOTS.filter(sl => stash.gear[sl.id]).length }));
     ck('letting a preset go takes two taps', stillThere === 1 && gone.n === 0);
-    ck('and leaves the kit it named alone', gone.worn === 8);
+    ck('and leaves the kit it named alone', gone.worn === 10);
 
     // At the cap there is no save button, and it says why.
     await p.evaluate(() => { for (let i = 0; i < loadoutCap(); i++) saveLoadout(); });

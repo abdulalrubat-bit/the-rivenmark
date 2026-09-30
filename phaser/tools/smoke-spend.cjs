@@ -87,7 +87,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
              slot: made && made.slot, rarity: made && made.rarity,
              affixes: made ? made.affixes.length : 0 };
   });
-  ck('a commission asks which slot first', commissioned.picker === 8,
+  ck('a commission asks which slot first', commissioned.picker === 10,
      commissioned.picker + ' slots offered');
   ck('and forges the piece you asked for',
      commissioned.after === commissioned.before + 1 && commissioned.slot === 'blade',
@@ -112,7 +112,9 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     if (cancel) cancel.click();
     await new Promise(r => setTimeout(r, 100));
     // now wear something and ask again
-    stash.gear.blade = stash.vault.find(i => i.slot === 'blade') || rollItem(0.6, 'blade');
+    // An ordinary blade: the Regalia and the uniques are fixed, and the
+    // temper does not offer them.
+    stash.gear.blade = stash.vault.find(i => i.slot === 'blade' && !i.set && !i.unique) || rollItem(0.6, 'blade');
     const again = document.querySelector('#screens [data-buy="temper"]');
     if (again) again.click();
     await new Promise(r => setTimeout(r, 120));

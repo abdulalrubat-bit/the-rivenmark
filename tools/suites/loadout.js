@@ -126,8 +126,8 @@ const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''
                    return stash.loadouts.length; })();
     return o;
   });
-  ck('a loadout saves the worn kit', lo.saved && lo.captured===8, lo.captured+'/8 captured');
-  ck('applying a loadout restores it', lo.restored===8 && lo.missing===0,
+  ck('a loadout saves the worn kit', lo.saved && lo.captured===10, lo.captured+'/10 captured');
+  ck('applying a loadout restores it', lo.restored===10 && lo.missing===0,
      lo.restored+' restored, '+lo.missing+' missing');
   ck('the hero comes back with it', lo.heroBack);
   ck('a stale preset degrades rather than conjuring items',

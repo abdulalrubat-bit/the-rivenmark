@@ -52,21 +52,107 @@ LEATHER_DK, LEATHER, LEATHER_LT = (61, 33, 30), (91, 58, 51), (120, 78, 63)
 GOLD_DK, GOLD, GOLD_LT = (149, 83, 63), (208, 143, 66), (227, 175, 63)
 
 
-def draw_girdle(size):
+def draw_girdle(size, strap=None, metal=None, style=''):
+    """A belt. `strap` and `metal` are (dark, mid, light) ramps; `style` adds
+    what makes one belt another: links for a chain, a pouch of coin, studs,
+    a rope's twist."""
+    sd, sm, sl = strap or (LEATHER_DK, LEATHER, LEATHER_LT)
+    md, mm, ml = metal or (GOLD_DK, GOLD, GOLD_LT)
     im = Image.new('RGBA', (size, size), (0, 0, 0, 0))
     d = ImageDraw.Draw(im)
     k = size / 16.0
     S = lambda v: int(round(v * k))
-    d.rectangle([S(1), S(6), S(14), S(10)], fill=LEATHER_DK)       # strap in shadow
-    d.rectangle([S(1), S(6), S(14), S(8)], fill=LEATHER)           # lit along the top
-    d.rectangle([S(2), S(6), S(13), S(6)], fill=LEATHER_LT)
-    for x in (3, 6, 11):                                           # punched holes
-        d.rectangle([S(x), S(8), S(x), S(8)], fill=(30, 18, 16))
-    d.rectangle([S(6), S(4), S(11), S(12)], fill=GOLD_DK)          # the buckle
-    d.rectangle([S(7), S(5), S(10), S(11)], fill=GOLD)
-    d.rectangle([S(8), S(6), S(9), S(10)], fill=LEATHER_DK)        # its window
-    d.rectangle([S(7), S(5), S(10), S(5)], fill=GOLD_LT)
+    heavy = 1 if style == 'heavy' else 0
+    d.rectangle([S(1), S(6 - heavy), S(14), S(10 + heavy)], fill=sd)       # strap in shadow
+    d.rectangle([S(1), S(6 - heavy), S(14), S(8)], fill=sm)                # lit along the top
+    d.rectangle([S(2), S(6 - heavy), S(13), S(6 - heavy)], fill=sl)
+    if style == 'chain':
+        for x in (1, 3, 12, 14):
+            d.rectangle([S(x), S(7), S(x), S(9)], fill=ml)
+    elif style == 'rope':
+        for x in range(1, 15, 2):
+            d.rectangle([S(x), S(7), S(x), S(7)], fill=sd)
+            d.rectangle([S(x + 1), S(9), S(x + 1), S(9)], fill=sd)
+    elif style == 'heavy':
+        for x in (2, 4, 12, 14):
+            d.rectangle([S(x), S(8), S(x), S(8)], fill=ml)
+    else:
+        for x in (3, 6, 11):                                               # punched holes
+            d.rectangle([S(x), S(8), S(x), S(8)], fill=(30, 18, 16))
+    d.rectangle([S(6), S(4), S(11), S(12)], fill=md)                       # the buckle
+    d.rectangle([S(7), S(5), S(10), S(11)], fill=mm)
+    d.rectangle([S(8), S(6), S(9), S(10)], fill=sd)                        # its window
+    d.rectangle([S(7), S(5), S(10), S(5)], fill=ml)
+    if style == 'coin':                                                    # a purse on it
+        d.ellipse([S(1), S(9), S(5), S(14)], fill=sd)
+        d.ellipse([S(2), S(10), S(4), S(12)], fill=sm)
+        d.rectangle([S(2), S(13), S(3), S(14)], fill=GOLD)
+    if style == 'ley':                                                     # a charm on a cord
+        d.rectangle([S(12), S(10), S(12), S(12)], fill=sl)
+        d.rectangle([S(11), S(13), S(13), S(14)], fill=(95, 208, 255))
     return im
+
+
+# Gloves. Neither sheet has any, so drawn in the girdle's hand: a cuff, the
+# back of the hand, four fingers and a thumb, lit from the top left. `style`
+# is what one pair has that another does not.
+def draw_glove(size, ramp, trim=None, style=''):
+    dk, md, lt = ramp
+    td, tm, tl = trim or ramp
+    im = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    k = size / 16.0
+    S = lambda v: int(round(v * k))
+    R = lambda x0, y0, x1, y1, c: d.rectangle([S(x0), S(y0), S(x1), S(y1)], fill=c)
+    R(4, 11, 11, 15, td); R(4, 11, 11, 12, tm); R(5, 11, 10, 11, tl)       # the cuff
+    R(4, 5, 11, 11, dk); R(4, 5, 10, 9, md)                                  # back of the hand
+    for i, x in enumerate((4, 6, 8, 10)):                                    # fingers
+        top = (2, 1, 1, 2)[i]
+        R(x, top, x + 1, 5, dk); R(x, top, x, 5, md); R(x, top, x, top, lt)
+    R(12, 6, 13, 9, dk); R(12, 6, 12, 8, md)                                 # thumb
+    R(5, 5, 9, 5, lt)
+    if style == 'plate':
+        for y in (6, 8, 10):
+            R(4, y, 10, y, lt)
+    elif style == 'spikes':
+        for x in (5, 7, 9):
+            R(x, 4, x, 4, tl); R(x, 3, x, 3, (240, 240, 240))
+    elif style == 'wrap':
+        for y in (6, 8, 10, 12):
+            R(4, y, 11, y, lt)
+    elif style == 'blood':
+        R(6, 7, 8, 9, (150, 30, 30)); R(9, 3, 9, 5, (150, 30, 30))
+    elif style == 'gilt':
+        R(6, 7, 8, 8, (227, 175, 63)); R(7, 6, 7, 9, (227, 175, 63))
+    return im
+
+IRON = ((70, 74, 82), (120, 126, 136), (180, 186, 196))
+SILK = ((70, 80, 110), (110, 126, 170), (170, 186, 220))
+BRONZE = ((110, 60, 30), (170, 100, 50), (220, 150, 80))
+DARK = ((40, 36, 40), (70, 62, 66), (110, 100, 100))
+ROPE = ((110, 90, 60), (160, 132, 90), (200, 176, 130))
+LEATHER_R = (LEATHER_DK, LEATHER, LEATHER_LT)
+GOLD_R = (GOLD_DK, GOLD, GOLD_LT)
+
+# Drawn cells: the key names a painter here rather than a sheet cell.
+DRAWN = {
+    'girdle':           lambda n: draw_girdle(n),
+    'Leather Girdle':   lambda n: draw_girdle(n),
+    'Chain Belt':       lambda n: draw_girdle(n, IRON, IRON, 'chain'),
+    'Heavy Belt':       lambda n: draw_girdle(n, DARK, IRON, 'heavy'),
+    'Coin Belt':        lambda n: draw_girdle(n, LEATHER_R, GOLD_R, 'coin'),
+    'Ley-Cord':         lambda n: draw_girdle(n, SILK, IRON, 'ley'),
+    'Rope Belt':        lambda n: draw_girdle(n, ROPE, BRONZE, 'rope'),
+    'gloves':           lambda n: draw_glove(n, LEATHER_R),
+    'Leather Gloves':   lambda n: draw_glove(n, LEATHER_R),
+    'Iron Gauntlets':   lambda n: draw_glove(n, IRON, IRON, 'plate'),
+    'Bracers':          lambda n: draw_glove(n, LEATHER_R, BRONZE, 'plate'),
+    'Grips':            lambda n: draw_glove(n, DARK, LEATHER_R),
+    'Spiked Gauntlets': lambda n: draw_glove(n, IRON, DARK, 'spikes'),
+    'Silk Wraps':       lambda n: draw_glove(n, SILK, SILK, 'wrap'),
+    'Bloodied Mitts':   lambda n: draw_glove(n, ROPE, LEATHER_R, 'blood'),
+    'Gilded Gloves':    lambda n: draw_glove(n, DARK, GOLD_R, 'gilt'),
+}
 
 
 def glyph(sheet, col, row):
@@ -104,6 +190,29 @@ ICONS = [
     ('Bone Amulet', 'i', 0, 5), ('Ley-Charm', 'i', 1, 5), ('Sun Pendant', 'i', 7, 4),
 
     ('Iron Band', 'i', 2, 5), ('Signet', 'i', 8, 4), ('Twisted Ring', 'i', 9, 4),
+
+    # The loot expansion. Same order as ICON_ORDER in the core, which gear.js
+    # holds this list to. `None` is drawn (DRAWN, above), by its key.
+    ('helm', 'g', 9, 1), ('gloves', None, 0, 0),
+    ('Rapier', 'g', 7, 6), ('Sabre', 'g', 0, 6), ('Bastard Sword', 'g', 9, 6),
+    ('War Axe', 'g', 3, 9), ('Kopis', 'g', 5, 7),
+    ('Spiked Targe', 'g', 9, 10), ('Heater Shield', 'g', 2, 10),
+    ('Bronze Roundel', 'g', 3, 10), ('Rune Ward', 'g', 4, 10),
+    ('Hood', 'g', 0, 0), ('Iron Cap', 'g', 0, 1), ('Visored Helm', 'g', 0, 2),
+    ('Winged Helm', 'g', 0, 3), ('Horned Helm', 'g', 0, 4), ('Skull Helm', 'g', 3, 4),
+    ('Circlet', 'g', 6, 1), ('Great Helm', 'g', 9, 2),
+    ('Brigandine', 'g', 1, 0), ('Scholar\u2019s Robe', 'g', 7, 2), ('Hide Vest', 'g', 1, 4),
+    ('Lamellar', 'g', 10, 3), ('Ember Cuirass', 'g', 7, 3),
+    ('Leather Gloves', None, 0, 0), ('Iron Gauntlets', None, 0, 0), ('Bracers', None, 0, 0),
+    ('Grips', None, 0, 0), ('Spiked Gauntlets', None, 0, 0), ('Silk Wraps', None, 0, 0),
+    ('Bloodied Mitts', None, 0, 0), ('Gilded Gloves', None, 0, 0),
+    ('Chain Belt', None, 0, 0), ('Heavy Belt', None, 0, 0), ('Coin Belt', None, 0, 0),
+    ('Ley-Cord', None, 0, 0), ('Rope Belt', None, 0, 0),
+    ('Iron Sabatons', 'g', 5, 4), ('Frost Boots', 'g', 5, 3), ('Ember Boots', 'g', 8, 1),
+    ('Hunter\u2019s Boots', 'g', 2, 4), ('Silk Slippers', 'g', 11, 4),
+    ('Star Pendant', 'i', 4, 5), ('Blood Gem', 'i', 3, 5), ('Teardrop', 'i', 6, 5),
+    ('Shard Pendant', 'i', 5, 5), ('Rosary', 'i', 0, 5),
+    ('Ruby Ring', 'i', 6, 4), ('Band of Thorns', 'i', 9, 1), ('Seer\u2019s Ring', 'i', 4, 4),
 ]
 
 # Scenery, cut from the dungeon sheets. Each entry is a generous source rect;
@@ -170,7 +279,7 @@ def strip_icons():
     out = Image.new('RGBA', (CELL * len(ICONS), CELL), (0, 0, 0, 0))
     keys = []
     for n, (key, which, col, row) in enumerate(ICONS):
-        cut = draw_girdle(BIG) if which is None else glyph(g if which == 'g' else i, col, row)
+        cut = DRAWN[key](BIG) if which is None else glyph(g if which == 'g' else i, col, row)
         out.paste(grade(cut.copy()), (n * CELL + (CELL - BIG) // 2, (CELL - BIG) // 2))
         keys.append(key)
     return out, keys
@@ -238,7 +347,17 @@ def patch(src, pattern, value, label):
     return new
 
 
+def write_icons():
+    """Only the item icon strip, to phaser/public/icons.png, where the gear
+    screens read it. python3 tools/build-art.py --icons"""
+    icons, keys = strip_icons()
+    icons.save(os.path.join(ROOT, 'phaser', 'public', 'icons.png'), optimize=True)
+    print('icons.png    %dx%d, %d cells' % (icons.size[0], icons.size[1], len(keys)))
+
+
 def main():
+    if '--icons' in sys.argv:
+        return write_icons()
     icons, keys = strip_icons()
     chests = strip_chests()
     scenery = strip_props()

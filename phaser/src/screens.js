@@ -15,7 +15,7 @@
           REGION_BY_ID, REGION_RELIC, hardcore, setHardcore, honoured, delveStanding,
           recommendedLevel,
           todaysBounty, bountyDone,
-          SLOTS, SLOT_BY_ID, RARITY, itemPower, affixText, saveStash,
+          SLOTS, SLOT_BY_ID, RARITY, itemPower, affixText, saveStash, ICON, ICON_ORDER, UNIQUE_BY_ID,
           VENDOR, vendorCost, canAfford, vendorBuy, HALL, hallTier,
           HALL_MAX, hallBuy, vaultCap, loadoutCap, saveLoadout, applyLoadout,
           deleteLoadout, discardFromVault, gearCtx, closeGear, compareLines,
@@ -217,14 +217,22 @@ const CSS = `
    or the piece's power and the word for what tapping does drift left and land
    at the end of the affix line -- "+13% damage take off" read as one phrase. */
 #screens .item>span:first-of-type{flex:1;min-width:0}
+/* On a narrow phone the icon, the power and the discard button left the words
+   a column thirty-five pixels wide, one letter to a line. The words keep a
+   readable width now, and the power steps down under them instead. */
+#screens .item{flex-wrap:wrap}
+#screens .item>span:first-of-type{min-width:min(120px,100%)}
+#screens .item>.pw{margin-left:auto}
 /* Item icons: one 20px pixel cell per base off icons.png (35 cells), drawn at
    2x and kept hard-edged. The slot's own cell stands in for an empty slot. */
 #screens .ico{flex:0 0 auto;width:30px;height:30px;margin-top:1px;
-  background:url(icons.png) no-repeat;background-size:1050px 30px;
+  background:url(icons.png) no-repeat;background-size:calc(var(--n,35) * 30px) 30px;
   background-position:calc(var(--i,0) * -30px) 0;
   image-rendering:pixelated;image-rendering:crisp-edges}
 #screens .ico.none{opacity:.3;filter:grayscale(.8)}
 #screens .item .aff{color:#85776f;font-size:11px;display:block;margin-top:2px;line-height:1.35}
+#screens .item .aff .imp{color:#c8b48a;font-style:normal}
+#screens .item .power{display:block;margin-top:3px;color:#e8c878;font-size:11.5px;line-height:1.35}
 #screens .pw{color:#e7905d;white-space:nowrap;text-align:right;flex:none}
 /* And the word is a tag, not more text. It is the only part of a row that
    says what happens if you touch it, so it is the part that must not look
@@ -310,7 +318,7 @@ body.menus #diag{display:none}
 #screens.station .item .aff{font-size:12.5px}
 #screens.station .act{font:600 10.5px Cinzel,Georgia,serif;letter-spacing:.8px;font-variant-caps:all-small-caps;
   color:#e7905d;border-color:#7a3a15}
-#screens.station .ico{width:36px;height:36px;background-size:1260px 36px;
+#screens.station .ico{width:36px;height:36px;background-size:calc(var(--n,35) * 36px) 36px;
   background-position:calc(var(--i,0) * -36px) 0;border-radius:6px;
   box-shadow:0 0 0 1px #362f2c,inset 0 0 8px rgba(0,0,0,.6);background-color:#0d0c0b}
 #screens.station .chip{min-height:40px;font:13px Georgia,serif}
@@ -437,8 +445,10 @@ body.menus #diag{display:none}
 #screens.station .item b{font-size:17.5px}
 #screens.station .pw{font-size:17px}
 #screens.station .act,#screens.station .row.delve .act{font-size:12.5px;padding:4px 8px}
-#screens.station .ico{width:46px;height:46px;background-size:1610px 46px;
+#screens.station .ico{width:46px;height:46px;background-size:calc(var(--n,35) * 46px) 46px;
   background-position:calc(var(--i,0) * -46px) 0}
+#screens.station .item{flex-wrap:wrap}
+#screens.station .item>span:first-of-type{min-width:min(120px,100%)}
 #screens.station .chip{min-height:46px;font-size:15px;padding:0 14px}
 #screens.station .drop{min-width:56px;font-size:16px}
 #screens.station .alt{font-size:18px;min-height:60px}
@@ -492,19 +502,7 @@ body.menus #diag{display:none}
 #screens.station .row,#screens.station .item>span{min-width:0;overflow-wrap:anywhere}
 `;
 
-/* Cells of icons.png (tools/build-art.py's strip, carried over from the
- * canvas build). The first ten are the slot fallbacks and loose glyphs; every
- * base after that has its own picture. Both rings share one. */
-const ICON = { blade: 0, offhand: 1, mail: 2, girdle: 3, boots: 4, amulet: 5,
-               ring1: 6, ring2: 6, ring: 6, coin: 7, skull: 8, gem: 9,
-               'Longsword': 10, 'Falchion': 11, 'Warblade': 12, 'Glaive': 13, 'Cleaver': 14,
-               'Kite Shield': 15, 'Buckler': 16, 'Warding Focus': 17, 'Tower Shield': 18,
-               'Ringmail': 19, 'Scale Hauberk': 20, 'Plated Coat': 21, 'Padded Jack': 22,
-               'Leather Girdle': 23, 'Plated Belt': 24, 'Sash of Cord': 25,
-               'Marching Boots': 26, 'Greaves': 27, 'Soft Treads': 28,
-               'Bone Amulet': 29, 'Ley-Charm': 30, 'Sun Pendant': 31,
-               'Iron Band': 32, 'Signet': 33, 'Twisted Ring': 34 };
-
+/* Cells of icons.png are the core's (ICON, ICON_ORDER), one list for both. */
 // A rung's short name, the same on Home and on the Delves list.
 const rungLabel = i => i === 0 ? 'Proving ground' : 'Delve ' + i;
 
@@ -1182,7 +1180,9 @@ export class Screens {
    * rerolling nothing is not a service. */
   slotPicker() {
     const v = VENDOR.find(x => x.id === this.slotFor);
-    const list = SLOTS.filter(sl => v && v.worn ? !!stash.gear[sl.id] : true);
+    // The Regalia and the uniques are fixed things: the temper cannot take them.
+    const fixed = it => it && (it.set || it.unique);
+    const list = SLOTS.filter(sl => v && v.worn ? !!stash.gear[sl.id] && !fixed(stash.gear[sl.id]) : true);
     if (!list.length)
       return '<p class="sub">Nothing is worn to temper.</p>' +
              '<button class="go" type="button" data-cancel="1">Back</button>';
@@ -1375,15 +1375,22 @@ export class Screens {
   /* The icon for a piece: its own base if the strip has one, else its slot's. */
   static ico(key, none) {
     const i = ICON[key] !== undefined ? ICON[key] : 0;
-    return '<i class="ico' + (none ? ' none' : '') + '" style="--i:' + i + '" aria-hidden="true"></i>';
+    return '<i class="ico' + (none ? ' none' : '') + '" style="--i:' + i + ';--n:' + ICON_ORDER.length + '" aria-hidden="true"></i>';
   }
 
   itemCard(it, act, extra) {
     const r = RARITY.find(x => x.id === it.rarity) || RARITY[0];
-    const aff = it.affixes.map(a => affixText(a, stash.hero)).filter(Boolean).join(' · ');
+    // The base's own stat first, set apart: it is what the thing IS, not
+    // what it rolled.
+    const imp = it.imp ? affixText(it.imp, stash.hero) : '';
+    const aff = (imp ? '<i class="imp">' + imp + '</i>' + (it.affixes.length ? ' · ' : '') : '') +
+                it.affixes.map(a => affixText(a, stash.hero)).filter(Boolean).join(' · ');
     const key = ICON[it.base] !== undefined ? it.base : it.slot;
+    // A unique says what it DOES, in its own line, under what it adds.
+    const U = it.unique && typeof UNIQUE_BY_ID !== 'undefined' && UNIQUE_BY_ID[it.unique];
+    const power = U ? '<span class="power">\u2726 ' + U.power + '</span>' : '';
     return '<span class="item">' + Screens.ico(key) + '<span><b style="color:' + r.colour + '">' + it.name +
-           '</b><span class="aff">' + (aff || '&mdash;') + '</span>' + (extra || '') +
+           '</b><span class="aff">' + (aff || '&mdash;') + '</span>' + power + (extra || '') +
            '</span>' +
            // The number is the piece's power; the word is what tapping does.
            // "41 · off" read as a state rather than an action.

@@ -58,7 +58,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
                       .map(n => n.style.color)).size
   }));
   ck('the forge shows every slot and every find',
-     shown.worn === 8 && shown.vault === seeded.vault,
+     shown.worn === 10 && shown.vault === seeded.vault,
      shown.worn + ' slots, ' + shown.vault + ' in the vault');
   ck('each find reads its own affixes', shown.affixLines >= seeded.vault,
      shown.affixLines + ' affix lines');

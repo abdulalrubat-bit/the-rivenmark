@@ -28,7 +28,7 @@ const RIM = '#060403';   // the dark edge every ordinary number carries
  * is what carries across a chamber, and its height says what the thing is
  * worth before you have walked over to look. */
 const BEACON_H = { worn: 54, tempered: 74, wrought: 98,
-                   hallowed: 124, riven: 150, mythic: 190 };
+                   hallowed: 124, riven: 150, unique: 170, mythic: 190 };
 
 /* Phaser's Graphics has no gradients, and the canvas build's beacons and light
  * pools are gradients. Both are faked with a few stacked shapes, which is what
