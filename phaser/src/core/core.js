@@ -696,7 +696,6 @@ const REGIONS = [
     note:'Dead ash around the Weeping Keep of Tor-Varden.',
     landmark:'The Weeping Keep of Tor-Varden', build:'keep',
     layout:{ roomMin:6, roomMax:13, corridor:3, chambers:7 },
-    roomSets: true,                      // set-piece rooms (see ROOM_SETS)
     earth:[58,44,30], mottle:[[26,18,11],[84,64,41],[116,90,58]],
     moss:[84,96,50],
     flag:[56,26], stone:['#241d16','#16110b','#0b0805'], lamp:'#e5761f' },
@@ -2132,6 +2131,7 @@ function generateWorld(spawn, portal) {
 
   buildWallRects();
   cutChasms(sc, pc);
+  cutRoomPits(sc);
   // A chasm turns standable floor into a hole, so the index has to be taken
   // again. Without this every pass that samples openCells -- pack seeding,
   // scenery, the loot scatter, the corpse, the ambush ring -- can drop
@@ -2256,12 +2256,15 @@ let roomDress = [];     // props and lamps the rooms laid down, applied with the
 // first, out of the delve's own count rather than on top of it.
 let roomChests = [];
 let roomLights = [];
+// Cells a room asked to be holes (the Gorges' span): floor until the rock is
+// merged, then cut as chasm by cutRoomPits. Kept out of every prop.
+let roomPits = new Set();
 
 function setPieceKit(h) {
   const C = CELL_W;
   const x0 = h.x, y0 = h.y, x1 = h.x + h.w - 1, y1 = h.y + h.h - 1;
   const at = (x, y) => ({ x: x * C + C / 2, y: y * C + C / 2 });
-  const open = (x, y) => cellAt(x, y) !== SOLID;
+  const open = (x, y) => cellAt(x, y) !== SOLID && !roomPits.has(gi(x, y));
   const kit = {
     x0, y0, x1, y1, cx: h.cx, cy: h.cy, w: h.w, h: h.h, at, open,
     wide: h.w >= h.h,
@@ -2287,6 +2290,10 @@ function setPieceKit(h) {
       if (kind === 'torch') roomLights.push({ x: p.x - nx * (C / 2 - 19), y: p.y - ny * (C / 2 - 19), color: PAL.ember });
     },
     lamp(x, y, color) { const p = at(x, y); roomLights.push({ x: p.x, y: p.y, color }); },
+    // A hole in the floor, cut after the rock is merged (cutRoomPits).
+    pit(x, y) { if (open(x, y)) roomPits.add(gi(x, y)); },
+    // Anything the room wants to remember about itself (the span's bridge).
+    meta: {},
     chest(x, y, kind) { if (open(x, y)) roomChests.push({ ...at(x, y), kind }); },
     // Every rim cell of one side, for hanging a row of fittings.
     side(which) {
@@ -2601,9 +2608,136 @@ ROOM_SETS.cistern = { min: [7, 7], shapes: ['octagon'], trap: 'pool',
     for (const [x, y] of k.side('top').concat(k.side('bottom'))) if (k.chance(0.3)) k.wall('chain', x, y);
     k.lamp(k.cx, k.cy, PAL.teal);
   } };
-const SET_TRAP = { hall: 'hall', pool: 'cistern' };
+const SET_TRAP = { hall: 'hall', pool: 'cistern', gust: 'span' };
 
-function dressSetPieces(halls, sc, pc) {
+/* --- THE RENDING GORGES ---------------------------------------------------
+   The Kael-Dorm Redoubt is a fort of the Frost-Scholars hung over split
+   earth: where the Moors are a keep gone to ash, this is a garrison that
+   read maps and kept books and watched the gorge. Its lamps burn cold.
+
+   Its own hazard is the SPAN: a room the gorge runs straight through, with
+   one bridge across and a wind down the chasm. When it blows it shoves
+   whatever stands in the room along the drop -- harmless on solid ground,
+   and on the bridge it throws you at the edge. The horde is lighter than
+   you are, and goes over (updateTraps, 'gust'). */
+const GORGE_LAMP = '#5fd0ff';
+const GORGE_SETS = {
+  /* The chasm across the room's long axis, two cells deep and wall to wall,
+     a three-wide bridge of planks over it. Ice on the lips, lamps at both
+     bridgeheads, and sometimes a coffer left on the far side. */
+  span: { min: [8, 9], shapes: ['octagon', 'buttress'], trap: 'gust',
+    clutter: ['rubble', 'crack', 'bones', 'icecrystal'],
+    names: ['The Sundered Span', 'The Rending Bridge', 'The Gorge-Crossing'],
+    build(k) {
+      const cut = [k.MB, k.MB + 1];
+      for (const b of cut)
+        for (let a = k.A0; a <= k.A1; a++) {
+          const [x, y] = k.xy(b, a);
+          if (Math.abs(a - k.MA) <= 1) k.prop('planks', x, y, 0, k.alongQ);
+          else k.pit(x, y);
+        }
+      for (const b of [k.MB - 1, k.MB + 2]) {
+        const [x, y] = k.xy(b, k.MA); k.lamp(x, y, GORGE_LAMP);
+        for (const a of [k.MA - 2, k.MA + 2]) k.put('icecrystal', b, a, 6);
+      }
+      for (const [x, y] of k.side(k.wide ? 'left' : 'top').concat(k.side(k.wide ? 'right' : 'bottom')))
+        if (k.chance(0.35)) k.wall('chain', x, y);
+      if (k.chance(0.6)) { const [x, y] = k.xy(k.B1 - 1, k.MA); k.chest(x, y, 'coffer'); }
+      k.meta.gust = { axis: k.wide ? 'y' : 'x',
+                      bridge: { b0: k.MB, b1: k.MB + 1, a: k.MA } };
+    } },
+
+  /* Where the redoubt was commanded: a map table in the middle with the
+     gorge drawn on it, braziers round it, banners and arms on the walls. */
+  warroom: { min: [7, 8], shapes: ['buttress', 'cross'],
+    clutter: ['scroll', 'coins', 'shield', 'sword'],
+    names: ['The War-Room of Kael-Dorm', 'The Map Hall', 'The Captains’ Table'],
+    build(k) {
+      k.prop('maptable', k.cx, k.cy, 0, k.alongQ);
+      k.put('candles', k.MB - 2, k.MA, 3); k.put('scroll', k.MB + 2, k.MA, 4);
+      for (const [db, da] of [[-3, -2], [3, -2], [-3, 2], [3, 2]]) {
+        k.put('brazier', k.MB + db, k.MA + da, 0, 0);
+        const [x, y] = k.xy(k.MB + db, k.MA + da); k.lamp(x, y, PAL.ember);
+      }
+      for (const [x, y] of k.side(k.wide ? 'top' : 'left').concat(k.side(k.wide ? 'bottom' : 'right')))
+        if ((k.wide ? x : y) % 2 === 0) k.wall('banner', x, y); else if (k.chance(0.4)) k.wall('rack', x, y);
+    } },
+
+  /* The Frost-Scholars' books: shelves on every wall, lecterns in two rows
+     down the room, a reading table in the middle. Cold, still, and a coffer
+     somebody warded. */
+  archive: { min: [7, 8], shapes: ['buttress', 'octagon'],
+    clutter: ['scroll', 'scroll', 'candles', 'crack'],
+    names: ['The Frost-Scholars’ Archive', 'The Rime Library', 'The Hall of Charts'],
+    build(k) {
+      for (const s of ['top', 'bottom', 'left', 'right'])
+        for (const [x, y] of k.side(s)) if (k.chance(0.75)) k.wall('shelf', x, y);
+      for (const a of [k.MA - 2, k.MA + 2])
+        for (let b = k.B0 + 2; b <= k.B1 - 2; b += 3) k.put('lectern', b, a, 2, k.acrossQ);
+      k.put('table', k.MB, k.MA, 2, k.alongQ);
+      k.put('candles', k.MB, k.MA, 3);
+      { const [x, y] = k.xy(k.chance(0.5) ? k.B0 + 1 : k.B1 - 1, k.MA); k.chest(x, y, 'coffer'); }
+      k.lamp(k.cx, k.cy, '#8a88e0');
+    } },
+
+  /* A signal-fire of the watch: a cold beacon on a cairn at the middle,
+     a ring of fallen stones round it, ice in the corners. It has to be held
+     while the gorge sends what it has. */
+  cairn: { min: [7, 7], shapes: ['octagon'],
+    clutter: ['rubble', 'bones', 'crack', 'moss'],
+    names: ['The Signal Cairn', 'The Watch-Fire of Vaelk', 'The Cold Beacon'],
+    build(k) {
+      k.prop('beacon', k.cx, k.cy, 0, 0);
+      k.lamp(k.cx, k.cy, GORGE_LAMP); k.lamp(k.cx, k.cy, GORGE_LAMP);
+      for (let i = 0; i < 8; i++) {
+        const a = i / 8 * TAU, r = Math.min(k.w, k.h) / 2 - 1.8;
+        k.prop(i % 2 ? 'rubble' : 'urn', Math.round(k.cx + Math.cos(a) * r), Math.round(k.cy + Math.sin(a) * r), 4);
+      }
+      for (const [x, y] of [[k.x0 + 1, k.y0 + 1], [k.x1 - 1, k.y0 + 1], [k.x0 + 1, k.y1 - 1], [k.x1 - 1, k.y1 - 1]])
+        k.prop('icecrystal', x, y, 6);
+    } },
+
+  /* What the redoubt froze and kept: biers under the ice, cages, crystal
+     grown along the walls, a coffer at the far end. Something is still in it. */
+  rimevault: { min: [6, 7], shapes: ['octagon', 'buttress'],
+    clutter: ['icecrystal', 'bones', 'crack', 'urn'],
+    names: ['The Rime Vault', 'The Frozen Hold', 'The Ice-Kept Cellar'],
+    build(k) {
+      for (const s of ['top', 'bottom', 'left', 'right'])
+        for (const [x, y] of k.side(s)) if (k.chance(0.4)) k.prop('icecrystal', x, y, 6);
+      for (const b of [k.MB - 2, k.MB + 2]) k.put('tomb', b, k.MA, 1, k.acrossQ);
+      k.put('cage', k.MB, k.MA - 2, 2); k.put('cage', k.MB, k.MA + 2, 2);
+      { const [x, y] = k.xy(k.B1 - 1, k.MA); k.chest(x, y, 'coffer'); }
+      k.lamp(k.cx, k.cy, '#9ae8ff');
+    } },
+
+  // The redoubt's own barracks: the Moors' garrison, by its own names.
+  garrison: Object.assign({}, ROOM_SETS.garrison,
+    { names: ['The Redoubt Barracks', 'The Kael-Dorm Watch', 'The Frost-Guard Billet'] })
+};
+
+// Which regions are built of set pieces, and from which table.
+const REGION_SETS = { slag: ROOM_SETS, vaelk: GORGE_SETS };
+
+// Cut the holes the rooms asked for, now the rock is merged. A cell whose
+// hole would strand floor is left as ground: a corridor that entered the
+// room across the gorge keeps its footing, and the delve is never cut.
+function cutRoomPits(sc) {
+  if (!roomPits.size) return;
+  let cut = 0;
+  for (const k of roomPits) {
+    if (grid[k] === SOLID) continue;
+    grid[k] = SOLID;
+    if (!allReachable(sc)) { grid[k] = OPEN; roomPits.delete(k); continue; }
+    pitGrid[k] = 1;
+    walls.push({ x: (k % GW) * CELL_W, y: ((k / GW) | 0) * CELL_W, w: CELL_W, h: CELL_W, pit: true });
+    cut++;
+  }
+  if (cut) rebuildWallGrid();
+}
+
+function dressSetPieces(halls, sc, pc, SETS) {
+  SETS = SETS || ROOM_SETS;
   const want = Math.min(halls.length, 5 + ((Math.random() * 3) | 0));
   const order = halls.slice().sort(() => Math.random() - 0.5);
   const used = {};
@@ -2617,15 +2751,15 @@ function dressSetPieces(halls, sc, pc) {
     if (h.x < pc.x + 10 && h.x + h.w > pc.x - 10 && h.y < pc.y + 10 && h.y + h.h > pc.y - 10) continue;
     const short = Math.min(h.w, h.h), long = Math.max(h.w, h.h);
     // Each template once before any repeats, the ones that fit this room.
-    const fits = Object.keys(ROOM_SETS).filter(id =>
-      short >= ROOM_SETS[id].min[0] && long >= ROOM_SETS[id].min[1]);
+    const fits = Object.keys(SETS).filter(id =>
+      short >= SETS[id].min[0] && long >= SETS[id].min[1]);
     if (!fits.length) continue;
     const fresh = fits.filter(id => !used[id]);
     const pool = fresh.length ? fresh : fits;
     const id = pool[(Math.random() * pool.length) | 0];
     used[id] = (used[id] || 0) + 1;
     chosen.add(h);
-    const T = ROOM_SETS[id];
+    const T = SETS[id];
     ROOM_SHAPES[T.shapes[(Math.random() * T.shapes.length) | 0]](h, sc);
     const kit = setPieceKit(h);
     T.build(kit);
@@ -2639,9 +2773,9 @@ function dressSetPieces(halls, sc, pc) {
     // delve must still be able to reach when it is finished (rooms.js).
     let floor = 0;
     for (let y = h.y; y < h.y + h.h; y++)
-      for (let x = h.x; x < h.x + h.w; x++) if (cellAt(x, y) !== SOLID) floor++;
+      for (let x = h.x; x < h.x + h.w; x++) if (cellAt(x, y) !== SOLID && !roomPits.has(gi(x, y))) floor++;
     const half = Math.max(h.w, h.h) >> 1;
-    rooms.push({ kind: SET_TRAP[T.trap] || id, set: id, floor,
+    rooms.push({ kind: SET_TRAP[T.trap] || id, set: id, floor, meta: kit.meta,
                  name: T.names[(Math.random() * T.names.length) | 0],
                  cx: h.cx, cy: h.cy, half,
                  x: h.cx * CELL_W + CELL_W / 2, y: h.cy * CELL_W + CELL_W / 2,
@@ -2681,6 +2815,12 @@ const ROOM_MOODS = {
   stores:   { grade: '#d8c090', gradeA: 0.08, dark: 0.22, fog: '#6a5a3a', motes: '#f0e4c0', drift: 'fall',  glow: '#c8a060' },
   chapel:   { grade: '#9a8cff', gradeA: 0.18, dark: 0.20, fog: '#4a4088', motes: '#e0d8ff', drift: 'float', glow: '#8a7cff' },
   cistern:  { grade: '#7ad06a', gradeA: 0.18, dark: 0.38, fog: '#2a5a28', motes: '#b0f098', drift: 'float', glow: '#5ad04a' },
+  // The Rending Gorges: cold light, and the fires the watch kept against it.
+  span:     { grade: '#a8d8ff', gradeA: 0.16, dark: 0.28, fog: '#4a6a8a', motes: '#e8f6ff', drift: 'float', glow: '#7ab8e8' },
+  warroom:  { grade: '#e0a060', gradeA: 0.12, dark: 0.25, fog: '#5a4030', motes: '#f0d8a8', drift: 'rise',  glow: '#d0883a' },
+  archive:  { grade: '#a8a0e8', gradeA: 0.16, dark: 0.36, fog: '#3a3a68', motes: '#e0dcff', drift: 'float', glow: '#8a88e0' },
+  cairn:    { grade: '#5fd0ff', gradeA: 0.22, dark: 0.18, fog: '#2a5a78', motes: '#bff0ff', drift: 'rise',  glow: '#5fd0ff' },
+  rimevault:{ grade: '#9ae8ff', gradeA: 0.24, dark: 0.45, fog: '#305a6a', motes: '#ffffff', drift: 'fall',  glow: '#6ad8f0' },
   // The older rooms, in the regions that do not have set pieces yet.
   hall:     { grade: '#8fb9d6', gradeA: 0.12, dark: 0.30, fog: '#3a4a5a', motes: '#d0e0f0', drift: 'fall',  glow: '#6a9ac0' },
   barracks: { grade: '#e0a860', gradeA: 0.10, dark: 0.25, fog: '#6a5030', motes: '#e8d0a0', drift: 'fall',  glow: '#d08a40' },
@@ -2732,8 +2872,9 @@ function updateRoomNames() {
 
 function dressRooms(halls, sc, pc) {
   rooms = [];
-  roomDress = []; roomLights = []; roomChests = [];
-  if (REGION.roomSets) return dressSetPieces(halls, sc, pc);
+  roomDress = []; roomLights = []; roomChests = []; roomPits = new Set();
+  const SETS = REGION_SETS[REGION.id];
+  if (SETS) return dressSetPieces(halls, sc, pc, SETS);
   const KINDS = ['hall', 'barracks', 'collapse', 'cistern'];
   const want = Math.min(halls.length, 3 + ((Math.random() * 3) | 0));
   const picked = [];
@@ -4692,7 +4833,18 @@ const ENCOUNTERS = {
   cistern:  { trigger: 'enter', say: 'Something stirs in the water.',
     foes: dp => [['any', 5 + Math.round(dp * 2), 'ring']] },
   chapel:   { trigger: 'enter', say: 'Hold the nave!', hold: 12,
-    foes: dp => [['any', 2, 'edge']], every: 2.6 }
+    foes: dp => [['any', 2, 'edge']], every: 2.6 },
+  // The Rending Gorges.
+  span:     { trigger: 'enter', say: 'They come across the span!',
+    foes: dp => [['fast', 4 + Math.round(dp * 3), 'edge']] },
+  warroom:  { trigger: 'enter', say: 'The captains turn from the map.',
+    foes: dp => [['heavy', 1, 'heart', true], ['any', 3 + Math.round(dp * 2), 'room']] },
+  archive:  { trigger: 'coffer', say: 'The ward on the coffer wakes the stacks!',
+    foes: dp => [['any', 5 + Math.round(dp * 2), 'ring']] },
+  cairn:    { trigger: 'enter', say: 'Keep the cairn lit!', hold: 12,
+    foes: dp => [['any', 2, 'edge']], every: 2.4 },
+  rimevault:{ trigger: 'coffer', say: 'The ice gives up what it kept.',
+    foes: dp => [['heavy', 1, 'ring', true], ['any', 3 + Math.round(dp * 2), 'ring']] }
 };
 const ENC_REACH = 130;          // how near a coffer wakes an 'coffer' room
 const ENC_HOLD_R = 130;         // how near the heart counts as holding it
@@ -4880,6 +5032,26 @@ const SPIKE_BITE  = 0.34;   // share of what stands on them -- a HEAVY blow
 const SPIKE_TOLL  = 0.12;   // ...but a gentler share of the hero
 const POOL_DPS    = 0.11;   // share of max life a second, both sides
 const TRAP_TICK   = 0.35;
+/* The gorge-wind, down the span's chasm. It tells for a second -- streaks
+ * down the room the way it will blow -- then shoves for most of one. The
+ * shove is about half a stride: walk into it and you hold your ground, stand
+ * on the bridge and you are thrown at the edge. It turns about every time,
+ * so which side of the bridge is safe is a thing you look for, not learn. */
+const GUST_CYCLE = 5.2;     // the whole beat
+const GUST_TELL  = 1.1;     // the streaks, before it blows
+const GUST_OUT   = 0.8;     // and how long it blows
+const GUST_PUSH  = 170;     // world units a second, on the hero
+const GUST_TOLL  = 0.12;    // share of the hero's life, thrown at the edge
+const GUST_BITE  = 0.6;     // share of what goes over, off the horde
+function gustPhase(t) {
+  const u = t % GUST_CYCLE;
+  if (u < GUST_CYCLE - GUST_OUT - GUST_TELL) return { phase: 'down', f: 0 };
+  if (u < GUST_CYCLE - GUST_OUT) return { phase: 'tell', f: (u - (GUST_CYCLE - GUST_OUT - GUST_TELL)) / GUST_TELL };
+  return { phase: 'out', f: (u - (GUST_CYCLE - GUST_OUT)) / GUST_OUT };
+}
+// A hole at a point: the chasm, not masonry.
+const pitAt = (x, y) => !!pitGrid && inGrid(Math.floor(x / CELL_W), Math.floor(y / CELL_W)) &&
+                        pitGrid[gi(Math.floor(x / CELL_W), Math.floor(y / CELL_W))] === 1;
 
 /* How fast a field beats, by how deep the delve is. Stated as the two ends
  * rather than as a multiplier, because the number that matters is neither of
@@ -4941,6 +5113,13 @@ function placeTraps() {
       traps.push({ kind: 'spike', x: rm.x, y: rm.y, r: rm.r, cycle: cycle,
                    // Offset so two halls in one delve are not in lockstep.
                    t: Math.random() * cycle, was: 'down', bit: [] });
+    } else if (rm.kind === 'span' && rm.meta && rm.meta.gust) {
+      const ax = rm.meta.gust.axis;
+      traps.push({ kind: 'gust', x: rm.x, y: rm.y, r: rm.r, box: rm.box, axis: ax,
+                   sign: Math.random() < 0.5 ? 1 : -1, dx: 0, dy: 0,
+                   t: Math.random() * GUST_CYCLE, was: 'down', hit: [] });
+      const tr = traps[traps.length - 1];
+      tr.dx = ax === 'x' ? tr.sign : 0; tr.dy = ax === 'y' ? tr.sign : 0;
     } else if (rm.kind === 'cistern') {
       traps.push({ kind: 'pool', x: rm.x, y: rm.y, r: Math.max(70, rm.r * 0.62),
                    t: Math.random() * 6, tick: 0 });
@@ -4976,6 +5155,8 @@ function updateTraps(dt) {
         }
       }
       tr.was = ph;
+    } else if (tr.kind === 'gust') {
+      updateGust(tr, dt);
     } else {
       tr.tick -= dt;
       if (tr.tick > 0) continue;
@@ -4992,6 +5173,44 @@ function updateTraps(dt) {
         if (dist2(e.x, e.y, tr.x, tr.y) > tr.r * tr.r) continue;
         damageEnemy(e, e.maxHp * POOL_DPS * TRAP_TICK, e.x, e.y);
       }
+    }
+  }
+}
+
+function updateGust(tr, dt) {
+  const ph = gustPhase(tr.t).phase;
+  // A fresh beat: it turns, about half the time, and says which way now.
+  if (ph === 'tell' && tr.was === 'down') {
+    if (Math.random() < 0.6) tr.sign = -tr.sign;
+    tr.dx = tr.axis === 'x' ? tr.sign : 0; tr.dy = tr.axis === 'y' ? tr.sign : 0;
+    tr.hit = [];
+    if (inBox(tr.box, player.x, player.y, 0)) sfx('wind', tr.x, tr.y, 0.6);
+  }
+  tr.was = ph;
+  if (ph !== 'out') return;
+  const push = GUST_PUSH * dt;
+  // Thrown at the edge: a hole just ahead of you, the way it blows.
+  const atEdge = b => pitAt(b.x + tr.dx * (b.r + 12), b.y + tr.dy * (b.r + 12));
+  if (inBox(tr.box, player.x, player.y, 0) && player.hp > 0) {
+    moveEntity(player, tr.dx * push, tr.dy * push);
+    if (atEdge(player) && !tr.hit.includes(player)) {
+      tr.hit.push(player);
+      const was = player.invuln; player.invuln = 0;
+      hurtPlayerBy(player.maxHp * GUST_TOLL, player.x - tr.dx * 120, player.y - tr.dy * 120, true);
+      player.invuln = Math.max(player.invuln, was);
+      if (!run.gustTold) { run.gustTold = true; toast('The gorge-wind throws you at the edge!', '#bfe8ff'); }
+    }
+  }
+  enemyGrid.query(tr.x, tr.y, tr.r * 1.5, _near);
+  for (let k = 0; k < _near.length; k++) {
+    const e = _near[k];
+    if (!trapBites(e) || e.anchored || !inBox(tr.box, e.x, e.y, 0)) continue;
+    // The horde is lighter than you: it is carried further.
+    moveEntity(e, tr.dx * push * 1.3 / Math.max(0.6, e.mass || 1), tr.dy * push * 1.3 / Math.max(0.6, e.mass || 1));
+    if (atEdge(e) && !tr.hit.includes(e)) {
+      tr.hit.push(e);
+      damageEnemy(e, e.maxHp * GUST_BITE, e.x - tr.dx * 40, e.y - tr.dy * 40);
+      burst(e.x + tr.dx * e.r, e.y + tr.dy * e.r, '#bfe8ff', 10, 140);
     }
   }
 }

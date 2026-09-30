@@ -1,4 +1,6 @@
-/* SET-PIECE ROOMS: the Slag-Moors are built of places, not empty boxes.
+/* SET-PIECE ROOMS: the Slag-Moors and the Rending Gorges are built of
+ * places, not empty boxes. Every region with a table in REGION_SETS is asked
+ * the same questions, each against its own templates.
  *
  * Playtested: "it feels like a full game but hollow; the delves need more
  * stuff and proper layouts." Asked of many generated delves at once, because
@@ -31,15 +33,17 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   await p.goto(pages.core());
   await p.waitForFunction(() => typeof dressSetPieces === 'function', null, { timeout: 30000 });
 
-  const R = await p.evaluate(() => {
-    const slagRungs = LEVELS.map((L, i) => i).filter(i => LEVELS[i].regions.includes('slag') && i > 0).slice(0, 6);
-    const out = { templates: Object.keys(ROOM_SETS).length, runs: 0, perRun: [], kinds: {}, sealed: [], gateCut: 0, dens: [], names: 0, errs: [] };
+  const ALL = await p.evaluate(() => Object.keys(REGION_SETS));
+  const byRegion = {};
+  for (const REG of ALL) byRegion[REG] = await p.evaluate(REG => {
+    const slagRungs = LEVELS.map((L, i) => i).filter(i => LEVELS[i].regions.includes(REG) && i > 0).slice(0, 6);
+    const out = { templates: Object.keys(REGION_SETS[REG]).length, runs: 0, perRun: [], kinds: {}, sealed: [], gateCut: 0, dens: [], names: 0, errs: [] };
     const open = new Set();
     for (let t = 0; t < 30; t++) {
       const idx = slagRungs[t % slagRungs.length];
-      stash = blankStash(); stash.region = 'slag';
+      stash = blankStash(); stash.region = REG;
       startRun('isaac', LEVELS[idx].id, 'riven');
-      if (REGION.id !== 'slag') continue;
+      if (REGION.id !== REG) continue;
       out.runs++;
       const sets = rooms.filter(r => r.set);
       out.perRun.push(sets.length);
@@ -72,7 +76,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
       }
     }
     // Walking in says its name, once.
-    stash = blankStash(); stash.region = 'slag';
+    stash = blankStash(); stash.region = REG;
     startRun('isaac', slagRungs[0] !== undefined ? LEVELS[slagRungs[0]].id : LEVELS[1].id, 'riven');
     const rm = rooms.find(r => r.set);
     if (rm) {
@@ -84,33 +88,40 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
       const first = run.toast && run.toast.text;
       run.toast = null;
       update(1 / 60);
-      out.named = { first, again: run.toast && run.toast.text, want: rm.name };
+      out.named = { first, again: run.toast && run.toast.text, want: rm.name, set: rm.set, q: (run.toastQ || []).map(t => t.text) };
     }
-    // Another region keeps the older archetypes.
-    stash = blankStash(); stash.region = 'vaelk';
-    const deep = LEVELS.findIndex(L => L.regions.includes('vaelk'));
-    startRun('isaac', LEVELS[deep].id, 'riven');
-    out.other = { region: REGION.id, sets: rooms.filter(r => r.set).length };
     return out;
+  }, REG);
+  // A region without a table keeps the older archetypes.
+  const other = await p.evaluate(() => {
+    const id = REGIONS.map(r => r.id).find(id => !REGION_SETS[id]);
+    if (!id) return { none: true };
+    stash = blankStash(); stash.region = id;
+    const deep = LEVELS.findIndex(L => L.regions.includes(id));
+    startRun('isaac', LEVELS[deep].id, 'riven');
+    return { want: id, region: REGION.id, sets: rooms.filter(r => r.set).length };
   });
 
-  const avg = R.perRun.reduce((a, b) => a + b, 0) / Math.max(1, R.perRun.length);
-  ck('Slag-Moors delves were generated', R.runs >= 20, R.runs + ' delves');
-  ck('each holds several named set pieces', Math.min(...R.perRun) >= 3 && avg >= 4,
-     'min ' + Math.min(...R.perRun) + ', mean ' + avg.toFixed(1));
-  ck('over enough delves every template turns up',
-     Object.keys(R.kinds).length === R.templates, JSON.stringify(R.kinds));
-  ck('every one is named', R.errs.length === 0, R.errs.slice(0, 3).join(', '));
-  ck('dressing a room never seals it', R.sealed.length === 0, R.sealed.length + ' sealed: ' + R.sealed.slice(0, 5).join(', '));
-  ck('and the gate is always reachable', R.gateCut === 0, R.gateCut + ' cut off');
-  const ratio = R.dens.map(d => d.room / Math.max(0.01, d.all)).sort((a, b) => a - b);
-  const median = ratio[ratio.length >> 1] || 0, lowest = ratio[0] || 0;
-  ck('a set piece is furnished well beyond the floor outside it', median >= 2 && lowest >= 1.25,
-     'median ' + median.toFixed(1) + 'x, lowest ' + lowest.toFixed(1) + 'x');
-  ck('walking in says its name', R.named && R.named.first === R.named.want, JSON.stringify(R.named));
-  ck('...once', R.named && !R.named.again);
-  ck('a region that has not opted in keeps the old rooms', R.other.region === 'vaelk' && R.other.sets === 0,
-     JSON.stringify(R.other));
+  for (const REG of ALL) {
+    const R = byRegion[REG], tag = REG + ': ';
+    const avg = R.perRun.reduce((a, b) => a + b, 0) / Math.max(1, R.perRun.length);
+    ck(tag + 'delves were generated', R.runs >= 20, R.runs + ' delves');
+    ck(tag + 'each holds several named set pieces', Math.min(...R.perRun) >= 3 && avg >= 4,
+       'min ' + Math.min(...R.perRun) + ', mean ' + avg.toFixed(1));
+    ck(tag + 'over enough delves every template turns up',
+       Object.keys(R.kinds).length === R.templates, JSON.stringify(R.kinds));
+    ck(tag + 'every one is named', R.errs.length === 0, R.errs.slice(0, 3).join(', '));
+    ck(tag + 'dressing a room never seals it', R.sealed.length === 0, R.sealed.length + ' sealed: ' + R.sealed.slice(0, 5).join(', '));
+    ck(tag + 'and the gate is always reachable', R.gateCut === 0, R.gateCut + ' cut off');
+    const ratio = R.dens.map(d => d.room / Math.max(0.01, d.all)).sort((a, b) => a - b);
+    const median = ratio[ratio.length >> 1] || 0, lowest = ratio[0] || 0;
+    ck(tag + 'a set piece is furnished well beyond the floor outside it', median >= 2 && lowest >= 1.25,
+       'median ' + median.toFixed(1) + 'x, lowest ' + lowest.toFixed(1) + 'x');
+    ck(tag + 'walking in says its name', R.named && R.named.first === R.named.want, JSON.stringify(R.named));
+    ck(tag + '...once', R.named && !R.named.again, JSON.stringify(R.named));
+  }
+  ck('a region that has not opted in keeps the old rooms',
+     other.none || (other.region === other.want && other.sets === 0), JSON.stringify(other));
   ck('no console errors', errs.length === 0, errs.slice(0, 3).join(' | '));
 
   console.log('\nPASS ' + pass.length + '\n  ' + pass.join('\n  '));

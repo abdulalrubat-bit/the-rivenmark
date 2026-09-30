@@ -2456,6 +2456,100 @@ function forgeProps() {
     g.fillStyle = 'rgba(20,18,14,.35)'; g.fillRect(-11, 14, 22, 4);          // its footing
   });
 
+
+  /* --- the Rending Gorges' furniture --------------------------------------
+     The Kael-Dorm Redoubt: a fort that read maps and kept books. Same hand,
+     but the cold is in it -- frost-blue where the Moors are ember. */
+  P('maptable', 52, g => {
+    g.fillStyle = '#3a2a19';
+    g.fillRect(-21, -13, 42, 26);
+    g.strokeStyle = 'rgba(14,10,6,.85)'; g.lineWidth = 1.4; g.strokeRect(-21, -13, 42, 26);
+    g.fillStyle = 'rgba(206,190,150,.88)';                            // the chart
+    g.fillRect(-17, -10, 34, 20);
+    g.strokeStyle = 'rgba(60,90,120,.75)'; g.lineWidth = 1.3;         // the gorge on it
+    g.beginPath(); g.moveTo(-15, -6); g.bezierCurveTo(-6, -2, -4, 6, 4, 3); g.bezierCurveTo(9, 1, 11, 7, 15, 8); g.stroke();
+    g.strokeStyle = 'rgba(90,70,40,.5)'; g.lineWidth = 0.8;
+    for (const x of [-9, 0, 9]) { g.beginPath(); g.moveTo(x, -10); g.lineTo(x, 10); g.stroke(); }
+    g.fillStyle = 'rgba(142,43,32,.9)';                              // markers
+    for (const [x, y] of [[-8, -3], [6, 2], [11, -6]]) { g.beginPath(); g.arc(x, y, 1.6, 0, TAU); g.fill(); }
+    g.fillStyle = 'rgba(95,208,255,.9)';
+    g.beginPath(); g.arc(-2, 5, 1.8, 0, TAU); g.fill();
+    g.fillStyle = 'rgba(180,150,100,.35)'; g.fillRect(-21, -13, 42, 1.6);
+  });
+  P('shelf', 44, g => {                                               // books against a wall, pointing +x
+    g.fillStyle = '#3a2a19';
+    g.fillRect(-4, -17, 9, 34);
+    g.strokeStyle = 'rgba(14,10,6,.85)'; g.lineWidth = 1.2; g.strokeRect(-4, -17, 9, 34);
+    const spines = ['#6a2a24', '#2a4a5a', '#5a4a2a', '#3a2a4a', '#2a4a34', '#6a5a3a'];
+    let y = -15;
+    for (let i = 0; y < 14; i++) {
+      const h = 3 + (i * 7 % 3);
+      g.fillStyle = spines[i % spines.length];
+      g.fillRect(-2, y, 6 + (i % 2), h - 0.6);
+      g.fillStyle = 'rgba(214,190,130,.35)'; g.fillRect(-2, y, 6, 0.8);
+      y += h;
+    }
+  });
+  P('lectern', 30, g => {
+    g.fillStyle = 'rgba(12,9,6,.9)';
+    g.beginPath(); g.arc(0, 0, 3, 0, TAU); g.fill();                   // the post, from above
+    g.fillStyle = '#4a3622';
+    g.beginPath(); g.moveTo(-10, -7); g.lineTo(10, -7); g.lineTo(8, 7); g.lineTo(-8, 7); g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(14,10,6,.85)'; g.lineWidth = 1.2; g.stroke();
+    g.fillStyle = 'rgba(226,212,178,.92)';                            // an open book
+    g.fillRect(-7, -4, 6.6, 8); g.fillRect(0.4, -4, 6.6, 8);
+    g.strokeStyle = 'rgba(90,70,40,.55)'; g.lineWidth = 0.6;
+    for (const yy of [-2, 0, 2]) { g.beginPath(); g.moveTo(-6, yy); g.lineTo(-1.5, yy); g.moveTo(1.5, yy); g.lineTo(6, yy); g.stroke(); }
+  });
+  P('icecrystal', 36, g => {
+    const shard = (x, y, a, len, w) => {
+      g.save(); g.translate(x, y); g.rotate(a);
+      const grd = g.createLinearGradient(0, -w, 0, w);
+      grd.addColorStop(0, '#e8f8ff'); grd.addColorStop(1, '#4a8ab0');
+      g.fillStyle = grd;
+      g.beginPath(); g.moveTo(0, -w); g.lineTo(len, 0); g.lineTo(0, w); g.lineTo(-2, 0); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(10,30,44,.8)'; g.lineWidth = 1; g.stroke();
+      g.restore();
+    };
+    g.shadowColor = '#9ae8ff'; g.shadowBlur = 8;
+    shard(-2, 2, -2.2, 13, 3.4); shard(1, 1, -0.9, 15, 3.8); shard(0, 3, 0.5, 11, 3);
+    shard(-1, -1, -1.6, 9, 2.6); shard(2, 4, 1.8, 8, 2.4);
+    g.shadowBlur = 0;
+    g.fillStyle = 'rgba(232,248,255,.8)'; g.beginPath(); g.arc(0, 1, 1.6, 0, TAU); g.fill();
+  });
+  P('planks', 40, g => {                                              // a bridge section, walked along x
+    g.fillStyle = 'rgba(10,8,6,.55)'; g.fillRect(-20, -20, 40, 40);
+    for (let i = 0; i < 5; i++) {
+      const x = -20 + i * 8;
+      g.fillStyle = i % 2 ? '#4a3622' : '#54402a';
+      g.fillRect(x + 0.6, -19, 6.8, 38);
+      g.strokeStyle = 'rgba(14,10,6,.8)'; g.lineWidth = 0.9; g.strokeRect(x + 0.6, -19, 6.8, 38);
+      g.fillStyle = 'rgba(180,150,100,.3)'; g.fillRect(x + 0.6, -19, 1.2, 38);
+      g.fillStyle = 'rgba(30,30,32,.9)';                              // the nails
+      g.beginPath(); g.arc(x + 4, -15, 0.8, 0, TAU); g.arc(x + 4, 15, 0.8, 0, TAU); g.fill();
+    }
+    g.fillStyle = 'rgba(191,232,255,.18)';                            // frost on the boards
+    g.beginPath(); g.ellipse(-6, 8, 9, 4, 0.3, 0, TAU); g.fill();
+  });
+  P('beacon', 44, g => {                                              // a cairn with a cold fire on it
+    const stone = (x, y, r, c) => {
+      g.fillStyle = c; g.beginPath(); g.ellipse(x, y, r, r * 0.8, 0.4, 0, TAU); g.fill();
+      g.strokeStyle = 'rgba(8,10,12,.85)'; g.lineWidth = 1.1; g.stroke();
+    };
+    for (let i = 0; i < 7; i++) {
+      const a = i / 7 * TAU;
+      stone(Math.cos(a) * 12, Math.sin(a) * 12, 5, i % 2 ? '#4a5258' : '#5a6268');
+    }
+    stone(0, 0, 9, '#3a4248');
+    g.shadowColor = '#5fd0ff'; g.shadowBlur = 12;
+    const fire = g.createRadialGradient(0, 0, 0, 0, 0, 7);
+    fire.addColorStop(0, 'rgba(240,252,255,.98)'); fire.addColorStop(0.5, 'rgba(95,208,255,.9)');
+    fire.addColorStop(1, 'rgba(30,90,140,.7)');
+    g.fillStyle = fire;
+    g.beginPath(); g.arc(0, 0, 6.5, 0, TAU); g.fill();
+    g.shadowBlur = 0;
+  });
+
   for (const k in SPR) {
     if (k.indexOf('p_') !== 0 || k.length > 2 && k.charAt(k.length - 2) === '_') continue;
     for (let q = 0; q < 4; q++) SPR[k + '_' + q] = rotateSprite(SPR[k], q);

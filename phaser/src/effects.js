@@ -14,7 +14,7 @@
 
 import Phaser from 'phaser';
 
-/* global crescentHue, traps, spikePhase, CELL_W, view,
+/* global crescentHue, traps, spikePhase, gustPhase, CELL_W, view,
           arcs, particles, rings, floaters, bolts, slams, hazards, nulls,
           totems, ruptures, player, cam, FLOAT_STYLE, FLOAT_LIFE, BOLT_R,
           TAU, HEROES, run, portal, drops, PORTAL_R, PAL, LEVEL, rarityOf,
@@ -107,6 +107,7 @@ export class Effects {
         g.strokeCircle(tr.x, tr.y, tr.r * w);
         continue;
       }
+      if (tr.kind === 'gust') { this.gust(g, tr); continue; }
       // The beat comes off the trap: it is compressed by the delve's depth,
       // and a renderer reading the constant would draw one rhythm over the
       // damage of another.
@@ -143,6 +144,39 @@ export class Effects {
           }
         }
       }
+    }
+  }
+
+  /* The gorge-wind. Quiet between beats; in the tell, streaks start down the
+   * room the way it is about to blow, thickening as it comes; while it blows
+   * they are long and bright and fast. Which way matters more than anything
+   * else here, so every streak carries an arrowhead. */
+  gust(g, tr) {
+    const ph = gustPhase(tr.t);
+    if (ph.phase === 'down') return;
+    const b = tr.box, out = ph.phase === 'out';
+    const along = tr.axis === 'x', sgn = tr.sign;
+    const len0 = along ? b.x1 - b.x0 : b.y1 - b.y0;       // the way it blows
+    const wid = along ? b.y1 - b.y0 : b.x1 - b.x0;
+    const n = 14, speed = out ? 900 : 260;
+    const seg = out ? 70 : 26 + ph.f * 30;
+    const alpha = out ? 0.75 * (1 - ph.f * 0.6) : 0.15 + ph.f * 0.5;
+    g.lineStyle(out ? 3 : 2, 0xcfeeff, alpha);
+    for (let i = 0; i < n; i++) {
+      const across = ((i * 0.6180339 + 0.13) % 1) * wid;
+      const phase = ((tr.t * speed + i * 97) % (len0 + seg));
+      let u = phase - seg;                                  // along, from the upwind side
+      if (sgn < 0) u = len0 - u - seg;
+      const a0 = Math.max(0, u), a1 = Math.min(len0, u + seg);
+      if (a1 <= a0) continue;
+      const head = sgn > 0 ? a1 : a0, tail = sgn > 0 ? a0 : a1;
+      const P = v => along ? [b.x0 + v, b.y0 + across] : [b.x0 + across, b.y0 + v];
+      const [hx, hy] = P(head), [tx, ty] = P(tail);
+      g.lineBetween(tx, ty, hx, hy);
+      const ax = along ? -sgn * 7 : 5, ay = along ? 5 : -sgn * 7;
+      const bx = along ? -sgn * 7 : -5, by = along ? -5 : -sgn * 7;
+      g.lineBetween(hx, hy, hx + ax, hy + ay);
+      g.lineBetween(hx, hy, hx + bx, hy + by);
     }
   }
 
