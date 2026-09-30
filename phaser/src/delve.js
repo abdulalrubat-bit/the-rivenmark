@@ -88,7 +88,9 @@ const STANDING = { pillar: 26, barrel: 12, crate: 11, urn: 10, banner: 16,
                    brazier: 12, table: 10, rack: 14, anvil: 9, cage: 14,
                    altar: 12, sacks: 9, shrine: 18,
                    // the Rending Gorges'
-                   maptable: 12, shelf: 14, lectern: 9, icecrystal: 10, beacon: 12 };
+                   maptable: 12, shelf: 14, lectern: 9, icecrystal: 10, beacon: 12,
+                   // Kraggen-Tor's
+                   cauldron: 12, obsidian: 11, minecart: 10 };
 // Laid on the floor under everything else, flat scenery included: a carpet
 // with rubble on it, not rubble under a carpet.
 const FLOOR = { carpet: true, planks: true };
