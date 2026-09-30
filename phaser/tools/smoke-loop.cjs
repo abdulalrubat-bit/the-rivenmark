@@ -294,7 +294,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
      oneLife.on.gear + ' pieces, ' + oneLife.on.coins + ' coin, loot ×' + oneLife.on.loot);
   ck('and putting it down gives the ordinary kit straight back, in one tap',
      oneLife.back.hardcore === false && oneLife.back.coins === 404 &&
-     oneLife.back.gear === 8,
+     oneLife.back.gear === 10,
      oneLife.back.gear + ' pieces and ' + oneLife.back.coins + ' coin returned');
   // Power reaching the screen as NaN compared false against every rung and
   // labelled the whole ladder "an even match" -- a wrong answer that looked

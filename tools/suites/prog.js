@@ -71,7 +71,7 @@ const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''
     o.l30 = { hp: Math.round(player.maxHp), dmg: +player.damage.toFixed(1) };
     // power level averages hero and kit
     o.bare = powerLevel(player.gear, 30);
-    for (const sl of SLOTS) player.gear[sl.id] = rollSetPiece(sl.id);
+    for (const sl of SET_SLOTS) player.gear[sl] = rollSetPiece(sl);
     o.kitted = powerLevel(player.gear, 30);
     o.lowLevelKitted = powerLevel(player.gear, 1);
     return o;
@@ -115,7 +115,7 @@ const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''
   // with real power, it should open deeper
   const deep = await gate(()=>{ localStorage.clear(); stash=blankStash();
     stash.xp = xpForLevel(40); stash.level = 40;
-    for (const sl of SLOTS) stash.gear[sl.id] = rollSetPiece(sl.id); saveStash(); });
+    for (const sl of SET_SLOTS) stash.gear[sl] = rollSetPiece(sl); saveStash(); });
   ck('a strong hero opens deeper down the ladder', deep.on[0]!=='test',
      'power '+deep.pw+' opened on '+deep.on[0]);
 

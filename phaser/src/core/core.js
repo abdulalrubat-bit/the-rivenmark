@@ -331,6 +331,9 @@ const BASE_PLAYER = {
   r: 14, maxHp: 100, speed: 205,
   damage: 22, fireDelay: 0.56, range: 186, arcSpeed: 1550,
   sweep: 28, shots: 1, fan: 0, magnet: 118, regen: 0,
+  // What the loot adds: no crit, a crit is half again, nothing drunk or thrown
+  // back, the coin as it falls, the cooldowns as written.
+  crit: 0, critDmg: 0.5, leech: 0, thorns: 0, coinFind: 1, haste: 0,
   iframe: 0.45
 };
 
@@ -1145,7 +1148,7 @@ function itemPower(it) {
   if (!it) return 0;
   const tier = RARITY.findIndex(r => r.id === it.rarity);
   let p = 6 + tier * 5;
-  for (const af of it.affixes) {
+  for (const af of itemLines(it)) {
     const a = AFFIX_BY_ID[af.id];
     if (!a) continue;
     p += a.mul ? Math.abs(af.v) * 90 : Math.abs(af.v) * (a.id === 'life' ? 0.5 : 2.2);
@@ -1345,7 +1348,9 @@ const SLOTS = [
   // system fonts, and in a grid of buttons a cross reads as "discard".
   { id:'blade',   name:'Blade',    mark:'\u2020' },
   { id:'offhand', name:'Off-hand', mark:'\u25d6' },
+  { id:'helm',    name:'Helm',     mark:'\u25d3' },
   { id:'mail',    name:'Mail',     mark:'\u2593' },
+  { id:'gloves',  name:'Gloves',   mark:'\u25a7' },
   { id:'girdle',  name:'Girdle',   mark:'\u2550' },
   { id:'boots',   name:'Boots',    mark:'\u25e2' },
   { id:'amulet',  name:'Amulet',   mark:'\u2727' },
@@ -1358,18 +1363,34 @@ const SLOTS = [
 // the loose glyphs; every base name after that has its own, so a Falchion and
 // a Glaive are no longer the same picture with a different word under it.
 // Built by tools/build-art.py, which owns both this order and the strip.
-const ICON = { blade:0, offhand:1, mail:2, girdle:3, boots:4, amulet:5,
-               ring1:6, ring2:6, ring:6, coin:7, skull:8, gem:9,
-               'Longsword':10, 'Falchion':11, 'Warblade':12, 'Glaive':13,
-               'Cleaver':14,
-               'Kite Shield':15, 'Buckler':16, 'Warding Focus':17,
-               'Tower Shield':18,
-               'Ringmail':19, 'Scale Hauberk':20, 'Plated Coat':21,
-               'Padded Jack':22,
-               'Leather Girdle':23, 'Plated Belt':24, 'Sash of Cord':25,
-               'Marching Boots':26, 'Greaves':27, 'Soft Treads':28,
-               'Bone Amulet':29, 'Ley-Charm':30, 'Sun Pendant':31,
-               'Iron Band':32, 'Signet':33, 'Twisted Ring':34 };
+/* The strip's cells in order -- tools/build-art.py cuts them in exactly this
+ * order (its ICONS list), and gear.js holds the two to each other. The first
+ * ten are the slot fallbacks and the loose glyphs; helm and gloves joined the
+ * slots later, so their fallbacks come after the first bases. */
+const ICON_ORDER = [
+  'blade', 'offhand', 'mail', 'girdle', 'boots', 'amulet', 'ring', 'coin', 'skull', 'gem',
+  'Longsword', 'Falchion', 'Warblade', 'Glaive', 'Cleaver',
+  'Kite Shield', 'Buckler', 'Warding Focus', 'Tower Shield',
+  'Ringmail', 'Scale Hauberk', 'Plated Coat', 'Padded Jack',
+  'Leather Girdle', 'Plated Belt', 'Sash of Cord',
+  'Marching Boots', 'Greaves', 'Soft Treads',
+  'Bone Amulet', 'Ley-Charm', 'Sun Pendant',
+  'Iron Band', 'Signet', 'Twisted Ring',
+  // the loot expansion
+  'helm', 'gloves',
+  'Rapier', 'Sabre', 'Bastard Sword', 'War Axe', 'Kopis',
+  'Spiked Targe', 'Heater Shield', 'Bronze Roundel', 'Rune Ward',
+  'Hood', 'Iron Cap', 'Visored Helm', 'Winged Helm', 'Horned Helm', 'Skull Helm', 'Circlet', 'Great Helm',
+  'Brigandine', 'Scholar\u2019s Robe', 'Hide Vest', 'Lamellar', 'Ember Cuirass',
+  'Leather Gloves', 'Iron Gauntlets', 'Bracers', 'Grips', 'Spiked Gauntlets', 'Silk Wraps', 'Bloodied Mitts', 'Gilded Gloves',
+  'Chain Belt', 'Heavy Belt', 'Coin Belt', 'Ley-Cord', 'Rope Belt',
+  'Iron Sabatons', 'Frost Boots', 'Ember Boots', 'Hunter\u2019s Boots', 'Silk Slippers',
+  'Star Pendant', 'Blood Gem', 'Teardrop', 'Shard Pendant', 'Rosary',
+  'Ruby Ring', 'Band of Thorns', 'Seer\u2019s Ring'
+];
+const ICON = {};
+ICON_ORDER.forEach((k, i) => { ICON[k] = i; });
+ICON.ring1 = ICON.ring2 = ICON.ring;
 const icoTag = (key, px) =>
   '<i class="ico" style="--i:' + (ICON[key] || 0) + ';--sz:' + px + 'px"></i>';
 // What an item should be drawn as: its own base if the strip carries one,
@@ -1394,6 +1415,9 @@ const RARITY = [
   { id:'wrought', name:'Spirit-wrought', colour:'#3a7ffb', tier:'rare',     affixes:3, weight:14 },
   { id:'hallowed',name:'Hallowed',       colour:'#a238e6', tier:'epic',     affixes:4, weight:5  },
   { id:'riven',   name:'Riven',          colour:'#ff8000', tier:'legend',   affixes:5, weight:1  },
+  // Never rolled by rollRarity either: a unique is a named thing with a power
+  // of its own (UNIQUES), and falls on its own odds (uniqueOdds).
+  { id:'unique',  name:'Unique',         colour:'#d8b25a', tier:'unique',   affixes:3, weight:0  },
   // Never rolled by rollRarity -- set pieces are the only mythics, and they
   // come off elites and the avatar rather than out of the ordinary drop table.
   { id:'mythic',  name:'Mythic',         colour:'#e0563f', tier:'set',      affixes:5, weight:0  }
@@ -1524,36 +1548,210 @@ const REGION_RELIC = {
 // Seven times in ten it is what the ground keeps; the rest is anything.
 const RELIC_HERE = 0.7;
 
+// The Regalia is eight pieces; the helm and gloves came later and are not in it.
+const SET_SLOTS = Object.keys(SET_PIECES);
 function relicSlotFor(regionId) {
   const here = REGION_RELIC[regionId];
   if (here && here.length && Math.random() < RELIC_HERE)
     return here[(Math.random() * here.length) | 0];
-  return SLOTS[(Math.random() * SLOTS.length) | 0].id;
+  return SET_SLOTS[(Math.random() * SET_SLOTS.length) | 0];
 }
 
 function rollSetPiece(slotId) {
-  const slot = slotId || relicSlotFor(REGION && REGION.id);
+  // Only the eight the Regalia has: asked for a helm or gloves, it gives a
+  // piece it does have rather than nothing.
+  const slot = SET_PIECES[slotId] ? slotId : relicSlotFor(REGION && REGION.id);
   const def = SET_PIECES[slot];
   return { uid: ++itemSeq, slot, base: def.base, rarity: 'mythic', set: SET_ID,
            affixes: def.affixes.map(a => ({ id: a[0], v: a[1] })),
            name: def.base };
 }
 
+/* --- UNIQUES ----------------------------------------------------------------
+   Asked for with the loot: "named uniques". Ten of them, each a named thing
+   on a real base, with rolled stats in fixed ranges and one POWER no roll can
+   give -- something that changes how you fight rather than how hard. Rare on
+   an ordinary body, likelier off a champion or the avatar, and likelier the
+   deeper you go (uniqueOdds). Each power is read in exactly one place, named
+   beside it here, and only while the piece is worn (player.uniq).
+   ------------------------------------------------------------------------ */
+const UNIQUES = [
+  { id:'rimebite', name:'Rimebite', slot:'blade', base:'Sabre',
+    affixes:[['damageP',0.12,0.18],['crit',0.04,0.06]],
+    power:'Your blows chill: what you strike moves a third slower for 2 seconds.' },   // heroBlow
+  { id:'hollowcrown', name:'The Hollow Crown', slot:'helm', base:'Circlet',
+    affixes:[['life',15,25],['damageP',0.08,0.12]],
+    power:'Below half your life, you strike 40% harder.' },                              // heroBlow
+  { id:'breakersgrasp', name:'Breaker\u2019s Grasp', slot:'gloves', base:'Iron Gauntlets',
+    affixes:[['damage',3,6],['critDmg',0.20,0.30]],
+    power:'Every fifth blow you land is a certain crit.' },                              // heroBlow
+  { id:'emberheart', name:'Emberheart', slot:'mail', base:'Ember Cuirass',
+    affixes:[['life',20,30],['ward',0.04,0.06]],
+    power:'When you are struck, you burst into flame around you (every 3 seconds).' },  // hurtPlayerBy
+  { id:'gravewhisper', name:'Gravewhisper', slot:'amulet', base:'Bone Amulet',
+    affixes:[['regen',0.4,0.8],['life',10,20]],
+    power:'Every kill mends 3% of your life.' },                                         // heroBlow
+  { id:'stormstride', name:'Stormstride', slot:'boots', base:'Frost Boots',
+    affixes:[['speed',0.06,0.10],['haste',0.05,0.08]],
+    power:'A kill quickens you: 30% more stride for 2 seconds.' },                       // heroBlow
+  { id:'vesper', name:'Vesper\u2019s Signet', slot:'ring1', base:'Signet',
+    affixes:[['coinFind',0.30,0.50],['magnet',0.20,0.30]],
+    power:'Coffers open to twice the coin.' },                                           // openChest
+  { id:'thornwall', name:'The Thornwall', slot:'offhand', base:'Spiked Targe',
+    affixes:[['ward',0.05,0.07],['thorns',8,12]],
+    power:'Your thorns strike three times as hard.' },                                   // hurtPlayer
+  { id:'leysiphon', name:'The Ley-Siphon', slot:'girdle', base:'Ley-Cord',
+    affixes:[['haste',0.06,0.10],['regen',0.3,0.5]],
+    power:'Every kill takes half a second off your abilities\u2019 wait.' },             // heroBlow
+  { id:'bloodoath', name:'Bloodoath', slot:'ring1', base:'Ruby Ring',
+    affixes:[['leech',0.02,0.03],['damageP',0.08,0.12]],
+    power:'A crit drinks twice the life.' }                                              // heroBlow
+];
+const UNIQUE_BY_ID = {};
+for (const u of UNIQUES) UNIQUE_BY_ID[u.id] = u;
+const UNIQUE_POWER = {           // the tuning of each power, in one place
+  rimebite: { chill: 2, slow: 0.35 }, hollowcrown: { below: 0.5, mult: 1.4 },
+  breakersgrasp: { every: 5 }, emberheart: { cd: 3, r: 130, bite: 0.6 },
+  gravewhisper: { heal: 0.03 }, stormstride: { t: 2, stride: 1.3 },
+  vesper: { coin: 2 }, thornwall: { mult: 3 }, leysiphon: { cut: 0.5 }, bloodoath: { mult: 2 }
+};
+
+// A unique at the delve's own level. `id` picks one; otherwise any.
+function rollUnique(id) {
+  const U = UNIQUE_BY_ID[id] || UNIQUES[(Math.random() * UNIQUES.length) | 0];
+  const ilvl = (0.9 + (LEVEL.depth || 0) * 0.9) * AFFIX_SCALE;
+  const affixes = U.affixes.map(([aid, lo, hi]) => {
+    const a = AFFIX_BY_ID[aid];
+    let v = (lo + Math.random() * (hi - lo)) * (a.flat ? 1 : ilvl);
+    v = a.dp ? +v.toFixed(a.dp) : (Math.abs(lo) >= 1 ? Math.max(1, Math.round(v)) : v);
+    return { id: aid, v };
+  });
+  const it = { uid: ++itemSeq, slot: U.slot, base: U.base, rarity: 'unique', unique: U.id,
+               affixes, name: U.name };
+  const imp = rollImplicit(BASE_BY_NAME[U.base], ilvl);
+  if (imp) it.imp = imp;
+  return it;
+}
+// Is a unique worn? Kept by recomputeStats, so the hot paths ask a flag.
+const hasUnique = id => !!(player && player.uniq && player.uniq[id]);
+// The odds any one drop is a unique instead: rare off the horde, likelier off
+// a champion and the avatar, and the deep ground doubles all of it.
+function uniqueOdds(e) {
+  const base = isAvatar(e) ? 0.12 : e.elite ? 0.05 : 0.008;
+  return base * (1 + (LEVEL.depth || 0)) * lootMult();
+}
+
 const setWorn = p => SLOTS.reduce((n, sl) =>
   n + (p.gear[sl.id] && p.gear[sl.id].set === SET_ID ? 1 : 0), 0);
 
-// Base items per slot. `key` picks which affix pool the base leans on, so a
-// blade rolls like a weapon and boots roll like boots.
-const BASES = {
-  blade:   ['Longsword', 'Falchion', 'Warblade', 'Glaive', 'Cleaver'],
-  offhand: ['Kite Shield', 'Buckler', 'Warding Focus', 'Tower Shield'],
-  mail:    ['Ringmail', 'Scale Hauberk', 'Plated Coat', 'Padded Jack'],
-  girdle:  ['Leather Girdle', 'Plated Belt', 'Sash of Cord'],
-  boots:   ['Marching Boots', 'Greaves', 'Soft Treads'],
-  amulet:  ['Bone Amulet', 'Ley-Charm', 'Sun Pendant'],
-  ring1:   ['Iron Band', 'Signet', 'Twisted Ring'],
-  ring2:   ['Iron Band', 'Signet', 'Twisted Ring']
+/* BASE ITEMS, and what each one is.
+ *
+ * Playtested: "more gear, so lots of different stuff drops". A base used to be
+ * a name and a picture and nothing else -- a Cleaver was a Longsword with a
+ * different word -- so eight bases a slot would have been eight words. Now
+ * every base carries one BUILT-IN stat (`imp`), rolled like an affix but at
+ * about half the strength, and it is what the base is for: a Rapier is quick,
+ * a Cleaver bites, a Kopis drinks. It never rerolls and is not counted
+ * against the rarity's affixes, so a Worn Rapier is still a quick blade. */
+const BASE_DEFS = {
+  blade: [
+    { name:'Longsword',     imp:['reach',   0.03, 0.06] },
+    { name:'Falchion',      imp:['sweep',   0.04, 0.08] },
+    { name:'Warblade',      imp:['damage',  1, 4] },
+    { name:'Glaive',        imp:['reach',   0.05, 0.09] },
+    { name:'Cleaver',       imp:['damageP', 0.04, 0.09] },
+    { name:'Rapier',        imp:['cadence', -0.07, -0.03] },
+    { name:'Sabre',         imp:['crit',    0.02, 0.05] },
+    { name:'Bastard Sword', imp:['damage',  2, 5] },
+    { name:'War Axe',       imp:['critDmg', 0.10, 0.22] },
+    { name:'Kopis',         imp:['leech',   0.006, 0.014] }
+  ],
+  offhand: [
+    { name:'Kite Shield',    imp:['ward',    0.02, 0.04] },
+    { name:'Buckler',        imp:['speed',   0.02, 0.04] },
+    { name:'Warding Focus',  imp:['regen',   0.1, 0.4] },
+    { name:'Tower Shield',   imp:['life',    6, 14] },
+    { name:'Spiked Targe',   imp:['thorns',  2, 6] },
+    { name:'Heater Shield',  imp:['damageP', 0.03, 0.06] },
+    { name:'Bronze Roundel', imp:['sweep',   0.03, 0.07] },
+    { name:'Rune Ward',      imp:['haste',   0.03, 0.06] }
+  ],
+  helm: [
+    { name:'Hood',          imp:['magnet',  0.06, 0.16] },
+    { name:'Iron Cap',      imp:['life',    5, 12] },
+    { name:'Visored Helm',  imp:['ward',    0.02, 0.04] },
+    { name:'Winged Helm',   imp:['speed',   0.02, 0.04] },
+    { name:'Horned Helm',   imp:['damageP', 0.03, 0.06] },
+    { name:'Skull Helm',    imp:['leech',   0.005, 0.012] },
+    { name:'Circlet',       imp:['crit',    0.02, 0.04] },
+    { name:'Great Helm',    imp:['regen',   0.1, 0.4] }
+  ],
+  mail: [
+    { name:'Ringmail',          imp:['ward',    0.02, 0.04] },
+    { name:'Scale Hauberk',     imp:['life',    6, 14] },
+    { name:'Plated Coat',       imp:['ward',    0.03, 0.05] },
+    { name:'Padded Jack',       imp:['speed',   0.02, 0.04] },
+    { name:'Brigandine',        imp:['thorns',  3, 7] },
+    { name:'Scholar\u2019s Robe', imp:['haste',  0.03, 0.06] },
+    { name:'Hide Vest',         imp:['regen',   0.1, 0.4] },
+    { name:'Lamellar',          imp:['life',    8, 16] },
+    { name:'Ember Cuirass',     imp:['damageP', 0.03, 0.06] }
+  ],
+  gloves: [
+    { name:'Leather Gloves',   imp:['cadence', -0.05, -0.02] },
+    { name:'Iron Gauntlets',   imp:['damage',  1, 3] },
+    { name:'Bracers',          imp:['ward',    0.02, 0.04] },
+    { name:'Grips',            imp:['crit',    0.02, 0.04] },
+    { name:'Spiked Gauntlets', imp:['thorns',  2, 5] },
+    { name:'Silk Wraps',       imp:['haste',   0.03, 0.06] },
+    { name:'Bloodied Mitts',   imp:['leech',   0.005, 0.012] },
+    { name:'Gilded Gloves',    imp:['coinFind',0.05, 0.12] }
+  ],
+  girdle: [
+    { name:'Leather Girdle', imp:['life',    5, 12] },
+    { name:'Plated Belt',    imp:['ward',    0.02, 0.04] },
+    { name:'Sash of Cord',   imp:['speed',   0.02, 0.04] },
+    { name:'Chain Belt',     imp:['thorns',  2, 5] },
+    { name:'Heavy Belt',     imp:['life',    8, 16] },
+    { name:'Coin Belt',      imp:['coinFind',0.06, 0.14] },
+    { name:'Ley-Cord',       imp:['haste',   0.03, 0.06] },
+    { name:'Rope Belt',      imp:['magnet',  0.08, 0.18] }
+  ],
+  boots: [
+    { name:'Marching Boots',   imp:['speed',   0.02, 0.05] },
+    { name:'Greaves',          imp:['ward',    0.02, 0.04] },
+    { name:'Soft Treads',      imp:['magnet',  0.06, 0.16] },
+    { name:'Iron Sabatons',    imp:['life',    5, 12] },
+    { name:'Frost Boots',      imp:['haste',   0.03, 0.06] },
+    { name:'Ember Boots',      imp:['damageP', 0.02, 0.05] },
+    { name:'Hunter\u2019s Boots', imp:['crit',   0.02, 0.04] },
+    { name:'Silk Slippers',    imp:['coinFind',0.05, 0.12] }
+  ],
+  amulet: [
+    { name:'Bone Amulet',   imp:['regen',   0.1, 0.4] },
+    { name:'Ley-Charm',     imp:['magnet',  0.08, 0.18] },
+    { name:'Sun Pendant',   imp:['damageP', 0.03, 0.07] },
+    { name:'Star Pendant',  imp:['crit',    0.02, 0.05] },
+    { name:'Blood Gem',     imp:['leech',   0.006, 0.014] },
+    { name:'Teardrop',      imp:['haste',   0.03, 0.07] },
+    { name:'Shard Pendant', imp:['critDmg', 0.10, 0.22] },
+    { name:'Rosary',        imp:['life',    6, 14] }
+  ],
+  ring1: [
+    { name:'Iron Band',      imp:['damage',  1, 3] },
+    { name:'Signet',         imp:['coinFind',0.05, 0.12] },
+    { name:'Twisted Ring',   imp:['cadence', -0.04, -0.02] },
+    { name:'Ruby Ring',      imp:['damageP', 0.02, 0.05] },
+    { name:'Band of Thorns', imp:['thorns',  2, 5] },
+    { name:'Seer\u2019s Ring', imp:['crit',   0.02, 0.04] }
+  ]
 };
+BASE_DEFS.ring2 = BASE_DEFS.ring1;
+// The names alone, as the older code reads them.
+const BASES = {};
+for (const sl in BASE_DEFS) BASES[sl] = BASE_DEFS[sl].map(b => b.name);
+const BASE_BY_NAME = {};
+for (const sl in BASE_DEFS) for (const b of BASE_DEFS[sl]) BASE_BY_NAME[b.name] = b;
 
 // An affix is a stat, a roll range, and how it is worded. `mul` stats are
 // multiplicative and stack by product; the rest add.
@@ -1568,12 +1766,36 @@ const AFFIXES = [
   { id:'sweep',   stat:'sweep',     mul:true,  lo:0.05, hi:0.16, dp:0, name:'Broad',     word:'+@ sweep' },
   { id:'cadence', stat:'fireDelay', mul:true,  lo:-0.12,hi:-0.04,dp:0, name:'Quick',     word:'@ swing time' },
   { id:'magnet',  stat:'magnet',    mul:true,  lo:0.10, hi:0.35, dp:0, name:'Drawing',   word:'+@ draw' },
-  { id:'regen',   stat:'regen',     mul:false, lo:0.2,  hi:0.9,  dp:1, name:'Mending',   word:'+@ life a second' }
+  { id:'regen',   stat:'regen',     mul:false, lo:0.2,  hi:0.9,  dp:1, name:'Mending',   word:'+@ life a second' },
+  // The loot expansion: stats that change how a fight goes, not only how
+  // hard. Each is read where the thing it changes happens (heroBlow for the
+  // crit and the leech, hurtPlayerBy for the thorns, the coin paths for the
+  // find, the cooldowns for the haste). Capped in recomputeStats.
+  // `flat`: rolled the same at every depth. A chance or a share grows into
+  // nonsense if the item level multiplies it -- measured, a rung-50 kit with
+  // scaled crits struck for twice what the old kit did.
+  { id:'crit',    stat:'crit',      mul:false, lo:0.02, hi:0.05, dp:0, pct:true, flat:true, name:'Deadly',   word:'@ crit chance' },
+  { id:'critDmg', stat:'critDmg',   mul:false, lo:0.10, hi:0.25, dp:0, pct:true, flat:true, name:'Brutal',   word:'@ more crit damage' },
+  { id:'leech',   stat:'leech',     mul:false, lo:0.01, hi:0.025,dp:0, pct:true, flat:true, name:'Leeching', word:'@ of damage dealt healed' },
+  { id:'thorns',  stat:'thorns',    mul:false, lo:3,    hi:10,   dp:0, name:'Barbed',   word:'+@ damage back at what strikes you' },
+  { id:'coinFind',stat:'coinFind',  mul:true,  lo:0.08, hi:0.25, dp:0, name:'Gilded',   word:'+@ coin found' },
+  { id:'haste',   stat:'haste',     mul:false, lo:0.04, hi:0.08, dp:0, pct:true, flat:true, name:'Hasted',   word:'@ faster ability recovery' }
 ];
 // Global dial on how much a roll is worth. Gear should be felt, but a full kit
 // of eight items multiplies together fast: at 1.0 the bot's escape rate went
 // from 30% to 73%. Left mutable so the balance harness can sweep it.
 let AFFIX_SCALE = 1;
+/* Ten pieces now where there were eight, and every one with a built-in stat
+ * on top of its rolls: the same strength spread over more of them. Measured
+ * against the eight-slot kit on main, a full kit rolled at the rung, so the
+ * loot is wider without the ladder going soft (see loot.js). */
+const SLOT_SPREAD = 0.8;
+// ...but only the offence is spread. Life and ward were not what grew, and
+// the new stats in the pools already thin them: measured, spreading them too
+// left a rung-50 kit with two thirds of the life it has on main.
+const OFFENCE = { damage: 1, fireDelay: 1, range: 1, sweep: 1 };
+const DEFENCE_LIFT = 0.95;
+const spreadOf = a => OFFENCE[a.stat] ? SLOT_SPREAD : (a.stat === 'maxHp' || a.stat === 'ward') ? DEFENCE_LIFT : 1;
 
 /* Some affixes suit one hero far more than the other, and say so. A `hero`
    tag pays a bonus when it is worn by the Vanguard it was made for, which
@@ -1582,7 +1804,7 @@ let AFFIX_SCALE = 1;
 const SYNERGY = [
   { id:'isaacWard',  hero:'isaac', stat:'ward',   mul:false, lo:0.04, hi:0.10, dp:0, pct:true,
     name:"Warden's",  word:'@ harm turned',
-    slots:['offhand','mail','girdle','ring1','ring2'] },
+    slots:['offhand','helm','mail','girdle','ring1','ring2'] },
   { id:'isaacSweep', hero:'isaac', stat:'sweep',  mul:true,  lo:0.10, hi:0.26, dp:0,
     name:'Sun-Wide',  word:'+@ sweep',
     slots:['blade','offhand','amulet'] },
@@ -1591,7 +1813,7 @@ const SYNERGY = [
     slots:['blade','amulet','ring1','ring2'] },
   { id:'zaydHaste',  hero:'zayd',  stat:'fireDelay', mul:true, lo:-0.20, hi:-0.08, dp:0,
     name:'Frost-Quick', word:'@ swing time',
-    slots:['blade','boots','ring1','ring2'] }
+    slots:['blade','gloves','boots','ring1','ring2'] }
 ];
 for (const sy of SYNERGY) AFFIXES.push(sy);
 // The slot pools are declared below, so registering into them waits until
@@ -1647,14 +1869,16 @@ for (const b of BRANDS) (BRAND_BY_SLOT[b.slot] = BRAND_BY_SLOT[b.slot] || []).pu
 const BRAND_ODDS = 0.55;
 
 const SLOT_AFFIXES = {
-  blade:   ['damage','damageP','reach','sweep','cadence'],
-  offhand: ['ward','life','damageP','sweep','regen'],
-  mail:    ['life','ward','regen','speed'],
-  girdle:  ['life','ward','magnet','regen'],
-  boots:   ['speed','life','magnet','ward'],
-  amulet:  ['damageP','life','regen','magnet','reach'],
-  ring1:   ['damage','damageP','life','ward','speed','magnet','cadence'],
-  ring2:   ['damage','damageP','life','ward','speed','magnet','cadence']
+  blade:   ['damage','damageP','reach','sweep','cadence','crit','critDmg','leech'],
+  offhand: ['ward','life','damageP','sweep','regen','thorns','haste'],
+  helm:    ['life','ward','regen','magnet','crit','haste'],
+  mail:    ['life','ward','regen','speed','thorns'],
+  gloves:  ['damage','damageP','cadence','crit','critDmg','leech'],
+  girdle:  ['life','ward','magnet','regen','coinFind','thorns'],
+  boots:   ['speed','life','magnet','ward','haste','coinFind'],
+  amulet:  ['damageP','life','regen','magnet','reach','critDmg','haste','coinFind'],
+  ring1:   ['damage','damageP','life','ward','speed','magnet','cadence','crit','leech','coinFind'],
+  ring2:   ['damage','damageP','life','ward','speed','magnet','cadence','crit','leech','coinFind']
 };
 
 // Hero-tagged affixes join the pools of the slots they were forged for. Done
@@ -1687,8 +1911,9 @@ let itemSeq = 0;
 function rollItem(depth, slotId) {
   const slot = slotId || SLOTS[(Math.random() * SLOTS.length) | 0].id;
   const rarity = rollRarity(clamp(depth, 0, 1));
-  const bases = BASES[slot];
-  const base = bases[(Math.random() * bases.length) | 0];
+  const defs = BASE_DEFS[slot];
+  const def = defs[(Math.random() * defs.length) | 0];
+  const base = def.name;
   const pool = SLOT_AFFIXES[slot].slice();
   const affixes = [];
   const n = Math.min(rarity.affixes, pool.length);
@@ -1698,7 +1923,7 @@ function rollItem(depth, slotId) {
   for (let i = 0; i < n; i++) {
     const id = pool.splice((Math.random() * pool.length) | 0, 1)[0];
     const a = AFFIX_BY_ID[id];
-    let v = (a.lo + Math.random() * (a.hi - a.lo)) * ilvl;
+    let v = (a.lo + Math.random() * (a.hi - a.lo)) * (a.flat ? 1 : ilvl * spreadOf(a));
     v = a.dp ? +v.toFixed(a.dp) : (Math.abs(a.lo) >= 1 ? Math.max(1, Math.round(v)) : v);
     affixes.push({ id, v });
   }
@@ -1710,9 +1935,26 @@ function rollItem(depth, slotId) {
     const br = brands[(Math.random() * brands.length) | 0];
     affixes[0] = { id: br.id, v: br.lo + Math.random() * (br.hi - br.lo) };
   }
-  return { uid: ++itemSeq, slot, base, rarity: rarity.id, affixes,
-           name: affixes.length ? AFFIX_BY_ID[affixes[0].id].name + ' ' + base : base };
+  const it = { uid: ++itemSeq, slot, base, rarity: rarity.id, affixes,
+               name: affixes.length ? AFFIX_BY_ID[affixes[0].id].name + ' ' + base : base };
+  const imp = rollImplicit(def, ilvl);
+  if (imp) it.imp = imp;
+  return it;
 }
+
+// A base's built-in stat, at the item's level. Rounded the way an affix is.
+function rollImplicit(def, ilvl) {
+  if (!def || !def.imp) return null;
+  const [id, lo, hi] = def.imp;
+  const a = AFFIX_BY_ID[id];
+  if (!a) return null;
+  let v = (lo + Math.random() * (hi - lo)) * (a.flat ? 1 : ilvl * spreadOf(a));
+  v = a.dp ? +v.toFixed(a.dp) : (Math.abs(lo) >= 1 ? Math.max(1, Math.round(v)) : v);
+  return { id, v };
+}
+
+// Every stat line a piece carries: the built-in one first, then the rolled.
+const itemLines = it => it ? (it.imp ? [it.imp].concat(it.affixes) : it.affixes) : [];
 
 function affixText(af, hero) {
   const a = AFFIX_BY_ID[af.id];
@@ -1769,10 +2011,12 @@ function recomputeStats() {
   // Gear on top: additive terms first, then the multiplicative ones, so the
   // order two items were equipped in cannot change the result.
   const add = {}, mul = {};
+  p.uniq = {};
+  for (const sl of SLOTS) { const it = p.gear[sl.id]; if (it && it.unique) p.uniq[it.unique] = true; }
   for (const sl of SLOTS) {
     const it = p.gear[sl.id];
     if (!it) continue;
-    for (const af of it.affixes) {
+    for (const af of itemLines(it)) {
       const a = AFFIX_BY_ID[af.id];
       if (!a) continue;
       // An affix forged for this Vanguard pays more in their hands.
@@ -1807,6 +2051,11 @@ function recomputeStats() {
 
   base.ward = clamp(base.ward, 0, 0.75);      // never immune
   base.fireDelay = Math.max(0.08, base.fireDelay);
+  // Never every blow a crit, never a blade that heals you whole, and the kit
+  // always has some wait left in it.
+  base.crit = clamp(base.crit || 0, 0, 0.6);
+  base.leech = clamp(base.leech || 0, 0, 0.12);
+  base.haste = clamp(base.haste || 0, 0, 0.5);
 
   for (const k in base) {
     if (k === 'r' || k === 'iframe') continue;
@@ -4165,7 +4414,8 @@ function maybeDropItem(e) {
   const purse = isAvatar(e) ? 90 : e.elite ? 26 : e.kind === 'breaker' ? 9 : 2;
   if (purse) {
     run.coins += Math.round(purse * (0.7 + Math.random() * 0.7) *
-                            (1 + (LEVEL.depth || 0) * 1.4) * lootMult() * twist('coin'));
+                            (1 + (LEVEL.depth || 0) * 1.4) * lootMult() * twist('coin') *
+                            (player.coinFind || 1));
   }
 
   const push = it => drops.push({
@@ -4181,7 +4431,7 @@ function maybeDropItem(e) {
     if (i === 0 && Math.random() > chance) return;
     // Quality floor by what it came off, so a champion never hands you rags.
     const floor = isAvatar(e) ? 0.85 : e.elite ? 0.7 : 0;
-    push(rollItem(Math.max(depth, floor)));
+    push(Math.random() < uniqueOdds(e) ? rollUnique() : rollItem(Math.max(depth, floor)));
   }
 }
 
@@ -4425,7 +4675,8 @@ function openChest(ch) {
   ch.t = 0;                      // the lid takes CHEST_OPEN to come up
   const K = CHEST_KINDS[ch.kind];
   const depth = LEVEL.depth || 0;
-  const coin = Math.round(rand(K.coin[0], K.coin[1]) * (1 + depth * 1.4) * lootMult());
+  const coin = Math.round(rand(K.coin[0], K.coin[1]) * (1 + depth * 1.4) * lootMult() *
+                         (player.coinFind || 1) * (hasUnique('vesper') ? UNIQUE_POWER.vesper.coin : 1));
   run.coins += coin;
   run.chests = (run.chests || 0) + 1;
 
@@ -5758,7 +6009,7 @@ function castAbility(id) {
   if (a.cost) spendCharges(a.cost);
   if (a.costPct) { player.tension = Math.max(0, (player.tension || 0) - TENSION_MAX * a.costPct);
                    player.chargePop = 1; }
-  if (a.cd) { player.cds = player.cds || {}; player.cds[a.id] = a.cd; }
+  if (a.cd) { player.cds = player.cds || {}; player.cds[a.id] = a.cd * (1 - (player.haste || 0)); }
   if (a.gcd) startGCD(a.gcd);
   // Spending from the bar is loud, whatever it does. A ward and a bolt cost
   // the same attention: what carries here is that you ACTED, not what the
@@ -5815,7 +6066,7 @@ const ABILITY_DO = {
       const e = _near[i];
       if (e.hp <= 0) continue;
       if (dist2(player.x, player.y, e.x, e.y) > a.radius * a.radius) continue;
-      damageEnemy(e, player.damage * a.dmg, player.x, player.y);
+      heroBlow(e, player.damage * a.dmg, player.x, player.y);
       knock(e, Math.atan2(e.y - player.y, e.x - player.x), 240);
     }
     player.mitigate = a.mitigate;
@@ -5842,7 +6093,7 @@ const ABILITY_DO = {
     shake(vuln ? 16 : 11);
     ring(t.x, t.y, vuln ? '#fff2c8' : '#ffd870', 8, vuln ? 190 : 120, 0.5);
     burst(t.x, t.y, '#fff2c8', vuln ? 40 : 22, 380);
-    damageEnemy(t, player.damage * a.dmg * (vuln ? VULN_MULT : 1), player.x, player.y);
+    heroBlow(t, player.damage * a.dmg * (vuln ? VULN_MULT : 1), player.x, player.y);
     if (vuln) toast('The guard is broken', '#fff2c8');
   },
 
@@ -6022,6 +6273,8 @@ function knock(e, ang, force) {
 
 // Cooldowns, the channel, and the timed states the kit puts on the hero.
 function updateAbilities(dt) {
+  if (player.rush > 0) player.rush = Math.max(0, player.rush - dt);
+  if (player.emberCd > 0) player.emberCd = Math.max(0, player.emberCd - dt);
   if (player.cds) {
     for (const k in player.cds) {
       if (player.cds[k] > 0) {
@@ -6063,7 +6316,7 @@ function breakChannel(why) {
   player.channel = null;
   // A broken channel still costs its cooldown -- otherwise the answer to
   // being interrupted is to press it again immediately.
-  if (a && a.cd) { player.cds = player.cds || {}; player.cds[a.id] = a.cd; }
+  if (a && a.cd) { player.cds = player.cds || {}; player.cds[a.id] = a.cd * (1 - (player.haste || 0)); }
   toast(why === 'hurt' ? 'The channel breaks' : 'You move, and it lapses', '#8c8168');
   sfx('lapse');
 }
@@ -6219,6 +6472,8 @@ function updateFloaters(dt) {
 const FLOAT_STYLE = {
   hit:    { c: '#f2e6c4', px: 15, rim: 'rgba(6,4,3,.85)',    w: 3, pop: 0.22 },
   heavy:  { c: '#ffe07a', px: 24, rim: 'rgba(255,214,120,.9)', w: 4.5, pop: 0.5, glow: 14 },
+  // A crit: bigger, hotter and louder than a heavy blow, so the stat reads.
+  crit:   { c: '#ff9a3a', px: 28, rim: 'rgba(255,120,40,.95)', w: 5, pop: 0.62, glow: 18 },
   soaked: { c: '#7c7566', px: 11, rim: 'rgba(6,4,3,.4)',    w: 2, pop: 0.06 },
   taken:  { c: '#e0563f', px: 19, rim: 'rgba(6,4,3,.9)',     w: 3.5, pop: 0.34 },
   // Not a number: a blow that does nothing has no number to show, and showing
@@ -6317,7 +6572,15 @@ function updateCamera(dt) {
   if (cam.shake < 0.05) cam.shake = 0;
 }
 
-function hurtPlayer(e) { hurtPlayerBy(e.dmg, e.x, e.y); }
+function hurtPlayer(e) {
+  const was = player.hp;
+  hurtPlayerBy(e.dmg, e.x, e.y);
+  // Thorns: what struck you in the open is struck back. Grows with the delve
+  // like everything the horde brings, or it would be a shallow-rung stat.
+  if (player.thorns > 0 && player.hp < was && e.hp > 0)
+    damageEnemy(e, player.thorns * (1 + (LEVEL.depth || 0) * 3) *
+                   (hasUnique('thornwall') ? UNIQUE_POWER.thornwall.mult : 1), player.x, player.y);
+}
 
 // Damage from something that is not a body -- a slam, a hazard -- comes
 // through here. fx/fy is only where the spray comes from.
@@ -6391,7 +6654,57 @@ function hurtPlayerBy(dmg, fx, fy, sized) {
   sfx('hurt', undefined, undefined, clamp(taken / Math.max(1, player.maxHp) * 4, 0, 1));
   // Which way it came from, for the HUD's hit marker (see noteHit).
   if (fx !== undefined && run) noteHit(fx, fy, taken);
+  // Emberheart: struck, it answers in fire -- on its own clock, so a swarm
+  // does not turn it into a furnace.
+  if (hasUnique('emberheart') && !(player.emberCd > 0) && player.hp > 0) {
+    const E = UNIQUE_POWER.emberheart;
+    player.emberCd = E.cd;
+    ring(player.x, player.y, '#ff7a2a', 10, E.r, 0.4);
+    burst(player.x, player.y, '#ffb060', 22, 260);
+    enemyGrid.query(player.x, player.y, E.r + 30, _near);
+    for (let i = 0; i < _near.length; i++) {
+      const e = _near[i];
+      if (e.hp > 0 && dist2(e.x, e.y, player.x, player.y) < (E.r + e.r) * (E.r + e.r))
+        damageEnemy(e, player.damage * E.bite, player.x, player.y);
+    }
+  }
   if (player.hp <= 0) { player.hp = 0; endRun(false); }
+}
+
+/* A blow the HERO lands: the crescent, the Aegis, the Guillotine. Traps,
+ * barrels and the wind go straight to damageEnemy -- a crit or a sip of life
+ * off a spike the room raised would be the gear taking credit for the floor.
+ * The crit is rolled here, and what the blow actually took (not what it was
+ * worth: a soak, a tether or an overkill all take less) is what the leech
+ * drinks from. Unique powers ride the same door (uniqueOnBlow). */
+function heroBlow(e, dmg, fx, fy) {
+  if (!e || e.hp <= 0) return;
+  const U = UNIQUE_POWER;
+  let crit = player.crit > 0 && Math.random() < player.crit;
+  // Breaker's Grasp: every fifth blow that lands is a crit, whatever the roll.
+  if (hasUnique('breakersgrasp')) {
+    player.blows = (player.blows || 0) + 1;
+    if (player.blows % U.breakersgrasp.every === 0) crit = true;
+  }
+  if (crit) dmg *= 1 + (player.critDmg || 0.5);
+  // The Hollow Crown: harder, the closer you are to the end.
+  if (hasUnique('hollowcrown') && player.hp < player.maxHp * U.hollowcrown.below) dmg *= U.hollowcrown.mult;
+  const before = Math.max(0, e.hp);
+  damageEnemy(e, dmg, fx, fy, crit);
+  const dealt = before - Math.max(0, e.hp);
+  if (dealt > 0 && player.leech > 0 && player.hp > 0) {
+    // Bloodoath: a crit drinks twice.
+    const k = crit && hasUnique('bloodoath') ? U.bloodoath.mult : 1;
+    player.hp = Math.min(player.maxHp, player.hp + dealt * player.leech * k);
+  }
+  // Rimebite: what it touches is slowed.
+  if (hasUnique('rimebite') && e.hp > 0) e.chill = U.rimebite.chill;
+  if (before > 0 && e.hp <= 0 && player.hp > 0) {
+    if (hasUnique('gravewhisper')) player.hp = Math.min(player.maxHp, player.hp + player.maxHp * U.gravewhisper.heal);
+    if (hasUnique('stormstride')) player.rush = U.stormstride.t;
+    if (hasUnique('leysiphon') && player.cds)
+      for (const k in player.cds) player.cds[k] = Math.max(0, player.cds[k] - U.leysiphon.cut);
+  }
 }
 
 /* --- WEIGHT ----------------------------------------------------------------
@@ -6429,7 +6742,7 @@ const KILL_SHAKE  = 4;
  * blade swung past. Every caller knows its own source -- the blast centre, the
  * arc's position, the hero -- so each one says. Omitted, the body still flashes
  * and simply does not flinch. */
-function damageEnemy(e, dmg, fx, fy) {
+function damageEnemy(e, dmg, fx, fy, crit) {
   if (e.hp <= 0) return;
   if (!e.awake) wakeEnemy(e);          // struck from the dark: everyone hears
   // He is held up by his escort. Hitting him through it is not forbidden, just
@@ -6484,7 +6797,7 @@ function damageEnemy(e, dmg, fx, fy) {
   // number: forty off a thrall is a killing blow and forty off the avatar is
   // a scratch, and the number should read like whichever it was.
   floatDmg(e.x, e.y - e.r * 0.9, dmg,
-           soaked ? 'soaked' : dmg > e.maxHp * 0.34 ? 'heavy' : 'hit');
+           soaked ? 'soaked' : crit ? 'crit' : dmg > e.maxHp * 0.34 ? 'heavy' : 'hit');
   // The kill has its own sound below, so a killing blow is not also a hit.
   if (e.hp > 0) sfx(soaked ? 'block' : 'hit', e.x, e.y, weight);
   // Every wound on an escort pushes the crystal. Killing them is how you get
@@ -6634,7 +6947,8 @@ function updatePlayer(dt) {
     // and that is what the blow is bought with: a second of being easy to
     // reach, spent up front, before you know whether it will land.
     if (!player.channel) {
-      const stride = (player.cleave || 0) > 0 ? CLEAVE_STRIDE : 1;
+      const stride = ((player.cleave || 0) > 0 ? CLEAVE_STRIDE : 1) *
+                     ((player.rush || 0) > 0 ? UNIQUE_POWER.stormstride.stride : 1);
       moveEntity(player, mv.x * player.speed * stride * dt,
                          mv.y * player.speed * stride * dt);
     }
@@ -7314,6 +7628,7 @@ function updateEnemies(dt) {
     // slow every frame you stand in it, and a second interrupt on a silenced
     // body should not stack into a minute of quiet.
     if (e.slowed > 0) e.slowed = Math.max(0, e.slowed - dt);
+    if (e.chill > 0) e.chill = Math.max(0, e.chill - dt);
     if (e.silenced > 0) e.silenced = Math.max(0, e.silenced - dt);
     // Metaphysical Vulnerability. Ten seconds, and the Guillotine reads it.
     if (e.vuln > 0) e.vuln = Math.max(0, e.vuln - dt);
@@ -7853,7 +8168,8 @@ function updateEnemies(dt) {
     const mx0 = e.x, my0 = e.y;
     // Slowed by a Null-Zone. The pool does not kill anything; it decides how
     // fast the ground in front of you can be crossed.
-    const spd = e.speed * ((e.slowed || 0) > 0 ? 0.3 : 1);
+    const spd = e.speed * ((e.slowed || 0) > 0 ? 0.3 : 1) *
+                ((e.chill || 0) > 0 ? 1 - UNIQUE_POWER.rimebite.slow : 1);
     moveEntity(e, (sx + rx * 0.8) * spd * dt, (sy + ry * 0.8) * spd * dt);
     advanceGait(e, mx0, my0, dt);
   }
@@ -7941,7 +8257,7 @@ function updateArcs(dt) {
           freeze(0.05);
           shake(8);
         }
-        damageEnemy(e, b.dmg, b.x, b.y);
+        heroBlow(e, b.dmg, b.x, b.y);
         b.hit.push(e);
         bladeLanded(b);
       }
@@ -8711,7 +9027,7 @@ function updatePortal(dt) {
     run.holdTicks++;
     run.holdCrest = false;
     const pay = Math.round(HOLD_COIN * Math.pow(run.holdTicks, HOLD_POW) *
-                           (1 + (LEVEL.depth || 0)));
+                           (1 + (LEVEL.depth || 0)) * (player.coinFind || 1));
     run.coins += pay;
     toast('Surge ' + run.holdTicks + ' held \u00b7 ' + pay + ' coin', PAL.coin);
     sfx('surge');
@@ -9182,7 +9498,9 @@ function validItem(it, slotId) {
   if (slotId && it.slot !== slotId) return false;
   if (!RARITY.some(r => r.id === it.rarity)) return false;
   if (!Array.isArray(it.affixes) || it.affixes.length > 12) return false;
-  for (const a of it.affixes) {
+  if (it.imp !== undefined && (!it.imp || typeof it.imp !== 'object')) return false;
+  if (it.unique !== undefined && !owns(UNIQUE_BY_ID, it.unique)) return false;
+  for (const a of itemLines(it)) {
     if (!a || typeof a !== 'object') return false;
     if (!owns(AFFIX_BY_ID, a.id)) return false;
     if (typeof a.v !== 'number' || !Number.isFinite(a.v) || Math.abs(a.v) > AFFIX_SANE) return false;
@@ -9197,6 +9515,8 @@ function validItem(it, slotId) {
 function mendItem(it) {
   const out = Object.assign({}, it);
   out.affixes = it.affixes.map(a => ({ id: a.id, v: a.v }));
+  if (it.imp) out.imp = { id: it.imp.id, v: it.imp.v };
+  if (it.unique !== undefined) out.unique = it.unique;
   if (typeof out.base !== 'string' || !out.base) out.base = SLOT_BY_ID[it.slot].name;
   if (typeof out.name !== 'string' || !out.name) out.name = out.base;
   out.name = out.name.slice(0, 80);
@@ -10072,7 +10392,7 @@ function vendorBuy(v, arg) {
     stash.vault.push(it);
   } else if (v.id === 'temper') {
     const it = arg && stash.gear[arg];
-    if (!it || it.set === SET_ID) return false;      // the Regalia is fixed
+    if (!it || it.set === SET_ID || it.unique) return false;   // the Regalia and the uniques are fixed
     const pool = SLOT_AFFIXES[it.slot].slice();
     // THE BRAND SURVIVES THE FIRE. A temper rerolls from SLOT_AFFIXES, which
     // brands are deliberately not in -- so without this it quietly replaced
@@ -10266,8 +10586,9 @@ function compareLines(it) {
   const totals = {};
   const add = (src, sign) => {
     if (!src) return;
-    for (const af of src.affixes) {
+    for (const af of itemLines(src)) {
       const a = AFFIX_BY_ID[af.id];
+      if (!a || a.brand) continue;
       const key = a.stat + (a.mul ? '%' : '');
       totals[key] = (totals[key] || 0) + sign * af.v;
     }
@@ -10275,7 +10596,11 @@ function compareLines(it) {
   add(it, 1); add(worn, -1);
   const NAMES = { damage:'damage', maxHp:'life', ward:'harm turned', speed:'stride',
                   range:'reach', sweep:'sweep', fireDelay:'swing time',
-                  magnet:'draw', regen:'mending' };
+                  magnet:'draw', regen:'mending', crit:'crit chance',
+                  critDmg:'crit damage', leech:'life drunk', thorns:'thorns',
+                  coinFind:'coin found', haste:'ability recovery' };
+  // Flat stats that are fractions, printed as percentages like ward is.
+  const FRAC = { ward: 1, crit: 1, critDmg: 1, leech: 1, haste: 1 };
   const out = [];
   for (const k in totals) {
     const v = totals[k];
@@ -10284,7 +10609,7 @@ function compareLines(it) {
     const stat = mul ? k.slice(0, -1) : k;
     // Ward is a flat fraction of harm turned (0.07 is 7%), not a multiplier and
     // not a whole number -- printed like one it read "-0.0 ward".
-    const pct = mul || stat === 'ward';
+    const pct = mul || !!FRAC[stat];
     if (pct && Math.round(v * 100) === 0) continue;   // nothing a player could feel
     // less swing time is better, so its sign reads backwards
     const good = stat === 'fireDelay' ? v < 0 : v > 0;
@@ -10777,7 +11102,7 @@ function endRun(won) {
   // the same place the wipe is -- the two must never be able to disagree.
   if (hardcore && won) {
     const carriedSet = player.bag.filter(it => it.set === SET_ID).length;
-    if (setWorn(player) + carriedSet >= SLOTS.length) {
+    if (setWorn(player) + carriedSet >= SET_SLOTS.length) {
       const h = Object.assign({}, honours());
       if (!h.crimson) {
         h.crimson = 1;

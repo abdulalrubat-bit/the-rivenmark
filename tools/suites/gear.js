@@ -61,7 +61,7 @@ const BRANDS_TEXT_OK = B => Object.keys(B).every(k =>
     o.shallowGood=shallow; o.deepGood=deep;
     return o;
   });
-  ck('every slot can roll', Object.keys(gen.slots).length===8, Object.keys(gen.slots).join(','));
+  ck('every slot can roll', Object.keys(gen.slots).length===10, Object.keys(gen.slots).join(','));
   ck('every rarity appears', Object.keys(gen.rar).length===5, JSON.stringify(gen.rar));
   ck('items are well-formed', gen.bad.length===0, gen.bad.slice(0,3).join(' | '));
   ck('affix count follows rarity', !gen.affixCounts['0'], JSON.stringify(gen.affixCounts));
@@ -188,7 +188,7 @@ const BRANDS_TEXT_OK = B => Object.keys(B).every(k =>
       await new Promise(r=>setTimeout(r,300)); return run.time===t; }));
   const rows = await g.evaluate(()=>[...document.querySelectorAll('#screens .rows')]
     .map(r=>r.querySelectorAll('.row').length));
-  ck('slots render', rows[1]===8, rows.join(' / '));
+  ck('slots render', rows[1]===10, rows.join(' / '));
   ck('bag grid renders', rows[0]===2, rows[0]+' carried');
   ck('the delve bag cannot equip', (await g.$$('#screens [data-on]')).length===0);
   await g.click('#bagBack'); await sleep(200);
@@ -373,7 +373,8 @@ const BRANDS_TEXT_OK = B => Object.keys(B).every(k =>
     return { ok, before, after: after.map(a => a.id).join(','),
              kept: after.some(a => a.id === 'fan'),
              n: after.length, rerolled: after.filter(a => a.id !== 'fan')
-               .some(a => ['damage','reach','sweep','cadence'].indexOf(a.id) >= 0) };
+               // anything the blade's own pool rolls (it grew crits and the leech)
+               .some(a => SLOT_AFFIXES.blade.indexOf(a.id) >= 0) };
   });
   ck('the fire took the piece', fire.ok, fire.before + ' → ' + fire.after);
   ck('and the brand survived it', fire.kept && fire.n === 5,

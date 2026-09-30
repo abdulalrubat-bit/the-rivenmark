@@ -107,7 +107,8 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
     rows: document.querySelectorAll('#vaultRows [data-on]').length,
     ups: document.querySelectorAll('#vaultRows [data-on].up').length }));
   ck('the vault has an order control and a filter for every slot',
-     bar.sort===1 && bar.filters.length === 2 + 7, bar.filters.join(' '));
+     // all, upgrades, and one per slot -- the two rings share one (ten slots, nine chips)
+     bar.sort===1 && bar.filters.length === 2 + 9, bar.filters.join(' '));
   ck('and each slot filter carries the slot’s mark', bar.marked);
   ck('and marks which pieces beat what is worn', bar.ups>0,
      bar.ups+' of '+bar.rows+' marked');

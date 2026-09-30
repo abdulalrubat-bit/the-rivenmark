@@ -37,7 +37,8 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     const claimed = [];
     for (const id in REGION_RELIC) claimed.push(...REGION_RELIC[id]);
     o.claimed = claimed.slice().sort();
-    o.slots = SLOTS.map(s => s.id).sort();
+    // The Regalia's eight: the helm and gloves came later and are not in it.
+    o.slots = SET_SLOTS.slice().sort();
     o.regions = Object.keys(REGION_RELIC).sort();
     o.allRegions = REGIONS.map(r => r.id).sort();
 
