@@ -1657,12 +1657,12 @@ const BASE_DEFS = {
   blade: [
     { name:'Longsword',     imp:['reach',   0.03, 0.06] },
     { name:'Falchion',      imp:['sweep',   0.04, 0.08] },
-    { name:'Warblade',      imp:['damage',  1, 4] },
+    { name:'Warblade',      imp:['damage',  1, 3] },
     { name:'Glaive',        imp:['reach',   0.05, 0.09] },
     { name:'Cleaver',       imp:['damageP', 0.04, 0.09] },
     { name:'Rapier',        imp:['cadence', -0.07, -0.03] },
     { name:'Sabre',         imp:['crit',    0.02, 0.05] },
-    { name:'Bastard Sword', imp:['damage',  2, 5] },
+    { name:'Bastard Sword', imp:['damage',  1, 4] },
     { name:'War Axe',       imp:['critDmg', 0.10, 0.22] },
     { name:'Kopis',         imp:['leech',   0.006, 0.014] }
   ],
@@ -1699,7 +1699,7 @@ const BASE_DEFS = {
   ],
   gloves: [
     { name:'Leather Gloves',   imp:['cadence', -0.05, -0.02] },
-    { name:'Iron Gauntlets',   imp:['damage',  1, 3] },
+    { name:'Iron Gauntlets',   imp:['damage',  1, 2] },
     { name:'Bracers',          imp:['ward',    0.02, 0.04] },
     { name:'Grips',            imp:['crit',    0.02, 0.04] },
     { name:'Spiked Gauntlets', imp:['thorns',  2, 5] },
@@ -1738,7 +1738,7 @@ const BASE_DEFS = {
     { name:'Rosary',        imp:['life',    6, 14] }
   ],
   ring1: [
-    { name:'Iron Band',      imp:['damage',  1, 3] },
+    { name:'Iron Band',      imp:['damage',  1, 2] },
     { name:'Signet',         imp:['coinFind',0.05, 0.12] },
     { name:'Twisted Ring',   imp:['cadence', -0.04, -0.02] },
     { name:'Ruby Ring',      imp:['damageP', 0.02, 0.05] },
@@ -1788,14 +1788,28 @@ let AFFIX_SCALE = 1;
 /* Ten pieces now where there were eight, and every one with a built-in stat
  * on top of its rolls: the same strength spread over more of them. Measured
  * against the eight-slot kit on main, a full kit rolled at the rung, so the
- * loot is wider without the ladder going soft (see loot.js). */
-const SLOT_SPREAD = 0.8;
+ * loot is wider without the ladder going soft (see loot.js).
+ *
+ * 0.65, and it was 0.8. The first measure was a blade's strike rate, and it
+ * missed what the hero does to a BOSS -- crits and the kit's abilities ride
+ * on top. The Crucible's escort, which is meant to out-mend a typical hero
+ * about half again, fell from 1.35x to 1.25x where it is taught and began
+ * failing its band; at 0.65 it reads 1.32x at rung 8 and 1.36x at rung 50,
+ * against 1.35x and 1.29x before the loot (crucible.js). */
+const SLOT_SPREAD = 0.65;
 // ...but only the offence is spread. Life and ward were not what grew, and
 // the new stats in the pools already thin them: measured, spreading them too
 // left a rung-50 kit with two thirds of the life it has on main.
 const OFFENCE = { damage: 1, fireDelay: 1, range: 1, sweep: 1 };
 const DEFENCE_LIFT = 0.95;
 const spreadOf = a => OFFENCE[a.stat] ? SLOT_SPREAD : (a.stat === 'maxHp' || a.stat === 'ward') ? DEFENCE_LIFT : 1;
+/* The flat chances (crit, its damage, the leech) do not grow with the item's
+ * level -- a share scaled by it grows into nonsense -- but at the mouth of the
+ * ladder, where a blade does twenty-two, a full share of them was the biggest
+ * thing in the kit: measured, the Crucible's escort stopped out-mending a
+ * rung-8 hero. So they come in at seven tenths and reach their whole by the
+ * deepest rung. */
+const flatAt = () => 0.7 + 0.3 * clamp(LEVEL.depth || 0, 0, 1);
 
 /* Some affixes suit one hero far more than the other, and say so. A `hero`
    tag pays a bonus when it is worn by the Vanguard it was made for, which
@@ -1923,7 +1937,7 @@ function rollItem(depth, slotId) {
   for (let i = 0; i < n; i++) {
     const id = pool.splice((Math.random() * pool.length) | 0, 1)[0];
     const a = AFFIX_BY_ID[id];
-    let v = (a.lo + Math.random() * (a.hi - a.lo)) * (a.flat ? 1 : ilvl * spreadOf(a));
+    let v = (a.lo + Math.random() * (a.hi - a.lo)) * (a.flat ? flatAt() : ilvl * spreadOf(a));
     v = a.dp ? +v.toFixed(a.dp) : (Math.abs(a.lo) >= 1 ? Math.max(1, Math.round(v)) : v);
     affixes.push({ id, v });
   }
@@ -1948,7 +1962,7 @@ function rollImplicit(def, ilvl) {
   const [id, lo, hi] = def.imp;
   const a = AFFIX_BY_ID[id];
   if (!a) return null;
-  let v = (lo + Math.random() * (hi - lo)) * (a.flat ? 1 : ilvl * spreadOf(a));
+  let v = (lo + Math.random() * (hi - lo)) * (a.flat ? flatAt() : ilvl * spreadOf(a));
   v = a.dp ? +v.toFixed(a.dp) : (Math.abs(lo) >= 1 ? Math.max(1, Math.round(v)) : v);
   return { id, v };
 }
@@ -2508,15 +2522,16 @@ let roomLights = [];
 // Cells a room asked to be holes (the Gorges' span): floor until the rock is
 // merged, then cut as chasm by cutRoomPits. Kept out of every prop.
 let roomPits = new Set();
-// Cells a room laid a lava fissure along (Kraggen-Tor's rift): floor you can
-// walk, which erupts on a beat (updateTraps, 'lava'). Kept out of every prop.
-let roomLava = new Set();
+// Cells a room keeps bare: a lava fissure (Kraggen-Tor's rift), a spore pod
+// (the Rot-Weald's grove). Floor you can walk, and a hazard of the room's
+// own (updateTraps), so kept out of every prop.
+let roomBare = new Set();
 
 function setPieceKit(h) {
   const C = CELL_W;
   const x0 = h.x, y0 = h.y, x1 = h.x + h.w - 1, y1 = h.y + h.h - 1;
   const at = (x, y) => ({ x: x * C + C / 2, y: y * C + C / 2 });
-  const open = (x, y) => cellAt(x, y) !== SOLID && !roomPits.has(gi(x, y)) && !roomLava.has(gi(x, y));
+  const open = (x, y) => cellAt(x, y) !== SOLID && !roomPits.has(gi(x, y)) && !roomBare.has(gi(x, y));
   const kit = {
     x0, y0, x1, y1, cx: h.cx, cy: h.cy, w: h.w, h: h.h, at, open,
     wide: h.w >= h.h,
@@ -2547,8 +2562,14 @@ function setPieceKit(h) {
     // A cell of lava fissure: still floor, remembered by the room.
     lava(x, y) {
       if (!open(x, y)) return;
-      roomLava.add(gi(x, y));
+      roomBare.add(gi(x, y));
       (kit.meta.lava = kit.meta.lava || []).push([x, y]);
+    },
+    // A spore pod at a cell centre: kept bare, remembered by the room.
+    pod(x, y) {
+      if (!open(x, y)) return;
+      roomBare.add(gi(x, y));
+      (kit.meta.pods = kit.meta.pods || []).push([x, y]);
     },
     // Anything the room wants to remember about itself (the span's bridge).
     meta: {},
@@ -2866,7 +2887,7 @@ ROOM_SETS.cistern = { min: [7, 7], shapes: ['octagon'], trap: 'pool',
     for (const [x, y] of k.side('top').concat(k.side('bottom'))) if (k.chance(0.3)) k.wall('chain', x, y);
     k.lamp(k.cx, k.cy, PAL.teal);
   } };
-const SET_TRAP = { hall: 'hall', pool: 'cistern', gust: 'span', lava: 'rift' };
+const SET_TRAP = { hall: 'hall', pool: 'cistern', gust: 'span', lava: 'rift', spore: 'grove' };
 
 /* --- THE RENDING GORGES ---------------------------------------------------
    The Kael-Dorm Redoubt is a fort of the Frost-Scholars hung over split
@@ -3013,7 +3034,7 @@ const KRAG_SETS = {
         k.meta.lava = k.meta.lava.filter(([x, y]) => {
           const joined = k.meta.lava.length > 1 && [[1, 0], [-1, 0], [0, 1], [0, -1]]
             .some(([dx, dy]) => S.has((x + dx) + ',' + (y + dy)));
-          if (!joined) roomLava.delete(gi(x, y));
+          if (!joined) roomBare.delete(gi(x, y));
           return joined;
         });
       }
@@ -3096,8 +3117,116 @@ const KRAG_SETS = {
     names: ['The Iron-Teeth Barracks', 'The Shatter-Gate Guardhouse', 'The Ghor Muster'] })
 };
 
+/* --- THE ROT-WEALD ------------------------------------------------------------
+   The southern forest, gone to creeping mutation: groves of fungus taller
+   than a man, a lodge the hunters never came back to, a spawning pool, a
+   shrine the roots took, and the Heart-Rot itself.
+
+   Its own hazard is the GROVE: spore pods grown out of the floor. Each one
+   swells (the tell), then bursts into a cloud that hangs for a few seconds
+   and poisons whatever breathes it. The pods keep their own rhythms, so a
+   grove is a room whose safe ground moves -- and the horde breathes it too
+   (updateTraps, 'spore'). */
+const WEALD_LAMP = '#9dbb5a';
+const WEALD_SETS = {
+  /* Great mushrooms stood about the room, the pods between them, moss over
+     everything and the pale green light of the rot itself. */
+  grove: { min: [7, 7], shapes: ['octagon', 'buttress'], trap: 'spore',
+    clutter: ['moss', 'moss', 'rubble', 'bones'],
+    names: ['The Spore-Grove', 'The Breathing Glade', 'The Mould-Garden'],
+    build(k) {
+      // Pods on a loose grid through the middle, never on the walls.
+      // Closer together in a short grove, so it still holds a few.
+      const pods = [], every = k.B1 - k.B0 < 9 ? 2 : 3;
+      for (let b = k.B0 + 2; b <= k.B1 - 2; b += every)
+        for (const a of [k.MA - 2, k.MA + 1])
+          pods.push(k.xy(b + (k.chance(0.5) ? 1 : 0), a + (k.chance(0.5) ? 1 : 0)));
+      for (const [x, y] of pods) k.pod(x, y);
+      // Shaping may have made some of those rock: never fewer than three.
+      for (const [db, da] of [[0, 0], [-2, 1], [2, -1], [0, 2]]) {
+        if ((k.meta.pods || []).length >= 3) break;
+        const [x, y] = k.xy(k.MB + db, k.MA + da);
+        if (!(k.meta.pods || []).some(([px, py]) => px === x && py === y)) k.pod(x, y);
+      }
+      for (const [x, y] of k.side('top').concat(k.side('bottom'), k.side('left'), k.side('right')))
+        if (k.chance(0.35)) k.prop('mushroom', x, y, 6);
+      for (let i = 0; i < 4; i++) {
+        const x = k.x0 + 1 + ((Math.random() * (k.w - 2)) | 0), y = k.y0 + 1 + ((Math.random() * (k.h - 2)) | 0);
+        k.prop('mushroom', x, y, 8);
+      }
+      k.lamp(k.cx, k.cy, WEALD_LAMP);
+    } },
+
+  /* Where the Weald's hunters kept their kill: pelts on the floor, antlered
+     skulls on the walls, a table and the bedrolls they did not come back
+     to, and a strongbox of what they were paid. */
+  lodge: { min: [6, 7], shapes: ['buttress'],
+    clutter: ['bones', 'moss', 'coins', 'sword'],
+    names: ['The Hunters\u2019 Lodge', 'The Trapper\u2019s Hall', 'The Last Camp'],
+    build(k) {
+      k.put('table', k.MB, k.MA, 2, k.alongQ);
+      for (const db of [-2, 2]) k.put('pelt', k.MB + db, k.MA, 3, (Math.random() * 4) | 0);
+      for (let b = k.B0 + 1; b <= k.B1 - 1; b += 2)
+        if (Math.abs(b - k.MB) > 2) k.put('bedroll', b, k.A0 + 1, 2, k.acrossQ);
+      for (const [x, y] of k.side(k.wide ? 'bottom' : 'right')) if (k.chance(0.4)) k.wall('rack', x, y);
+      for (const [x, y] of k.side(k.wide ? 'top' : 'left')) if (k.chance(0.25)) k.prop('hornskull', x, y, 4);
+      { const [x, y] = k.xy(k.chance(0.5) ? k.B0 + 1 : k.B1 - 1, k.A1 - 1); k.chest(x, y, 'coffer'); }
+      k.lamp(k.cx, k.cy, PAL.ember);
+    } },
+
+  /* The rot's own heart: a knot of root the size of a cart, beating, with
+     roots run out from it across the floor. It has to be held while the
+     forest sends what it has. */
+  heart: { min: [6, 6], shapes: ['octagon'],
+    clutter: ['moss', 'moss', 'crack', 'bones'],
+    names: ['The Heart-Rot', 'The Beating Root', 'The Rotten Core'],
+    build(k) {
+      k.prop('rootheart', k.cx, k.cy, 0, 0);
+      for (let i = 0; i < 6; i++) {
+        const t = i / 6 * TAU;
+        for (let r = 1.5; r < Math.min(k.w, k.h) / 2 - 0.5; r += 1)
+          k.prop('roots', Math.round(k.cx + Math.cos(t) * r), Math.round(k.cy + Math.sin(t) * r), 3, i % 4);
+      }
+      k.lamp(k.cx, k.cy, '#c8e060'); k.lamp(k.cx, k.cy, WEALD_LAMP);
+    } },
+
+  /* A pool the rot breeds in: the water in the middle is the cistern's
+     poison (it is the same trap, both ways), mushrooms round its rim, moss
+     on everything. */
+  spawnpool: { min: [7, 7], shapes: ['octagon'], trap: 'pool',
+    clutter: ['moss', 'moss', 'bones', 'crack'],
+    names: ['The Spawning Pool', 'The Brood-Mere', 'The Green Deep'],
+    build(k) {
+      for (let i = 0; i < 8; i++) {
+        const t = i / 8 * TAU, r = Math.min(k.w, k.h) / 2 - 1.5;
+        k.prop(i % 2 ? 'mushroom' : 'roots', Math.round(k.cx + Math.cos(t) * r), Math.round(k.cy + Math.sin(t) * r), 5);
+      }
+      k.lamp(k.cx, k.cy, '#5ad04a');
+    } },
+
+  /* A shrine of the old faith the forest took back: the altar under moss,
+     its columns cracked by roots, a coffer at its foot that something
+     heavy still guards. */
+  shrine: { min: [6, 7], shapes: ['cross', 'octagon'],
+    clutter: ['moss', 'rubble', 'crack', 'candles'],
+    names: ['The Overgrown Shrine', 'The Moss Chapel', 'The Root-Taken Altar'],
+    build(k) {
+      const head = k.chance(0.5) ? k.B1 - 1 : k.B0 + 1;
+      k.put('altar', head, k.MA, 0, k.acrossQ);
+      k.put('candles', head, k.MA - 1, 3);
+      for (const a of [k.A0 + 1, k.A1 - 1])
+        for (let b = k.B0 + 2; b <= k.B1 - 2; b += 2) k.put(k.chance(0.6) ? 'pillar' : 'roots', b, a, 2, 0);
+      { const [x, y] = k.xy(head === k.B1 - 1 ? k.B0 + 1 : k.B1 - 1, k.MA); k.chest(x, y, 'coffer'); }
+      const [lx, ly] = k.xy(head, k.MA); k.lamp(lx, ly, WEALD_LAMP);
+    } },
+
+  // The wardens' camp: the Moors' garrison, by the Weald's own names.
+  garrison: Object.assign({}, ROOM_SETS.garrison, { min: [6, 7],
+    names: ['The Warden\u2019s Camp', 'The Weald-Watch', 'The Rangers\u2019 Billet'] })
+};
+
 // Which regions are built of set pieces, and from which table.
-const REGION_SETS = { slag: ROOM_SETS, vaelk: GORGE_SETS, kraggen: KRAG_SETS };
+const REGION_SETS = { slag: ROOM_SETS, vaelk: GORGE_SETS, kraggen: KRAG_SETS, weald: WEALD_SETS };
 
 // Cut the holes the rooms asked for, now the rock is merged. A cell whose
 // hole would strand floor is left as ground: a corridor that entered the
@@ -3207,6 +3336,12 @@ const ROOM_MOODS = {
   altar:    { grade: '#c070ff', gradeA: 0.16, dark: 0.40, fog: '#3a1a4a', motes: '#e0b0ff', drift: 'float', glow: '#a050e0' },
   chainpits:{ grade: '#c85a3a', gradeA: 0.14, dark: 0.45, fog: '#4a2018', motes: '#d8a080', drift: 'fall',  glow: '#b04a2a' },
   quarry:   { grade: '#d8a060', gradeA: 0.12, dark: 0.30, fog: '#5a4028', motes: '#e8c890', drift: 'fall',  glow: '#c8803a' },
+  // The Rot-Weald: sick greens, and the lodge's old fire.
+  grove:    { grade: '#a8d060', gradeA: 0.22, dark: 0.30, fog: '#3a5a20', motes: '#d8f0a0', drift: 'float', glow: '#9dbb5a' },
+  lodge:    { grade: '#d0a060', gradeA: 0.12, dark: 0.30, fog: '#4a3a20', motes: '#e8d0a0', drift: 'fall',  glow: '#c8883a' },
+  heart:    { grade: '#c8e060', gradeA: 0.24, dark: 0.35, fog: '#4a5a18', motes: '#e8f890', drift: 'rise',  glow: '#b8d040' },
+  spawnpool:{ grade: '#6ad07a', gradeA: 0.20, dark: 0.40, fog: '#1a4a28', motes: '#a0f0b0', drift: 'float', glow: '#4ac05a' },
+  shrine:   { grade: '#b0c890', gradeA: 0.14, dark: 0.32, fog: '#3a4a30', motes: '#e0f0c8', drift: 'fall',  glow: '#9dbb5a' },
   // The older rooms, in the regions that do not have set pieces yet.
   hall:     { grade: '#8fb9d6', gradeA: 0.12, dark: 0.30, fog: '#3a4a5a', motes: '#d0e0f0', drift: 'fall',  glow: '#6a9ac0' },
   barracks: { grade: '#e0a860', gradeA: 0.10, dark: 0.25, fog: '#6a5030', motes: '#e8d0a0', drift: 'fall',  glow: '#d08a40' },
@@ -3258,7 +3393,7 @@ function updateRoomNames() {
 
 function dressRooms(halls, sc, pc) {
   rooms = [];
-  roomDress = []; roomLights = []; roomChests = []; roomPits = new Set(); roomLava = new Set();
+  roomDress = []; roomLights = []; roomChests = []; roomPits = new Set(); roomBare = new Set();
   const SETS = REGION_SETS[REGION.id];
   if (SETS) return dressSetPieces(halls, sc, pc, SETS);
   const KINDS = ['hall', 'barracks', 'collapse', 'cistern'];
@@ -3648,8 +3783,8 @@ function buildScenery(spawn, portal) {
   standPillars(spawn, portal);
   // Nothing lies on a lava fissure: the crack has to read as a crack, and a
   // barrel standing in it would be a thing to break that burns you for it.
-  if (roomLava.size)
-    props = props.filter(pr => !roomLava.has(gi(Math.floor(pr.x / C), Math.floor(pr.y / C))));
+  if (roomBare.size)
+    props = props.filter(pr => !roomBare.has(gi(Math.floor(pr.x / C), Math.floor(pr.y / C))));
   indexBreakables();
 }
 
@@ -4101,7 +4236,7 @@ function placePacks(spawn) {
     for (let k = 0; k < n; k++) {
       const pos = scatterNear(st.x, st.y, 74, 16, spawn);
       if (!pos) continue;
-      if (roomLava.has(gi(Math.floor(pos.x / CELL_W), Math.floor(pos.y / CELL_W)))) continue;   // not in the rift
+      if (roomBare.has(gi(Math.floor(pos.x / CELL_W), Math.floor(pos.y / CELL_W)))) continue;   // not in the rift
       props.push({ x: pos.x, y: pos.y, q: (Math.random() * 4) | 0, kind: 'barrel' });
     }
   }
@@ -5248,7 +5383,18 @@ const ENCOUNTERS = {
   chainpits:{ trigger: 'coffer', say: 'The chains break — the prisoners are loose!',
     foes: dp => [['fast', 6 + Math.round(dp * 3), 'ring']] },
   quarry:   { trigger: 'enter', say: 'The quarry wakes.',
-    foes: dp => [['heavy', 1, 'room', true], ['any', 3 + Math.round(dp * 2), 'room']] }
+    foes: dp => [['heavy', 1, 'room', true], ['any', 3 + Math.round(dp * 2), 'room']] },
+  // The Rot-Weald.
+  grove:    { trigger: 'enter', say: 'The grove breathes out.',
+    foes: dp => [['any', 4 + Math.round(dp * 3), 'ring']] },
+  lodge:    { trigger: 'coffer', say: 'The hunters are home.',
+    foes: dp => [['fast', 4 + Math.round(dp * 2), 'edge'], ['heavy', 1, 'room']] },
+  heart:    { trigger: 'enter', say: 'Hold the Heart-Rot!', hold: 12,
+    foes: dp => [['any', 2, 'edge']], every: 2.5 },
+  spawnpool:{ trigger: 'enter', say: 'Something crawls out of the water.',
+    foes: dp => [['any', 5 + Math.round(dp * 2), 'ring']] },
+  shrine:   { trigger: 'coffer', say: 'The shrine\u2019s keeper stirs.',
+    foes: dp => [['heavy', 1, 'ring', true], ['any', 2 + Math.round(dp * 2), 'room']] }
 };
 const ENC_REACH = 130;          // how near a coffer wakes an 'coffer' room
 const ENC_HOLD_R = 130;         // how near the heart counts as holding it
@@ -5470,6 +5616,23 @@ function lavaPhase(t) {
 // Is a body standing on a cell of this fissure? Its centre, against the set.
 const onLava = (tr, x, y) => tr.cells.has(gi(Math.floor(x / CELL_W), Math.floor(y / CELL_W)));
 
+/* The grove's pods. Each keeps its own clock: most of it quiet, a second of
+ * swelling (the tell -- the pod grows and pales), then it bursts into a
+ * cloud that hangs for the rest of the beat and poisons whoever breathes
+ * it, a share of life a second, both ways, like the cistern's water. */
+const SPORE_CYCLE = 7.0;
+const SPORE_TELL  = 1.0;
+const SPORE_CLOUD = 2.6;
+const SPORE_R     = 80;      // how far the cloud reaches
+const SPORE_DPS   = 0.10;    // share of the hero's life a second
+const SPORE_BITE  = 0.14;    // ...and of a body of the horde's
+function sporePhase(t) {
+  const u = t % SPORE_CYCLE;
+  if (u < SPORE_CYCLE - SPORE_CLOUD - SPORE_TELL) return { phase: 'down', f: 0 };
+  if (u < SPORE_CYCLE - SPORE_CLOUD) return { phase: 'tell', f: (u - (SPORE_CYCLE - SPORE_CLOUD - SPORE_TELL)) / SPORE_TELL };
+  return { phase: 'cloud', f: (u - (SPORE_CYCLE - SPORE_CLOUD)) / SPORE_CLOUD };
+}
+
 // A hole at a point: the chasm, not masonry.
 const pitAt = (x, y) => !!pitGrid && inGrid(Math.floor(x / CELL_W), Math.floor(y / CELL_W)) &&
                         pitGrid[gi(Math.floor(x / CELL_W), Math.floor(y / CELL_W))] === 1;
@@ -5534,6 +5697,12 @@ function placeTraps() {
       traps.push({ kind: 'spike', x: rm.x, y: rm.y, r: rm.r, cycle: cycle,
                    // Offset so two halls in one delve are not in lockstep.
                    t: Math.random() * cycle, was: 'down', bit: [] });
+    } else if (rm.kind === 'grove' && rm.meta && rm.meta.pods) {
+      traps.push({ kind: 'spore', x: rm.x, y: rm.y, r: rm.r, box: rm.box, tick: 0,
+                   // Each pod on its own clock, so the grove is never all
+                   // clear or all cloud at once.
+                   pods: rm.meta.pods.map(([cx, cy]) => ({ x: cx * CELL_W + CELL_W / 2, y: cy * CELL_W + CELL_W / 2,
+                                                           t: Math.random() * SPORE_CYCLE, was: 'down' })) });
     } else if (rm.kind === 'rift' && rm.meta && rm.meta.lava) {
       traps.push({ kind: 'lava', x: rm.x, y: rm.y, r: rm.r, box: rm.box,
                    cells: new Set(rm.meta.lava.map(([x, y]) => gi(x, y))), list: rm.meta.lava,
@@ -5584,6 +5753,8 @@ function updateTraps(dt) {
       updateGust(tr, dt);
     } else if (tr.kind === 'lava') {
       updateLava(tr);
+    } else if (tr.kind === 'spore') {
+      updateSpores(tr, dt);
     } else {
       tr.tick -= dt;
       if (tr.tick > 0) continue;
@@ -5601,6 +5772,37 @@ function updateTraps(dt) {
         damageEnemy(e, e.maxHp * POOL_DPS * TRAP_TICK, e.x, e.y);
       }
     }
+  }
+}
+
+function updateSpores(tr, dt) {
+  for (const pd of tr.pods) {
+    pd.t += dt;
+    const ph = sporePhase(pd.t).phase;
+    if (ph === 'cloud' && pd.was !== 'cloud') {
+      burst(pd.x, pd.y, '#b8d870', 14, 160);
+      if (dist2(player.x, player.y, pd.x, pd.y) < 500 * 500) sfx('hurt', pd.x, pd.y, 0.15);
+    }
+    pd.was = ph;
+  }
+  tr.tick -= dt;
+  if (tr.tick > 0) return;
+  tr.tick = TRAP_TICK;
+  const R2 = SPORE_R * SPORE_R;
+  const clouds = tr.pods.filter(pd => pd.was === 'cloud');
+  if (!clouds.length) return;
+  if (player.hp > 0 && clouds.some(pd => dist2(player.x, player.y, pd.x, pd.y) < R2)) {
+    const was = player.invuln; player.invuln = 0;
+    hurtPlayerBy(player.maxHp * SPORE_DPS * TRAP_TICK, player.x, player.y + 1, true);
+    player.invuln = Math.max(player.invuln, was);
+    if (!run.sporeTold) { run.sporeTold = true; toast('Spores! Step out of the cloud.', '#d8f0a0'); }
+  }
+  enemyGrid.query(tr.x, tr.y, tr.r * 1.5, _near);
+  for (let k = 0; k < _near.length; k++) {
+    const e = _near[k];
+    if (!trapBites(e)) continue;
+    if (!clouds.some(pd => dist2(e.x, e.y, pd.x, pd.y) < R2)) continue;
+    damageEnemy(e, e.maxHp * SPORE_BITE * TRAP_TICK, e.x, e.y + 1);
   }
 }
 

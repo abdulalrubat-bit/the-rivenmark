@@ -14,7 +14,7 @@
 
 import Phaser from 'phaser';
 
-/* global crescentHue, traps, spikePhase, gustPhase, lavaPhase, CELL_W, view,
+/* global crescentHue, traps, spikePhase, gustPhase, lavaPhase, sporePhase, SPORE_R, CELL_W, view,
           arcs, particles, rings, floaters, bolts, slams, hazards, nulls,
           totems, ruptures, player, cam, FLOAT_STYLE, FLOAT_LIFE, BOLT_R,
           TAU, HEROES, run, portal, drops, PORTAL_R, PAL, LEVEL, rarityOf,
@@ -109,6 +109,7 @@ export class Effects {
       }
       if (tr.kind === 'gust') { this.gust(g, tr); continue; }
       if (tr.kind === 'lava') { this.lava(g, tr, t); continue; }
+      if (tr.kind === 'spore') { this.spores(g, tr, t); continue; }
       // The beat comes off the trap: it is compressed by the delve's depth,
       // and a renderer reading the constant would draw one rhythm over the
       // damage of another.
@@ -144,6 +145,38 @@ export class Effects {
             g.strokeRect(px - half, py - half, half * 2, half * 2);
           }
         }
+      }
+    }
+  }
+
+  /* The grove's pods. A pod always shows -- a mottled bulb on the floor --
+   * so the room reads before it goes off; the tell swells it and pales it,
+   * and the burst leaves a cloud of sick green that thins as it hangs. */
+  spores(g, tr, t) {
+    for (let i = 0; i < tr.pods.length; i++) {
+      const pd = tr.pods[i], ph = sporePhase(pd.t);
+      if (ph.phase === 'cloud') {
+        const k = 1 - ph.f;
+        for (let j = 0; j < 4; j++) {
+          const a = t * 0.7 + j * 1.6 + i, rr = SPORE_R * (0.55 + 0.12 * j);
+          g.fillStyle(0x9dbb5a, 0.13 * k + 0.04);
+          g.fillCircle(pd.x + Math.cos(a) * 12, pd.y + Math.sin(a) * 9, rr);
+        }
+        g.lineStyle(2, 0xc8e080, 0.35 * k + 0.1);
+        g.strokeCircle(pd.x, pd.y, SPORE_R);
+        g.fillStyle(0x2a3a14, 0.9);                       // the burst husk
+        g.fillCircle(pd.x, pd.y, 7);
+      } else {
+        const sw = ph.phase === 'tell' ? ph.f : 0;
+        const r = 9 + sw * 7 + Math.sin(t * 2 + i) * 0.6;
+        g.fillStyle(0x3a4a1a, 0.95);
+        g.fillCircle(pd.x, pd.y, r + 2);
+        g.fillStyle(sw > 0.5 ? 0xd8f0a0 : sw > 0 ? 0xa8c860 : 0x6a8a30, 0.95);
+        g.fillCircle(pd.x, pd.y, r);
+        g.fillStyle(0x2a3a14, 0.7);                        // its spots
+        g.fillCircle(pd.x - r * 0.35, pd.y - r * 0.2, r * 0.22);
+        g.fillCircle(pd.x + r * 0.3, pd.y + r * 0.25, r * 0.18);
+        if (sw > 0) { g.lineStyle(2, 0xe8f8b0, 0.3 + sw * 0.6); g.strokeCircle(pd.x, pd.y, r + 4 + sw * 6); }
       }
     }
   }

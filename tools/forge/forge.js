@@ -2594,6 +2594,59 @@ function forgeProps() {
     for (const [x, y] of [[-6, -3], [1, 0], [8, -2]]) g.fillRect(x, y, 2, 1.4);
   });
 
+  /* --- the Rot-Weald's furniture --------------------------------------------
+     The forest gone to mutation: fungus, root, and what the hunters left. */
+  P('mushroom', 44, g => {                                            // a cap as wide as a man, from above
+    g.fillStyle = 'rgba(10,12,6,.45)'; g.beginPath(); g.ellipse(3, 4, 17, 14, 0, 0, TAU); g.fill();
+    const cap = g.createRadialGradient(-5, -5, 2, 0, 0, 17);
+    cap.addColorStop(0, '#c8b890'); cap.addColorStop(0.6, '#8a6a48'); cap.addColorStop(1, '#4a3222');
+    g.fillStyle = cap; g.beginPath(); g.arc(0, 0, 16, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(20,14,8,.85)'; g.lineWidth = 1.4; g.stroke();
+    g.fillStyle = 'rgba(200,230,140,.75)';                              // the sick spots
+    for (const [x, y, r] of [[-6, -3, 2.6], [4, -7, 2], [6, 4, 2.8], [-2, 7, 1.8], [-9, 5, 1.5]]) {
+      g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+    }
+  });
+  P('pelt', 40, g => {                                                // a hide laid flat, along x
+    g.fillStyle = 'rgba(96,72,48,.92)';
+    g.beginPath();
+    g.moveTo(-17, -4); g.lineTo(-12, -11); g.lineTo(-4, -8); g.lineTo(4, -12); g.lineTo(12, -9);
+    g.lineTo(17, -3); g.lineTo(15, 6); g.lineTo(8, 11); g.lineTo(-3, 9); g.lineTo(-11, 12); g.lineTo(-16, 5);
+    g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(30,20,12,.8)'; g.lineWidth = 1.2; g.stroke();
+    g.fillStyle = 'rgba(140,110,76,.6)'; g.beginPath(); g.ellipse(0, 0, 9, 5, 0, 0, TAU); g.fill();
+  });
+  P('roots', 40, g => {                                               // roots across the floor
+    g.lineCap = 'round';
+    for (const [w, col] of [[5, 'rgba(40,30,16,.9)'], [3, 'rgba(96,78,44,.9)']]) {
+      g.strokeStyle = col; g.lineWidth = w;
+      g.beginPath(); g.moveTo(-19, 2); g.bezierCurveTo(-8, -6, 2, 8, 19, -1); g.stroke();
+      g.lineWidth = w * 0.6;
+      g.beginPath(); g.moveTo(-4, 1); g.bezierCurveTo(-1, 8, 4, 12, 6, 18); g.stroke();
+      g.beginPath(); g.moveTo(8, 1); g.bezierCurveTo(9, -8, 12, -12, 11, -18); g.stroke();
+    }
+    g.lineCap = 'butt';
+    g.fillStyle = 'rgba(160,190,90,.5)';
+    for (const [x, y] of [[-10, -1], [5, 3], [13, -1]]) { g.beginPath(); g.arc(x, y, 1.6, 0, TAU); g.fill(); }
+  });
+  P('rootheart', 56, g => {                                           // the knot at the rot's heart
+    g.lineCap = 'round';
+    g.strokeStyle = 'rgba(40,30,16,.95)'; g.lineWidth = 6;
+    for (let i = 0; i < 7; i++) {
+      const a = i / 7 * TAU;
+      g.beginPath(); g.moveTo(0, 0); g.quadraticCurveTo(Math.cos(a + 0.4) * 14, Math.sin(a + 0.4) * 14, Math.cos(a) * 25, Math.sin(a) * 25); g.stroke();
+    }
+    g.lineCap = 'butt';
+    const knot = g.createRadialGradient(-4, -4, 2, 0, 0, 15);
+    knot.addColorStop(0, '#6a5a2a'); knot.addColorStop(1, '#2a2010');
+    g.fillStyle = knot; g.beginPath(); g.arc(0, 0, 14, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(10,8,4,.9)'; g.lineWidth = 1.5; g.stroke();
+    g.shadowColor = '#c8e060'; g.shadowBlur = 10;                        // the sick light in its heart
+    g.fillStyle = 'rgba(210,240,110,.9)';
+    g.beginPath(); g.ellipse(0, 0, 5, 7, 0.4, 0, TAU); g.fill();
+    g.shadowBlur = 0;
+  });
+
   for (const k in SPR) {
     if (k.indexOf('p_') !== 0 || k.length > 2 && k.charAt(k.length - 2) === '_') continue;
     for (let q = 0; q < 4; q++) SPR[k + '_' + q] = rotateSprite(SPR[k], q);
