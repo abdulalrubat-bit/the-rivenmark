@@ -450,8 +450,39 @@ const ENEMY_TYPES = {
   // whole threat is the note it sings. See THE SILENT CHOIR.
   singer:   { r: 17, speed: 0, hp: 150, dmg: 22, tech: 0, cd: 9.0, mass: 30,
               role: 'press', anchored: true, look: 'cantor',
-              color: '#c8b8ff', halo: 'rgba(200,184,255,.30)', weight: 0, from: 1e9 }
+              color: '#c8b8ff', halo: 'rgba(200,184,255,.30)', weight: 0, from: 1e9 },
+
+  /* --- THE REGIONS' OWN ------------------------------------------------------
+   * Bodies that walk one region only (`region`), and each region's lord, who
+   * takes the Deceiver's rungs when the delve is cut from their ground (see
+   * REGION_BOSS). Painted from an existing body (`look`) with a tint of their
+   * own, the way the Crucible-Mass is, until they have art of their own --
+   * `borrowed` says so, and the sprite forge paints nothing for them. */
+
+  // THE SLAG-MOORS. Small, fast, and they burn out: an imp does little on its
+  // own, but where it dies it leaves a patch of embers, so a pack of them cut
+  // down at your feet is ground you now have to step off.
+  imp:     { r: 11, speed: 168, hp: 18,  dmg: 6,  tech: 1, cd: 0.8,  mass: 0.5,
+              role: 'flank', look: 'eclipse', borrowed: true, region: 'slag',
+              color: '#ff8a3a', halo: 'rgba(255,138,58,.24)', weight: 7,  from: 0 },
+  // The Ash-King of Tor-Varden: the keep's burnt lord. He walks at you like
+  // any heavy, but on a clock he sends the molten wave -- lines of fire rolling
+  // out from him that you stand BETWEEN -- and he calls his ember imps.
+  ashking: { r: 30, speed: 70,  hp: 600, dmg: 30, tech: 30, cd: 1.2,  mass: 8.0,
+              role: 'press', look: 'deceiver', borrowed: true,
+              color: '#ff7a2a', halo: 'rgba(255,122,42,.30)', weight: 0, from: 1e9 }
 };
+
+/* Each region's lord, and the rungs they take: a rung that would be the
+ * Deceiver's, past the teaching ramp, when the delve is cut from their
+ * ground. The ramp keeps him -- a second set of rules there is a second
+ * thing to learn -- and the Crucible and the Choir keep their own rungs. */
+const REGION_BOSS = { slag: 'ashking' };
+const regionBossHere = () => LEVEL && LEVEL.boss === 'deceiver' && !LEVEL.lesson &&
+                              REGION && REGION_BOSS[REGION.id] || null;
+// The roster, less any body that walks another region's ground.
+const rosterHere = () => (LEVEL.horde || []).filter(k => ENEMY_TYPES[k] &&
+  (!ENEMY_TYPES[k].region || (REGION && ENEMY_TYPES[k].region === REGION.id)));
 
 /* An avatar, of either kind. There are two now, and every place that used to
  * read `kind === 'deceiver'` was really asking this -- "is this the thing the
@@ -459,7 +490,7 @@ const ENEMY_TYPES = {
  * eight more `|| kind === 'crucible'` clauses, and the ninth one that somebody
  * forgets is a boss that drops thrall loot or calcifies out of its own arena.
  */
-const isAvatar = e => e.kind === 'deceiver' || e.kind === 'crucible';
+const isAvatar = e => e.kind === 'deceiver' || e.kind === 'crucible' || !!e.regionBoss;
 
 
 // --- the slam -------------------------------------------------------------
@@ -837,7 +868,10 @@ function bossNote(L) {
   if (L.boss === 'crucible')
     return ' \u2014 rooted where it stands, and its totems mend it';
   const m = MUTATOR_BY_ID[(L.mutators || [])[0]];
-  return m ? ' \u2014 ' + m.note : '';
+  // A region's lord may take the rung, if the delve is cut from their ground.
+  const lord = L.boss === 'deceiver' && !L.lesson && (L.regions || []).some(r => REGION_BOSS[r])
+    ? ' \u2014 unless the ground it is cut from has a lord of its own' : '';
+  return (m ? ' \u2014 ' + m.note : '') + lord;
 }
 
 function deceiverName(ms) {
@@ -918,7 +952,9 @@ const RAMP = [
 ];
 
 // The roster once the ramp has finished teaching: everything.
-const FULL_HORDE = RAMP[RAMP.length - 1].horde.slice();
+const FULL_HORDE = RAMP[RAMP.length - 1].horde.slice()
+  // and the regions' own, who only walk where they belong (rosterHere)
+  .concat(['imp']);
 
 // II, III, IV... for the second and later passes through the names, however
 // long the ladder grows.
@@ -4124,7 +4160,7 @@ function makePlayer(x, y, heroId) {
 function typeWeights(t) {
   let total = 0;
   const out = [];
-  for (const k of LEVEL.horde) {
+  for (const k of rosterHere()) {
     const d = ENEMY_TYPES[k];
     if (t < d.from) continue;
     // Ramp in over 20s so a new archetype trickles in rather than flooding.
@@ -4271,7 +4307,7 @@ function placePacks(spawn) {
   if (!openCells.length) return;
   const far = Math.hypot(WORLD.w, WORLD.h) * 0.5;
   const sites = [];
-  const roster = LEVEL.horde;
+  const roster = rosterHere();
 
   const budget = Math.round((LEVEL.quota || 125) * SLAG_HEAD * twist('slag'));
   // Reservoir of candidate sites, kept apart so packs read as separate groups.
@@ -5555,7 +5591,7 @@ function placeEncounters(spawn) {
 // Which of the rung's bodies: 'fast' the quickest, 'heavy' the toughest,
 // 'any' by the horde's own weights. Never a boss-kind or an illusion.
 function encKind(pref) {
-  const kinds = (LEVEL.horde || []).filter(k => ENEMY_TYPES[k] && ENEMY_TYPES[k].speed > 0 &&
+  const kinds = rosterHere().filter(k => ENEMY_TYPES[k] && ENEMY_TYPES[k].speed > 0 &&
     !['mirage', 'deceiver', 'lieutenant', 'crucible', 'singer'].includes(k));
   if (!kinds.length) return 'thrall';
   if (pref === 'fast') return kinds.reduce((a, b) => ENEMY_TYPES[b].speed > ENEMY_TYPES[a].speed ? b : a);
@@ -7340,6 +7376,7 @@ function damageEnemy(e, dmg, fx, fy, crit) {
   // Broken across the room or broken at your feet, it goes off either way --
   // and that is the whole lesson, so it must hold however it died.
   if (e.hp <= 0 && e.kind === 'husk' && !e.burst) burstHusk(e);
+  if (e.hp <= 0 && e.kind === 'imp' && !e.embered) { e.embered = true; impEmbers(e); }
   // "Heavy" is measured against the body being hit, not against a fixed
   // number: forty off a thrall is a killing blow and forty off the avatar is
   // a scratch, and the number should read like whichever it was.
@@ -7362,6 +7399,17 @@ function damageEnemy(e, dmg, fx, fy, crit) {
     if (e.kind === 'mirage') {
       burst(e.x, e.y, '#e8c060', 10, 150);
       return;                                   // a lie, not a body
+    }
+    if (e.regionBoss) {
+      sfx('fall', e.x, e.y, 1);
+      run.bossDown = true;
+      run.boss = null;
+      run.banner = 3.4;
+      run.bannerText = 'The ley-gate answers';
+      run.bannerNote = e.title + ' is broken. Hold the circle.';
+      burst(e.x, e.y, e.color || '#ff7a2a', 40, 320);
+      shake(14);
+      for (const q of enemies) if (q.called) q.hp = 0;     // his imps go out with him
     }
     if (e.kind === 'crucible') {
       sfx('fall', e.x, e.y, 1);
@@ -8188,6 +8236,8 @@ function updateEnemies(dt) {
     } else if (e.kind === 'crucible') {
       updateCrucible(e, dt);
       continue;
+    } else if (e.kind === 'ashking' && e.awake) {
+      ashKingTick(e, dt);                  // and walks and swings like any heavy, below
     } else if (e.kind === 'singer') {
       updateSinger(e, dt);
       continue;
@@ -8985,7 +9035,102 @@ function spawnBoss() {
   if (!LEVEL.boss) { run.bossDown = true; return; }
   if (LEVEL.boss === 'crucible') spawnCrucible();
   else if (LEVEL.boss === 'choir') spawnChoir();
+  else if (regionBossHere()) spawnRegionBoss(regionBossHere());
   else spawnDeceiver();
+}
+
+/* A region's lord arrives at the gate, as the Deceiver would. Health on the
+ * same rule every avatar uses (half at the mouth, and the horde's depth term
+ * after), so it is the same weight of fight on the same rung. */
+const REGION_BOSS_INFO = {
+  ashking: { title: 'The Ash-King of Tor-Varden',
+             note: 'Stand between the fire, not in it. Cut down his imps.' }
+};
+function spawnRegionBoss(kind) {
+  const d = ENEMY_TYPES[kind];
+  const dep = LEVEL.depth || 0;
+  const at = openNear(portal.x, portal.y - 4, d.r);
+  const e = newBody(kind, at.x, at.y, 0);
+  e.hp = e.maxHp = d.hp * (1 + run.time / 220) * (0.5 + dep * 1.6) * DIFF.threat;
+  e.dmg = d.dmg; e.speed = d.speed; e.atk = 1.4;
+  e.awake = true; e.regionBoss = true;
+  e.aggro = AGGRO_FAR;
+  const info = REGION_BOSS_INFO[kind];
+  e.title = info.title;
+  if (kind === 'ashking') { e.wave = ASHKING.firstWave; e.call = ASHKING.firstCall; e.waveTurn = Math.random() * TAU; }
+  enemies.push(e);
+  run.boss = e;
+  run.bossTitle = e.title;
+  run.banner = 3.8;
+  run.bannerText = e.title;
+  run.bannerNote = info.note;
+  sfx('arrive', e.x, e.y, 1);
+  shake(10);
+  clog('boss', kind);
+}
+
+/* THE ASH-KING. Two clocks on top of an ordinary heavy's walk and swing:
+ *
+ *   the WAVE  -- four lines of fire (six, once he is below half) rolled out
+ *                from where he stands: a row of slams along each line, each
+ *                one landing a beat after the one inside it, so it reads as a
+ *                wave travelling outward. The gaps between the lines are the
+ *                safe ground, and the lines turn every wave.
+ *   the CALL  -- three ember imps, raised about him. Cut down at your feet
+ *                they leave embers, so where you kill them is a choice.
+ *
+ * The slams are the game's own (the gorger's and the Crucible's), so their
+ * tell and their burn are the ones the player already reads. */
+const ASHKING = {
+  firstWave: 3.0, waveCd: 7.0, waveCdHalf: 5.0, lines: 4, linesHalf: 6,
+  reach: 420, step: 46, blockR: 30, rollIn: 1 / 520, hit: 0.9,
+  firstCall: 4.5, callCd: 9.0, calls: 3, impCap: 8
+};
+function ashKingTick(e, dt) {
+  const K = ASHKING, half = e.hp < e.maxHp * 0.5;
+  e.wave -= dt;
+  if (e.wave <= 0) {
+    e.wave = half ? K.waveCdHalf : K.waveCd;
+    const lines = half ? K.linesHalf : K.lines;
+    e.waveTurn += Math.PI / lines;
+    for (let i = 0; i < lines; i++) {
+      const a = e.waveTurn + i / lines * TAU;
+      let k = 0;
+      for (let d = 60; d <= K.reach; d += K.step, k++) {
+        const bx = e.x + Math.cos(a) * d, by = e.y + Math.sin(a) * d;
+        if (pointInWalls(bx, by, 4)) break;              // the wall ends the line
+        slams.push({ x: bx, y: by, r: K.blockR, wind: SLAM_WIND + d * K.rollIn, t: 0,
+                     dmg: e.dmg * K.hit, struck: false, fracture: k % 2 === 1, molten: true });
+      }
+    }
+    ring(e.x, e.y, '#ff7a2a', 14, 70, 0.4);
+    sfx('furnace', e.x, e.y);
+    shake(5);
+    clog('boss', 'wave', { lines });
+  }
+  e.call -= dt;
+  if (e.call <= 0) {
+    e.call = K.callCd;
+    const imps = enemies.filter(q => q.kind === 'imp' && q.hp > 0 && q.called).length;
+    for (let i = 0; i < K.calls && imps + i < K.impCap; i++) {
+      const a = Math.random() * TAU;
+      const at = openNear(e.x + Math.cos(a) * 70, e.y + Math.sin(a) * 70, 12);
+      const q = placeEnemy('imp', at.x, at.y, 0.6);
+      if (!q) break;
+      q.awake = true; q.called = true;
+      burst(at.x, at.y, '#ff8a3a', 8, 120);
+    }
+    clog('boss', 'call');
+  }
+}
+
+/* An ember imp, dying, leaves embers where it fell: a small patch that burns
+ * the hero for a moment. Not the horde -- its own kind is what it is made of. */
+// A flat burn a second, scaled by the delve like every hazard (a gorger's
+// broken floor is 9): a patch you step off, not one that ends you.
+const IMP_EMBER = { r: 34, dps: 5, life: 2.4 };
+function impEmbers(e) {
+  addHazard(e.x, e.y, IMP_EMBER.r, IMP_EMBER.dps, IMP_EMBER.life, '#ff7a2a');
 }
 
 /* The Crucible-Mass arrives at the gate the same way the avatar does, and

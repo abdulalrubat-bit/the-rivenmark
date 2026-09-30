@@ -11,6 +11,8 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   const errs=[]; p.on('pageerror',e=>errs.push(e.message));
   p.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
   await p.goto(pages.core()); await sleep(700);
+  // These measure the Deceiver himself; a region's own lord would stand in for him.
+  await p.evaluate(() => { for (const k in REGION_BOSS) delete REGION_BOSS[k]; });
 
   /* A rung to run the epithet tests on. The mutators are the DECEIVER's -- they
    * set his blink, his mirages, his guard -- and every third rung past the ramp

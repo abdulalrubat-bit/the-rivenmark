@@ -129,7 +129,8 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     ck(tag + 'a set piece is furnished well beyond the floor outside it', median >= 2 && p10 >= 1.25 && lowest >= 1,
        'median ' + median.toFixed(1) + 'x, 1 in 10 below ' + p10.toFixed(2) + 'x, lowest ' + lowest.toFixed(1) + 'x');
     ck(tag + 'walking in says its name', R.named && R.named.first === R.named.want, JSON.stringify(R.named));
-    ck(tag + '...once', R.named && !R.named.again, JSON.stringify(R.named));
+    // The ground's own tip may follow the name; the name itself must not.
+    ck(tag + '...once', R.named && R.named.again !== R.named.want, JSON.stringify(R.named));
   }
   ck('a region that has not opted in keeps the old rooms',
      other.none || (other.region === other.want && other.sets === 0), JSON.stringify(other));

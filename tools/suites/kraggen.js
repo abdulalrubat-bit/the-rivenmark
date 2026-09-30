@@ -56,6 +56,9 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     if (!tr) return o;
     for (const e of enemies) e.hp = 0;
     enemies.length = 0; encounters.length = 0;
+    // Hazards and slams go through the i-frames too; one left burning where
+    // the delve was built would be counted as the crack's.
+    hazards.length = 0; slams.length = 0;
     for (let i = traps.length - 1; i >= 0; i--) if (traps[i] !== tr) traps.splice(i, 1);
     player.maxHp = 1000; player.hp = 1000;
     const step = n => { for (let i = 0; i < n; i++) update(1 / 60); };

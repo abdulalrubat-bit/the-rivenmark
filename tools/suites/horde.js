@@ -26,7 +26,8 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
     const rows = LEVELS.slice(0,7).map(L=>L.horde.join(','));
     const deep = LEVELS[20].horde.slice().sort().join(',');
     const full = FULL_HORDE.slice().sort().join(',');
-    return {rows, deep, full,
+    const regional = FULL_HORDE.filter(k => ENEMY_TYPES[k].region).length;
+    return {rows, deep, full, regional,
             huskFrom: LEVELS.findIndex(L=>L.horde.indexOf('husk')>=0),
             cantorFrom: LEVELS.findIndex(L=>L.horde.indexOf('cantor')>=0)};
   });
@@ -34,8 +35,10 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
   ck('and the cantor on the next', ramp.cantorFrom===4, 'delve '+ramp.cantorFrom);
   // Pinned to FULL_HORDE rather than a literal, so adding an archetype is one
   // edit in the game and not a spurious failure here.
+  // Eight shared archetypes, plus the bodies only one region breeds (the
+  // roster filters those by ground, so the horde itself carries them all).
   ck('deep delves carry the whole roster',
-     ramp.deep===ramp.full && ramp.full.split(',').length===8, ramp.deep);
+     ramp.deep===ramp.full && ramp.full.split(',').length===8 + ramp.regional, ramp.deep);
 
   // ---- the husk ----------------------------------------------------------
   const husk = await p.evaluate(()=>{

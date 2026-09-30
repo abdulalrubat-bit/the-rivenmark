@@ -35,6 +35,15 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     return t ? { n: +(t.querySelector('.row span').textContent.split(' ')[0]), text: t.textContent,
                  point: document.querySelector('.tut-point') ? document.querySelector('.tut-point').className : '' }
              : null; });
+  /* Held for so long OF THE DELVE'S OWN CLOCK, not the wall's. A software GL
+   * here draws the delve at fifteen frames a second, and the step caps its
+   * slice, so 2.2 seconds of wall time was about one second of play -- one
+   * swing where three were owed, and step 2 never moved on. A phone GPU keeps
+   * the two clocks together; this keeps the check honest on either. */
+  const hold = async secs => {
+    const t0 = await p.evaluate(() => run.time);
+    await p.waitForFunction(([t0, s]) => run.time - t0 >= s, [t0, secs], { timeout: 30000 });
+  };
   const descend = async () => {
     await p.waitForSelector('#screens.up #descend', { timeout: 30000 });
     await p.click('#descend'); await sleep(900);
@@ -65,20 +74,20 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     ck('walking moves it on, to the Conduit, and points at it', s.n === 2 && /conduit/.test(s.point), s.point);
 
     // 2: strike
-    await p.evaluate(() => { attackPress(); }); await sleep(2200); await p.evaluate(() => attackRelease());
+    await p.evaluate(() => { attackPress(); }); await hold(2.2); await p.evaluate(() => attackRelease());
     s = await step();
     ck('holding the Conduit to strike moves it on', s.n === 3, 'step ' + s.n);
 
     // 3: aim
     await sleep(300);
     ck('...and aiming waits for an aimed blow', (await step()).n === 3);
-    await p.evaluate(() => { attackPress(); attackAim(1.2, 0.7); }); await sleep(1800);
+    await p.evaluate(() => { attackPress(); attackAim(1.2, 0.7); }); await hold(1.8);
     await p.evaluate(() => { attackRelease(); attackNeutral(); });
     s = await step();
     ck('two blows aimed by hand move it on, to the heavy button', s.n === 4 && /heavy/.test(s.point), s.point);
 
     // 4: heavy
-    await p.evaluate(() => heavyPress()); await sleep(900); await p.evaluate(() => heavyRelease()); await sleep(250);
+    await p.evaluate(() => heavyPress()); await hold(0.9); await p.evaluate(() => heavyRelease()); await sleep(250);
     s = await step();
     ck('a heavy blow moves it on, to the kit', s.n === 5 && /kit/.test(s.point), s.point);
 

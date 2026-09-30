@@ -1604,6 +1604,11 @@ function forgeAll() {
   for (const k in ENEMY_TYPES) {
     const d = ENEMY_TYPES[k];
     if (k === 'deceiver' || k === 'mirage') { SPR[k] = forgeDeceiver(k); continue; }
+    // A body that borrows another's look is DRAWN from that one's frames (the
+    // game reads 'bestiary/' + look, scaled to its own size and tinted), so
+    // forging a set of its own only spends the tool's memory on sprites
+    // nothing draws. (`borrowed`: the regions' own, until they have art.)
+    if (d.borrowed) continue;
     // `look` borrows another kind's paint. The Crucible-Mass is a gorger
     // drawn at forty-five units instead of twenty-six and lit a hotter
     // orange -- three times the footprint, no new art, and it still reads as

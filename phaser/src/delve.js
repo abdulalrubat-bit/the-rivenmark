@@ -146,7 +146,9 @@ function bodyLookScale(e) {
  * dark body with a molten mouth, and a flat orange over the whole of it loses
  * the body and keeps only the glow.
  */
-const LOOK_TINT = { crucible: 0xffab7a, singer: 0xd8ccff };
+const LOOK_TINT = { crucible: 0xffab7a, singer: 0xd8ccff,
+                    // the regions' own, painted from another body until they have art
+                    imp: 0xffa060, ashking: 0xff9a60 };
 
 export class Delve extends Phaser.Scene {
   constructor() { super('delve'); }

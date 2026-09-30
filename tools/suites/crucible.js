@@ -65,7 +65,8 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     o.placed = !pointInWalls(e.x, e.y, e.r);
     o.big = e.r;
     o.biggestElse = Math.max(...Object.keys(ENEMY_TYPES)
-      .filter(k => k !== 'crucible').map(k => ENEMY_TYPES[k].r));
+      // a region's lord is a boss in his own right, not a body it towers over
+      .filter(k => k !== 'crucible' && !REGION_BOSS_INFO[k]).map(k => ENEMY_TYPES[k].r));
     const ax = e.x, ay = e.y;
     knock(e, 0, 1e6);                       // far past anything the kit throws
     o.shoved = +Math.hypot(e.x - ax, e.y - ay).toFixed(2);
