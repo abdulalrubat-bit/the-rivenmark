@@ -85,7 +85,7 @@ const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+(note?'  ['+note+']':''
     for(const sl of SLOTS) player.gear[sl.id]=null;
     recomputeStats();
     const base={hp:player.maxHp, dmg:player.damage, shots:player.shots};
-    const order=SLOTS.map(s=>s.id);
+    const order=SET_SLOTS.slice();      // the Regalia's eight
     const seen=[];
     for(let i=0;i<order.length;i++){
       player.gear[order[i]]=rollSetPiece(order[i]);

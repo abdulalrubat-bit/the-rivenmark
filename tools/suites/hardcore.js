@@ -98,19 +98,19 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     // Softcore first: the same feat must NOT earn it.
     setHardcore(false); stash = blankStash(); saveStash();
     startRun('isaac', LEVELS[4].id, 'riven');
-    for (const sl of SLOTS) player.gear[sl.id] = rollSetPiece(sl.id);
+    for (const sl of SET_SLOTS) player.gear[sl] = rollSetPiece(sl);
     endRun(true);
     o.softEarned = honoured();
     // And a Hardcore extraction that is NOT a whole set must not either.
     setHardcore(true); stash = blankStash(); saveStash();
     startRun('isaac', LEVELS[4].id, 'riven');
-    for (const sl of SLOTS.slice(0, 7)) player.gear[sl.id] = rollSetPiece(sl.id);
+    for (const sl of SET_SLOTS.slice(0, 7)) player.gear[sl] = rollSetPiece(sl);
     endRun(true);
     o.sevenEarned = honoured();
     // Eight does.
     stash = blankStash(); saveStash();
     startRun('isaac', LEVELS[4].id, 'riven');
-    for (const sl of SLOTS) player.gear[sl.id] = rollSetPiece(sl.id);
+    for (const sl of SET_SLOTS) player.gear[sl] = rollSetPiece(sl);
     endRun(true);
     o.eightEarned = honoured();
     o.hueAfter = { isaac: crescentHue('isaac'), zayd: crescentHue('zayd') };
@@ -165,7 +165,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
     return o;
   });
 
-  ck('the ordinary game keeps its own key', R.softOnDisk && R.soft.gear === 8,
+  ck('the ordinary game keeps its own key', R.softOnDisk && R.soft.gear === 10,
      R.soft.gear + ' pieces, ' + R.soft.coins + ' coin');
   ck('taking up one life hands you nothing of it',
      R.hcStartsEmpty.gear === 0 && R.hcStartsEmpty.coins === 0 &&
@@ -181,7 +181,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
      'loot ' + R.softRates.loot + '→' + R.hardRates.loot +
      ', Regalia ' + R.softRates.relic + '→' + R.hardRates.relic);
 
-  ck('the fixture had something to lose', R.beforeDeath.gear === 8 &&
+  ck('the fixture had something to lose', R.beforeDeath.gear === 10 &&
      R.beforeDeath.vault === 3 && R.beforeDeath.hall === 8 && R.beforeDeath.pity > 0,
      JSON.stringify(R.beforeDeath));
   ck('and death takes every last piece of it',
@@ -194,12 +194,12 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   ck('no corpse is left, because there is nobody to come back for it',
      R.corpseLeft === false);
   ck('and the ordinary game did not feel it',
-     R.softAfterHcDeath === 640 && R.softIntact.gear === 8 && R.softIntact.hall === 8,
+     R.softAfterHcDeath === 640 && R.softIntact.gear === 10 && R.softIntact.hall === 8,
      R.softIntact.gear + ' pieces and ' + R.softIntact.coins + ' coin still there');
   // The control. Without it "death takes everything" would pass on a build
   // where death always took everything, in both modes.
   ck('an ordinary death still takes only the bag',
-     R.softDeath.after.gear === 8 && R.softDeath.after.coins === R.softDeath.before.coins &&
+     R.softDeath.after.gear === 10 && R.softDeath.after.coins === R.softDeath.before.coins &&
      R.softDeath.after.hall === 8 && R.softDeath.corpse === true,
      'kept ' + R.softDeath.after.gear + ' pieces and left a corpse');
 
@@ -225,7 +225,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
   // every Hardcore stash on every launch.
   ck('a delve that ended takes the mark off again', R.markAfterExtract === false);
   ck('so relaunching after an extraction keeps everything',
-     R.afterExtractRelaunch.gear === 8 && R.afterExtractRelaunch.hall === 8,
+     R.afterExtractRelaunch.gear === 10 && R.afterExtractRelaunch.hall === 8,
      'kept ' + R.afterExtractRelaunch.gear + ' pieces');
   ck('and the notice goes once a new life begins', R.noticeSpent);
   for (const from of ['play', 'pause']) {

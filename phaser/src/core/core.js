@@ -1558,7 +1558,9 @@ function relicSlotFor(regionId) {
 }
 
 function rollSetPiece(slotId) {
-  const slot = slotId || relicSlotFor(REGION && REGION.id);
+  // Only the eight the Regalia has: asked for a helm or gloves, it gives a
+  // piece it does have rather than nothing.
+  const slot = SET_PIECES[slotId] ? slotId : relicSlotFor(REGION && REGION.id);
   const def = SET_PIECES[slot];
   return { uid: ++itemSeq, slot, base: def.base, rarity: 'mythic', set: SET_ID,
            affixes: def.affixes.map(a => ({ id: a[0], v: a[1] })),
