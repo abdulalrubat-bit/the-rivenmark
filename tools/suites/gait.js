@@ -53,8 +53,13 @@ const pass=[],fail=[]; const ck=(n,ok,note)=>(ok?pass:fail).push((ok?'':'x ')+n+
    * tool now: the Phaser build loads the packed atlas instead, whose size
    * pack-atlas.js guards on its own. Ten pieces of room furniture (brazier,
    * table, carpet, rack, anvil, candles, cage, altar, bedroll, sacks) took
-   * the forge to 12.5MB; the line still stands, just where the tool is. */
-  ck('the whole atlas stays under 14MB', atlas.MB<14, atlas.MB+'MB');
+   * the forge to 12.5MB; the line still stands, just where the tool is.
+   *
+   * 16MB, and it was 14: three regions' own furniture since (the Gorges',
+   * Kraggen-Tor's and the Rot-Weald's, sixteen props) took it to 14.5MB, and
+   * the last region has its own to come. Same reasoning -- the tool's memory,
+   * not the game's, which loads the packed atlas. */
+  ck('the whole atlas stays under 16MB', atlas.MB<16, atlas.MB+'MB');
 
   // Poses must be distinct. Six samples of a sine repeat in pairs, which is
   // how the first cycle came out as four poses shown twice.

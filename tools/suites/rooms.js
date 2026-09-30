@@ -72,7 +72,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
         const inAny = pr => sets.some(s => pr.x > s.box.x0 && pr.x < s.box.x1 && pr.y > s.box.y0 && pr.y < s.box.y1);
         // A lava fissure is bare on purpose: it is the floor, not a room
         // nobody furnished, so it is left out of what the room is asked to fill.
-        const bare = c => roomLava.has(gi(Math.floor(c.x / CELL_W), Math.floor(c.y / CELL_W)));
+        const bare = c => roomBare.has(gi(Math.floor(c.x / CELL_W), Math.floor(c.y / CELL_W)));
         const cells = openCells.filter(c => inside(c) && !bare(c)).length || 1;
         const outCells = openCells.filter(c => !inAny(c)).length || 1;
         out.dens.push({ room: props.filter(inside).length / cells, all: props.filter(q => !inAny(q)).length / outCells });

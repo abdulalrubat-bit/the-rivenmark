@@ -54,7 +54,7 @@ const ck = (n, ok, note) => (ok ? pass : fail).push((ok ? '' : 'x ') + n + (note
       for (const rm of rooms) {
         seen[rm.kind] = (seen[rm.kind] || 0) + 1;
         const near = traps.filter(t => Math.hypot(t.x - rm.x, t.y - rm.y) < 4);
-        const want = rm.kind === 'hall' ? 'spike' : rm.kind === 'cistern' ? 'pool' : rm.kind === 'span' ? 'gust' : rm.kind === 'rift' ? 'lava' : null;
+        const want = rm.kind === 'hall' ? 'spike' : rm.kind === 'cistern' ? 'pool' : rm.kind === 'span' ? 'gust' : rm.kind === 'rift' ? 'lava' : rm.kind === 'grove' ? 'spore' : null;
         if (want ? !near.some(t => t.kind === want) : near.length) mismatched++;
       }
       if (traps.some(t => t.kind === 'spike')) spikeDelves++;

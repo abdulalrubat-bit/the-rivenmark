@@ -90,10 +90,12 @@ const STANDING = { pillar: 26, barrel: 12, crate: 11, urn: 10, banner: 16,
                    // the Rending Gorges'
                    maptable: 12, shelf: 14, lectern: 9, icecrystal: 10, beacon: 12,
                    // Kraggen-Tor's
-                   cauldron: 12, obsidian: 11, minecart: 10 };
+                   cauldron: 12, obsidian: 11, minecart: 10,
+                   // the Rot-Weald's
+                   mushroom: 14, rootheart: 16 };
 // Laid on the floor under everything else, flat scenery included: a carpet
 // with rubble on it, not rubble under a carpet.
-const FLOOR = { carpet: true, planks: true };
+const FLOOR = { carpet: true, planks: true, pelt: true, roots: true };
 
 /* The core's names are used bare, not through `window`.
  *
