@@ -41,7 +41,7 @@ The two Vanguards. `-rest`, an 8-frame `-run-N` and an 8-frame `-walk-N` each.
 | `heroes/zayd-walk-N` | 8 | 144x144 | 72×72 |
 | `heroes/zayd-weapon` | 1 | 130x130 | 65×65 |
 
-### `bestiary/` — 84 frames
+### `bestiary/` — 85 frames
 
 Everything that fights you. `-rest` plus an 8-frame `-run-N` per kind.
 
@@ -66,23 +66,40 @@ Everything that fights you. `-rest` plus an 8-frame `-run-N` per kind.
 | `bestiary/mirage-rest` | 1 | 192x192 | 96×96 |
 | `bestiary/shaman-rest` | 1 | 108x108 | 54×54 |
 | `bestiary/shaman-run-N` | 8 | 108x108 | 54×54 |
+| `bestiary/singer-rest` | 1 | 115x115 | 58×58 |
 | `bestiary/thrall-rest` | 1 | 88x88 | 44×44 |
 | `bestiary/thrall-run-N` | 8 | 88x88 | 44×44 |
 
-### `props/` — 100 frames
+### `props/` — 185 frames
 
 Scenery. `-N` variants are rolled per placement, so they should differ visibly.
 
 | frame | count | size (2×) | world |
 |---|---|---|---|
+| `props/altar` | 1 | 96x96 | 48×48 |
+| `props/altar-N` | 4 | 96x96 | 48×48 |
+| `props/anvil` | 1 | 72x72 | 36×36 |
+| `props/anvil-N` | 4 | 72x72 | 36×36 |
 | `props/banner` | 1 | 68x68 | 34×34 |
 | `props/banner-N` | 4 | 68x68 | 34×34 |
 | `props/barrel` | 1 | 64x64 | 32×32 |
 | `props/barrel-N` | 4 | 64x64 | 32×32 |
+| `props/beacon` | 1 | 88x88 | 44×44 |
+| `props/beacon-N` | 4 | 88x88 | 44×44 |
+| `props/bedroll` | 1 | 88x88 | 44×44 |
+| `props/bedroll-N` | 4 | 88x88 | 44×44 |
 | `props/bones` | 1 | 68x68 | 34×34 |
 | `props/bones-N` | 4 | 68x68 | 34×34 |
 | `props/boss` | 1 | 108x108 | 54×54 |
 | `props/boss-N` | 4 | 108x108 | 54×54 |
+| `props/brazier` | 1 | 68x68 | 34×34 |
+| `props/brazier-N` | 4 | 68x68 | 34×34 |
+| `props/cage` | 1 | 88x88 | 44×44 |
+| `props/cage-N` | 4 | 88x88 | 44×44 |
+| `props/candles` | 1 | 60x60 | 30×30 |
+| `props/candles-N` | 4 | 60x60 | 30×30 |
+| `props/carpet` | 1 | 160x160 | 80×80 |
+| `props/carpet-N` | 4 | 160x160 | 80×80 |
 | `props/chain` | 1 | 60x60 | 30×30 |
 | `props/chain-N` | 4 | 60x60 | 30×30 |
 | `props/coins` | 1 | 60x60 | 30×30 |
@@ -95,20 +112,38 @@ Scenery. `-N` variants are rolled per placement, so they should differ visibly.
 | `props/grate-N` | 4 | 68x68 | 34×34 |
 | `props/hornskull` | 1 | 76x76 | 38×38 |
 | `props/hornskull-N` | 4 | 76x76 | 38×38 |
+| `props/icecrystal` | 1 | 72x72 | 36×36 |
+| `props/icecrystal-N` | 4 | 72x72 | 36×36 |
+| `props/lectern` | 1 | 60x60 | 30×30 |
+| `props/lectern-N` | 4 | 60x60 | 30×30 |
+| `props/maptable` | 1 | 104x104 | 52×52 |
+| `props/maptable-N` | 4 | 104x104 | 52×52 |
 | `props/moss` | 1 | 80x80 | 40×40 |
 | `props/moss-N` | 4 | 80x80 | 40×40 |
 | `props/pillar` | 1 | 192x192 | 96×96 |
 | `props/pillar-N` | 4 | 192x192 | 96×96 |
+| `props/planks` | 1 | 80x80 | 40×40 |
+| `props/planks-N` | 4 | 80x80 | 40×40 |
+| `props/rack` | 1 | 88x88 | 44×44 |
+| `props/rack-N` | 4 | 88x88 | 44×44 |
 | `props/rubble` | 1 | 60x60 | 30×30 |
 | `props/rubble-N` | 4 | 60x60 | 30×30 |
+| `props/sacks` | 1 | 68x68 | 34×34 |
+| `props/sacks-N` | 4 | 68x68 | 34×34 |
 | `props/sconce` | 1 | 52x52 | 26×26 |
 | `props/sconce-N` | 4 | 52x52 | 26×26 |
 | `props/scroll` | 1 | 68x68 | 34×34 |
 | `props/scroll-N` | 4 | 68x68 | 34×34 |
+| `props/shelf` | 1 | 88x88 | 44×44 |
+| `props/shelf-N` | 4 | 88x88 | 44×44 |
 | `props/shield` | 1 | 72x72 | 36×36 |
 | `props/shield-N` | 4 | 72x72 | 36×36 |
+| `props/shrine` | 1 | 88x88 | 44×44 |
+| `props/shrine-N` | 4 | 88x88 | 44×44 |
 | `props/sword` | 1 | 80x80 | 40×40 |
 | `props/sword-N` | 4 | 80x80 | 40×40 |
+| `props/table` | 1 | 88x88 | 44×44 |
+| `props/table-N` | 4 | 88x88 | 44×44 |
 | `props/tomb` | 1 | 112x112 | 56×56 |
 | `props/tomb-N` | 4 | 112x112 | 56×56 |
 | `props/torch` | 1 | 68x68 | 34×34 |
@@ -168,6 +203,7 @@ size in world units, which the silhouette should roughly fill.
 | `shaman` | 16 | 74 | 0 | chant | `#ff7a2c` | delve 88 |
 | `lieutenant` | 21 | 300 | 26 | press | `#c2352a` | delve — |
 | `crucible` | 45 | 820 | 30 | press | `#ff5a24` | delve — |
+| `singer` | 17 | 150 | 22 | press | `#c8b8ff` | delve — |
 
 ## Animation
 
@@ -181,4 +217,4 @@ per kind, for looking at rather than loading.
 
 ---
 
-245 frames total, from tools/forge/forge.js.
+331 frames total, from tools/forge/forge.js.
